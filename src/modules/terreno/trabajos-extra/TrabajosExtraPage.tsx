@@ -62,27 +62,29 @@ export function TrabajosExtraPage() {
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <Table aria-label="Trabajos extraordinarios" className="w-full">
-            <Table.Header>
-              <Table.Column id="equipo" isRowHeader>
-                Equipo
-              </Table.Column>
-              <Table.Column id="cliente">Cliente</Table.Column>
-              <Table.Column id="horas">Horas</Table.Column>
-              <Table.Column id="monto">Monto</Table.Column>
-              <Table.Column id="fecha">Fecha</Table.Column>
-            </Table.Header>
-            <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
-              {(r) => (
-                <Table.Row id={r.id}>
-                  <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
-                  <Table.Cell>{r.cliente}</Table.Cell>
-                  <Table.Cell>{r.horasMaquina}</Table.Cell>
-                  <Table.Cell>{money(r.monto)}</Table.Cell>
-                  <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
+          <Table className="w-full">
+            <Table.Content aria-label="Trabajos extraordinarios">
+              <Table.Header>
+                <Table.Column id="equipo" isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column id="cliente">Cliente</Table.Column>
+                <Table.Column id="horas">Horas</Table.Column>
+                <Table.Column id="monto">Monto</Table.Column>
+                <Table.Column id="fecha">Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
+                {(r) => (
+                  <Table.Row id={r.id}>
+                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell>{r.cliente}</Table.Cell>
+                    <Table.Cell>{r.horasMaquina}</Table.Cell>
+                    <Table.Cell>{money(r.monto)}</Table.Cell>
+                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
           </Table>
         )}
       </div>

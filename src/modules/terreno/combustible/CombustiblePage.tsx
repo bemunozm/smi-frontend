@@ -54,37 +54,39 @@ export function CombustiblePage() {
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <Table aria-label="Cargas de combustible" className="w-full">
-            <Table.Header>
-              <Table.Column id="foto">Foto</Table.Column>
-              <Table.Column id="equipo" isRowHeader>
-                Equipo
-              </Table.Column>
-              <Table.Column id="litros">Litros</Table.Column>
-              <Table.Column id="rendimiento">Rendimiento</Table.Column>
-              <Table.Column id="fecha">Fecha</Table.Column>
-            </Table.Header>
-            <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
-              {(r) => (
-                <Table.Row id={r.id}>
-                  <Table.Cell>
-                    {r.fotoUrl ? (
-                      <img
-                        src={assetUrl(r.fotoUrl)}
-                        alt="Carga"
-                        className="h-10 w-10 rounded-lg border border-border object-cover"
-                      />
-                    ) : (
-                      '—'
-                    )}
-                  </Table.Cell>
-                  <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
-                  <Table.Cell>{r.litros} L</Table.Cell>
-                  <Table.Cell>{r.rendimiento != null ? r.rendimiento : '—'}</Table.Cell>
-                  <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
+          <Table className="w-full">
+            <Table.Content aria-label="Cargas de combustible">
+              <Table.Header>
+                <Table.Column id="foto">Foto</Table.Column>
+                <Table.Column id="equipo" isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column id="litros">Litros</Table.Column>
+                <Table.Column id="rendimiento">Rendimiento</Table.Column>
+                <Table.Column id="fecha">Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
+                {(r) => (
+                  <Table.Row id={r.id}>
+                    <Table.Cell>
+                      {r.fotoUrl ? (
+                        <img
+                          src={assetUrl(r.fotoUrl)}
+                          alt="Carga"
+                          className="h-10 w-10 rounded-lg border border-border object-cover"
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell>{r.litros} L</Table.Cell>
+                    <Table.Cell>{r.rendimiento != null ? r.rendimiento : '—'}</Table.Cell>
+                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
           </Table>
         )}
       </div>

@@ -55,27 +55,29 @@ export function HorometroPage() {
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <Table aria-label="Registros de horómetro" className="w-full">
-            <Table.Header>
-              <Table.Column id="equipo" isRowHeader>
-                Equipo
-              </Table.Column>
-              <Table.Column id="turno">Turno</Table.Column>
-              <Table.Column id="inicial">Inicial</Table.Column>
-              <Table.Column id="final">Final</Table.Column>
-              <Table.Column id="fecha">Fecha</Table.Column>
-            </Table.Header>
-            <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
-              {(r) => (
-                <Table.Row id={r.id}>
-                  <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
-                  <Table.Cell>{r.turno}</Table.Cell>
-                  <Table.Cell>{r.valorInicial}</Table.Cell>
-                  <Table.Cell>{r.valorFinal ?? '— (abierto)'}</Table.Cell>
-                  <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
+          <Table className="w-full">
+            <Table.Content aria-label="Registros de horómetro">
+              <Table.Header>
+                <Table.Column id="equipo" isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column id="turno">Turno</Table.Column>
+                <Table.Column id="inicial">Inicial</Table.Column>
+                <Table.Column id="final">Final</Table.Column>
+                <Table.Column id="fecha">Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
+                {(r) => (
+                  <Table.Row id={r.id}>
+                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell>{r.turno}</Table.Cell>
+                    <Table.Cell>{r.valorInicial}</Table.Cell>
+                    <Table.Cell>{r.valorFinal ?? '— (abierto)'}</Table.Cell>
+                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
           </Table>
         )}
       </div>

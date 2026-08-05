@@ -71,35 +71,37 @@ export function HallazgosPage() {
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <Table aria-label="Hallazgos" className="w-full">
-            <Table.Header>
-              <Table.Column id="equipo" isRowHeader>
-                Equipo
-              </Table.Column>
-              <Table.Column id="descripcion">Descripción</Table.Column>
-              <Table.Column id="criticidad">Criticidad</Table.Column>
-              <Table.Column id="estado">Estado</Table.Column>
-              <Table.Column id="fecha">Fecha</Table.Column>
-            </Table.Header>
-            <Table.Body items={hallazgos} renderEmptyState={() => 'Sin hallazgos.'}>
-              {(h) => (
-                <Table.Row id={h.id}>
-                  <Table.Cell>{h.equipo?.codigo ?? h.equipoId}</Table.Cell>
-                  <Table.Cell>{h.descripcion}</Table.Cell>
-                  <Table.Cell>
-                    <Chip color={critColor[h.criticidad] ?? 'default'} variant="soft" size="sm">
-                      {h.criticidad}
-                    </Chip>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Chip color={estadoColor[h.estado] ?? 'default'} variant="soft" size="sm">
-                      {h.estado}
-                    </Chip>
-                  </Table.Cell>
-                  <Table.Cell>{new Date(h.fecha).toLocaleDateString()}</Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
+          <Table className="w-full">
+            <Table.Content aria-label="Hallazgos">
+              <Table.Header>
+                <Table.Column id="equipo" isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column id="descripcion">Descripción</Table.Column>
+                <Table.Column id="criticidad">Criticidad</Table.Column>
+                <Table.Column id="estado">Estado</Table.Column>
+                <Table.Column id="fecha">Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body items={hallazgos} renderEmptyState={() => 'Sin hallazgos.'}>
+                {(h) => (
+                  <Table.Row id={h.id}>
+                    <Table.Cell>{h.equipo?.codigo ?? h.equipoId}</Table.Cell>
+                    <Table.Cell>{h.descripcion}</Table.Cell>
+                    <Table.Cell>
+                      <Chip color={critColor[h.criticidad] ?? 'default'} variant="soft" size="sm">
+                        {h.criticidad}
+                      </Chip>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip color={estadoColor[h.estado] ?? 'default'} variant="soft" size="sm">
+                        {h.estado}
+                      </Chip>
+                    </Table.Cell>
+                    <Table.Cell>{new Date(h.fecha).toLocaleDateString()}</Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
           </Table>
         )}
       </div>
