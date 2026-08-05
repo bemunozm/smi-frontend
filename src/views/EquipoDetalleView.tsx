@@ -101,6 +101,9 @@ export function EquipoDetalleView() {
           {equipo.tipo} · {equipo.marca} {equipo.modelo}
           {equipo.anio ? ` · ${equipo.anio}` : ''}
         </p>
+        <Link className="text-sm text-(--accent) hover:underline" to={`/equipos/${equipo.id}/ficha`}>
+          Ver ficha completa →
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

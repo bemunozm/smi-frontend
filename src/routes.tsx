@@ -7,6 +7,7 @@ import { AppLayout } from './layout/AppLayout';
 import { DashboardView } from './views/DashboardView';
 import { EquipoDetalleView } from './views/EquipoDetalleView';
 import { EquiposView } from './views/EquiposView';
+import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
 import { InsumoKardexView } from './views/InsumoKardexView';
 import { InventarioView } from './views/InventarioView';
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
             children: [
               { path: '/equipos', element: <EquiposView /> },
               { path: '/equipos/:id', element: <EquipoDetalleView /> },
+              { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
               { path: '/inventario', element: <InventarioView /> },
               { path: '/inventario/:id', element: <InsumoKardexView /> },
             ],

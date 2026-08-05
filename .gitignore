@@ -37,3 +37,6 @@ dist-ssr
 
 # Mockup de diseño (referencia, no va al repo)
 SMI Terreno (standalone).html
+
+# CodeGraph index (local)
+.codegraph/
