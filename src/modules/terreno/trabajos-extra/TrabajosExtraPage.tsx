@@ -1,14 +1,10 @@
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  trabajoExtraFormSchema,
-  calcMonto,
-  type TrabajoExtraForm,
-  type TrabajoExtraFormInput,
-} from './schema';
+import { Button, Table } from '@heroui/react';
+import { trabajoExtraFormSchema, calcMonto, type TrabajoExtraForm } from './schema';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
-import { Button, SelectField, TextField } from '../../../shared/ui/controls';
+import { FormNumberField, FormSelectField, FormTextField } from '../../../shared/ui/form';
 
 const money = (n: number) => n.toLocaleString('es-CL', { style: 'currency', currency: 'CLP' });
 
@@ -17,20 +13,15 @@ export function TrabajosExtraPage() {
   const { data: registros = [], isLoading } = useTrabajosExtraList();
   const crear = useCreateTrabajoExtra();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    formState: { errors },
-  } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
+  const { control, handleSubmit, reset } = useForm<TrabajoExtraForm>({
     resolver: zodResolver(trabajoExtraFormSchema),
     defaultValues: { equipoId: '', cliente: '', horasMaquina: 0, tarifa: 0 },
   });
 
-  const horas = Number(useWatch({ control, name: 'horasMaquina' })) || 0;
-  const tarifa = Number(useWatch({ control, name: 'tarifa' })) || 0;
-  const montoPreview = calcMonto(horas, tarifa);
+  const equipoItems = equipos.map((e) => ({ value: e.id, label: `${e.codigo} — ${e.modelo}` }));
+  const horas = useWatch({ control, name: 'horasMaquina' }) ?? 0;
+  const tarifa = useWatch({ control, name: 'tarifa' }) ?? 0;
+  const montoPreview = calcMonto(Number(horas) || 0, Number(tarifa) || 0);
 
   const onSubmit = (values: TrabajoExtraForm) =>
     crear.mutate(values, {
@@ -48,31 +39,11 @@ export function TrabajosExtraPage() {
         onSubmit={handleSubmit(onSubmit)}
         className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
       >
-        <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
-          <option value="">Seleccioná…</option>
-          {equipos.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.codigo} — {e.modelo}
-            </option>
-          ))}
-        </SelectField>
-
-        <TextField label="Cliente" error={errors.cliente?.message} {...register('cliente')} />
-        <TextField
-          label="Horas máquina"
-          type="number"
-          step="0.1"
-          error={errors.horasMaquina?.message}
-          {...register('horasMaquina')}
-        />
-        <TextField label="Tonelaje (opcional)" type="number" step="0.1" {...register('tonelaje')} />
-        <TextField
-          label="Tarifa"
-          type="number"
-          step="1"
-          error={errors.tarifa?.message}
-          {...register('tarifa')}
-        />
+        <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
+        <FormTextField control={control} name="cliente" label="Cliente" />
+        <FormNumberField control={control} name="horasMaquina" label="Horas máquina" minValue={0} step={0.1} />
+        <FormNumberField control={control} name="tonelaje" label="Tonelaje (opcional)" minValue={0} step={0.1} />
+        <FormNumberField control={control} name="tarifa" label="Tarifa" minValue={0} step={1} />
 
         <div className="flex items-end">
           <div className="rounded-lg bg-muted px-4 py-2 text-sm">
@@ -81,47 +52,40 @@ export function TrabajosExtraPage() {
         </div>
 
         <div className="sm:col-span-2">
-          <Button type="submit" disabled={crear.isPending}>
+          <Button type="submit" variant="primary" isDisabled={crear.isPending}>
             {crear.isPending ? 'Guardando…' : 'Registrar trabajo'}
           </Button>
         </div>
       </form>
 
-      <section className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground">
-              <tr className="border-b border-border">
-                <th className="p-3">Equipo</th>
-                <th className="p-3">Cliente</th>
-                <th className="p-3">Horas</th>
-                <th className="p-3">Monto</th>
-                <th className="p-3">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {registros.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-0">
-                  <td className="p-3">{r.equipo?.codigo ?? r.equipoId}</td>
-                  <td className="p-3">{r.cliente}</td>
-                  <td className="p-3">{r.horasMaquina}</td>
-                  <td className="p-3 font-medium">{money(r.monto)}</td>
-                  <td className="p-3">{new Date(r.fecha).toLocaleDateString()}</td>
-                </tr>
-              ))}
-              {registros.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-4 text-muted-foreground">
-                    Sin registros.
-                  </td>
-                </tr>
+          <Table aria-label="Trabajos extraordinarios" className="w-full">
+            <Table.Header>
+              <Table.Column id="equipo" isRowHeader>
+                Equipo
+              </Table.Column>
+              <Table.Column id="cliente">Cliente</Table.Column>
+              <Table.Column id="horas">Horas</Table.Column>
+              <Table.Column id="monto">Monto</Table.Column>
+              <Table.Column id="fecha">Fecha</Table.Column>
+            </Table.Header>
+            <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
+              {(r) => (
+                <Table.Row id={r.id}>
+                  <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                  <Table.Cell>{r.cliente}</Table.Cell>
+                  <Table.Cell>{r.horasMaquina}</Table.Cell>
+                  <Table.Cell>{money(r.monto)}</Table.Cell>
+                  <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                </Table.Row>
               )}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table>
         )}
-      </section>
+      </div>
     </div>
   );
 }

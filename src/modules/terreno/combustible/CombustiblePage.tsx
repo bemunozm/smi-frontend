@@ -1,9 +1,10 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput } from './schema';
+import { Button, Table } from '@heroui/react';
+import { combustibleFormSchema, type CombustibleForm } from './schema';
 import { useCombustibleList, useCreateCombustible } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
-import { Button, SelectField, TextField } from '../../../shared/ui/controls';
+import { FormNumberField, FormSelectField } from '../../../shared/ui/form';
 import { ImageUploadField } from '../../../shared/ui/ImageUploadField';
 import { assetUrl } from '../../../shared/api/uploads';
 
@@ -12,19 +13,13 @@ export function CombustiblePage() {
   const { data: registros = [], isLoading } = useCombustibleList();
   const crear = useCreateCombustible();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<CombustibleFormInput, unknown, CombustibleForm>({
+  const { control, handleSubmit, reset, setValue, watch } = useForm<CombustibleForm>({
     resolver: zodResolver(combustibleFormSchema),
     defaultValues: { equipoId: '', litros: 0 },
   });
 
   const fotoUrl = watch('fotoUrl');
+  const equipoItems = equipos.map((e) => ({ value: e.id, label: `${e.codigo} — ${e.modelo}` }));
 
   const onSubmit = (values: CombustibleForm) => {
     crear.mutate(values, { onSuccess: () => reset({ equipoId: '', litros: 0, fotoUrl: undefined }) });
@@ -43,61 +38,36 @@ export function CombustiblePage() {
         onSubmit={handleSubmit(onSubmit)}
         className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
       >
-        <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
-          <option value="">Seleccioná…</option>
-          {equipos.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.codigo} — {e.modelo}
-            </option>
-          ))}
-        </SelectField>
-
-        <TextField
-          label="Litros"
-          type="number"
-          step="0.1"
-          inputMode="decimal"
-          error={errors.litros?.message}
-          {...register('litros')}
-        />
-        <TextField
-          label="Lectura actual (horómetro)"
-          type="number"
-          step="0.1"
-          inputMode="decimal"
-          {...register('lecturaActual')}
-        />
-        <ImageUploadField
-          label="Foto de la carga"
-          value={fotoUrl}
-          onChange={(url) => setValue('fotoUrl', url)}
-        />
+        <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
+        <FormNumberField control={control} name="litros" label="Litros" minValue={0} step={0.1} />
+        <FormNumberField control={control} name="lecturaActual" label="Lectura actual (horómetro)" minValue={0} step={0.1} />
+        <ImageUploadField label="Foto de la carga" value={fotoUrl} onChange={(url) => setValue('fotoUrl', url)} />
 
         <div className="sm:col-span-2">
-          <Button type="submit" disabled={crear.isPending}>
+          <Button type="submit" variant="primary" isDisabled={crear.isPending}>
             {crear.isPending ? 'Guardando…' : 'Registrar carga'}
           </Button>
         </div>
       </form>
 
-      <section className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground">
-              <tr className="border-b border-border">
-                <th className="p-3">Foto</th>
-                <th className="p-3">Equipo</th>
-                <th className="p-3">Litros</th>
-                <th className="p-3">Rendimiento</th>
-                <th className="p-3">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {registros.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-0">
-                  <td className="p-3">
+          <Table aria-label="Cargas de combustible" className="w-full">
+            <Table.Header>
+              <Table.Column id="foto">Foto</Table.Column>
+              <Table.Column id="equipo" isRowHeader>
+                Equipo
+              </Table.Column>
+              <Table.Column id="litros">Litros</Table.Column>
+              <Table.Column id="rendimiento">Rendimiento</Table.Column>
+              <Table.Column id="fecha">Fecha</Table.Column>
+            </Table.Header>
+            <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
+              {(r) => (
+                <Table.Row id={r.id}>
+                  <Table.Cell>
                     {r.fotoUrl ? (
                       <img
                         src={assetUrl(r.fotoUrl)}
@@ -105,26 +75,19 @@ export function CombustiblePage() {
                         className="h-10 w-10 rounded-lg border border-border object-cover"
                       />
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      '—'
                     )}
-                  </td>
-                  <td className="p-3">{r.equipo?.codigo ?? r.equipoId}</td>
-                  <td className="p-3">{r.litros} L</td>
-                  <td className="p-3">{r.rendimiento != null ? r.rendimiento : '—'}</td>
-                  <td className="p-3 whitespace-nowrap">{new Date(r.fecha).toLocaleDateString()}</td>
-                </tr>
-              ))}
-              {registros.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-4 text-muted-foreground">
-                    Sin registros.
-                  </td>
-                </tr>
+                  </Table.Cell>
+                  <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                  <Table.Cell>{r.litros} L</Table.Cell>
+                  <Table.Cell>{r.rendimiento != null ? r.rendimiento : '—'}</Table.Cell>
+                  <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                </Table.Row>
               )}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table>
         )}
-      </section>
+      </div>
     </div>
   );
 }

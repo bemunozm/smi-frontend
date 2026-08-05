@@ -6,11 +6,10 @@ export const hallazgoFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
   descripcion: z.string().min(3, 'Describí el hallazgo'),
   criticidad: z.enum(CRITICIDADES),
-  fotoUrl: z.string().url('URL inválida').optional().or(z.literal('')),
+  fotoUrl: z.string().optional(),
 });
 
 export type HallazgoForm = z.infer<typeof hallazgoFormSchema>;
-export type HallazgoFormInput = z.input<typeof hallazgoFormSchema>;
 
 export interface Hallazgo {
   id: string;
