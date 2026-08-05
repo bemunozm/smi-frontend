@@ -73,7 +73,7 @@ export function EquipoDetalleView() {
         >
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha del equipo.'}
         </div>
-        <Link className="text-sm text-accent hover:underline" to="/equipos">
+        <Link className="text-sm text-(--accent) hover:underline" to="/equipos">
           ← Volver a equipos
         </Link>
       </div>
@@ -97,7 +97,7 @@ export function EquipoDetalleView() {
             {estadoEquipoLabel(equipo.estado)}
           </Chip>
         </div>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-(--muted)">
           {equipo.tipo} · {equipo.marca} {equipo.modelo}
           {equipo.anio ? ` · ${equipo.anio}` : ''}
         </p>
@@ -158,7 +158,7 @@ export function EquipoDetalleView() {
                       {(movimiento) => (
                         <Table.Row>
                           <Table.Cell>
-                            <span className="font-mono text-xs text-muted">
+                            <span className="font-mono text-xs text-(--muted)">
                               {movimiento.insumo.codigo}
                             </span>{' '}
                             {movimiento.insumo.nombre}
@@ -167,7 +167,7 @@ export function EquipoDetalleView() {
                             {movimiento.tipo === 'SALIDA' ? '−' : '+'}
                             {NUMERO.format(movimiento.cantidad)}
                           </Table.Cell>
-                          <Table.Cell className="text-sm text-muted">
+                          <Table.Cell className="text-sm text-(--muted)">
                             {formatFecha(movimiento.fecha)}
                           </Table.Cell>
                         </Table.Row>
@@ -178,7 +178,7 @@ export function EquipoDetalleView() {
               </Table.ScrollContainer>
             </Table>
           ) : (
-            <p className="px-1 pb-2 text-sm text-muted">
+            <p className="px-1 pb-2 text-sm text-(--muted)">
               Esta unidad todavía no tiene consumos de inventario registrados.
             </p>
           )}

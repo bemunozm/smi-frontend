@@ -58,7 +58,7 @@ export function InsumoKardexView() {
         >
           {error instanceof Error ? error.message : 'No se pudo cargar el kardex.'}
         </div>
-        <Link className="text-sm text-accent hover:underline" to="/inventario">
+        <Link className="text-sm text-(--accent) hover:underline" to="/inventario">
           ← Volver a inventario
         </Link>
       </div>
@@ -89,7 +89,7 @@ export function InsumoKardexView() {
             </Chip>
           ) : null}
         </div>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-(--muted)">
           {insumo.descripcion || `Medido en ${UNIDAD_LABELS[insumo.unidad].toLowerCase()}.`}
         </p>
       </div>
@@ -153,7 +153,7 @@ export function InsumoKardexView() {
                   <Table.Collection items={movimientos}>
                     {(movimiento) => (
                       <Table.Row>
-                        <Table.Cell className="text-sm text-muted">
+                        <Table.Cell className="text-sm text-(--muted)">
                           {formatFecha(movimiento.fecha)}
                         </Table.Cell>
                         <Table.Cell>
@@ -168,10 +168,10 @@ export function InsumoKardexView() {
                         <Table.Cell className="text-sm">
                           {ORIGEN_LABELS[movimiento.origen]}
                         </Table.Cell>
-                        <Table.Cell className="font-mono text-xs text-muted">
+                        <Table.Cell className="font-mono text-xs text-(--muted)">
                           {movimiento.equipo ? (
                             <Link
-                              className="text-accent hover:underline"
+                              className="text-(--accent) hover:underline"
                               to={`/equipos/${movimiento.equipo.id}`}
                             >
                               {movimiento.equipo.codigo}
@@ -187,7 +187,7 @@ export function InsumoKardexView() {
                         <Table.Cell className="font-mono text-sm font-medium">
                           {NUMERO.format(movimiento.saldoResultante)}
                         </Table.Cell>
-                        <Table.Cell className="text-sm text-muted">
+                        <Table.Cell className="text-sm text-(--muted)">
                           {movimiento.observacion || '—'}
                         </Table.Cell>
                       </Table.Row>
@@ -198,7 +198,7 @@ export function InsumoKardexView() {
             </Table.ScrollContainer>
           </Table>
         ) : (
-          <p className="px-1 pb-2 text-sm text-muted">
+          <p className="px-1 pb-2 text-sm text-(--muted)">
             Este insumo todavía no tiene movimientos registrados.
           </p>
         )}
