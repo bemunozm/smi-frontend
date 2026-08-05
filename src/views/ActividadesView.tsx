@@ -223,104 +223,107 @@ export function ActividadesView() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">Actividades</h2>
-        <p className="text-sm text-muted">Asigna y da seguimiento a tareas fuera de una orden de trabajo.</p>
+        <p className="text-sm text-muted-foreground">Asigna y da seguimiento a tareas fuera de una orden de trabajo.</p>
       </div>
 
-      {puedeAsignar ? (
+      <div className="grid gap-6 lg:grid-cols-2">
+        {puedeAsignar ? (
+          <Card>
+            <Card.Header>
+              <Card.Title className="font-display text-base font-semibold text-foreground">
+                Asignar actividad
+              </Card.Title>
+            </Card.Header>
+            <Card.Content>
+              <AsignarActividadForm />
+            </Card.Content>
+          </Card>
+        ) : (
+          <div className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+            Solo Administradores o Supervisores pueden asignar nuevas actividades. Puedes marcar como
+            completadas las que tengas asignadas a la derecha.
+          </div>
+        )}
+
         <Card>
           <Card.Header>
-            <Card.Title className="font-display text-base font-semibold text-foreground">
-              Asignar actividad
-            </Card.Title>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Card.Title>Seguimiento del día</Card.Title>
+              <Chip color="success" size="sm" variant="soft">
+                Completadas {stats.completadas} / {stats.total}
+              </Chip>
+            </div>
           </Card.Header>
           <Card.Content>
-            <AsignarActividadForm />
+            {isPending ? (
+              <div className="flex justify-center py-8">
+                <Spinner color="accent" size="sm" />
+              </div>
+            ) : null}
+
+            {isError ? (
+              <p className="text-sm text-danger-soft-foreground" role="alert">
+                {error instanceof Error ? error.message : 'No se pudo cargar la lista de actividades.'}
+              </p>
+            ) : null}
+
+            {!isPending && !isError && actividades && actividades.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">Todavía no hay actividades asignadas.</p>
+            ) : null}
+
+            {!isPending && !isError && actividades && actividades.length > 0
+              ? actividades.map((actividad) => (
+                  <div
+                    className="flex flex-wrap items-start justify-between gap-3 border-t border-border py-3 first:border-t-0 first:pt-0"
+                    key={actividad.id}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        aria-label={`Marcar "${actividad.descripcion}" como completada`}
+                        isSelected={actividad.estado === 'COMPLETADA'}
+                        onChange={(isCompletada) => {
+                          actualizarActividad.mutate({
+                            id: actividad.id,
+                            input: {
+                              estado: isCompletada ? ESTADO_ACTIVIDAD.COMPLETADA : ESTADO_ACTIVIDAD.PENDIENTE,
+                            },
+                          });
+                        }}
+                      >
+                        <Checkbox.Content>
+                          <Checkbox.Control>
+                            <Checkbox.Indicator />
+                          </Checkbox.Control>
+                        </Checkbox.Content>
+                      </Checkbox>
+                      <div className="flex flex-col gap-1">
+                        <p
+                          className={
+                            actividad.estado === 'COMPLETADA'
+                              ? 'text-sm text-muted-foreground line-through'
+                              : 'text-sm text-foreground'
+                          }
+                        >
+                          {actividad.descripcion}
+                        </p>
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>{ORIGEN_ACTIVIDAD_LABELS[actividad.origen]}</span>
+                          {actividad.referencia ? <span>· {actividad.referencia}</span> : null}
+                          {actividad.equipoId ? <span>· Equipo {actividad.equipoId}</span> : null}
+                          {actividad.hallazgoId ? <span>· Hallazgo {actividad.hallazgoId}</span> : null}
+                          {actividad.asignadoA ? <span>· Asignado a {actividad.asignadoA.nombre}</span> : null}
+                        </div>
+                      </div>
+                    </div>
+                    <Chip color={estadoActividadChipColor(actividad.estado)} size="sm" variant="soft">
+                      {ESTADO_ACTIVIDAD_LABELS[actividad.estado]}
+                    </Chip>
+                  </div>
+                ))
+              : null}
           </Card.Content>
         </Card>
-      ) : (
-        <div className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
-          Solo Administradores o Supervisores pueden asignar nuevas actividades. Puedes marcar como
-          completadas las que tengas asignadas abajo.
-        </div>
-      )}
-
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-          Seguimiento del día
-        </span>
-        <Chip color="success" size="sm" variant="soft">
-          Completadas {stats.completadas} / {stats.total}
-        </Chip>
       </div>
-
-      {isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner color="accent" size="lg" />
-        </div>
-      ) : null}
-
-      {isError ? (
-        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
-          {error instanceof Error ? error.message : 'No se pudo cargar la lista de actividades.'}
-        </div>
-      ) : null}
-
-      {!isPending && !isError && actividades && actividades.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">Todavía no hay actividades asignadas</p>
-          <p className="text-sm text-muted">Usa el formulario de arriba para asignar la primera.</p>
-        </div>
-      ) : null}
-
-      {!isPending && !isError && actividades && actividades.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          {actividades.map((actividad) => (
-            <Card key={actividad.id}>
-              <Card.Content className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    aria-label={`Marcar "${actividad.descripcion}" como completada`}
-                    isSelected={actividad.estado === 'COMPLETADA'}
-                    onChange={(isCompletada) => {
-                      actualizarActividad.mutate({
-                        id: actividad.id,
-                        input: { estado: isCompletada ? ESTADO_ACTIVIDAD.COMPLETADA : ESTADO_ACTIVIDAD.PENDIENTE },
-                      });
-                    }}
-                  >
-                    <Checkbox.Content>
-                      <Checkbox.Control>
-                        <Checkbox.Indicator />
-                      </Checkbox.Control>
-                    </Checkbox.Content>
-                  </Checkbox>
-                  <div className="flex flex-col gap-1">
-                    <p
-                      className={
-                        actividad.estado === 'COMPLETADA'
-                          ? 'text-sm text-muted line-through'
-                          : 'text-sm text-foreground'
-                      }
-                    >
-                      {actividad.descripcion}
-                    </p>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted">
-                      <span>{ORIGEN_ACTIVIDAD_LABELS[actividad.origen]}</span>
-                      {actividad.referencia ? <span>· {actividad.referencia}</span> : null}
-                      {actividad.equipoId ? <span>· Equipo {actividad.equipoId}</span> : null}
-                      {actividad.hallazgoId ? <span>· Hallazgo {actividad.hallazgoId}</span> : null}
-                      {actividad.asignadoA ? <span>· Asignado a {actividad.asignadoA.nombre}</span> : null}
-                    </div>
-                  </div>
-                </div>
-                <Chip color={estadoActividadChipColor(actividad.estado)} size="sm" variant="soft">
-                  {ESTADO_ACTIVIDAD_LABELS[actividad.estado]}
-                </Chip>
-              </Card.Content>
-            </Card>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
