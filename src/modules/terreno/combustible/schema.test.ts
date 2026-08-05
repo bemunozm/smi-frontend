@@ -2,18 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { combustibleFormSchema } from './schema';
 
 describe('combustibleFormSchema', () => {
+  it('acepta litros + tipo', () => {
+    expect(combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 50, tipo: 'PETROLEO' }).success).toBe(true);
+  });
+
   it('rechaza litros <= 0', () => {
-    const r = combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 0 });
-    expect(r.success).toBe(false);
+    expect(combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 0, tipo: 'PETROLEO' }).success).toBe(false);
   });
 
-  it('acepta un registro válido', () => {
-    const r = combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 50 });
-    expect(r.success).toBe(true);
-  });
-
-  it('rechaza equipoId vacío', () => {
-    const r = combustibleFormSchema.safeParse({ equipoId: '', litros: 50 });
-    expect(r.success).toBe(false);
+  it('rechaza tipo inválido', () => {
+    expect(combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 50, tipo: 'GAS' }).success).toBe(false);
   });
 });

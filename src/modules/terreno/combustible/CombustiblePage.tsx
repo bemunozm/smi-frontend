@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Clock, ImageIcon } from 'lucide-react';
+import { ArrowRight, ImageIcon } from 'lucide-react';
 import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput } from './schema';
 import { useCombustibleList, useCreateCombustible } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
@@ -15,9 +15,15 @@ import {
   PhotoDropzone,
   PrimaryButton,
   SectionHeader,
+  Segmented,
   SelectField,
-  StatRow,
 } from '../../../shared/ui/mobile';
+
+const TIPO_ITEMS = [
+  { value: 'PETROLEO' as const, label: 'Petróleo' },
+  { value: 'BENCINA' as const, label: 'Bencina' },
+];
+const tipoLabel: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
 
 export function CombustiblePage() {
   const { data: equipos = [] } = useEquipos();
@@ -33,21 +39,14 @@ export function CombustiblePage() {
     formState: { errors },
   } = useForm<CombustibleFormInput, unknown, CombustibleForm>({
     resolver: zodResolver(combustibleFormSchema),
-    defaultValues: { equipoId: '' },
+    defaultValues: { equipoId: '', tipo: 'PETROLEO' },
   });
 
-  const equipoId = watch('equipoId');
-  const litros = Number(watch('litros')) || 0;
-  const lectura = Number(watch('lecturaActual')) || 0;
+  const tipo = (watch('tipo') as CombustibleForm['tipo']) ?? 'PETROLEO';
   const fotoUrl = watch('fotoUrl');
 
-  const equipo = equipos.find((e) => e.id === equipoId);
-  const delta = equipo && lectura ? lectura - equipo.horometroActual : 0;
-  const horasCiclo = delta > 0 ? delta : null;
-  const rendimiento = horasCiclo && litros > 0 ? Number((horasCiclo / litros).toFixed(1)) : null;
-
   const onSubmit = (values: CombustibleForm) =>
-    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', fotoUrl: undefined }) });
+    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', tipo: 'PETROLEO', fotoUrl: undefined }) });
 
   return (
     <div>
@@ -62,46 +61,21 @@ export function CombustiblePage() {
             ))}
           </SelectField>
 
-          {equipo && (
-            <div className="-mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Última lectura registrada:{' '}
-              <span className="tabular font-semibold text-foreground">{fmtNum(equipo.horometroActual)} h</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Litros"
-              unit="L"
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              placeholder="0"
-              error={errors.litros?.message}
-              {...register('litros', { valueAsNumber: true })}
-            />
-            <Field
-              label="Horómetro"
-              unit="h"
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              placeholder="0"
-              {...register('lecturaActual', { valueAsNumber: true })}
-            />
-          </div>
-
-          <StatRow
-            items={[
-              {
-                label: 'Rendimiento',
-                value: rendimiento != null ? `${fmtNum(rendimiento)} L/h` : '—',
-                tone: 'primary',
-              },
-              { label: 'Horas del ciclo', value: horasCiclo != null ? `${fmtNum(horasCiclo)} h` : '—' },
-            ]}
+          <Field
+            label="Litros"
+            unit="L"
+            type="number"
+            step="0.1"
+            inputMode="decimal"
+            placeholder="0"
+            error={errors.litros?.message}
+            {...register('litros', { valueAsNumber: true })}
           />
+
+          <div>
+            <FieldLabel>Tipo de combustible</FieldLabel>
+            <Segmented value={tipo} onChange={(v) => setValue('tipo', v)} options={TIPO_ITEMS} />
+          </div>
 
           <div>
             <FieldLabel hint={<span className="text-[var(--danger)]">Requerida</span>}>Foto de la carga</FieldLabel>
@@ -140,11 +114,9 @@ export function CombustiblePage() {
               </div>
               <div className="text-right">
                 <div className="tabular font-bold text-foreground">{fmtNum(r.litros)} L</div>
-                {r.rendimiento != null && (
-                  <Chip tone="success" className="mt-1">
-                    {fmtNum(r.rendimiento)} L/h
-                  </Chip>
-                )}
+                <Chip tone="neutral" className="mt-1">
+                  {tipoLabel[r.tipo] ?? r.tipo}
+                </Chip>
               </div>
             </div>
           </ListCard>

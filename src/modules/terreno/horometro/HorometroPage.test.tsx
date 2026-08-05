@@ -14,7 +14,7 @@ describe('HorometroPage', () => {
     );
     qc.setQueryData(
       ['horometro'],
-      [{ id: 'r1', equipoId: 'e1', operadorId: 'op1', turno: 'MANANA', valorInicial: 1180, valorFinal: 1200, fecha: '2026-08-01T09:00:00.000Z', equipo: { codigo: 'EX-001' } }],
+      [{ id: 'r1', equipoId: 'e1', operador: 'Juan Rojas', turno: 'DIURNO', valorInicial: 1180, valorFinal: 1200, nivelCombustible: 75, fecha: '2026-08-01T09:00:00.000Z', equipo: { codigo: 'EX-001' } }],
     );
 
     render(
@@ -25,6 +25,6 @@ describe('HorometroPage', () => {
 
     expect(screen.getByText('Lectura de turno')).toBeTruthy();
     expect(screen.getByText('Registrar lectura')).toBeTruthy();
-    expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
+    expect(screen.getByText('Juan Rojas')).toBeTruthy();
   });
 });

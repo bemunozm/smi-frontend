@@ -14,7 +14,23 @@ describe('TrabajosExtraPage', () => {
     );
     qc.setQueryData(
       ['trabajos-extra'],
-      [{ id: 'r1', equipoId: 'e1', cliente: 'Minera Norte', horasMaquina: 12, tonelaje: null, tarifa: 85000, monto: 1020000, fotoUrl: null, fecha: '2026-08-01T09:00:00.000Z', equipo: { codigo: 'CM-003' } }],
+      [
+        {
+          id: 'r1',
+          equipoId: 'e1',
+          operador: 'Juan Rojas',
+          faena: 'Rajo Norte',
+          turno: 'DIURNO',
+          horometroInicial: 5388,
+          horometroFinal: 5400,
+          totalHoras: 12,
+          actividad: 'REGULACION_CARGA',
+          descripcion: 'Carga de material',
+          observaciones: null,
+          fecha: '2026-08-01T09:00:00.000Z',
+          equipo: { codigo: 'CM-003' },
+        },
+      ],
     );
 
     render(
@@ -25,6 +41,8 @@ describe('TrabajosExtraPage', () => {
 
     expect(screen.getByText('Trabajo extraordinario')).toBeTruthy();
     expect(screen.getByText('Registrar trabajo')).toBeTruthy();
-    expect(screen.getByText('Minera Norte')).toBeTruthy();
+    expect(screen.getByText(/Rajo Norte/)).toBeTruthy();
+    // 'Regulación y carga' aparece en el select y en la tarjeta de la lista
+    expect(screen.getAllByText('Regulación y carga').length).toBeGreaterThan(0);
   });
 });

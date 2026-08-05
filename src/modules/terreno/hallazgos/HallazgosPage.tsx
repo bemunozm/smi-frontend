@@ -19,26 +19,26 @@ import {
   type ChipTone,
 } from '../../../shared/ui/mobile';
 
-const CRIT_ITEMS = [
+const PRIORIDAD_ITEMS = [
   { value: 'BAJA' as const, label: 'BAJA' },
   { value: 'MEDIA' as const, label: 'MEDIA' },
   { value: 'ALTA' as const, label: 'ALTA' },
   { value: 'CRITICA' as const, label: 'CRÍTICA' },
 ];
 
-const critTone: Record<string, ChipTone> = {
+const prioridadTone: Record<string, ChipTone> = {
   BAJA: 'neutral',
   MEDIA: 'warning',
   ALTA: 'danger',
   CRITICA: 'danger-solid',
 };
-const critAccent: Record<string, string> = {
+const prioridadAccent: Record<string, string> = {
   BAJA: '#928d80',
   MEDIA: '#c87f0a',
   ALTA: '#a31e22',
   CRITICA: '#a31e22',
 };
-const critLabel: Record<string, string> = { BAJA: 'BAJA', MEDIA: 'MEDIA', ALTA: 'ALTA', CRITICA: 'CRÍTICA' };
+const prioridadLabel: Record<string, string> = { BAJA: 'BAJA', MEDIA: 'MEDIA', ALTA: 'ALTA', CRITICA: 'CRÍTICA' };
 
 const estadoTone: Record<string, ChipTone> = {
   ABIERTO: 'danger',
@@ -65,15 +65,15 @@ export function HallazgosPage() {
     formState: { errors },
   } = useForm<HallazgoForm>({
     resolver: zodResolver(hallazgoFormSchema),
-    defaultValues: { equipoId: '', descripcion: '', criticidad: 'MEDIA' },
+    defaultValues: { equipoId: '', descripcion: '', prioridad: 'MEDIA' },
   });
 
-  const criticidad = (watch('criticidad') as HallazgoForm['criticidad']) ?? 'MEDIA';
+  const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
   const fotoUrl = watch('fotoUrl');
 
   const onSubmit = (values: HallazgoForm) =>
     crear.mutate(values, {
-      onSuccess: () => reset({ equipoId: '', descripcion: '', criticidad: 'MEDIA', fotoUrl: undefined }),
+      onSuccess: () => reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA', fotoUrl: undefined }),
     });
 
   return (
@@ -90,8 +90,8 @@ export function HallazgosPage() {
           </SelectField>
 
           <div>
-            <FieldLabel>Criticidad</FieldLabel>
-            <Segmented value={criticidad} onChange={(v) => setValue('criticidad', v)} options={CRIT_ITEMS} />
+            <FieldLabel>Nivel de prioridad</FieldLabel>
+            <Segmented value={prioridad} onChange={(v) => setValue('prioridad', v)} options={PRIORIDAD_ITEMS} />
           </div>
 
           <TextareaField
@@ -117,10 +117,10 @@ export function HallazgosPage() {
       <SectionHeader action="Ver todos">Hallazgos del turno</SectionHeader>
       <div className="space-y-2.5">
         {hallazgos.map((h) => (
-          <ListCard key={h.id} accent={critAccent[h.criticidad]}>
+          <ListCard key={h.id} accent={prioridadAccent[h.prioridad]}>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-foreground">{h.equipo?.codigo ?? h.equipoId}</span>
-              <Chip tone={critTone[h.criticidad] ?? 'neutral'}>{critLabel[h.criticidad] ?? h.criticidad}</Chip>
+              <Chip tone={prioridadTone[h.prioridad] ?? 'neutral'}>{prioridadLabel[h.prioridad] ?? h.prioridad}</Chip>
               <span className="tabular ml-auto text-xs text-muted-foreground">{fmtTime(h.fecha)}</span>
             </div>
             <p className="mt-1.5 text-sm text-foreground">{h.descripcion}</p>

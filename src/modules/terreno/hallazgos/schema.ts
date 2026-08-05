@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-export const CRITICIDADES = ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'] as const;
+export const PRIORIDADES = ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'] as const;
 
 export const hallazgoFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
   descripcion: z.string().min(3, 'Describí el hallazgo'),
-  criticidad: z.enum(CRITICIDADES),
+  prioridad: z.enum(PRIORIDADES),
   fotoUrl: z.string().optional(),
 });
 
@@ -15,7 +15,7 @@ export interface Hallazgo {
   id: string;
   equipoId: string;
   descripcion: string;
-  criticidad: string;
+  prioridad: string;
   estado: string;
   fotoUrl: string | null;
   fecha: string;

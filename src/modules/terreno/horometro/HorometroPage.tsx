@@ -19,9 +19,8 @@ import {
 } from '../../../shared/ui/mobile';
 
 const TURNOS = [
-  { value: 'MANANA' as const, label: 'MAÑANA', sub: '08-16' },
-  { value: 'TARDE' as const, label: 'TARDE', sub: '16-00' },
-  { value: 'NOCHE' as const, label: 'NOCHE', sub: '00-08' },
+  { value: 'DIURNO' as const, label: 'DIURNO', sub: '08-20' },
+  { value: 'NOCTURNO' as const, label: 'NOCTURNO', sub: '20-08' },
 ];
 
 export function HorometroPage() {
@@ -38,18 +37,16 @@ export function HorometroPage() {
     formState: { errors },
   } = useForm<HorometroFormInput, unknown, HorometroForm>({
     resolver: zodResolver(horometroFormSchema),
-    defaultValues: { equipoId: '', operadorId: '', turno: 'MANANA' },
+    defaultValues: { equipoId: '', operador: '', turno: 'DIURNO' },
   });
 
-  const turno = (watch('turno') as HorometroForm['turno']) ?? 'MANANA';
+  const turno = (watch('turno') as HorometroForm['turno']) ?? 'DIURNO';
   const inicial = Number(watch('valorInicial')) || 0;
   const final = Number(watch('valorFinal')) || 0;
   const horasTurno = final > inicial ? final - inicial : null;
 
   const onSubmit = (values: HorometroForm) =>
-    crear.mutate(values, {
-      onSuccess: () => reset({ equipoId: '', operadorId: '', turno: 'MANANA' }),
-    });
+    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', operador: '', turno: 'DIURNO' }) });
 
   return (
     <div>
@@ -81,16 +78,15 @@ export function HorometroPage() {
 
           <Field
             label="Operador"
-            placeholder="OP-1148"
-            prefix="ID"
+            placeholder="Nombre y apellido"
             right={<User className="h-4 w-4 text-muted-foreground" />}
-            error={errors.operadorId?.message}
-            {...register('operadorId')}
+            error={errors.operador?.message}
+            {...register('operador')}
           />
 
           <div className="grid grid-cols-2 gap-3">
             <Field
-              label="Valor inicial"
+              label="Horómetro inicial"
               unit="h"
               type="number"
               step="0.1"
@@ -100,7 +96,7 @@ export function HorometroPage() {
               {...register('valorInicial', { valueAsNumber: true })}
             />
             <Field
-              label="Valor final"
+              label="Horómetro final"
               unit="h"
               type="number"
               step="0.1"
@@ -109,6 +105,16 @@ export function HorometroPage() {
               {...register('valorFinal', { valueAsNumber: true })}
             />
           </div>
+
+          <Field
+            label="Nivel de combustible"
+            unit="%"
+            type="number"
+            step="1"
+            inputMode="numeric"
+            placeholder="0"
+            {...register('nivelCombustible', { valueAsNumber: true })}
+          />
 
           <div className="flex items-center justify-between rounded-2xl bg-[var(--surface-tertiary)] px-3.5 py-3">
             <div>
@@ -144,8 +150,10 @@ export function HorometroPage() {
                 {r.valorFinal != null ? 'Cerrado' : 'Abierto'}
               </Chip>
             </div>
-            <div className="tabular mt-1.5 text-xs text-muted-foreground">
-              {fmtNum(r.valorInicial)} h → {r.valorFinal != null ? `${fmtNum(r.valorFinal)} h` : '—'} · {fmtDate(r.fecha)}
+            <div className="mt-1 text-sm text-foreground">{r.operador}</div>
+            <div className="tabular mt-0.5 text-xs text-muted-foreground">
+              {fmtNum(r.valorInicial)} h → {r.valorFinal != null ? `${fmtNum(r.valorFinal)} h` : '—'}
+              {r.nivelCombustible != null ? ` · ${fmtNum(r.nivelCombustible)}% comb.` : ''} · {fmtDate(r.fecha)}
             </div>
           </ListCard>
         ))}

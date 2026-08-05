@@ -14,7 +14,7 @@ describe('CombustiblePage', () => {
     );
     qc.setQueryData(
       ['combustible'],
-      [{ id: 'r1', equipoId: 'e1', litros: 120, fotoUrl: null, rendimiento: 4.5, fecha: '2026-08-01T09:20:00.000Z', equipo: { codigo: 'EX-001' } }],
+      [{ id: 'r1', equipoId: 'e1', litros: 120, tipo: 'PETROLEO', fotoUrl: null, fecha: '2026-08-01T09:20:00.000Z', equipo: { codigo: 'EX-001' } }],
     );
 
     render(
@@ -24,7 +24,7 @@ describe('CombustiblePage', () => {
     );
 
     expect(screen.getByText('Registrar carga')).toBeTruthy();
-    expect(screen.getByText('Últimas cargas')).toBeTruthy();
+    expect(screen.getByText('Tipo de combustible')).toBeTruthy();
     expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
   });
 });

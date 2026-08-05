@@ -3,23 +3,32 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight } from 'lucide-react';
 import {
   trabajoExtraFormSchema,
-  calcMonto,
+  ACTIVIDADES,
+  actividadLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from './schema';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
-import { fmtMoney, fmtNum } from '../../../shared/lib/format';
+import { fmtDate, fmtNum } from '../../../shared/lib/format';
 import {
   Card,
   Chip,
   Field,
+  FieldLabel,
   ListCard,
   PrimaryButton,
   ScreenTitle,
   SectionHeader,
+  Segmented,
   SelectField,
+  TextareaField,
 } from '../../../shared/ui/mobile';
+
+const TURNOS = [
+  { value: 'DIURNO' as const, label: 'DIURNO', sub: '08-20' },
+  { value: 'NOCTURNO' as const, label: 'NOCTURNO', sub: '20-08' },
+];
 
 export function TrabajosExtraPage() {
   const { data: equipos = [] } = useEquipos();
@@ -31,24 +40,28 @@ export function TrabajosExtraPage() {
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
     resolver: zodResolver(trabajoExtraFormSchema),
-    defaultValues: { equipoId: '', cliente: '' },
+    defaultValues: { equipoId: '', operador: '', faena: '', turno: 'DIURNO', actividad: 'REGULACION_CARGA' },
   });
 
-  const horas = Number(watch('horasMaquina')) || 0;
-  const tarifa = Number(watch('tarifa')) || 0;
-  const monto = calcMonto(horas, tarifa);
+  const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
+  const ini = Number(watch('horometroInicial')) || 0;
+  const fin = Number(watch('horometroFinal')) || 0;
+  const totalHoras = fin > ini ? fin - ini : null;
 
   const onSubmit = (values: TrabajoExtraForm) =>
-    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', cliente: '' }) });
+    crear.mutate(values, {
+      onSuccess: () => reset({ equipoId: '', operador: '', faena: '', turno: 'DIURNO', actividad: 'REGULACION_CARGA' }),
+    });
 
   return (
     <div>
       <ScreenTitle
         title="Trabajo extraordinario"
-        subtitle="Horas máquina × tarifa determinan el monto a facturar al cliente."
+        subtitle="Registro de tarea por turno: horómetros, actividad y observaciones."
       />
 
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -62,54 +75,68 @@ export function TrabajosExtraPage() {
                 </option>
               ))}
             </SelectField>
-            <Field label="Cliente" placeholder="Seleccionar" error={errors.cliente?.message} {...register('cliente')} />
+            <Field label="Operador" placeholder="Nombre y apellido" error={errors.operador?.message} {...register('operador')} />
+          </div>
+
+          <Field label="Faena" placeholder="Ej: Rajo Norte" error={errors.faena?.message} {...register('faena')} />
+
+          <div>
+            <FieldLabel>Turno</FieldLabel>
+            <Segmented value={turno} onChange={(v) => setValue('turno', v)} options={TURNOS} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field
-              label="Horas máquina"
+              label="Horómetro inicial"
               unit="h"
               type="number"
               step="0.1"
               inputMode="decimal"
               placeholder="0"
-              error={errors.horasMaquina?.message}
-              {...register('horasMaquina', { valueAsNumber: true })}
+              error={errors.horometroInicial?.message}
+              {...register('horometroInicial', { valueAsNumber: true })}
             />
             <Field
-              label="Tarifa"
-              prefix="$"
-              unit="/h"
+              label="Horómetro final"
+              unit="h"
               type="number"
-              step="1"
-              inputMode="numeric"
+              step="0.1"
+              inputMode="decimal"
               placeholder="0"
-              error={errors.tarifa?.message}
-              {...register('tarifa', { valueAsNumber: true })}
+              error={errors.horometroFinal?.message}
+              {...register('horometroFinal', { valueAsNumber: true })}
             />
           </div>
 
-          <Field
-            label="Tonelaje"
-            hint={<span className="text-muted-foreground">Opcional</span>}
-            unit="t"
-            type="number"
-            step="0.1"
-            inputMode="decimal"
-            placeholder="0"
-            {...register('tonelaje', { valueAsNumber: true })}
-          />
+          <SelectField label="Actividad" error={errors.actividad?.message} {...register('actividad')}>
+            {ACTIVIDADES.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </SelectField>
 
           <div className="rounded-2xl bg-secondary p-4 text-secondary-foreground">
-            <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
-              <span className="text-white/50">Monto estimado</span>
-              <span className="tabular text-white/70">
-                {fmtNum(horas)} h × {fmtMoney(tarifa)}
-              </span>
-            </div>
-            <div className="tabular mt-1 text-3xl font-bold">{fmtMoney(monto)}</div>
-            <div className="mt-1 text-xs text-white/50">Referencial. Se confirma al aprobar el reporte.</div>
+            <div className="text-[10px] font-bold tracking-wider text-white/50 uppercase">Total horas de tarea</div>
+            <div className="tabular mt-1 text-3xl font-bold">{totalHoras != null ? `${fmtNum(totalHoras)} h` : '—'}</div>
+            <div className="mt-1 text-xs text-white/50">Se calcula desde el horómetro inicial y final.</div>
           </div>
+
+          <TextareaField
+            label="Descripción de la tarea"
+            rows={3}
+            placeholder="Qué se hizo y dónde"
+            error={errors.descripcion?.message}
+            {...register('descripcion')}
+          />
+
+          <TextareaField
+            label="Observaciones"
+            hint={<span className="text-muted-foreground">Opcional</span>}
+            rows={2}
+            placeholder="Novedades, detenciones, etc."
+            {...register('observaciones')}
+          />
 
           <PrimaryButton type="submit" disabled={crear.isPending}>
             {crear.isPending ? 'Guardando…' : 'Registrar trabajo'}
@@ -125,15 +152,16 @@ export function TrabajosExtraPage() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="font-semibold text-foreground">{r.equipo?.codigo ?? r.equipoId}</span>
-                <span className="truncate text-sm text-muted-foreground">{r.cliente}</span>
+                <span className="truncate text-sm text-muted-foreground">{r.operador}</span>
               </div>
-              <Chip tone="info">Por aprobar</Chip>
+              <Chip tone="info">{r.turno}</Chip>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="tabular text-xs text-muted-foreground">
-                {fmtNum(r.horasMaquina)} h × {fmtMoney(r.tarifa)}
+            <div className="mt-1 text-sm text-foreground">{actividadLabel[r.actividad] ?? r.actividad}</div>
+            <div className="tabular mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {r.faena} · {fmtDate(r.fecha)}
               </span>
-              <span className="tabular font-bold text-foreground">{fmtMoney(r.monto)}</span>
+              <span className="font-semibold text-foreground">{fmtNum(r.totalHoras)} h</span>
             </div>
           </ListCard>
         ))}

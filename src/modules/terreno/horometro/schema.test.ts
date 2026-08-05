@@ -4,14 +4,14 @@ import { horometroFormSchema } from './schema';
 describe('horometroFormSchema', () => {
   it('acepta un registro válido', () => {
     const r = horometroFormSchema.safeParse({
-      equipoId: 'e1', operadorId: 'op1', turno: 'MANANA', valorInicial: 100,
+      equipoId: 'e1', operador: 'Juan Rojas', turno: 'DIURNO', valorInicial: 100,
     });
     expect(r.success).toBe(true);
   });
 
   it('rechaza turno inválido', () => {
     const r = horometroFormSchema.safeParse({
-      equipoId: 'e1', operadorId: 'op1', turno: 'MADRUGADA', valorInicial: 100,
+      equipoId: 'e1', operador: 'Juan Rojas', turno: 'MANANA', valorInicial: 100,
     });
     expect(r.success).toBe(false);
   });

@@ -14,7 +14,7 @@ describe('HallazgosPage', () => {
     );
     qc.setQueryData(
       ['hallazgos'],
-      [{ id: 'h1', equipoId: 'e1', descripcion: 'Fuga de aceite hidráulico', criticidad: 'ALTA', estado: 'ABIERTO', fotoUrl: null, fecha: '2026-08-01T08:12:00.000Z', equipo: { codigo: 'PE-004' } }],
+      [{ id: 'h1', equipoId: 'e1', descripcion: 'Fuga de aceite hidráulico', prioridad: 'ALTA', estado: 'ABIERTO', fotoUrl: null, fecha: '2026-08-01T08:12:00.000Z', equipo: { codigo: 'PE-004' } }],
     );
 
     render(
@@ -23,7 +23,7 @@ describe('HallazgosPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('Hallazgos del turno')).toBeTruthy();
+    expect(screen.getByText('Nivel de prioridad')).toBeTruthy();
     expect(screen.getByText('Registrar hallazgo')).toBeTruthy();
     expect(screen.getByText('Fuga de aceite hidráulico')).toBeTruthy();
   });
