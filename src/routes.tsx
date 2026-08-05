@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { GuestRoute } from './components/GuestRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -10,6 +10,11 @@ import { LoginView } from './views/LoginView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
+import { TerrenoMobileLayout } from './shared/layout/AppLayout';
+import { CombustiblePage } from './modules/terreno/combustible/CombustiblePage';
+import { HorometroPage } from './modules/terreno/horometro/HorometroPage';
+import { TrabajosExtraPage } from './modules/terreno/trabajos-extra/TrabajosExtraPage';
+import { HallazgosPage } from './modules/terreno/hallazgos/HallazgosPage';
 
 export const router = createBrowserRouter([
   {
@@ -36,13 +41,27 @@ export const router = createBrowserRouter([
             ],
           },
           {
-            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
-            children: [{ path: '/terreno', element: <PlaceholderView title="Terreno" /> }],
-          },
-          {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
             children: [
               { path: '/mantenimiento', element: <PlaceholderView title="Mantenimiento" /> },
+            ],
+          },
+        ],
+      },
+      // Operación en Terreno — UI mobile propia (fuera del layout desktop),
+      // restringida a ADMIN + SUPERVISOR. Se integra con la auth/rutas del
+      // equipo; el shell mobile (header + tab bar) reemplaza al Sidebar/Topbar.
+      {
+        element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
+        children: [
+          {
+            element: <TerrenoMobileLayout />,
+            children: [
+              { path: '/terreno', element: <Navigate replace to="/terreno/hallazgos" /> },
+              { path: '/terreno/combustible', element: <CombustiblePage /> },
+              { path: '/terreno/horometro', element: <HorometroPage /> },
+              { path: '/terreno/trabajos-extra', element: <TrabajosExtraPage /> },
+              { path: '/terreno/hallazgos', element: <HallazgosPage /> },
             ],
           },
         ],
