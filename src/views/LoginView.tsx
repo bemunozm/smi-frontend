@@ -119,7 +119,7 @@ export function LoginView() {
               {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Ingresar')}
             </Button>
             {SHOW_DEV_HINT ? (
-              <p className="text-center text-xs text-muted">Dev: admin@smi.local / Smi123456!</p>
+              <p className="text-center text-xs text-muted-foreground">Dev: admin@smi.local / Smi123456!</p>
             ) : null}
           </Card.Footer>
         </form>

@@ -67,6 +67,7 @@ Reglas del patrón:
 - **Tema claro cálido**: fondo `#EFEDE9`, texto `#0D0C0A`, accent `#1E50EA`. Tokens en `:root` mapeados a las variables que espera `@heroui/styles` → todos los componentes HeroUI adoptan la paleta.
 - **Fuentes** self-hosted (`@fontsource-variable`): `Geist` (UI, `font-sans`), `Space Grotesk` (títulos, `font-display`), `Geist Mono`.
 - Ajustes de componentes (campos/botones 48px, radios, labels uppercase) están en `@layer components` de `index.css` — patrón oficial de HeroUI. **No reimplementes componentes ni pongas hex sueltos**: usa los tokens (`bg-danger-soft`, `text-foreground`, chips con `color`, etc.).
+- `--color-muted`/`bg-muted` es una **superficie** tenue (convención shadcn, la usa el kit mobile de Terreno vía `@theme inline`); para **texto** secundario/tenue usa siempre **`text-muted-foreground`**, nunca `text-muted` (resuelve a un fondo casi blanco, no a un color de texto).
 
 ## Cómo agregar una vista/dominio
 1. `types/<x>.ts` con los schemas Zod. 2. `api/<X>API.ts` (patrón de arriba). 3. `hooks/use<X>s.ts` (query + mutations con feedback). 4. `views/<X>View.tsx` (solo UI, HeroUI). 5. Ruta en `routes.tsx` (dentro de `ProtectedRoute`, con `allowedRoles` si aplica). 6. Ítem en `config/nav-items.ts` (filtrado por rol si corresponde).
