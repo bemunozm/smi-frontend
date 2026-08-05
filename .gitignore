@@ -31,3 +31,6 @@ dist-ssr
 # Env
 .env
 .env.local
+
+# Mockup de diseño (referencia, no va al repo)
+SMI Terreno (standalone).html
