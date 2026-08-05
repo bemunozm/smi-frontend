@@ -17,7 +17,7 @@ src/
 ├── context/     # AppProviders.tsx (QueryClientProvider y demás providers)
 ├── hooks/       # useX.ts (useQuery + useMutation) y useCurrentUser
 ├── layout/      # AppLayout, Sidebar, Topbar
-├── lib/         # instancias configuradas: axios.ts, query-client.ts, auth-client.ts
+├── lib/         # instancias configuradas: axios.ts, query-client.ts, auth-client.ts, api-error.ts (toDomainError compartido)
 ├── store/       # ui.ts (Zustand — SOLO estado de UI, nunca auth)
 ├── types/       # schemas Zod + tipos: roles.ts, user.ts, ...
 ├── views/       # una vista por pantalla — SE LLAMAN *View, NO *Page
@@ -28,13 +28,18 @@ src/
 Los archivos son **named exports** (no `export default`). Sin path alias — imports relativos.
 
 ## Patrón CRUD estándar (calca `users` de punta a punta)
-Cada dominio se implementa igual. Este es EL patrón:
+Cada dominio se implementa igual. Este es EL patrón — la ESTRUCTURA (axios +
+try/catch + Zod + queryFn) se calca por dominio, pero el helper de errores
+es único y compartido en `lib/`, no se duplica:
 
 ```
 lib/axios.ts            instancia axios (baseURL de config/env, withCredentials)
+lib/api-error.ts         toDomainError/extractBackendMessage — COMPARTIDO, cada
+                        api/<X>API.ts lo IMPORTA, nunca lo redefine local
    ↓
 api/<X>API.ts           funciones async: axios + try/catch + Zod.parse(response COMPLETA) + return .data
-                        el catch pasa por toDomainError → mensaje del backend primero, sino fallback
+                        el catch llama a toDomainError (importado de lib/api-error)
+                        → mensaje del backend primero, sino fallback
    ↓
 types/<x>.ts            <X>Schema (zod) + tipos z.infer + <X>ResponseSchema/<X>ListResponseSchema
    ↓
@@ -48,7 +53,7 @@ views/<X>View.tsx       SOLO UI. Consume los hooks. mutate(payload, { onSuccess:
 
 Reglas del patrón:
 - **Validar SIEMPRE la response con Zod** (la envoltura completa `{ data, message }`). Los schemas viven en `types/` y sirven tanto para validar respuestas como para tipar/validar forms (RHF + `zodResolver`).
-- **Errores**: `api/<X>API.ts#toDomainError` es la única fuente del mensaje → para errores HTTP usa `error.response.data.message` (backend) y, si no viene, un **fallback amigable** (nunca el mensaje técnico de axios); `ZodError` → mensaje de "respuesta inválida".
+- **Errores**: `lib/api-error.ts#toDomainError` es la única fuente del mensaje en TODO el frontend (importado por cada `api/<X>API.ts`, nunca reimplementado) → para errores HTTP usa `error.response.data.message` (backend) y, si no viene, un **fallback amigable** (nunca el mensaje técnico de axios); `ZodError` → mensaje de "respuesta inválida".
 - **Feedback (toasts) + invalidación viven en los hooks**, no en las vistas. La vista solo cierra el modal / navega en su `onSuccess` local. Ambos `onSuccess` (hook + call-site) se ejecutan.
 - **`useQueryClient()`** para invalidar (no importar la instancia directamente).
 
