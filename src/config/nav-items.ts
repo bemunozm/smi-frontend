@@ -8,9 +8,14 @@ export interface NavItem {
 }
 
 /**
- * Menú por rol. Los módulos de dominio todavía no existen — cada item
- * apunta a una página placeholder ("En construcción"); lo que importa acá
- * es demostrar que el menú cambia según `session.user.role`.
+ * Menú por rol. Los items que todavía apuntan a `PlaceholderView`
+ * ("En construcción") son los dominios que aún no se implementan; Flota,
+ * Inventario y Terreno ya llevan a su vista real. Lo que importa acá es que el
+ * menú cambia según `session.user.role`.
+ *
+ * Los roles de cada item deben coincidir con los `allowedRoles` de la ruta en
+ * `routes.tsx`: mostrar un item que después rebota en `/forbidden` es peor que
+ * no mostrarlo.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   {
@@ -18,8 +23,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: '/',
     roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.OPERADOR],
   },
-  { label: 'Equipos', to: '/equipos', roles: [ROLES.ADMIN] },
-  { label: 'Inventario', to: '/inventario', roles: [ROLES.ADMIN] },
+  {
+    label: 'Equipos',
+    to: '/equipos',
+    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+  },
+  {
+    label: 'Inventario',
+    to: '/inventario',
+    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+  },
   { label: 'Terreno', to: '/terreno', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   { label: 'Mantenimiento', to: '/mantenimiento', roles: [ROLES.ADMIN, ROLES.MANTENEDOR] },
   { label: 'Notificaciones', to: '/notificaciones', roles: [ROLES.ADMIN] },
