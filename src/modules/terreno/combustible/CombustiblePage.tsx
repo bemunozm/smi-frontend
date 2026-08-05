@@ -4,6 +4,8 @@ import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput 
 import { useCombustibleList, useCreateCombustible } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
 import { Button, SelectField, TextField } from '../../../shared/ui/controls';
+import { ImageUploadField } from '../../../shared/ui/ImageUploadField';
+import { assetUrl } from '../../../shared/api/uploads';
 
 export function CombustiblePage() {
   const { data: equipos = [] } = useEquipos();
@@ -14,14 +16,18 @@ export function CombustiblePage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<CombustibleFormInput, unknown, CombustibleForm>({
     resolver: zodResolver(combustibleFormSchema),
     defaultValues: { equipoId: '', litros: 0 },
   });
 
+  const fotoUrl = watch('fotoUrl');
+
   const onSubmit = (values: CombustibleForm) => {
-    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', litros: 0 }) });
+    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', litros: 0, fotoUrl: undefined }) });
   };
 
   return (
@@ -50,11 +56,22 @@ export function CombustiblePage() {
           label="Litros"
           type="number"
           step="0.1"
+          inputMode="decimal"
           error={errors.litros?.message}
           {...register('litros')}
         />
-        <TextField label="Lectura actual (horómetro)" type="number" step="0.1" {...register('lecturaActual')} />
-        <TextField label="Foto (URL)" error={errors.fotoUrl?.message} {...register('fotoUrl')} />
+        <TextField
+          label="Lectura actual (horómetro)"
+          type="number"
+          step="0.1"
+          inputMode="decimal"
+          {...register('lecturaActual')}
+        />
+        <ImageUploadField
+          label="Foto de la carga"
+          value={fotoUrl}
+          onChange={(url) => setValue('fotoUrl', url)}
+        />
 
         <div className="sm:col-span-2">
           <Button type="submit" disabled={crear.isPending}>
@@ -70,6 +87,7 @@ export function CombustiblePage() {
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr className="border-b border-border">
+                <th className="p-3">Foto</th>
                 <th className="p-3">Equipo</th>
                 <th className="p-3">Litros</th>
                 <th className="p-3">Rendimiento</th>
@@ -79,15 +97,26 @@ export function CombustiblePage() {
             <tbody>
               {registros.map((r) => (
                 <tr key={r.id} className="border-b border-border last:border-0">
+                  <td className="p-3">
+                    {r.fotoUrl ? (
+                      <img
+                        src={assetUrl(r.fotoUrl)}
+                        alt="Carga"
+                        className="h-10 w-10 rounded-lg border border-border object-cover"
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="p-3">{r.equipo?.codigo ?? r.equipoId}</td>
                   <td className="p-3">{r.litros} L</td>
                   <td className="p-3">{r.rendimiento != null ? r.rendimiento : '—'}</td>
-                  <td className="p-3">{new Date(r.fecha).toLocaleDateString()}</td>
+                  <td className="p-3 whitespace-nowrap">{new Date(r.fecha).toLocaleDateString()}</td>
                 </tr>
               ))}
               {registros.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-4 text-muted-foreground">
+                  <td colSpan={5} className="p-4 text-muted-foreground">
                     Sin registros.
                   </td>
                 </tr>
