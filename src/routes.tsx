@@ -11,6 +11,7 @@ import { ForbiddenView } from './views/ForbiddenView';
 import { InsumoKardexView } from './views/InsumoKardexView';
 import { InventarioView } from './views/InventarioView';
 import { LoginView } from './views/LoginView';
+import { MantenimientoView } from './views/MantenimientoView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
@@ -62,9 +63,7 @@ export const router = createBrowserRouter([
           },
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
-            children: [
-              { path: '/mantenimiento', element: <PlaceholderView title="Mantenimiento" /> },
-            ],
+            children: [{ path: '/mantenimiento', element: <MantenimientoView /> }],
           },
         ],
       },
