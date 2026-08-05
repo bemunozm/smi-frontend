@@ -21,6 +21,9 @@ vista y los hooks (`useDashboard.ts`) no necesitan cambiar.
 | `hallazgosAbiertos` | Terreno | Alexander | `GET /api/hallazgos?estado=ABIERTO` → `data.length`. | Endpoint de hallazgos existe en su rama pero **sin filtro/agregación por estado**; hay que pedirlo o contar en cliente sobre el listado completo mientras tanto. |
 | `proximasMantenciones` | Mantenimiento | Joaquín | Motor preventivo por umbral de horómetro. | **Fase 2** — el endpoint todavía no existe. |
 | `ingresosTrabajosExtra` | Terreno | Alexander | Suma de `monto` sobre `TrabajoExtraordinario`. | ⚠️ **Sujeto a confirmación**: el campo `monto` fue **eliminado** del modelo — pendiente reponerlo con Alexander antes de poder calcular este KPI. |
+| `hallazgosAbiertosPorCriticidad` | Terreno | Alexander | Mismo endpoint que `hallazgosAbiertos`, agrupado por `criticidad`. Complementa esa card (subtítulo "1 crítico · 2 altos"). | Depende del mismo endpoint sin filtro/agregación por estado. |
+| `cumplimientoPreventivoPct` | Mantenimiento | Joaquín | % de mantenciones preventivas ejecutadas dentro del umbral de horómetro. | **Fase 2** — el motor preventivo todavía no existe. |
+| `insumosBajoMinimo` | Inventario/Amin | Amin | Conteo de insumos con `stockActual < stockMinimo`. | Endpoint no existe aún en `main`. |
 
 ## Listas
 
@@ -28,6 +31,10 @@ vista y los hooks (`useDashboard.ts`) no necesitan cambiar.
 |---|---|---|---|---|
 | `HallazgoResumen[]` (hallazgos recientes) | Terreno | Alexander | `GET /api/hallazgos?estado=ABIERTO&limit=5`, orden por fecha desc. | Depende del mismo endpoint de hallazgos de arriba; hoy no soporta `limit`/orden — habría que pedirlo o recortar/ordenar en cliente. |
 | `MantencionProxima[]` (próximas mantenciones) | Mantenimiento | Joaquín | Motor preventivo por umbral de horómetro. | **Fase 2** — no existe aún, igual que el KPI de arriba. |
+| `FlotaComposicionItem[]` (dona de composición de flota) | Flota/Inventario | Amin | `GET /api/equipos`, agrupado por `estado` (idealmente un endpoint de agregación). | Endpoint no existe aún en `main`. Los conteos deben sumar `equiposDisponibles.total`. |
+| `HallazgoTendenciaSemana[]` (tendencia semanal, abiertos vs cerrados) | Terreno | Alexander | `GET /api/hallazgos`, agregado por semana y `estado`. | El endpoint actual no soporta agregación temporal — pedirla o calcularla en cliente sobre el listado completo. |
+| `TrabajoExtraordinarioMes[]` (horas extraordinarias por mes) | Terreno | Alexander | `GET /api/trabajos-extraordinarios`, agregado por mes sumando `totalHoras`. | Usa **horas**, no ingresos — el campo `monto` fue eliminado del modelo. |
+| `InsumoBajoStock[]` (tabla de insumos bajo stock mínimo) | Inventario/Amin | Amin | Endpoint que filtre `stockActual < stockMinimo`. | Endpoint no existe aún en `main`. Mismo dato alimenta el KPI `insumosBajoMinimo`. |
 
 ## Shape esperado (referencia rápida)
 
@@ -55,6 +62,29 @@ MantencionProxima = {
   equipo: string;
   tipo: 'PREVENTIVA' | 'CORRECTIVA';
   horometroRestante: number; // horas, 0 = umbral alcanzado
+}
+
+FlotaComposicionItem = {
+  estado: 'DISPONIBLE' | 'EN_RUTA' | 'EN_MANTENCION' | 'DE_BAJA';
+  cantidad: number;
+}
+
+HallazgoTendenciaSemana = {
+  semana: string; // etiqueta corta, ej. "4 ago"
+  abiertos: number;
+  cerrados: number;
+}
+
+TrabajoExtraordinarioMes = {
+  mes: string; // etiqueta corta, ej. "Ago"
+  horas: number; // horas máquina, NO monto (campo eliminado)
+}
+
+InsumoBajoStock = {
+  id: string;
+  insumo: string;
+  stockActual: number;
+  stockMinimo: number;
 }
 ```
 

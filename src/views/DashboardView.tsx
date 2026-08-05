@@ -1,15 +1,40 @@
+import type { CSSProperties } from 'react';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import {
   useDashboardSummary,
+  useFlotaComposicion,
   useHallazgosRecientes,
+  useHallazgosTendencia,
+  useInsumosBajoStock,
   useMantencionesProximas,
+  useTrabajosExtraordinariosMensual,
 } from '../hooks/useDashboard';
 import {
+  CHART_NEUTRAL,
+  HALLAZGOS_TENDENCIA_COLOR,
+  TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
+  equipoEstadoChartColor,
+  equipoEstadoLabel,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
+  hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
 
 const CLP_FORMATTER = new Intl.NumberFormat('es-CL', {
@@ -17,6 +42,84 @@ const CLP_FORMATTER = new Intl.NumberFormat('es-CL', {
   currency: 'CLP',
   maximumFractionDigits: 0,
 });
+
+/**
+ * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
+ * sin línea de eje) y tooltip estilizado con los tokens de `index.css` en vez
+ * del look por defecto de Recharts. Un solo lugar para mantener los 3
+ * gráficos visualmente consistentes entre sí.
+ *
+ * Usan hex literales (`CHART_NEUTRAL`), no `var(--token)`: para los props que
+ * Recharts pinta como atributo SVG (`fill`/`stroke` de ejes y grid) el custom
+ * property podía no resolverse a tiempo para el primer paint — ver la nota
+ * larga en `config/dashboard-colors.ts`. `TOOLTIP_*` renderiza en un `<div>`
+ * HTML normal (sí soporta `var()`), pero se deja igual en hex por
+ * consistencia con el resto del archivo.
+ */
+/** Recharts espera `SVGProps<SVGTextElement>` para `tick`, no `CSSProperties`
+ * (comparten `fontSize`/`fill` pero no todo el resto) — se deja sin anotar
+ * para que la inferencia contextual resuelva el tipo correcto en cada uso. */
+const AXIS_TICK_STYLE = { fontSize: 11, fill: CHART_NEUTRAL.muted };
+
+const TOOLTIP_CONTENT_STYLE: CSSProperties = {
+  background: CHART_NEUTRAL.surface,
+  border: `1px solid ${CHART_NEUTRAL.border}`,
+  borderRadius: 8,
+  boxShadow: CHART_NEUTRAL.overlayShadow,
+  fontSize: 12,
+  fontFamily: '"Geist Variable", ui-sans-serif, system-ui, sans-serif',
+  padding: '8px 12px',
+};
+
+const TOOLTIP_LABEL_STYLE: CSSProperties = {
+  color: CHART_NEUTRAL.muted,
+  fontSize: 11,
+  fontWeight: 600,
+  marginBottom: 4,
+};
+
+const TOOLTIP_ITEM_STYLE: CSSProperties = {
+  color: CHART_NEUTRAL.foreground,
+  fontSize: 12,
+  padding: 0,
+};
+
+interface ChartLegendItem {
+  key: string;
+  label: string;
+  color: string;
+  value?: string;
+}
+
+/**
+ * Leyenda propia (no la `<Legend>` de Recharts): un swatch de color por
+ * identidad + texto en tono neutro — el texto nunca lleva el color de la
+ * serie (regla de accesibilidad de la guía dataviz), la identidad la carga
+ * el punto de color.
+ */
+function ChartLegendRow({ items }: { items: ChartLegendItem[] }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 pt-2">
+      {items.map((item) => (
+        <div className="flex items-center gap-1.5" key={item.key}>
+          <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="text-xs text-muted">
+            {item.label}
+            {item.value !== undefined ? <span className="ms-1 font-mono text-foreground">{item.value}</span> : null}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="flex h-64 items-center justify-center">
+      <Spinner color="accent" size="sm" />
+    </div>
+  );
+}
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -73,8 +176,8 @@ function SummaryCards() {
 
   if (isPending) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }, (_, index) => (
           <KpiCardSkeleton key={index} />
         ))}
       </div>
@@ -94,13 +197,18 @@ function SummaryCards() {
   );
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <KpiCard
         hint={`${disponibilidadPct}% de la flota operativa`}
         label="Equipos disponibles"
         value={`${summary.equiposDisponibles.disponibles} / ${summary.equiposDisponibles.total}`}
       />
-      <KpiCard hint="Requieren seguimiento" label="Hallazgos abiertos" value={String(summary.hallazgosAbiertos)} />
+      <KpiCard
+        hint={hallazgosCriticidadHint(summary.hallazgosAbiertosPorCriticidad)}
+        hintTone={summary.hallazgosAbiertosPorCriticidad.critica > 0 ? 'warning' : 'muted'}
+        label="Hallazgos abiertos"
+        value={String(summary.hallazgosAbiertos)}
+      />
       <KpiCard
         hint="Según umbral de horómetro"
         label="Próximas mantenciones"
@@ -112,7 +220,215 @@ function SummaryCards() {
         label="Ingresos trabajos extra"
         value={CLP_FORMATTER.format(summary.ingresosTrabajosExtra)}
       />
+      <KpiCard
+        hint="Mantenciones preventivas ejecutadas a tiempo"
+        hintTone={summary.cumplimientoPreventivoPct < 80 ? 'warning' : 'muted'}
+        label="Cumplimiento preventivo"
+        value={`${Math.round(summary.cumplimientoPreventivoPct)}%`}
+      />
+      <KpiCard
+        hint={summary.insumosBajoMinimo > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
+        hintTone={summary.insumosBajoMinimo > 0 ? 'warning' : 'muted'}
+        label="Insumos bajo mínimo"
+        value={String(summary.insumosBajoMinimo)}
+      />
     </div>
+  );
+}
+
+/** Dona — composición de estados de la flota (DISPONIBLE/EN_RUTA/
+ * EN_MANTENCION/DE_BAJA). Aporta la MEZCLA de estados que la card "Equipos
+ * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
+ * con el resto. Datos ← Flota/Amin, mock. */
+function FlotaComposicionSection() {
+  const { data, isPending, isError, error } = useFlotaComposicion();
+
+  const chartData = data?.map((item) => ({
+    ...item,
+    label: equipoEstadoLabel(item.estado),
+    fill: equipoEstadoChartColor(item.estado),
+  }));
+
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Title>Composición de la flota</Card.Title>
+        <Card.Description>Distribución de los equipos por estado operativo.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {isPending ? <ChartSkeleton /> : null}
+
+        {isError ? (
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar la composición de la flota.'}
+          </p>
+        ) : null}
+
+        {!isPending && !isError && chartData ? (
+          <>
+            <div className="h-64 w-full">
+              <ResponsiveContainer height="100%" width="100%">
+                <PieChart>
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    formatter={(value, name) => [`${value} equipos`, name]}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                  />
+                  <Pie
+                    cx="50%"
+                    cy="50%"
+                    data={chartData}
+                    dataKey="cantidad"
+                    innerRadius="58%"
+                    isAnimationActive={false}
+                    nameKey="label"
+                    outerRadius="85%"
+                    paddingAngle={3}
+                    stroke={CHART_NEUTRAL.surface}
+                    strokeWidth={2}
+                  >
+                    {chartData.map((entry) => (
+                      <Cell fill={entry.fill} key={entry.estado} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <ChartLegendRow
+              items={chartData.map((item) => ({
+                key: item.estado,
+                label: item.label,
+                value: String(item.cantidad),
+                color: item.fill,
+              }))}
+            />
+          </>
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+}
+
+/** Área — tendencia semanal de hallazgos, abiertos vs cerrados (~8 semanas).
+ * Aporta la dimensión TEMPORAL (¿se acumulan o se resuelven?) que ninguna
+ * card muestra. Datos ← Terreno, mock. */
+function HallazgosTendenciaSection() {
+  const { data, isPending, isError, error } = useHallazgosTendencia();
+
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Title>Tendencia de hallazgos</Card.Title>
+        <Card.Description>Abiertos vs. cerrados por semana, últimas 8 semanas.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {isPending ? <ChartSkeleton /> : null}
+
+        {isError ? (
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar la tendencia de hallazgos.'}
+          </p>
+        ) : null}
+
+        {!isPending && !isError && data ? (
+          <>
+            <div className="h-64 w-full">
+              <ResponsiveContainer height="100%" width="100%">
+                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+                  <XAxis axisLine={false} dataKey="semana" tick={AXIS_TICK_STYLE} tickLine={false} />
+                  <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={28} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    cursor={{ stroke: CHART_NEUTRAL.border, strokeWidth: 1 }}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                  />
+                  <Area
+                    dataKey="abiertos"
+                    fill={HALLAZGOS_TENDENCIA_COLOR.abiertos}
+                    fillOpacity={0.12}
+                    isAnimationActive={false}
+                    name="Abiertos"
+                    stroke={HALLAZGOS_TENDENCIA_COLOR.abiertos}
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  <Area
+                    dataKey="cerrados"
+                    fill={HALLAZGOS_TENDENCIA_COLOR.cerrados}
+                    fillOpacity={0.12}
+                    isAnimationActive={false}
+                    name="Cerrados"
+                    stroke={HALLAZGOS_TENDENCIA_COLOR.cerrados}
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <ChartLegendRow
+              items={[
+                { key: 'abiertos', label: 'Abiertos', color: HALLAZGOS_TENDENCIA_COLOR.abiertos },
+                { key: 'cerrados', label: 'Cerrados', color: HALLAZGOS_TENDENCIA_COLOR.cerrados },
+              ]}
+            />
+          </>
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+}
+
+/** Barras — horas máquina de trabajos extraordinarios por mes (~6 meses).
+ * Usa HORAS, no ingresos (el campo `monto` fue eliminado en Terreno). Serie
+ * única: sin leyenda, el título de la card ya dice qué se mide. Datos ←
+ * Terreno, mock. */
+function TrabajosExtraordinariosSection() {
+  const { data, isPending, isError, error } = useTrabajosExtraordinariosMensual();
+
+  return (
+    <Card className="lg:col-span-2">
+      <Card.Header>
+        <Card.Title>Horas extraordinarias por mes</Card.Title>
+        <Card.Description>Horas máquina en trabajos extraordinarios, últimos 6 meses.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {isPending ? <ChartSkeleton /> : null}
+
+        {isError ? (
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar las horas extraordinarias.'}
+          </p>
+        ) : null}
+
+        {!isPending && !isError && data ? (
+          <div className="h-64 w-full">
+            <ResponsiveContainer height="100%" width="100%">
+              <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+                <XAxis axisLine={false} dataKey="mes" tick={AXIS_TICK_STYLE} tickLine={false} />
+                <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
+                <Tooltip
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
+                  formatter={(value) => [`${value} h`, 'Horas']}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                />
+                <Bar
+                  dataKey="horas"
+                  fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
+                  isAnimationActive={false}
+                  maxBarSize={28}
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : null}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -233,6 +549,68 @@ function MantencionesProximasSection() {
   );
 }
 
+/** Insumos con stock por debajo del mínimo — mismo patrón de `Table` que
+ * `MantencionesProximasSection`. Datos ← Inventario/Amin, mock. */
+function InsumosBajoStockSection() {
+  const { data: insumos, isPending, isError, error } = useInsumosBajoStock();
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <Card.Header>
+        <Card.Title>Insumos bajo stock mínimo</Card.Title>
+        <Card.Description>Repuestos e insumos que requieren reposición.</Card.Description>
+      </Card.Header>
+
+      {isPending ? (
+        <div className="flex justify-center py-8">
+          <Spinner color="accent" size="sm" />
+        </div>
+      ) : null}
+
+      {isError ? (
+        <p className="px-1 text-sm text-danger-soft-foreground" role="alert">
+          {error instanceof Error ? error.message : 'No se pudo cargar los insumos bajo stock mínimo.'}
+        </p>
+      ) : null}
+
+      {!isPending && !isError && insumos && insumos.length > 0 ? (
+        <Table variant="secondary">
+          <Table.ScrollContainer>
+            <Table.Content aria-label="Insumos bajo stock mínimo" className="min-w-full">
+              <Table.Header>
+                <Table.Column isRowHeader>Insumo</Table.Column>
+                <Table.Column>Stock actual</Table.Column>
+                <Table.Column>Stock mínimo</Table.Column>
+                <Table.Column>Estado</Table.Column>
+              </Table.Header>
+              <Table.Body>
+                <Table.Collection items={insumos}>
+                  {(insumo) => (
+                    <Table.Row>
+                      <Table.Cell>{insumo.insumo}</Table.Cell>
+                      <Table.Cell className="font-mono text-sm">{insumo.stockActual}</Table.Cell>
+                      <Table.Cell className="font-mono text-sm">{insumo.stockMinimo}</Table.Cell>
+                      <Table.Cell>
+                        <Chip color={insumo.stockActual === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                          {insumo.stockActual === 0 ? 'Sin stock' : 'Bajo mínimo'}
+                        </Chip>
+                      </Table.Cell>
+                    </Table.Row>
+                  )}
+                </Table.Collection>
+              </Table.Body>
+            </Table.Content>
+          </Table.ScrollContainer>
+        </Table>
+      ) : null}
+
+      {!isPending && !isError && insumos && insumos.length === 0 ? (
+        <p className="px-1 text-sm text-muted">No hay insumos bajo su stock mínimo.</p>
+      ) : null}
+    </Card>
+  );
+}
+
 export function DashboardView() {
   const { user } = useCurrentUser();
 
@@ -256,9 +634,17 @@ export function DashboardView() {
       <SummaryCards />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <FlotaComposicionSection />
+        <HallazgosTendenciaSection />
+        <TrabajosExtraordinariosSection />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <HallazgosRecientesSection />
         <MantencionesProximasSection />
       </div>
+
+      <InsumosBajoStockSection />
     </div>
   );
 }

@@ -1,11 +1,19 @@
 import { toDomainError } from '../lib/api-error';
 import {
   DashboardSummaryResponseSchema,
+  FlotaComposicionResponseSchema,
   HallazgosRecientesResponseSchema,
+  HallazgosTendenciaResponseSchema,
+  InsumosBajoStockResponseSchema,
   MantencionesProximasResponseSchema,
+  TrabajosExtraordinariosResponseSchema,
   type DashboardSummary,
+  type FlotaComposicionItem,
   type HallazgoResumen,
+  type HallazgoTendenciaSemana,
+  type InsumoBajoStock,
   type MantencionProxima,
+  type TrabajoExtraordinarioMes,
 } from '../types/dashboard';
 
 /**
@@ -34,6 +42,14 @@ function delay(ms: number): Promise<void> {
  * TODO(integración): `ingresosTrabajosExtra` ← Terreno: suma de `monto`
  *   sobre `TrabajoExtraordinario`. El campo `monto` fue ELIMINADO del
  *   modelo — pendiente reponerlo con Alexander. Sujeto a confirmación.
+ * TODO(integración): `hallazgosAbiertosPorCriticidad` ← Terreno (Alexander):
+ *   mismo endpoint que `hallazgosAbiertos`, agrupado por `criticidad` en vez
+ *   de solo contar.
+ * TODO(integración): `cumplimientoPreventivoPct` ← Mantenimiento (Joaquín):
+ *   % de mantenciones preventivas ejecutadas dentro del umbral de horómetro
+ *   — Fase 2, no existe aún.
+ * TODO(integración): `insumosBajoMinimo` ← Inventario/Amin: conteo de
+ *   insumos con `stockActual < stockMinimo`. Endpoint no existe aún.
  */
 async function getSummary(): Promise<DashboardSummary> {
   try {
@@ -43,8 +59,11 @@ async function getSummary(): Promise<DashboardSummary> {
       data: {
         equiposDisponibles: { disponibles: 12, total: 18 },
         hallazgosAbiertos: 5,
+        hallazgosAbiertosPorCriticidad: { critica: 1, alta: 2, media: 1, baja: 1 },
         proximasMantenciones: 3,
         ingresosTrabajosExtra: 2_450_000,
+        cumplimientoPreventivoPct: 87,
+        insumosBajoMinimo: 4,
       },
       message: 'ok (mock)',
     };
@@ -130,8 +149,119 @@ async function getMantencionesProximas(): Promise<MantencionProxima[]> {
   }
 }
 
+/**
+ * TODO(integración): reemplazar por `GET /api/equipos`, agrupado por
+ * `estado` (idealmente un endpoint de agregación). Dominio: Flota/Inventario
+ * (Amin). Los conteos deben sumar `equiposDisponibles.total` del summary.
+ */
+async function getFlotaComposicion(): Promise<FlotaComposicionItem[]> {
+  try {
+    await delay(300);
+
+    const mockResponse = {
+      data: [
+        { estado: 'DISPONIBLE', cantidad: 12 },
+        { estado: 'EN_RUTA', cantidad: 3 },
+        { estado: 'EN_MANTENCION', cantidad: 2 },
+        { estado: 'DE_BAJA', cantidad: 1 },
+      ],
+      message: 'ok (mock)',
+    };
+
+    return FlotaComposicionResponseSchema.parse(mockResponse).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener la composición de la flota.');
+  }
+}
+
+/**
+ * TODO(integración): reemplazar por `GET /api/hallazgos` agregado por
+ * semana (`fecha`) y `estado`, abiertos vs cerrados. Dominio: Terreno
+ * (Alexander). El endpoint actual no soporta agregación temporal — habría
+ * que pedirla o calcularla en cliente sobre el listado completo.
+ */
+async function getHallazgosTendencia(): Promise<HallazgoTendenciaSemana[]> {
+  try {
+    await delay(300);
+
+    const mockResponse = {
+      data: [
+        { semana: '30 jun', abiertos: 4, cerrados: 2 },
+        { semana: '7 jul', abiertos: 3, cerrados: 3 },
+        { semana: '14 jul', abiertos: 5, cerrados: 3 },
+        { semana: '21 jul', abiertos: 6, cerrados: 4 },
+        { semana: '28 jul', abiertos: 4, cerrados: 5 },
+        { semana: '4 ago', abiertos: 5, cerrados: 4 },
+        { semana: '11 ago', abiertos: 3, cerrados: 6 },
+        { semana: '18 ago', abiertos: 5, cerrados: 3 },
+      ],
+      message: 'ok (mock)',
+    };
+
+    return HallazgosTendenciaResponseSchema.parse(mockResponse).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener la tendencia de hallazgos.');
+  }
+}
+
+/**
+ * TODO(integración): reemplazar por `GET /api/trabajos-extraordinarios`
+ * agregado por mes, sumando `totalHoras`. Dominio: Terreno (Alexander). Usa
+ * HORAS, no ingresos — el campo `monto` fue eliminado del modelo.
+ */
+async function getTrabajosExtraordinariosMensual(): Promise<TrabajoExtraordinarioMes[]> {
+  try {
+    await delay(300);
+
+    const mockResponse = {
+      data: [
+        { mes: 'Mar', horas: 32 },
+        { mes: 'Abr', horas: 41 },
+        { mes: 'May', horas: 28 },
+        { mes: 'Jun', horas: 53 },
+        { mes: 'Jul', horas: 47 },
+        { mes: 'Ago', horas: 36 },
+      ],
+      message: 'ok (mock)',
+    };
+
+    return TrabajosExtraordinariosResponseSchema.parse(mockResponse).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener las horas extraordinarias.');
+  }
+}
+
+/**
+ * TODO(integración): reemplazar por el endpoint de Inventario que filtre
+ * `stockActual < stockMinimo`. Dominio: Inventario/Amin, endpoint no existe
+ * aún en `main`. Mismo dato alimenta `insumosBajoMinimo` del summary.
+ */
+async function getInsumosBajoStock(): Promise<InsumoBajoStock[]> {
+  try {
+    await delay(300);
+
+    const mockResponse = {
+      data: [
+        { id: 'IN-014', insumo: 'Aceite hidráulico 20L', stockActual: 2, stockMinimo: 6 },
+        { id: 'IN-027', insumo: 'Filtro de aire PE-004', stockActual: 1, stockMinimo: 4 },
+        { id: 'IN-033', insumo: 'Correa alternador', stockActual: 0, stockMinimo: 3 },
+        { id: 'IN-041', insumo: 'Grasa multipropósito 5kg', stockActual: 3, stockMinimo: 5 },
+      ],
+      message: 'ok (mock)',
+    };
+
+    return InsumosBajoStockResponseSchema.parse(mockResponse).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener los insumos bajo stock mínimo.');
+  }
+}
+
 export const DashboardAPI = {
   getSummary,
   getHallazgosRecientes,
   getMantencionesProximas,
+  getFlotaComposicion,
+  getHallazgosTendencia,
+  getTrabajosExtraordinariosMensual,
+  getInsumosBajoStock,
 };
