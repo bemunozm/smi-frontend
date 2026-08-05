@@ -1,7 +1,5 @@
-import axios from 'axios';
-import { ZodError } from 'zod';
-
 import { axiosInstance } from '../lib/axios';
+import { toDomainError } from '../lib/api-error';
 import {
   ActividadListResponseSchema,
   ActividadResponseSchema,
@@ -25,41 +23,6 @@ import {
   type UpdateActividadInput,
   type UpdateOrdenInput,
 } from '../types/mantenimiento';
-
-/**
- * Extrae `message` del body `{ data, message }` que el backend devuelve
- * incluso en 4xx/5xx — mismo helper que `api/UserAPI.ts#extractBackendMessage`,
- * duplicado a propósito acá (cada módulo de dominio es responsable de su
- * propio `toDomainError`, ver comentario de `UserAPI.ts`).
- */
-function extractBackendMessage(data: unknown): string | undefined {
-  if (typeof data !== 'object' || data === null || !('message' in data)) {
-    return undefined;
-  }
-  const raw = (data as { message?: unknown }).message;
-  return typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined;
-}
-
-/**
- * `toDomainError` propio del módulo Mantenimiento — misma lógica que
- * `UserAPI.ts#toDomainError`: prioriza el mensaje del backend, luego un
- * fallback amigable, nunca el texto técnico de axios. `ZodError` señala un
- * desajuste de contrato con `types/mantenimiento.ts`, no un error de red.
- */
-function toDomainError(error: unknown, fallbackMessage: string): Error {
-  if (error instanceof ZodError) {
-    const firstIssue = error.issues[0]?.message ?? 'formato inesperado';
-    return new Error(`Respuesta de /mantenimiento inválida: ${firstIssue}`);
-  }
-  if (axios.isAxiosError(error)) {
-    const backendMessage = extractBackendMessage(error.response?.data);
-    return new Error(backendMessage ?? fallbackMessage);
-  }
-  if (error instanceof Error) {
-    return new Error(error.message);
-  }
-  return new Error(fallbackMessage);
-}
 
 // ---------------------------------------------------------------------------
 // Órdenes de trabajo
