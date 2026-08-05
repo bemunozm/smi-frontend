@@ -500,7 +500,7 @@ export function UsersView() {
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
             Usuarios
           </h1>
-          <p className="text-sm text-muted">Crea, edita y elimina las cuentas del sistema.</p>
+          <p className="text-sm text-muted-foreground">Crea, edita y elimina las cuentas del sistema.</p>
         </div>
         <CreateUserModal />
       </div>
@@ -523,7 +523,7 @@ export function UsersView() {
       {!isPending && !isError && users && users.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">Todavía no hay usuarios</p>
-          <p className="text-sm text-muted">Crea el primero con el botón "Nuevo usuario".</p>
+          <p className="text-sm text-muted-foreground">Crea el primero con el botón "Nuevo usuario".</p>
         </div>
       ) : null}
 

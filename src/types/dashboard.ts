@@ -1,12 +1,24 @@
 import { z } from 'zod';
 
 /**
- * Contrato de datos del dashboard del bloque Núcleo. Los dominios que lo
- * alimentan (Terreno, Mantenimiento, Flota/Inventario) todavía no están
- * integrados a `main` — este archivo ES el contrato: cuando esos dominios
- * expongan sus endpoints reales, `api/DashboardAPI.ts` deja de construir
- * mocks y pasa a `axiosInstance.get(...)`, pero la forma de los datos que
- * consume la vista no cambia (siempre que el backend respete este shape).
+ * Contrato de datos del dashboard del bloque Núcleo.
+ *
+ * Terreno (Alexander) ya está integrado a `main` con datos REALES — sus 4
+ * piezas (KPI "Hallazgos abiertos", lista de recientes, tendencia semanal,
+ * horas extraordinarias por mes) se calculan en cliente desde
+ * `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts` vía
+ * `config/dashboard-aggregations.ts` — ver `hooks/useDashboard.ts`. Los
+ * tipos de acá (`HallazgoResumen`, `HallazgoTendenciaSemana`,
+ * `TrabajoExtraordinarioMes`, `HallazgosPorCriticidad`) siguen siendo el
+ * contrato de SALIDA que consume `DashboardView`, aunque ya no lleguen por
+ * red envueltos en `{ data, message }` (eso lo tipa — sin Zod, son
+ * `interface` planas, dominio de Terreno — `types/hallazgos.ts` /
+ * `types/trabajosExtra.ts` en la entrada).
+ *
+ * Flota/Inventario (Amin) y Mantenimiento (Joaquín) siguen sin integrar —
+ * `DashboardSummarySchema` de acá y el mock de `api/DashboardAPI.ts` cubren
+ * solo esos campos. Cuando expongan sus endpoints reales, el patrón es el
+ * mismo: reemplazar el `mockResponse` por `axiosInstance.get(...)`.
  */
 
 export const CRITICIDADES = ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'] as const;
@@ -27,9 +39,14 @@ export const EquiposDisponiblesSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 
-/** Breakdown por criticidad de los hallazgos con `estado === 'ABIERTO'` —
- * complementa la card "Hallazgos abiertos" (mismo endpoint que ese KPI,
- * agrupado por `criticidad` en vez de solo contar). */
+/** Breakdown por prioridad de los hallazgos con `estado === 'ABIERTO'` —
+ * complementa la card "Hallazgos abiertos" (mismo listado que ese KPI,
+ * agrupado por `prioridad`). Calculado en cliente en
+ * `config/dashboard-aggregations.ts#hallazgosAbiertosPorPrioridad` desde el
+ * listado real de `hooks/useHallazgos.ts` — ya no es parte de
+ * `DashboardSummarySchema` (no llega envuelto en `{ data, message }`, se
+ * deriva). El nombre del campo sigue siendo "criticidad" del lado del
+ * dashboard aunque el backend lo llame `prioridad` (ver `types/hallazgos.ts`). */
 export const HallazgosPorCriticidadSchema = z.object({
   critica: z.number().int().nonnegative(),
   alta: z.number().int().nonnegative(),
@@ -38,18 +55,19 @@ export const HallazgosPorCriticidadSchema = z.object({
 });
 export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema>;
 
+/**
+ * KPIs que siguen sin dueño integrado a `main` (Flota/Inventario y
+ * Mantenimiento) — únicos campos que todavía sirve `api/DashboardAPI.ts`
+ * como mock. `hallazgosAbiertos` e `ingresosTrabajosExtra` salieron de acá:
+ * el primero ahora es real (ver `hooks/useDashboard.ts#useHallazgosAbiertosResumen`),
+ * el segundo se eliminó — el campo `monto` de `TrabajoExtraordinario` no
+ * existe en el modelo real, solo `totalHoras` (cubierto por el gráfico de
+ * horas extraordinarias).
+ */
 export const DashboardSummarySchema = z.object({
   equiposDisponibles: EquiposDisponiblesSchema,
-  /** ← Terreno: `GET /api/hallazgos?estado=ABIERTO`, contar `data.length`. */
-  hallazgosAbiertos: z.number().int().nonnegative(),
-  /** ← Terreno: mismo listado de arriba, agrupado por `criticidad`. */
-  hallazgosAbiertosPorCriticidad: HallazgosPorCriticidadSchema,
   /** ← Mantenimiento: motor preventivo por umbral de horómetro (Fase 2). */
   proximasMantenciones: z.number().int().nonnegative(),
-  /** ← Terreno: suma de `monto` en `TrabajoExtraordinario`. CLP. Sujeto a
-   *  confirmación — el campo `monto` fue eliminado del modelo, pendiente
-   *  reponerlo con Alexander. */
-  ingresosTrabajosExtra: z.number().nonnegative(),
   /** ← Mantenimiento: % de mantenciones preventivas ejecutadas dentro del
    *  umbral de horómetro (a tiempo) sobre el total programado. Fase 2. */
   cumplimientoPreventivoPct: z.number().min(0).max(100),
@@ -58,7 +76,12 @@ export const DashboardSummarySchema = z.object({
 });
 export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
 
-/** ← Terreno: `GET /api/hallazgos?estado=ABIERTO&limit=5`, orden por fecha desc. */
+/** ← Terreno (real): top 5 del listado de `GET /api/hallazgos` (ya viene
+ * `orderBy fecha desc`), remapeado en cliente desde `Hallazgo` —
+ * `config/dashboard-aggregations.ts#hallazgosRecientes`. Ya no valida una
+ * respuesta de red directamente (por eso no tiene `*ResponseSchema`), pero
+ * se mantiene como tipo de SALIDA porque `DashboardView` sigue consumiendo
+ * este shape. */
 export const HallazgoResumenSchema = z.object({
   id: z.string(),
   equipo: z.string(),
@@ -89,11 +112,11 @@ export const FlotaComposicionItemSchema = z.object({
 });
 export type FlotaComposicionItem = z.infer<typeof FlotaComposicionItemSchema>;
 
-/** ← Terreno: tendencia semanal de `Hallazgo.estado`/`fecha`, abiertos vs
- * cerrados (~8 semanas). Aporta la dimensión TEMPORAL (¿se acumulan o se
- * resuelven?) que ninguna card muestra. Depende de agregación por semana que
- * el endpoint actual de hallazgos no soporta — habría que pedirla o agregar
- * en cliente sobre el listado completo mientras tanto. */
+/** ← Terreno (real): tendencia semanal de `Hallazgo.estado`/`fecha`, abiertos
+ * vs cerrados (~8 semanas). Calculada en cliente —
+ * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal` — documenta
+ * ahí la semántica exacta (agrupa por semana de REPORTE, no de cierre; el
+ * modelo no tiene fecha de cierre). */
 export const HallazgoTendenciaSemanaSchema = z.object({
   semana: z.string(),
   abiertos: z.number().int().nonnegative(),
@@ -101,9 +124,11 @@ export const HallazgoTendenciaSemanaSchema = z.object({
 });
 export type HallazgoTendenciaSemana = z.infer<typeof HallazgoTendenciaSemanaSchema>;
 
-/** ← Terreno: horas máquina de `TrabajoExtraordinario.totalHoras`/`fecha`,
- * agrupadas por mes (~6 meses). Usa HORAS, no ingresos — el campo `monto`
- * fue eliminado del modelo (ver `ingresosTrabajosExtra` en el summary). */
+/** ← Terreno (real): horas máquina de `TrabajoExtraordinario.totalHoras`/`fecha`,
+ * agrupadas por mes (~6 meses) en cliente —
+ * `config/dashboard-aggregations.ts#trabajosExtraPorMes`. Usa HORAS, no
+ * ingresos: el campo `monto` no existe en el modelo real (solo
+ * `totalHoras`), así que el KPI de ingresos que tenía el mock se eliminó. */
 export const TrabajoExtraordinarioMesSchema = z.object({
   mes: z.string(),
   horas: z.number().nonnegative(),
@@ -122,14 +147,14 @@ export type InsumoBajoStock = z.infer<typeof InsumoBajoStockSchema>;
 
 /** Envolturas `{ data, message }` — mismo formato que ya usa `smi-backend`
  * en `users` (ver `types/user.ts`); el mock las respeta para que activar el
- * fetch real el día de mañana sea un cambio de una línea en `DashboardAPI`. */
+ * fetch real el día de mañana sea un cambio de una línea en `DashboardAPI`.
+ * Solo quedan las de los dominios que TODAVÍA son mock (Mantenimiento,
+ * Flota/Inventario) — las de Terreno se retiraron: ese dominio no valida con
+ * Zod (interfaces planas en `types/hallazgos.ts` / `types/trabajosExtra.ts`,
+ * deuda propia de Terreno, fuera del alcance de Núcleo) y deriva el shape de
+ * salida en cliente. */
 export const DashboardSummaryResponseSchema = z.object({
   data: DashboardSummarySchema,
-  message: z.string(),
-});
-
-export const HallazgosRecientesResponseSchema = z.object({
-  data: z.array(HallazgoResumenSchema),
   message: z.string(),
 });
 
@@ -140,16 +165,6 @@ export const MantencionesProximasResponseSchema = z.object({
 
 export const FlotaComposicionResponseSchema = z.object({
   data: z.array(FlotaComposicionItemSchema),
-  message: z.string(),
-});
-
-export const HallazgosTendenciaResponseSchema = z.object({
-  data: z.array(HallazgoTendenciaSemanaSchema),
-  message: z.string(),
-});
-
-export const TrabajosExtraordinariosResponseSchema = z.object({
-  data: z.array(TrabajoExtraordinarioMesSchema),
   message: z.string(),
 });
 

@@ -19,8 +19,10 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import {
   useDashboardSummary,
   useFlotaComposicion,
+  useHallazgosAbiertosResumen,
   useHallazgosRecientes,
   useHallazgosTendencia,
+  useHorasFacturables,
   useInsumosBajoStock,
   useMantencionesProximas,
   useTrabajosExtraordinariosMensual,
@@ -36,12 +38,6 @@ import {
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
-
-const CLP_FORMATTER = new Intl.NumberFormat('es-CL', {
-  style: 'currency',
-  currency: 'CLP',
-  maximumFractionDigits: 0,
-});
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -103,7 +99,7 @@ function ChartLegendRow({ items }: { items: ChartLegendItem[] }) {
       {items.map((item) => (
         <div className="flex items-center gap-1.5" key={item.key}>
           <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
-          <span className="text-xs text-muted">
+          <span className="text-xs text-muted-foreground">
             {item.label}
             {item.value !== undefined ? <span className="ms-1 font-mono text-foreground">{item.value}</span> : null}
           </span>
@@ -129,26 +125,47 @@ function formatFecha(iso: string): string {
   );
 }
 
+function formatHoras(horas: number): string {
+  return `${Number.isInteger(horas) ? horas : horas.toFixed(1)} h`;
+}
+
 interface KpiCardProps {
   label: string;
   value: string;
   hint: string;
   hintTone?: 'muted' | 'warning';
+  /** Marca discreta de que ESTA card puntual ya consume datos reales
+   * (Terreno), a diferencia del resto del dashboard. Ver `RealDataChip`. */
+  isReal?: boolean;
 }
 
-function KpiCard({ label, value, hint, hintTone = 'muted' }: KpiCardProps) {
+/** Indicador discreto de dato real — reemplaza, a nivel de sección, al
+ * chip único "Datos de ejemplo" del header (que dejó de ser cierto para
+ * el 100% del dashboard desde que Terreno se integró). */
+function RealDataChip() {
+  return (
+    <Chip className="shrink-0" color="success" size="sm" variant="soft">
+      Real
+    </Chip>
+  );
+}
+
+function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false }: KpiCardProps) {
   return (
     <Card>
       <Card.Header>
-        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-          {label}
-        </Card.Description>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+            {label}
+          </Card.Description>
+          {isReal ? <RealDataChip /> : null}
+        </div>
         <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
           {value}
         </Card.Title>
       </Card.Header>
       <Card.Content>
-        <p className={`text-xs ${hintTone === 'warning' ? 'text-warning-soft-foreground' : 'text-muted'}`}>
+        <p className={`text-xs ${hintTone === 'warning' ? 'text-warning-soft-foreground' : 'text-muted-foreground'}`}>
           {hint}
         </p>
       </Card.Content>
@@ -167,26 +184,30 @@ function KpiCardSkeleton() {
 }
 
 /**
- * Sección de 4 KPIs. Consume `useDashboardSummary()` — el contrato real de
- * cada campo (qué endpoint de qué dominio lo alimentará) está documentado
- * en `types/dashboard.ts` y `DASHBOARD-CONTRACTS.md`.
+ * KPIs de Flota/Inventario (Amin) y Mantenimiento (Joaquín) — únicos que
+ * siguen en mock, ver `api/DashboardAPI.ts#getSummary`. Consulta propia
+ * (`useDashboardSummary()`): si falla, no afecta al KPI real de al lado
+ * (`HallazgosAbiertosKpiCard`), que usa su propia query.
  */
-function SummaryCards() {
+function MockKpiCards() {
   const { data: summary, isPending, isError, error } = useDashboardSummary();
 
   if (isPending) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }, (_, index) => (
+      <>
+        {Array.from({ length: 4 }, (_, index) => (
           <KpiCardSkeleton key={index} />
         ))}
-      </div>
+      </>
     );
   }
 
   if (isError) {
     return (
-      <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+      <div
+        className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground sm:col-span-2 lg:col-span-3"
+        role="alert"
+      >
         {error instanceof Error ? error.message : 'No se pudo cargar el resumen.'}
       </div>
     );
@@ -197,28 +218,16 @@ function SummaryCards() {
   );
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <>
       <KpiCard
         hint={`${disponibilidadPct}% de la flota operativa`}
         label="Equipos disponibles"
         value={`${summary.equiposDisponibles.disponibles} / ${summary.equiposDisponibles.total}`}
       />
       <KpiCard
-        hint={hallazgosCriticidadHint(summary.hallazgosAbiertosPorCriticidad)}
-        hintTone={summary.hallazgosAbiertosPorCriticidad.critica > 0 ? 'warning' : 'muted'}
-        label="Hallazgos abiertos"
-        value={String(summary.hallazgosAbiertos)}
-      />
-      <KpiCard
         hint="Según umbral de horómetro"
         label="Próximas mantenciones"
         value={String(summary.proximasMantenciones)}
-      />
-      <KpiCard
-        hint="Cifra sujeta a confirmación con Terreno"
-        hintTone="warning"
-        label="Ingresos trabajos extra"
-        value={CLP_FORMATTER.format(summary.ingresosTrabajosExtra)}
       />
       <KpiCard
         hint="Mantenciones preventivas ejecutadas a tiempo"
@@ -232,6 +241,81 @@ function SummaryCards() {
         label="Insumos bajo mínimo"
         value={String(summary.insumosBajoMinimo)}
       />
+    </>
+  );
+}
+
+/** ← Terreno (real): `useHallazgosAbiertosResumen()` cuenta sobre
+ * `GET /api/hallazgos` y desglosa por `prioridad`. Query independiente de
+ * `MockKpiCards` — si Terreno cae, el resto de los KPIs sigue mostrando su
+ * mock con normalidad. */
+function HallazgosAbiertosKpiCard() {
+  const { data, isPending, isError, error } = useHallazgosAbiertosResumen();
+
+  if (isPending) return <KpiCardSkeleton />;
+
+  if (isError) {
+    return (
+      <Card>
+        <Card.Content className="py-6">
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar los hallazgos.'}
+          </p>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <KpiCard
+      hint={hallazgosCriticidadHint(data.porPrioridad)}
+      hintTone={data.porPrioridad.critica > 0 ? 'warning' : 'muted'}
+      isReal
+      label="Hallazgos abiertos"
+      value={String(data.abiertos)}
+    />
+  );
+}
+
+/** ← Terreno (real): `useHorasFacturables()` reutiliza la MISMA query y los
+ * MISMOS buckets mensuales que ya consume el gráfico "Horas extraordinarias
+ * por mes" (`useTrabajosExtraordinariosMensual`) — no dispara una query
+ * nueva ni recorre `trabajos-extra` de nuevo, solo suma la serie que el
+ * gráfico ya calculó. Reemplaza al KPI "Ingresos trabajos extra" del mock
+ * original (el campo `monto` no existe en el modelo real de
+ * `TrabajoExtraordinario`, solo `totalHoras`). */
+function HorasFacturablesKpiCard() {
+  const { data, isPending, isError, error } = useHorasFacturables();
+
+  if (isPending) return <KpiCardSkeleton />;
+
+  if (isError) {
+    return (
+      <Card>
+        <Card.Content className="py-6">
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar las horas extraordinarias.'}
+          </p>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  if (data === undefined) return null;
+
+  return (
+    <KpiCard hint="Últimos 6 meses" isReal label="Horas facturables" value={formatHoras(data)} />
+  );
+}
+
+function SummaryCards() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <MockKpiCards />
+      <HallazgosAbiertosKpiCard />
+      <HorasFacturablesKpiCard />
     </div>
   );
 }
@@ -311,15 +395,21 @@ function FlotaComposicionSection() {
 
 /** Área — tendencia semanal de hallazgos, abiertos vs cerrados (~8 semanas).
  * Aporta la dimensión TEMPORAL (¿se acumulan o se resuelven?) que ninguna
- * card muestra. Datos ← Terreno, mock. */
+ * card muestra. Datos ← Terreno, REAL (agrupación en cliente, ver
+ * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`). */
 function HallazgosTendenciaSection() {
   const { data, isPending, isError, error } = useHallazgosTendencia();
 
   return (
     <Card>
       <Card.Header>
-        <Card.Title>Tendencia de hallazgos</Card.Title>
-        <Card.Description>Abiertos vs. cerrados por semana, últimas 8 semanas.</Card.Description>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Tendencia de hallazgos</Card.Title>
+          <RealDataChip />
+        </div>
+        <Card.Description>
+          Abiertos/en proceso vs. cerrados, agrupados por semana de reporte (últimas 8).
+        </Card.Description>
       </Card.Header>
       <Card.Content>
         {isPending ? <ChartSkeleton /> : null}
@@ -381,16 +471,21 @@ function HallazgosTendenciaSection() {
 }
 
 /** Barras — horas máquina de trabajos extraordinarios por mes (~6 meses).
- * Usa HORAS, no ingresos (el campo `monto` fue eliminado en Terreno). Serie
- * única: sin leyenda, el título de la card ya dice qué se mide. Datos ←
- * Terreno, mock. */
+ * Usa HORAS, no ingresos: el campo `monto` no existe en el modelo real de
+ * `TrabajoExtraordinario` (solo `totalHoras`), así que el KPI de ingresos
+ * que tenía el mock se eliminó en vez de dejarlo roto. Serie única: sin
+ * leyenda, el título de la card ya dice qué se mide. Datos ← Terreno, REAL
+ * (agrupación en cliente, ver `config/dashboard-aggregations.ts#trabajosExtraPorMes`). */
 function TrabajosExtraordinariosSection() {
   const { data, isPending, isError, error } = useTrabajosExtraordinariosMensual();
 
   return (
     <Card className="lg:col-span-2">
       <Card.Header>
-        <Card.Title>Horas extraordinarias por mes</Card.Title>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Horas extraordinarias por mes</Card.Title>
+          <RealDataChip />
+        </div>
         <Card.Description>Horas máquina en trabajos extraordinarios, últimos 6 meses.</Card.Description>
       </Card.Header>
       <Card.Content>
@@ -433,14 +528,18 @@ function TrabajosExtraordinariosSection() {
 }
 
 /** Lista de hallazgos recientes — filas dentro de una sola card (mismo
- * patrón de filas con separador que `ProfileView`), no una card por ítem. */
+ * patrón de filas con separador que `ProfileView`), no una card por ítem.
+ * Datos ← Terreno, REAL: top 5 de `GET /api/hallazgos`. */
 function HallazgosRecientesSection() {
   const { data: hallazgos, isPending, isError, error } = useHallazgosRecientes();
 
   return (
     <Card>
       <Card.Header>
-        <Card.Title>Hallazgos recientes</Card.Title>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Hallazgos recientes</Card.Title>
+          <RealDataChip />
+        </div>
         <Card.Description>Últimos reportes de terreno, sin importar su estado.</Card.Description>
       </Card.Header>
       <Card.Content>
@@ -456,29 +555,29 @@ function HallazgosRecientesSection() {
           </p>
         ) : null}
 
-        {!isPending && !isError
+        {!isPending && !isError && hallazgos
           ? hallazgos.map((hallazgo) => (
               <div
                 className="flex flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0"
                 key={hallazgo.id}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-muted">{hallazgo.equipo}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{hallazgo.equipo}</span>
                   <Chip color={criticidadChipColor(hallazgo.criticidad)} size="sm" variant="soft">
                     {hallazgo.criticidad}
                   </Chip>
                   <Chip color={hallazgoEstadoChipColor(hallazgo.estado)} size="sm" variant="secondary">
                     {hallazgoEstadoLabel(hallazgo.estado)}
                   </Chip>
-                  <span className="ms-auto font-mono text-xs text-muted">{formatFecha(hallazgo.fecha)}</span>
+                  <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
                 </div>
                 <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
               </div>
             ))
           : null}
 
-        {!isPending && !isError && hallazgos.length === 0 ? (
-          <p className="py-4 text-sm text-muted">No hay hallazgos recientes.</p>
+        {!isPending && !isError && hallazgos && hallazgos.length === 0 ? (
+          <p className="py-4 text-sm text-muted-foreground">No hay hallazgos recientes.</p>
         ) : null}
       </Card.Content>
     </Card>
@@ -543,7 +642,7 @@ function MantencionesProximasSection() {
       ) : null}
 
       {!isPending && !isError && mantenciones.length === 0 ? (
-        <p className="px-1 text-sm text-muted">No hay mantenciones próximas.</p>
+        <p className="px-1 text-sm text-muted-foreground">No hay mantenciones próximas.</p>
       ) : null}
     </Card>
   );
@@ -605,7 +704,7 @@ function InsumosBajoStockSection() {
       ) : null}
 
       {!isPending && !isError && insumos && insumos.length === 0 ? (
-        <p className="px-1 text-sm text-muted">No hay insumos bajo su stock mínimo.</p>
+        <p className="px-1 text-sm text-muted-foreground">No hay insumos bajo su stock mínimo.</p>
       ) : null}
     </Card>
   );
@@ -624,10 +723,10 @@ export function DashboardView() {
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
             Hola, {user?.name || user?.email}
           </h1>
-          <p className="text-sm text-muted">Resumen general del sistema.</p>
+          <p className="text-sm text-muted-foreground">Resumen general del sistema.</p>
         </div>
         <Chip color="warning" size="sm" variant="soft">
-          Datos de ejemplo
+          Datos parcialmente de ejemplo
         </Chip>
       </div>
 

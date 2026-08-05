@@ -104,7 +104,7 @@ export function Topbar() {
                 <span className="truncate text-sm font-medium text-foreground">
                   {user.name || user.email}
                 </span>
-                <span className="truncate text-xs text-muted">{user.email}</span>
+                <span className="truncate text-xs text-muted-foreground">{user.email}</span>
                 {role ? (
                   <Chip className="w-fit" color={roleChipColor(role)} size="sm" variant="soft">
                     {role}

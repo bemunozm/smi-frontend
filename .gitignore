@@ -34,3 +34,6 @@ dist-ssr
 
 # Playwright CLI artifacts
 .playwright-cli/
+
+# Mockup de diseño (referencia, no va al repo)
+SMI Terreno (standalone).html

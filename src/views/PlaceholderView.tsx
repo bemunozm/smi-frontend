@@ -11,7 +11,7 @@ export function PlaceholderView({ title }: PlaceholderViewProps) {
       <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
       <Card variant="transparent">
         <Card.Content>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             Este módulo está en construcción. Se implementará cuando el dominio de{' '}
             {title.toLowerCase()} esté disponible.
           </p>

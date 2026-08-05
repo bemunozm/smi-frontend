@@ -191,6 +191,31 @@
   .modal__dialog {
     border-radius: 14px;
   }
+
+  /* Texto tenue INTERNO de HeroUI (Card.Description, encabezados de Table,
+     cuerpo de Modal/AlertDialog, Toast, indicadores de menú, close-button,
+     descripción genérica de campo) — @heroui/styles aplica `text-muted` a
+     estos selectors, pero `--color-muted` ahora resuelve a una SUPERFICIE
+     clara (`--surface-tertiary`), no a un color de texto: el kit mobile de
+     Terreno redefinió `--color-muted` en su bloque `@theme inline` de más
+     abajo para que SU `bg-muted` sea una superficie (convención shadcn:
+     muted=superficie, muted-foreground=texto). Terreno no importa
+     `@heroui/react` (tiene sus propios componentes en `shared/ui/mobile.tsx`),
+     así que estos selectors de HeroUI nunca aparecen en su UI — pisarlos acá
+     no le afecta. Mismo color que `text-muted-foreground` (ver
+     `CLAUDE.md#design-system`), para que el texto tenue de HeroUI y el
+     nuestro (JSX) se vean idénticos. */
+  .card__description,
+  .table__column,
+  .modal__body,
+  .alert-dialog__body,
+  .toast__description,
+  .menu-item__indicator,
+  .menu-item__indicator--submenu,
+  .close-button--default,
+  .description {
+    color: var(--color-muted-foreground);
+  }
 }
 
 /* ==========================================================================

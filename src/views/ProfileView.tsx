@@ -56,7 +56,7 @@ export function ProfileView() {
         <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
           Mi perfil
         </h1>
-        <p className="text-sm text-muted">Información de tu cuenta en el sistema.</p>
+        <p className="text-sm text-muted-foreground">Información de tu cuenta en el sistema.</p>
       </div>
 
       <Card className="max-w-2xl">
