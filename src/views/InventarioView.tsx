@@ -266,7 +266,7 @@ function CreateInsumoModal() {
                         />
                       </div>
 
-                      <p className="text-xs text-muted">
+                      <p className="text-xs text-(--muted)">
                         El stock inicial queda registrado como una entrada por compra: el kardex
                         parte explicando de dónde salió el saldo.
                       </p>
@@ -722,7 +722,7 @@ function EditInsumoModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
                       />
                     </div>
 
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-(--muted)">
                       El stock actual ({NUMERO.format(insumo.stock)}{' '}
                       {unidadSimbolo(insumo.unidad)}) no se edita acá: se mueve con movimientos de
                       inventario o con un ajuste por conteo físico.
@@ -802,7 +802,7 @@ function AjusteModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
                     noValidate
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
-                    <p className="text-sm text-muted">
+                    <p className="text-sm text-(--muted)">
                       El sistema tiene <strong>{NUMERO.format(insumo.stock)}</strong>{' '}
                       {unidadSimbolo(insumo.unidad)}. Ingresa lo que contaste en bodega y se
                       registrará la diferencia como movimiento.
@@ -996,7 +996,7 @@ export function InventarioView() {
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
             Insumos y repuestos
           </h1>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-(--muted)">
             Stock de bodega con alerta de mínimos y trazabilidad de cada movimiento.
           </p>
         </div>
@@ -1057,7 +1057,7 @@ export function InventarioView() {
       {!isPending && !isError && insumos.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">No hay insumos que coincidan</p>
-          <p className="text-sm text-muted">Ajusta los filtros o crea el primero.</p>
+          <p className="text-sm text-(--muted)">Ajusta los filtros o crea el primero.</p>
         </div>
       ) : null}
 
@@ -1080,20 +1080,20 @@ export function InventarioView() {
                     <Table.Row>
                       <Table.Cell>
                         <Link
-                          className="font-mono text-sm font-medium text-accent hover:underline"
+                          className="font-mono text-sm font-medium text-(--accent) hover:underline"
                           to={`/inventario/${insumo.id}`}
                         >
                           {insumo.codigo}
                         </Link>
                       </Table.Cell>
                       <Table.Cell>{insumo.nombre}</Table.Cell>
-                      <Table.Cell className="text-sm text-muted">
+                      <Table.Cell className="text-sm text-(--muted)">
                         {UNIDAD_LABELS[insumo.unidad]}
                       </Table.Cell>
                       <Table.Cell className="font-mono text-sm">
                         {NUMERO.format(insumo.stock)} {unidadSimbolo(insumo.unidad)}
                       </Table.Cell>
-                      <Table.Cell className="font-mono text-sm text-muted">
+                      <Table.Cell className="font-mono text-sm text-(--muted)">
                         {NUMERO.format(insumo.stockMinimo)}
                       </Table.Cell>
                       <Table.Cell>
@@ -1113,7 +1113,7 @@ export function InventarioView() {
                             <InsumoActionsMenu insumo={insumo} />
                           ) : (
                             <Link
-                              className="text-sm text-accent hover:underline"
+                              className="text-sm text-(--accent) hover:underline"
                               to={`/inventario/${insumo.id}`}
                             >
                               Ver kardex

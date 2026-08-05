@@ -508,7 +508,7 @@ export function EquiposView() {
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
             Equipos
           </h1>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-(--muted)">
             Maquinaria y vehículos de la operación, con su estado y uso acumulado.
           </p>
         </div>
@@ -576,7 +576,7 @@ export function EquiposView() {
       {!isPending && !isError && equipos.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">No hay equipos que coincidan</p>
-          <p className="text-sm text-muted">Ajusta los filtros o crea el primero.</p>
+          <p className="text-sm text-(--muted)">Ajusta los filtros o crea el primero.</p>
         </div>
       ) : null}
 
@@ -599,7 +599,7 @@ export function EquiposView() {
                     <Table.Row>
                       <Table.Cell>
                         <Link
-                          className="font-mono text-sm font-medium text-accent hover:underline"
+                          className="font-mono text-sm font-medium text-(--accent) hover:underline"
                           to={`/equipos/${equipo.id}`}
                         >
                           {equipo.codigo}
@@ -608,7 +608,7 @@ export function EquiposView() {
                       <Table.Cell>{equipo.tipo}</Table.Cell>
                       <Table.Cell>
                         {equipo.marca} {equipo.modelo}
-                        {equipo.anio ? <span className="text-muted"> · {equipo.anio}</span> : null}
+                        {equipo.anio ? <span className="text-(--muted)"> · {equipo.anio}</span> : null}
                       </Table.Cell>
                       <Table.Cell>
                         <Chip color={estadoEquipoChipColor(equipo.estado)} size="sm" variant="soft">
