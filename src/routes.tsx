@@ -10,11 +10,11 @@ import { LoginView } from './views/LoginView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
-import { TerrenoMobileLayout } from './shared/layout/AppLayout';
-import { CombustiblePage } from './modules/terreno/combustible/CombustiblePage';
-import { HorometroPage } from './modules/terreno/horometro/HorometroPage';
-import { TrabajosExtraPage } from './modules/terreno/trabajos-extra/TrabajosExtraPage';
-import { HallazgosPage } from './modules/terreno/hallazgos/HallazgosPage';
+import { TerrenoMobileLayout } from './layout/TerrenoLayout';
+import { CombustibleView } from './views/CombustibleView';
+import { HorometroView } from './views/HorometroView';
+import { TrabajosExtraView } from './views/TrabajosExtraView';
+import { HallazgosView } from './views/HallazgosView';
 
 export const router = createBrowserRouter([
   {
@@ -58,10 +58,10 @@ export const router = createBrowserRouter([
             element: <TerrenoMobileLayout />,
             children: [
               { path: '/terreno', element: <Navigate replace to="/terreno/hallazgos" /> },
-              { path: '/terreno/combustible', element: <CombustiblePage /> },
-              { path: '/terreno/horometro', element: <HorometroPage /> },
-              { path: '/terreno/trabajos-extra', element: <TrabajosExtraPage /> },
-              { path: '/terreno/hallazgos', element: <HallazgosPage /> },
+              { path: '/terreno/combustible', element: <CombustibleView /> },
+              { path: '/terreno/horometro', element: <HorometroView /> },
+              { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
+              { path: '/terreno/hallazgos', element: <HallazgosView /> },
             ],
           },
         ],
