@@ -1,153 +1,157 @@
+/* Fuentes (self-hosted, offline) */
+@import '@fontsource-variable/geist';
+@import '@fontsource/geist-mono/400.css';
+@import '@fontsource/geist-mono/500.css';
+@import '@fontsource/geist-mono/600.css';
+@import '@fontsource-variable/space-grotesk';
+
 @import "tailwindcss";
 @import "@heroui/styles";
-@custom-variant dark (&:where(.dark, .dark *));
 
+/* =========================================================================
+   Tema "SMI · Operación en Terreno" — claro cálido
+   Override de los tokens semánticos de HeroUI v3 (sin @layer → gana sobre los
+   defaults de HeroUI). Al tocar estos tokens, TODOS los componentes HeroUI
+   (Button, Input, Select, Table, Chip…) adoptan la paleta del diseño.
+   ========================================================================= */
 :root {
-  --card: #fafafa;
-  --ring: #2e6aff;
-  --input: #cccccc;
-  --muted: #ffffff;
-  --accent: #ffffff;
-  --border: #e7e4e4;
-  --radius: 1.3rem;
-  --chart-1: #2e67ff;
-  --chart-2: #00cdcc;
-  --chart-3: #f9ff40;
-  --chart-4: #00eeba;
-  --chart-5: #ff2822;
-  --popover: #ffffff;
-  --primary: #2e67ff;
-  --sidebar: #fafafa;
-  --spacing: 0.25rem;
-  --font-mono: Menlo, monospace;
-  --font-sans: Open Sans, sans-serif;
-  --secondary: #0e142b;
-  --background: #fcfcfc;
-  --font-serif: Georgia, serif;
-  --foreground: #0e142b;
-  --destructive: #ff6c35;
-  --shadow-blur: 0px;
-  --shadow-color: #2e6aff;
-  --sidebar-ring: #2e6aff;
-  --shadow-spread: -50px;
-  --letter-spacing: 0em;
-  --shadow-opacity: 0;
-  --sidebar-accent: #ffffff;
-  --sidebar-border: #ffffff;
-  --card-foreground: #0e142b;
-  --shadow-offset-x: -50px;
-  --shadow-offset-y: 2px;
-  --sidebar-primary: #2e67ff;
-  --muted-foreground: #0e142b;
-  --accent-foreground: #2e67ff;
-  --popover-foreground: #0e142b;
-  --primary-foreground: #ffffff;
-  --sidebar-foreground: #0e142b;
-  --secondary-foreground: #ffffff;
-  --destructive-foreground: #ffffff;
-  --sidebar-accent-foreground: #2e67ff;
-  --sidebar-primary-foreground: #ffffff;
+  color-scheme: light;
+
+  /* Base */
+  --background: #faf8f4; /* fondo crema */
+  --foreground: #0d0c0a; /* texto casi-negro cálido */
+
+  /* Superficies */
+  --surface: #ffffff;
+  --surface-foreground: #0d0c0a;
+  --surface-hover: #f8f7f5;
+  --surface-secondary: #f4f1ec;
+  --surface-secondary-foreground: #0d0c0a;
+  --surface-tertiary: #efede9;
+  --surface-tertiary-foreground: #0d0c0a;
+
+  /* Overlays (popovers, menús, modales) */
+  --overlay: #ffffff;
+  --overlay-foreground: #0d0c0a;
+
+  /* Texto muted + bordes */
+  --muted: #6b6760;
+  --border: #e7e2da;
+  --border-secondary: #efede9;
+  --border-tertiary: #f4f1ec;
+
+  /* Radios y foco */
+  --radius: 0.625rem; /* 10px — controles HeroUI */
+  --field-radius: 0.625rem;
+  --ring-offset-width: 2px;
+
+  /* Accent = primario azul */
+  --accent: #1e50ea;
+  --accent-foreground: #ffffff;
+  --accent-hover: #1848d0;
+  --accent-soft: #ebf1ff;
+  --accent-soft-foreground: #1239b5;
+  --accent-soft-hover: #dde8ff;
+
+  /* Default = neutro cálido */
+  --default: #efede9;
+  --default-foreground: #48453f;
+  --default-hover: #e7e2da;
+  --default-soft: #f4f1ec;
+  --default-soft-foreground: #6b6760;
+  --default-soft-hover: #efede9;
+
+  /* Danger */
+  --danger: #a31e22;
+  --danger-foreground: #ffffff;
+  --danger-hover: #8c191c;
+  --danger-soft: #fbeaea;
+  --danger-soft-foreground: #a31e22;
+  --danger-soft-hover: #f7dede;
+
+  /* Success */
+  --success: #0e9f6e;
+  --success-foreground: #ffffff;
+  --success-hover: #0c8a60;
+  --success-soft: #d9f4e7;
+  --success-soft-foreground: #0e6b4d;
+  --success-soft-hover: #c9eede;
+
+  /* Warning */
+  --warning: #c87f0a;
+  --warning-foreground: #ffffff;
+  --warning-hover: #ac6d08;
+  --warning-soft: #fcefd0;
+  --warning-soft-foreground: #8a5a09;
+  --warning-soft-hover: #f9e7bd;
+
+  /* Campos (inputs) */
+  --field-background: #ffffff;
+  --field-foreground: #0d0c0a;
+  --field-placeholder: #928d80;
+  --field-border: #e7e2da;
+  --field-border-hover: #d8d2c8;
+  --field-border-focus: #1e50ea;
+  --field-focus: #1e50ea;
+
+  /* Sombra suave cálida para tarjetas */
+  --shadow-card: 0 1px 3px rgba(13, 12, 10, 0.06), 0 1px 2px rgba(13, 12, 10, 0.04);
 }
 
-.dark {
-  --card: #0f0f0f;
-  --ring: #2e6aff;
-  --input: #162151;
-  --muted: #181818;
-  --accent: #000e39;
-  --border: #26272e;
-  --radius: 1.3rem;
-  --chart-1: #2e67ff;
-  --chart-2: #00cdcc;
-  --chart-3: #f9ff40;
-  --chart-4: #00eeba;
-  --chart-5: #ff2822;
-  --popover: #000000;
-  --primary: #2b65ff;
-  --sidebar: #0f0f0f;
-  --spacing: 0.25rem;
-  --font-mono: Menlo, monospace;
-  --font-sans: Open Sans, sans-serif;
-  --secondary: #ffffff;
-  --background: #000000;
-  --font-serif: Georgia, serif;
-  --foreground: #ffffff;
-  --destructive: #ff6c35;
-  --shadow-blur: 0px;
-  --shadow-color: #2e6aff;
-  --sidebar-ring: #2e6aff;
-  --shadow-spread: -50px;
-  --letter-spacing: 0em;
-  --shadow-opacity: 0;
-  --sidebar-accent: #000e39;
-  --sidebar-border: #323e62;
-  --card-foreground: #d9d9d9;
-  --shadow-offset-x: -50px;
-  --shadow-offset-y: 2px;
-  --sidebar-primary: #2e6aff;
-  --muted-foreground: #7b7e8c;
-  --accent-foreground: #2b65ff;
-  --popover-foreground: #ffffff;
-  --primary-foreground: #ffffff;
-  --sidebar-foreground: #d9d9d9;
-  --secondary-foreground: #0e142b;
-  --destructive-foreground: #ffffff;
-  --sidebar-accent-foreground: #2b65ff;
-  --sidebar-primary-foreground: #ffffff;
-}
-
+/* =========================================================================
+   Tokens de utilidades Tailwind del layer propio de la app.
+   Se mapean a la MISMA paleta (evitando colisiones de nombres con HeroUI:
+   p.ej. bg-muted -> superficie suave, NO el color de texto muted).
+   ========================================================================= */
 @theme inline {
-  --color-card: var(--card);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-border: var(--border);
-  --color-radius: var(--radius);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-popover: var(--popover);
-  --color-primary: var(--primary);
-  --color-sidebar: var(--sidebar);
-  --color-spacing: var(--spacing);
-  --color-font-mono: var(--font-mono);
-  --color-font-sans: var(--font-sans);
-  --color-secondary: var(--secondary);
   --color-background: var(--background);
-  --color-font-serif: var(--font-serif);
   --color-foreground: var(--foreground);
-  --color-destructive: var(--destructive);
-  --color-shadow-blur: var(--shadow-blur);
-  --color-shadow-color: var(--shadow-color);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-shadow-spread: var(--shadow-spread);
-  --color-letter-spacing: var(--letter-spacing);
-  --color-shadow-opacity: var(--shadow-opacity);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-card-foreground: var(--card-foreground);
-  --color-shadow-offset-x: var(--shadow-offset-x);
-  --color-shadow-offset-y: var(--shadow-offset-y);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+
+  --color-card: var(--surface);
+  --color-card-foreground: var(--surface-foreground);
+
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: var(--foreground);
+
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+
+  --color-secondary: #0d0c0a; /* acento oscuro (barras/nav) */
+  --color-secondary-foreground: #ffffff;
+
+  --color-muted: var(--surface-tertiary); /* bg-muted -> superficie suave */
+  --color-muted-foreground: #6b6760; /* text-muted-foreground -> gris cálido */
+
+  --color-accent: var(--accent-soft); /* bg-accent -> azul suave */
+  --color-accent-foreground: var(--accent-soft-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--field-border);
+  --color-ring: var(--accent);
+
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
+
+  --radius: 0.625rem;
+
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', monospace;
+  --font-display: 'Space Grotesk Variable', 'Geist Variable', sans-serif;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Números tabulares en las tablas/datos se ven mejor con Geist Mono */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }

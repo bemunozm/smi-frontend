@@ -17,8 +17,10 @@ export function AppLayout() {
 
   const sidebarBody = (
     <div className="flex h-full flex-col p-4">
-      <h2 className="text-lg font-semibold">SMI</h2>
-      <p className="mb-4 text-xs text-muted-foreground">Operación en Terreno</p>
+      <h2 className="font-display text-2xl font-semibold tracking-tight">SMI</h2>
+      <p className="mb-5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Operación en Terreno
+      </p>
       <nav className="flex flex-col gap-1">
         {nav.map((n) => (
           <NavLink
@@ -63,8 +65,10 @@ export function AppLayout() {
         >
           ☰
         </button>
-        <span className="font-semibold">SMI</span>
-        <span className="text-xs text-muted-foreground">Operación en Terreno</span>
+        <span className="font-display text-lg font-semibold tracking-tight">SMI</span>
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          · Operación en Terreno
+        </span>
       </header>
 
       {/* Overlay del drawer (solo móvil) */}

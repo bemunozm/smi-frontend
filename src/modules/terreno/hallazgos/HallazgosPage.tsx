@@ -53,7 +53,7 @@ export function HallazgosPage() {
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
+        className="grid gap-4 rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] p-4 sm:grid-cols-2"
       >
         <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
         <FormSelectField control={control} name="criticidad" label="Criticidad" items={CRITICIDAD_ITEMS} />
@@ -67,7 +67,7 @@ export function HallazgosPage() {
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (

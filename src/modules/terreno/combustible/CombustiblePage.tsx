@@ -36,7 +36,7 @@ export function CombustiblePage() {
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
+        className="grid gap-4 rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] p-4 sm:grid-cols-2"
       >
         <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
         <FormNumberField control={control} name="litros" label="Litros" minValue={0} step={0.1} />
@@ -50,7 +50,7 @@ export function CombustiblePage() {
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
@@ -79,10 +79,12 @@ export function CombustiblePage() {
                         '—'
                       )}
                     </Table.Cell>
-                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
-                    <Table.Cell>{r.litros} L</Table.Cell>
-                    <Table.Cell>{r.rendimiento != null ? r.rendimiento : '—'}</Table.Cell>
-                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                    <Table.Cell className="tabular font-medium">{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell className="tabular">{r.litros} L</Table.Cell>
+                    <Table.Cell className="tabular">{r.rendimiento != null ? r.rendimiento : '—'}</Table.Cell>
+                    <Table.Cell className="tabular text-muted-foreground">
+                      {new Date(r.fecha).toLocaleDateString()}
+                    </Table.Cell>
                   </Table.Row>
                 )}
               </Table.Body>

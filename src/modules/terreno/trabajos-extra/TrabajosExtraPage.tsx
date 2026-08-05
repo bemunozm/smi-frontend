@@ -37,7 +37,7 @@ export function TrabajosExtraPage() {
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
+        className="grid gap-4 rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] p-4 sm:grid-cols-2"
       >
         <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
         <FormTextField control={control} name="cliente" label="Cliente" />
@@ -46,8 +46,9 @@ export function TrabajosExtraPage() {
         <FormNumberField control={control} name="tarifa" label="Tarifa" minValue={0} step={1} />
 
         <div className="flex items-end">
-          <div className="rounded-lg bg-muted px-4 py-2 text-sm">
-            Monto estimado: <span className="font-semibold text-primary">{money(montoPreview)}</span>
+          <div className="rounded-xl bg-accent px-4 py-2 text-sm text-accent-foreground">
+            Monto estimado:{' '}
+            <span className="tabular font-semibold text-primary">{money(montoPreview)}</span>
           </div>
         </div>
 
@@ -58,7 +59,7 @@ export function TrabajosExtraPage() {
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
@@ -76,11 +77,13 @@ export function TrabajosExtraPage() {
               <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
                 {(r) => (
                   <Table.Row id={r.id}>
-                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell className="tabular font-medium">{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
                     <Table.Cell>{r.cliente}</Table.Cell>
-                    <Table.Cell>{r.horasMaquina}</Table.Cell>
-                    <Table.Cell>{money(r.monto)}</Table.Cell>
-                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                    <Table.Cell className="tabular">{r.horasMaquina}</Table.Cell>
+                    <Table.Cell className="tabular font-medium">{money(r.monto)}</Table.Cell>
+                    <Table.Cell className="tabular text-muted-foreground">
+                      {new Date(r.fecha).toLocaleDateString()}
+                    </Table.Cell>
                   </Table.Row>
                 )}
               </Table.Body>

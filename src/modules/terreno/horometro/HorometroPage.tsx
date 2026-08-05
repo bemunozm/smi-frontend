@@ -36,7 +36,7 @@ export function HorometroPage() {
 
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-4 rounded-(--radius) border border-border bg-card p-4 sm:grid-cols-2"
+        className="grid gap-4 rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] p-4 sm:grid-cols-2"
       >
         <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
         <FormSelectField control={control} name="turno" label="Turno" items={TURNO_ITEMS} />
@@ -51,7 +51,7 @@ export function HorometroPage() {
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-(--radius) border border-border bg-card">
+      <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
         {isLoading ? (
           <p className="p-4 text-muted-foreground">Cargando…</p>
         ) : (
@@ -69,11 +69,13 @@ export function HorometroPage() {
               <Table.Body items={registros} renderEmptyState={() => 'Sin registros.'}>
                 {(r) => (
                   <Table.Row id={r.id}>
-                    <Table.Cell>{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
+                    <Table.Cell className="tabular font-medium">{r.equipo?.codigo ?? r.equipoId}</Table.Cell>
                     <Table.Cell>{r.turno}</Table.Cell>
-                    <Table.Cell>{r.valorInicial}</Table.Cell>
-                    <Table.Cell>{r.valorFinal ?? '— (abierto)'}</Table.Cell>
-                    <Table.Cell>{new Date(r.fecha).toLocaleDateString()}</Table.Cell>
+                    <Table.Cell className="tabular">{r.valorInicial}</Table.Cell>
+                    <Table.Cell className="tabular">{r.valorFinal ?? '— (abierto)'}</Table.Cell>
+                    <Table.Cell className="tabular text-muted-foreground">
+                      {new Date(r.fecha).toLocaleDateString()}
+                    </Table.Cell>
                   </Table.Row>
                 )}
               </Table.Body>
