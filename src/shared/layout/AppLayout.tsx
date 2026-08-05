@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router';
-import { Briefcase, Clock, Fuel, Menu, TriangleAlert, X } from 'lucide-react';
-import { useAuthStore, type Rol } from '../store/auth.store';
+import { NavLink, Outlet, useNavigate } from 'react-router';
+import { Briefcase, Clock, Fuel, LayoutDashboard, LogOut, Menu, TriangleAlert, X } from 'lucide-react';
+
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { signOut } from '../../lib/auth-client';
 
 const tabs = [
   { to: '/terreno/hallazgos', label: 'Hallazgos', icon: TriangleAlert },
@@ -9,8 +11,6 @@ const tabs = [
   { to: '/terreno/horometro', label: 'Horómetro', icon: Clock },
   { to: '/terreno/trabajos-extra', label: 'Trabajos', icon: Briefcase },
 ];
-
-const roles: Rol[] = ['ADMIN', 'SUPERVISOR', 'MANTENEDOR', 'OPERADOR'];
 
 function StatusPill() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -32,9 +32,15 @@ function StatusPill() {
   );
 }
 
-export function AppLayout() {
-  const { rol, setRol } = useAuthStore();
+export function TerrenoMobileLayout() {
+  const { user, role } = useCurrentUser();
   const [menu, setMenu] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-[#e9e7e2]">
@@ -84,7 +90,7 @@ export function AppLayout() {
           })}
         </nav>
 
-        {/* Drawer (menú / rol de dev) */}
+        {/* Drawer */}
         {menu && (
           <>
             <button
@@ -93,13 +99,21 @@ export function AppLayout() {
               onClick={() => setMenu(false)}
               className="absolute inset-0 z-30 bg-black/40"
             />
-            <div className="absolute inset-y-0 left-0 z-40 w-64 bg-card p-5 shadow-xl">
+            <div className="absolute inset-y-0 left-0 z-40 flex w-64 flex-col bg-card p-5 shadow-xl">
               <div className="mb-6 flex items-center justify-between">
                 <span className="font-display text-xl font-bold tracking-tight">SMI</span>
                 <button type="button" onClick={() => setMenu(false)} aria-label="Cerrar" className="rounded-lg p-1 hover:bg-muted">
                   <X className="h-5 w-5" />
                 </button>
               </div>
+
+              {user && (
+                <div className="mb-4 rounded-xl bg-muted p-3">
+                  <div className="text-sm font-semibold text-foreground">{user.name}</div>
+                  <div className="text-xs text-muted-foreground">{role ?? user.email}</div>
+                </div>
+              )}
+
               <nav className="flex flex-col gap-1">
                 {tabs.map((t) => {
                   const Icon = t.icon;
@@ -120,20 +134,24 @@ export function AppLayout() {
                   );
                 })}
               </nav>
-              <div className="mt-8">
-                {/* PROVISIONAL — selector de rol para el guard stub. */}
-                <label className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Rol (dev)</label>
-                <select
-                  value={rol}
-                  onChange={(e) => setRol(e.target.value as Rol)}
-                  className="mt-1.5 w-full rounded-xl border border-border bg-background p-2.5 text-sm"
+
+              <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
+                <NavLink
+                  to="/"
+                  onClick={() => setMenu(false)}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-muted"
                 >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                  <LayoutDashboard className="h-4 w-4" />
+                  Ir al panel
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Salir
+                </button>
               </div>
             </div>
           </>

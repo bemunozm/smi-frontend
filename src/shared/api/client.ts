@@ -1,14 +1,17 @@
 import axios from 'axios';
-import { useAuthStore } from '../store/auth.store';
 
+import { env } from '../../config/env';
+
+/**
+ * Instancia axios para las llamadas de datos del bloque Terreno. Usa la
+ * config de entorno del equipo (`config/env`); el backend expone el dominio
+ * bajo `/api`, y la sesión va por cookie de Better Auth (`withCredentials`).
+ *
+ * Nota: es una instancia aparte de `lib/axios.ts` (que no prefija `/api`);
+ * este bloque mobile mantiene su propio cliente hasta unificar el patrón
+ * con el resto del front.
+ */
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api',
+  baseURL: `${env.apiUrl}/api`,
   withCredentials: true,
-});
-
-// PROVISIONAL — inyecta el rol de dev para el guard stub del backend.
-api.interceptors.request.use((config) => {
-  const rol = useAuthStore.getState().rol;
-  if (rol) config.headers['x-dev-role'] = rol;
-  return config;
 });
