@@ -187,16 +187,6 @@
     border-radius: var(--radius);
   }
 
-  /* Encabezados de tabla: HeroUI pinta el texto del header con
-     `--surface-tertiary`, que en este tema claro es casi blanco (#f8f7f5) y se
-     pierde sobre el fondo crema. Se pisa con el gris `--muted` (legible y
-     consistente con los labels de campo). Afecta TODAS las tablas de la app
-     (Usuarios, Dashboard, Flota, Inventario) — corrige un bug de contraste del
-     tema, no solo de una vista. */
-  .table__column {
-    color: var(--muted);
-  }
-
   /* Modal: radio un poco mayor que las cards, consistente con el resto */
   .modal__dialog {
     border-radius: 14px;

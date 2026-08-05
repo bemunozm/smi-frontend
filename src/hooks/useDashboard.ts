@@ -29,6 +29,13 @@ import {
  * piezas del dashboard los usen a la vez solo hay una petición de red por
  * dominio — y si esa petición falla, cada pieza lo refleja en su propio
  * `isError` sin tumbar el resto del dashboard (que sigue en mock).
+ *
+ * Flota/Inventario (Amin) también está integrado a `main` con datos reales,
+ * pero no tiene hooks propios acá: `DashboardView` consume DIRECTO
+ * `useResumenFlota()` (`hooks/useEquipos.ts`) y `useInsumos({ bajoStock: true })`
+ * / `useResumenInventario()` (`hooks/useInventario.ts`) — el backend ya
+ * agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`, así que no hace
+ * falta una capa de agregación en cliente como la de Terreno.
  */
 export function useDashboardSummary() {
   return useQuery({
@@ -65,13 +72,6 @@ export function useMantencionesProximas() {
   });
 }
 
-export function useFlotaComposicion() {
-  return useQuery({
-    queryKey: ['dashboard', 'flota-composicion'],
-    queryFn: DashboardAPI.getFlotaComposicion,
-  });
-}
-
 /** ← Terreno (real): agrupa `GET /api/hallazgos` por semana de reporte,
  * abiertos vs cerrados — semántica documentada en
  * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`. */
@@ -97,11 +97,4 @@ export function useHorasFacturables() {
   const query = useTrabajosExtraordinariosMensual();
   const data = useMemo(() => (query.data ? sumHorasExtra(query.data) : undefined), [query.data]);
   return { ...query, data };
-}
-
-export function useInsumosBajoStock() {
-  return useQuery({
-    queryKey: ['dashboard', 'insumos-bajo-stock'],
-    queryFn: DashboardAPI.getInsumosBajoStock,
-  });
 }

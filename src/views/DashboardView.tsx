@@ -16,14 +16,14 @@ import {
 } from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useResumenFlota } from '../hooks/useEquipos';
+import { useInsumos, useResumenInventario } from '../hooks/useInventario';
 import {
   useDashboardSummary,
-  useFlotaComposicion,
   useHallazgosAbiertosResumen,
   useHallazgosRecientes,
   useHallazgosTendencia,
   useHorasFacturables,
-  useInsumosBajoStock,
   useMantencionesProximas,
   useTrabajosExtraordinariosMensual,
 } from '../hooks/useDashboard';
@@ -33,11 +33,12 @@ import {
   TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
   equipoEstadoChartColor,
-  equipoEstadoLabel,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
+import { estadoEquipoLabel, unidadSimbolo } from '../config/flota-colors';
+import { ESTADOS_EQUIPO } from '../types/equipo';
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -184,18 +185,18 @@ function KpiCardSkeleton() {
 }
 
 /**
- * KPIs de Flota/Inventario (Amin) y Mantenimiento (Joaquín) — únicos que
- * siguen en mock, ver `api/DashboardAPI.ts#getSummary`. Consulta propia
- * (`useDashboardSummary()`): si falla, no afecta al KPI real de al lado
- * (`HallazgosAbiertosKpiCard`), que usa su propia query.
+ * KPIs de Mantenimiento (Joaquín) — único dominio que sigue en mock, ver
+ * `api/DashboardAPI.ts#getSummary`. Consulta propia (`useDashboardSummary()`):
+ * si falla, no afecta a los KPIs reales de al lado (Flota/Inventario,
+ * Hallazgos, Horas facturables), que usan sus propias queries.
  */
-function MockKpiCards() {
+function MantencionMockKpiCards() {
   const { data: summary, isPending, isError, error } = useDashboardSummary();
 
   if (isPending) {
     return (
       <>
-        {Array.from({ length: 4 }, (_, index) => (
+        {Array.from({ length: 2 }, (_, index) => (
           <KpiCardSkeleton key={index} />
         ))}
       </>
@@ -213,17 +214,8 @@ function MockKpiCards() {
     );
   }
 
-  const disponibilidadPct = Math.round(
-    (summary.equiposDisponibles.disponibles / summary.equiposDisponibles.total) * 100,
-  );
-
   return (
     <>
-      <KpiCard
-        hint={`${disponibilidadPct}% de la flota operativa`}
-        label="Equipos disponibles"
-        value={`${summary.equiposDisponibles.disponibles} / ${summary.equiposDisponibles.total}`}
-      />
       <KpiCard
         hint="Según umbral de horómetro"
         label="Próximas mantenciones"
@@ -235,20 +227,81 @@ function MockKpiCards() {
         label="Cumplimiento preventivo"
         value={`${Math.round(summary.cumplimientoPreventivoPct)}%`}
       />
-      <KpiCard
-        hint={summary.insumosBajoMinimo > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
-        hintTone={summary.insumosBajoMinimo > 0 ? 'warning' : 'muted'}
-        label="Insumos bajo mínimo"
-        value={String(summary.insumosBajoMinimo)}
-      />
     </>
+  );
+}
+
+/** ← Flota (Amin, real): `useResumenFlota()` — el backend ya agrega
+ * `disponibles`/`total`, no se cuenta en cliente. Query independiente: si
+ * Flota cae, el resto de los KPIs sigue con normalidad. */
+function EquiposDisponiblesKpiCard() {
+  const { data, isPending, isError, error } = useResumenFlota();
+
+  if (isPending) return <KpiCardSkeleton />;
+
+  if (isError) {
+    return (
+      <Card>
+        <Card.Content className="py-6">
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar la flota.'}
+          </p>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  const disponibilidadPct = data.total > 0 ? Math.round((data.disponibles / data.total) * 100) : 0;
+
+  return (
+    <KpiCard
+      hint={`${disponibilidadPct}% de la flota operativa`}
+      isReal
+      label="Equipos disponibles"
+      value={`${data.disponibles} / ${data.total}`}
+    />
+  );
+}
+
+/** ← Inventario (Amin, real): `useResumenInventario().bajoMinimo` — conteo
+ * agregado en el backend, mismo dato que alimenta la tabla de abajo
+ * (`InsumosBajoStockSection`). */
+function InsumosBajoMinimoKpiCard() {
+  const { data, isPending, isError, error } = useResumenInventario();
+
+  if (isPending) return <KpiCardSkeleton />;
+
+  if (isError) {
+    return (
+      <Card>
+        <Card.Content className="py-6">
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar el inventario.'}
+          </p>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <KpiCard
+      hint={data.bajoMinimo > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
+      hintTone={data.bajoMinimo > 0 ? 'warning' : 'muted'}
+      isReal
+      label="Insumos bajo mínimo"
+      value={String(data.bajoMinimo)}
+    />
   );
 }
 
 /** ← Terreno (real): `useHallazgosAbiertosResumen()` cuenta sobre
  * `GET /api/hallazgos` y desglosa por `prioridad`. Query independiente de
- * `MockKpiCards` — si Terreno cae, el resto de los KPIs sigue mostrando su
- * mock con normalidad. */
+ * las demás KPI cards — si Terreno cae, el resto sigue mostrando sus datos
+ * (reales o mock) con normalidad. */
 function HallazgosAbiertosKpiCard() {
   const { data, isPending, isError, error } = useHallazgosAbiertosResumen();
 
@@ -313,7 +366,9 @@ function HorasFacturablesKpiCard() {
 function SummaryCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <MockKpiCards />
+      <EquiposDisponiblesKpiCard />
+      <MantencionMockKpiCards />
+      <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />
       <HorasFacturablesKpiCard />
     </div>
@@ -323,20 +378,28 @@ function SummaryCards() {
 /** Dona — composición de estados de la flota (DISPONIBLE/EN_RUTA/
  * EN_MANTENCION/DE_BAJA). Aporta la MEZCLA de estados que la card "Equipos
  * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
- * con el resto. Datos ← Flota/Amin, mock. */
+ * con el resto. Datos ← Flota/Amin, REAL: `useResumenFlota().porEstado` ya
+ * viene agregado por el backend, solo se remapea a la forma que espera el
+ * `Pie` (no se cuenta en cliente). */
 function FlotaComposicionSection() {
-  const { data, isPending, isError, error } = useFlotaComposicion();
+  const { data, isPending, isError, error } = useResumenFlota();
 
-  const chartData = data?.map((item) => ({
-    ...item,
-    label: equipoEstadoLabel(item.estado),
-    fill: equipoEstadoChartColor(item.estado),
-  }));
+  const chartData = data
+    ? ESTADOS_EQUIPO.map((estado) => ({
+        estado,
+        cantidad: data.porEstado[estado] ?? 0,
+        label: estadoEquipoLabel(estado),
+        fill: equipoEstadoChartColor(estado),
+      }))
+    : undefined;
 
   return (
     <Card>
       <Card.Header>
-        <Card.Title>Composición de la flota</Card.Title>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Composición de la flota</Card.Title>
+          <RealDataChip />
+        </div>
         <Card.Description>Distribución de los equipos por estado operativo.</Card.Description>
       </Card.Header>
       <Card.Content>
@@ -649,14 +712,20 @@ function MantencionesProximasSection() {
 }
 
 /** Insumos con stock por debajo del mínimo — mismo patrón de `Table` que
- * `MantencionesProximasSection`. Datos ← Inventario/Amin, mock. */
+ * `MantencionesProximasSection`. Datos ← Inventario/Amin, REAL:
+ * `useInsumos({ bajoStock: true })` — el backend ya filtra por
+ * `stock <= stockMinimo`, mismo dato que alimenta el KPI
+ * `InsumosBajoMinimoKpiCard`. */
 function InsumosBajoStockSection() {
-  const { data: insumos, isPending, isError, error } = useInsumosBajoStock();
+  const { data: insumos, isPending, isError, error } = useInsumos({ bajoStock: true });
 
   return (
     <Card className="flex flex-col gap-3">
       <Card.Header>
-        <Card.Title>Insumos bajo stock mínimo</Card.Title>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Insumos bajo stock mínimo</Card.Title>
+          <RealDataChip />
+        </div>
         <Card.Description>Repuestos e insumos que requieren reposición.</Card.Description>
       </Card.Header>
 
@@ -686,12 +755,19 @@ function InsumosBajoStockSection() {
                 <Table.Collection items={insumos}>
                   {(insumo) => (
                     <Table.Row>
-                      <Table.Cell>{insumo.insumo}</Table.Cell>
-                      <Table.Cell className="font-mono text-sm">{insumo.stockActual}</Table.Cell>
-                      <Table.Cell className="font-mono text-sm">{insumo.stockMinimo}</Table.Cell>
                       <Table.Cell>
-                        <Chip color={insumo.stockActual === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
-                          {insumo.stockActual === 0 ? 'Sin stock' : 'Bajo mínimo'}
+                        <span className="font-mono text-xs text-muted-foreground">{insumo.codigo}</span>{' '}
+                        {insumo.nombre}
+                      </Table.Cell>
+                      <Table.Cell className="font-mono text-sm">
+                        {insumo.stock} {unidadSimbolo(insumo.unidad)}
+                      </Table.Cell>
+                      <Table.Cell className="font-mono text-sm">
+                        {insumo.stockMinimo} {unidadSimbolo(insumo.unidad)}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Chip color={insumo.stock === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                          {insumo.stock === 0 ? 'Sin stock' : 'Bajo mínimo'}
                         </Chip>
                       </Table.Cell>
                     </Table.Row>

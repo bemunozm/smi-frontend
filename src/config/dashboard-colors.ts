@@ -1,4 +1,6 @@
-import type { Criticidad, EquipoEstado, HallazgoEstado, HallazgosPorCriticidad } from '../types/dashboard';
+import type { EstadoEquipo } from '../types/equipo';
+import type { Criticidad, HallazgoEstado, HallazgosPorCriticidad } from '../types/dashboard';
+import { estadoEquipoChipColor } from './flota-colors';
 
 /** Colores semánticos de HeroUI (Chip) aceptados por estos mapeos. */
 export type DashboardChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
@@ -33,31 +35,6 @@ const ESTADO_LABEL: Record<HallazgoEstado, string> = {
 
 export function hallazgoEstadoLabel(estado: HallazgoEstado): string {
   return ESTADO_LABEL[estado];
-}
-
-const EQUIPO_ESTADO_COLOR: Record<EquipoEstado, DashboardChipColor> = {
-  DISPONIBLE: 'success',
-  EN_RUTA: 'accent',
-  EN_MANTENCION: 'warning',
-  DE_BAJA: 'default',
-};
-
-/** Color de Chip consistente por estado de equipo — mismo patrón que
- * `criticidadChipColor`. Reusado por la dona de composición de flota para
- * que el gráfico y cualquier chip de estado hablen el mismo idioma visual. */
-export function equipoEstadoChipColor(estado: EquipoEstado): DashboardChipColor {
-  return EQUIPO_ESTADO_COLOR[estado];
-}
-
-const EQUIPO_ESTADO_LABEL: Record<EquipoEstado, string> = {
-  DISPONIBLE: 'Disponible',
-  EN_RUTA: 'En ruta',
-  EN_MANTENCION: 'En mantención',
-  DE_BAJA: 'De baja',
-};
-
-export function equipoEstadoLabel(estado: EquipoEstado): string {
-  return EQUIPO_ESTADO_LABEL[estado];
 }
 
 /**
@@ -103,9 +80,15 @@ export const CHART_NEUTRAL = {
   overlayShadow: HEX.overlayShadow,
 } as const;
 
-/** Color de relleno del gráfico de flota para un estado dado. */
-export function equipoEstadoChartColor(estado: EquipoEstado): string {
-  return CHART_FILL[equipoEstadoChipColor(estado)];
+/** Color de relleno del gráfico de flota para un estado dado — puente entre
+ * el color semántico de Chip que ya define `flota-colors.ts#estadoEquipoChipColor`
+ * (fuente única de colores/labels de `EstadoEquipo`, dominio de Amin) y los
+ * hex literales que necesita Recharts. Ya no duplica el mapeo estado→color:
+ * antes vivía acá un `EQUIPO_ESTADO_COLOR` propio, desalineado del que ya
+ * usan las vistas de Flota (`DE_BAJA` era `default` acá vs. `danger` en
+ * `flota-colors.ts`) — se eliminó a favor de reusar el de Amin. */
+export function equipoEstadoChartColor(estado: EstadoEquipo): string {
+  return CHART_FILL[estadoEquipoChipColor(estado)];
 }
 
 /** Serie "abiertos vs cerrados" del gráfico de tendencia de hallazgos —

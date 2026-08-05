@@ -3,11 +3,11 @@ import { z } from 'zod';
 /**
  * Contrato de datos del dashboard del bloque Núcleo.
  *
- * Terreno (Alexander) ya está integrado a `main` con datos REALES — sus 4
- * piezas (KPI "Hallazgos abiertos", lista de recientes, tendencia semanal,
- * horas extraordinarias por mes) se calculan en cliente desde
- * `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts` vía
- * `config/dashboard-aggregations.ts` — ver `hooks/useDashboard.ts`. Los
+ * Terreno (Alexander) y Flota/Inventario (Amin) ya están integrados a
+ * `main` con datos REALES. Terreno: sus 4 piezas (KPI "Hallazgos abiertos",
+ * lista de recientes, tendencia semanal, horas extraordinarias por mes) se
+ * calculan en cliente desde `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts`
+ * vía `config/dashboard-aggregations.ts` — ver `hooks/useDashboard.ts`. Los
  * tipos de acá (`HallazgoResumen`, `HallazgoTendenciaSemana`,
  * `TrabajoExtraordinarioMes`, `HallazgosPorCriticidad`) siguen siendo el
  * contrato de SALIDA que consume `DashboardView`, aunque ya no lleguen por
@@ -15,10 +15,17 @@ import { z } from 'zod';
  * `interface` planas, dominio de Terreno — `types/hallazgos.ts` /
  * `types/trabajosExtra.ts` en la entrada).
  *
- * Flota/Inventario (Amin) y Mantenimiento (Joaquín) siguen sin integrar —
- * `DashboardSummarySchema` de acá y el mock de `api/DashboardAPI.ts` cubren
- * solo esos campos. Cuando expongan sus endpoints reales, el patrón es el
- * mismo: reemplazar el `mockResponse` por `axiosInstance.get(...)`.
+ * Flota/Inventario (Amin) NO se lee desde acá: `DashboardView` consume
+ * directo `useResumenFlota()`/`useInsumos()` de `hooks/useEquipos.ts` /
+ * `hooks/useInventario.ts` y sus tipos (`ResumenFlota`, `Insumo`) de
+ * `types/equipo.ts` / `types/inventario.ts` — sin capa de agregación propia
+ * (el backend ya agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`).
+ *
+ * Mantenimiento (Joaquín) sigue sin integrar (Fase 2, motor preventivo por
+ * umbral de horómetro no existe aún) — `DashboardSummarySchema` de acá y el
+ * mock de `api/DashboardAPI.ts` cubren solo esos 2 campos. Cuando exponga su
+ * endpoint real, el patrón es el mismo: reemplazar el `mockResponse` por
+ * `axiosInstance.get(...)`.
  */
 
 export const CRITICIDADES = ['BAJA', 'MEDIA', 'ALTA', 'CRITICA'] as const;
@@ -29,15 +36,6 @@ export type HallazgoEstado = (typeof HALLAZGO_ESTADOS)[number];
 
 export const MANTENCION_TIPOS = ['PREVENTIVA', 'CORRECTIVA'] as const;
 export type MantencionTipo = (typeof MANTENCION_TIPOS)[number];
-
-export const EQUIPO_ESTADOS = ['DISPONIBLE', 'EN_RUTA', 'EN_MANTENCION', 'DE_BAJA'] as const;
-export type EquipoEstado = (typeof EQUIPO_ESTADOS)[number];
-
-/** ← Flota/Inventario (`GET /api/equipos`, contar `estado === 'DISPONIBLE'` / total). */
-export const EquiposDisponiblesSchema = z.object({
-  disponibles: z.number().int().nonnegative(),
-  total: z.number().int().nonnegative(),
-});
 
 /** Breakdown por prioridad de los hallazgos con `estado === 'ABIERTO'` —
  * complementa la card "Hallazgos abiertos" (mismo listado que ese KPI,
@@ -56,23 +54,20 @@ export const HallazgosPorCriticidadSchema = z.object({
 export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema>;
 
 /**
- * KPIs que siguen sin dueño integrado a `main` (Flota/Inventario y
- * Mantenimiento) — únicos campos que todavía sirve `api/DashboardAPI.ts`
- * como mock. `hallazgosAbiertos` e `ingresosTrabajosExtra` salieron de acá:
- * el primero ahora es real (ver `hooks/useDashboard.ts#useHallazgosAbiertosResumen`),
- * el segundo se eliminó — el campo `monto` de `TrabajoExtraordinario` no
- * existe en el modelo real, solo `totalHoras` (cubierto por el gráfico de
- * horas extraordinarias).
+ * KPIs que siguen sin dueño integrado a `main` (Mantenimiento, Fase 2) —
+ * únicos campos que todavía sirve `api/DashboardAPI.ts` como mock.
+ * `equiposDisponibles`/`insumosBajoMinimo` salieron de acá (ahora reales, ver
+ * `hooks/useEquipos.ts#useResumenFlota` / `hooks/useInventario.ts#useResumenInventario`),
+ * igual que `hallazgosAbiertos` (real) e `ingresosTrabajosExtra` (eliminado —
+ * el campo `monto` de `TrabajoExtraordinario` no existe en el modelo real,
+ * solo `totalHoras`, cubierto por el gráfico de horas extraordinarias).
  */
 export const DashboardSummarySchema = z.object({
-  equiposDisponibles: EquiposDisponiblesSchema,
   /** ← Mantenimiento: motor preventivo por umbral de horómetro (Fase 2). */
   proximasMantenciones: z.number().int().nonnegative(),
   /** ← Mantenimiento: % de mantenciones preventivas ejecutadas dentro del
    *  umbral de horómetro (a tiempo) sobre el total programado. Fase 2. */
   cumplimientoPreventivoPct: z.number().min(0).max(100),
-  /** ← Inventario/Amin: conteo de insumos con `stockActual < stockMinimo`. */
-  insumosBajoMinimo: z.number().int().nonnegative(),
 });
 export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
 
@@ -102,16 +97,6 @@ export const MantencionProximaSchema = z.object({
 });
 export type MantencionProxima = z.infer<typeof MantencionProximaSchema>;
 
-/** ← Flota/Inventario (Amin): conteo de `Equipo.estado` agrupado. Alimenta el
- * gráfico de composición de flota — aporta la MEZCLA de estados que la card
- * "Equipos disponibles" (disponibles/total) no muestra. Endpoint no existe
- * aún; hoy se contaría en cliente sobre `GET /api/equipos`. */
-export const FlotaComposicionItemSchema = z.object({
-  estado: z.enum(EQUIPO_ESTADOS),
-  cantidad: z.number().int().nonnegative(),
-});
-export type FlotaComposicionItem = z.infer<typeof FlotaComposicionItemSchema>;
-
 /** ← Terreno (real): tendencia semanal de `Hallazgo.estado`/`fecha`, abiertos
  * vs cerrados (~8 semanas). Calculada en cliente —
  * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal` — documenta
@@ -135,24 +120,15 @@ export const TrabajoExtraordinarioMesSchema = z.object({
 });
 export type TrabajoExtraordinarioMes = z.infer<typeof TrabajoExtraordinarioMesSchema>;
 
-/** ← Inventario/Amin: insumos con `stockActual < stockMinimo`. Alimenta el
- * KPI `insumosBajoMinimo` (mismo endpoint) y la tabla del mismo nombre. */
-export const InsumoBajoStockSchema = z.object({
-  id: z.string(),
-  insumo: z.string(),
-  stockActual: z.number().nonnegative(),
-  stockMinimo: z.number().nonnegative(),
-});
-export type InsumoBajoStock = z.infer<typeof InsumoBajoStockSchema>;
-
 /** Envolturas `{ data, message }` — mismo formato que ya usa `smi-backend`
  * en `users` (ver `types/user.ts`); el mock las respeta para que activar el
  * fetch real el día de mañana sea un cambio de una línea en `DashboardAPI`.
- * Solo quedan las de los dominios que TODAVÍA son mock (Mantenimiento,
- * Flota/Inventario) — las de Terreno se retiraron: ese dominio no valida con
- * Zod (interfaces planas en `types/hallazgos.ts` / `types/trabajosExtra.ts`,
- * deuda propia de Terreno, fuera del alcance de Núcleo) y deriva el shape de
- * salida en cliente. */
+ * Solo queda la del dominio que TODAVÍA es mock (Mantenimiento) — las de
+ * Terreno se retiraron: ese dominio no valida con Zod (interfaces planas en
+ * `types/hallazgos.ts` / `types/trabajosExtra.ts`, deuda propia de Terreno,
+ * fuera del alcance de Núcleo) y deriva el shape de salida en cliente;
+ * Flota/Inventario tampoco tiene envoltura acá — usa directo las respuestas
+ * ya validadas por `types/equipo.ts` / `types/inventario.ts`. */
 export const DashboardSummaryResponseSchema = z.object({
   data: DashboardSummarySchema,
   message: z.string(),
@@ -160,15 +136,5 @@ export const DashboardSummaryResponseSchema = z.object({
 
 export const MantencionesProximasResponseSchema = z.object({
   data: z.array(MantencionProximaSchema),
-  message: z.string(),
-});
-
-export const FlotaComposicionResponseSchema = z.object({
-  data: z.array(FlotaComposicionItemSchema),
-  message: z.string(),
-});
-
-export const InsumosBajoStockResponseSchema = z.object({
-  data: z.array(InsumoBajoStockSchema),
   message: z.string(),
 });
