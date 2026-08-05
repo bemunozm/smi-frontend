@@ -5,19 +5,16 @@ import { CombustiblePage } from './CombustiblePage';
 
 afterEach(cleanup);
 
-// Render de CLIENTE con datos precargados: así se renderizan los ítems de
-// colección de React-Aria (opciones del Select y filas de la Table), que es
-// donde se dispara "cannot be rendered outside a collection".
 describe('CombustiblePage', () => {
   it('renderiza con datos sin lanzar', () => {
     const qc = new QueryClient();
     qc.setQueryData(
       ['equipos'],
-      [{ id: 'e1', codigo: 'EX-001', tipo: 'Excavadora', marca: 'Cat', modelo: '336', estado: 'OPERATIVO', horometroActual: 100, kilometrajeActual: 0 }],
+      [{ id: 'e1', codigo: 'EX-001', tipo: 'Excavadora', marca: 'Cat', modelo: '336', estado: 'OPERATIVO', horometroActual: 1180, kilometrajeActual: 0 }],
     );
     qc.setQueryData(
       ['combustible'],
-      [{ id: 'r1', equipoId: 'e1', litros: 20, fotoUrl: null, rendimiento: 5, fecha: '2026-08-01T00:00:00.000Z', equipo: { codigo: 'EX-001' } }],
+      [{ id: 'r1', equipoId: 'e1', litros: 120, fotoUrl: null, rendimiento: 4.5, fecha: '2026-08-01T09:20:00.000Z', equipo: { codigo: 'EX-001' } }],
     );
 
     render(
@@ -26,8 +23,8 @@ describe('CombustiblePage', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('Cargas de combustible')).toBeTruthy();
-    // La fila con el equipo debe estar presente (tabla renderizada de verdad).
+    expect(screen.getByText('Registrar carga')).toBeTruthy();
+    expect(screen.getByText('Últimas cargas')).toBeTruthy();
     expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
   });
 });

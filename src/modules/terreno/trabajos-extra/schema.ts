@@ -1,14 +1,16 @@
 import { z } from 'zod';
+import { posNumber, optNumber } from '../../../shared/lib/forms';
 
 export const trabajoExtraFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
   cliente: z.string().min(1, 'Indicá el cliente'),
-  horasMaquina: z.number().positive('Debe ser mayor a 0'),
-  tonelaje: z.number().optional(),
-  tarifa: z.number().positive('Debe ser mayor a 0'),
+  horasMaquina: posNumber('Debe ser mayor a 0'),
+  tonelaje: optNumber,
+  tarifa: posNumber('Debe ser mayor a 0'),
 });
 
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
+export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
 export function calcMonto(horasMaquina: number, tarifa: number): number {
   return Number((horasMaquina * tarifa).toFixed(2));

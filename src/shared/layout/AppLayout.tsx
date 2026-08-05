@@ -1,98 +1,144 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router';
+import { Briefcase, Clock, Fuel, Menu, TriangleAlert, X } from 'lucide-react';
 import { useAuthStore, type Rol } from '../store/auth.store';
 
-const nav = [
-  { to: '/terreno/combustible', label: 'Combustible' },
-  { to: '/terreno/horometro', label: 'Horómetro' },
-  { to: '/terreno/trabajos-extra', label: 'Trabajos extra' },
-  { to: '/terreno/hallazgos', label: 'Hallazgos' },
+const tabs = [
+  { to: '/terreno/hallazgos', label: 'Hallazgos', icon: TriangleAlert },
+  { to: '/terreno/combustible', label: 'Combustible', icon: Fuel },
+  { to: '/terreno/horometro', label: 'Horómetro', icon: Clock },
+  { to: '/terreno/trabajos-extra', label: 'Trabajos', icon: Briefcase },
 ];
 
 const roles: Rol[] = ['ADMIN', 'SUPERVISOR', 'MANTENEDOR', 'OPERADOR'];
 
+function StatusPill() {
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/90">
+      <span className={`h-2 w-2 rounded-full ${online ? 'bg-[#38d17a]' : 'bg-[#e0a11a]'}`} />
+      {online ? 'En línea' : 'Sin conexión'}
+    </span>
+  );
+}
+
 export function AppLayout() {
   const { rol, setRol } = useAuthStore();
-  const [open, setOpen] = useState(false);
-
-  const sidebarBody = (
-    <div className="flex h-full flex-col p-4">
-      <h2 className="font-display text-2xl font-semibold tracking-tight">SMI</h2>
-      <p className="mb-5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Operación en Terreno
-      </p>
-      <nav className="flex flex-col gap-1">
-        {nav.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            onClick={() => setOpen(false)}
-            className={({ isActive }) =>
-              `rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`
-            }
-          >
-            {n.label}
-          </NavLink>
-        ))}
-      </nav>
-      <div className="mt-6">
-        {/* PROVISIONAL — selector de rol para el guard stub. Reemplazar por Better Auth. */}
-        <label className="text-xs text-muted-foreground">Rol (dev)</label>
-        <select
-          value={rol}
-          onChange={(e) => setRol(e.target.value as Rol)}
-          className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm"
-        >
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-  );
+  const [menu, setMenu] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background text-foreground md:flex">
-      {/* Barra superior (solo móvil) */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-sidebar px-4 py-3 md:hidden">
-        <button
-          type="button"
-          aria-label="Abrir menú"
-          onClick={() => setOpen(true)}
-          className="rounded-lg px-2 py-1 text-xl leading-none hover:bg-muted"
-        >
-          ☰
-        </button>
-        <span className="font-display text-lg font-semibold tracking-tight">SMI</span>
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          · Operación en Terreno
-        </span>
-      </header>
+    <div className="min-h-screen bg-[#e9e7e2]">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col bg-background shadow-[0_0_60px_rgba(13,12,10,0.08)]">
+        {/* Header oscuro */}
+        <header className="sticky top-0 z-20 flex items-center gap-3 rounded-b-3xl bg-[#0d0c0a] px-4 py-3.5 text-white">
+          <button
+            type="button"
+            aria-label="Menú"
+            onClick={() => setMenu(true)}
+            className="-ml-1 rounded-lg p-1.5 text-white/90 hover:bg-white/10"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="flex-1 leading-none">
+            <div className="font-display text-lg font-bold tracking-tight">SMI</div>
+            <div className="mt-0.5 text-[10px] font-semibold tracking-wider text-white/50 uppercase">
+              Operación en Terreno
+            </div>
+          </div>
+          <StatusPill />
+        </header>
 
-      {/* Overlay del drawer (solo móvil) */}
-      {open && (
-        <button
-          type="button"
-          aria-label="Cerrar menú"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-        />
-      )}
+        {/* Contenido */}
+        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
+          <Outlet />
+        </main>
 
-      {/* Sidebar: drawer deslizable en móvil, fijo en desktop */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-sidebar transition-transform md:static md:z-auto md:w-60 md:translate-x-0 ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {sidebarBody}
-      </aside>
+        {/* Tab bar inferior */}
+        <nav className="sticky bottom-0 z-20 grid grid-cols-4 border-t border-border bg-card/95 pb-1 backdrop-blur">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            return (
+              <NavLink
+                key={t.to}
+                to={t.to}
+                className={({ isActive }) =>
+                  `flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
+                    isActive ? 'text-primary' : 'text-muted-foreground'
+                  }`
+                }
+              >
+                <Icon className="h-5 w-5" />
+                {t.label}
+              </NavLink>
+            );
+          })}
+        </nav>
 
-      <main className="min-w-0 flex-1 p-4 md:p-6">
-        <Outlet />
-      </main>
+        {/* Drawer (menú / rol de dev) */}
+        {menu && (
+          <>
+            <button
+              type="button"
+              aria-label="Cerrar menú"
+              onClick={() => setMenu(false)}
+              className="absolute inset-0 z-30 bg-black/40"
+            />
+            <div className="absolute inset-y-0 left-0 z-40 w-64 bg-card p-5 shadow-xl">
+              <div className="mb-6 flex items-center justify-between">
+                <span className="font-display text-xl font-bold tracking-tight">SMI</span>
+                <button type="button" onClick={() => setMenu(false)} aria-label="Cerrar" className="rounded-lg p-1 hover:bg-muted">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <nav className="flex flex-col gap-1">
+                {tabs.map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <NavLink
+                      key={t.to}
+                      to={t.to}
+                      onClick={() => setMenu(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                          isActive ? 'bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)]' : 'hover:bg-muted'
+                        }`
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {t.label}
+                    </NavLink>
+                  );
+                })}
+              </nav>
+              <div className="mt-8">
+                {/* PROVISIONAL — selector de rol para el guard stub. */}
+                <label className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Rol (dev)</label>
+                <select
+                  value={rol}
+                  onChange={(e) => setRol(e.target.value as Rol)}
+                  className="mt-1.5 w-full rounded-xl border border-border bg-background p-2.5 text-sm"
+                >
+                  {roles.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

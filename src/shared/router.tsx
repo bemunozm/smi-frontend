@@ -10,7 +10,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/terreno/combustible" replace /> },
+      { index: true, element: <Navigate to="/terreno/hallazgos" replace /> },
       { path: 'terreno/combustible', element: <CombustiblePage /> },
       { path: 'terreno/horometro', element: <HorometroPage /> },
       { path: 'terreno/trabajos-extra', element: <TrabajosExtraPage /> },

@@ -1,41 +1,75 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Chip, Table } from '@heroui/react';
-import { hallazgoFormSchema, CRITICIDADES, type HallazgoForm } from './schema';
+import { ArrowRight } from 'lucide-react';
+import { hallazgoFormSchema, type HallazgoForm } from './schema';
 import { useHallazgosList, useCreateHallazgo } from './hooks';
 import { useEquipos } from '../../../shared/hooks/useEquipos';
-import { FormSelectField, FormTextField } from '../../../shared/ui/form';
-import { ImageUploadField } from '../../../shared/ui/ImageUploadField';
+import { fmtDate, fmtTime } from '../../../shared/lib/format';
+import {
+  Card,
+  Chip,
+  FieldLabel,
+  ListCard,
+  PhotoButtons,
+  PrimaryButton,
+  SectionHeader,
+  Segmented,
+  SelectField,
+  TextareaField,
+  type ChipTone,
+} from '../../../shared/ui/mobile';
 
-type ChipColor = 'default' | 'warning' | 'danger' | 'success' | 'accent';
+const CRIT_ITEMS = [
+  { value: 'BAJA' as const, label: 'BAJA' },
+  { value: 'MEDIA' as const, label: 'MEDIA' },
+  { value: 'ALTA' as const, label: 'ALTA' },
+  { value: 'CRITICA' as const, label: 'CRÍTICA' },
+];
 
-const critColor: Record<string, ChipColor> = {
-  BAJA: 'default',
+const critTone: Record<string, ChipTone> = {
+  BAJA: 'neutral',
   MEDIA: 'warning',
   ALTA: 'danger',
-  CRITICA: 'danger',
+  CRITICA: 'danger-solid',
 };
+const critAccent: Record<string, string> = {
+  BAJA: '#928d80',
+  MEDIA: '#c87f0a',
+  ALTA: '#a31e22',
+  CRITICA: '#a31e22',
+};
+const critLabel: Record<string, string> = { BAJA: 'BAJA', MEDIA: 'MEDIA', ALTA: 'ALTA', CRITICA: 'CRÍTICA' };
 
-const estadoColor: Record<string, ChipColor> = {
+const estadoTone: Record<string, ChipTone> = {
   ABIERTO: 'danger',
-  EN_PROCESO: 'warning',
-  CERRADO: 'default',
+  EN_PROCESO: 'info',
+  CERRADO: 'success',
 };
-
-const CRITICIDAD_ITEMS = CRITICIDADES.map((c) => ({ value: c, label: c }));
+const estadoLabel: Record<string, string> = {
+  ABIERTO: 'ABIERTO',
+  EN_PROCESO: 'EN PROCESO',
+  CERRADO: 'CERRADO',
+};
 
 export function HallazgosPage() {
   const { data: equipos = [] } = useEquipos();
-  const { data: hallazgos = [], isLoading } = useHallazgosList();
+  const { data: hallazgos = [] } = useHallazgosList();
   const crear = useCreateHallazgo();
 
-  const { control, handleSubmit, reset, setValue, watch } = useForm<HallazgoForm>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<HallazgoForm>({
     resolver: zodResolver(hallazgoFormSchema),
     defaultValues: { equipoId: '', descripcion: '', criticidad: 'MEDIA' },
   });
 
+  const criticidad = (watch('criticidad') as HallazgoForm['criticidad']) ?? 'MEDIA';
   const fotoUrl = watch('fotoUrl');
-  const equipoItems = equipos.map((e) => ({ value: e.id, label: `${e.codigo} — ${e.modelo}` }));
 
   const onSubmit = (values: HallazgoForm) =>
     crear.mutate(values, {
@@ -43,67 +77,60 @@ export function HallazgosPage() {
     });
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-xl font-semibold">Hallazgos</h1>
-        <p className="text-sm text-muted-foreground">
-          Registrá un hallazgo con su criticidad; nace en estado ABIERTO.
-        </p>
-      </header>
+    <div>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <Card className="space-y-4">
+          <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
+            <option value="">Seleccioná…</option>
+            {equipos.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.codigo} — {e.tipo}
+              </option>
+            ))}
+          </SelectField>
 
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="grid gap-4 rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] p-4 sm:grid-cols-2"
-      >
-        <FormSelectField control={control} name="equipoId" label="Equipo" items={equipoItems} />
-        <FormSelectField control={control} name="criticidad" label="Criticidad" items={CRITICIDAD_ITEMS} />
-        <FormTextField control={control} name="descripcion" label="Descripción" className="sm:col-span-2" />
-        <ImageUploadField label="Foto (opcional)" value={fotoUrl} onChange={(url) => setValue('fotoUrl', url)} />
+          <div>
+            <FieldLabel>Criticidad</FieldLabel>
+            <Segmented value={criticidad} onChange={(v) => setValue('criticidad', v)} options={CRIT_ITEMS} />
+          </div>
 
-        <div className="sm:col-span-2">
-          <Button type="submit" variant="primary" isDisabled={crear.isPending}>
+          <TextareaField
+            label="Descripción"
+            rows={3}
+            placeholder="Qué se detectó, dónde y en qué condición"
+            error={errors.descripcion?.message}
+            {...register('descripcion')}
+          />
+
+          <div>
+            <FieldLabel hint={<span className="text-muted-foreground">Opcional</span>}>Foto</FieldLabel>
+            <PhotoButtons value={fotoUrl} onChange={(u) => setValue('fotoUrl', u)} />
+          </div>
+
+          <PrimaryButton type="submit" disabled={crear.isPending}>
             {crear.isPending ? 'Guardando…' : 'Registrar hallazgo'}
-          </Button>
-        </div>
+            <ArrowRight className="h-4 w-4" />
+          </PrimaryButton>
+        </Card>
       </form>
 
-      <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
-        {isLoading ? (
-          <p className="p-4 text-muted-foreground">Cargando…</p>
-        ) : (
-          <Table className="w-full">
-            <Table.Content aria-label="Hallazgos">
-              <Table.Header>
-                <Table.Column id="equipo" isRowHeader>
-                  Equipo
-                </Table.Column>
-                <Table.Column id="descripcion">Descripción</Table.Column>
-                <Table.Column id="criticidad">Criticidad</Table.Column>
-                <Table.Column id="estado">Estado</Table.Column>
-                <Table.Column id="fecha">Fecha</Table.Column>
-              </Table.Header>
-              <Table.Body items={hallazgos} renderEmptyState={() => 'Sin hallazgos.'}>
-                {(h) => (
-                  <Table.Row id={h.id}>
-                    <Table.Cell>{h.equipo?.codigo ?? h.equipoId}</Table.Cell>
-                    <Table.Cell>{h.descripcion}</Table.Cell>
-                    <Table.Cell>
-                      <Chip color={critColor[h.criticidad] ?? 'default'} variant="soft" size="sm">
-                        {h.criticidad}
-                      </Chip>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Chip color={estadoColor[h.estado] ?? 'default'} variant="soft" size="sm">
-                        {h.estado}
-                      </Chip>
-                    </Table.Cell>
-                    <Table.Cell>{new Date(h.fecha).toLocaleDateString()}</Table.Cell>
-                  </Table.Row>
-                )}
-              </Table.Body>
-            </Table.Content>
-          </Table>
-        )}
+      <SectionHeader action="Ver todos">Hallazgos del turno</SectionHeader>
+      <div className="space-y-2.5">
+        {hallazgos.map((h) => (
+          <ListCard key={h.id} accent={critAccent[h.criticidad]}>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-foreground">{h.equipo?.codigo ?? h.equipoId}</span>
+              <Chip tone={critTone[h.criticidad] ?? 'neutral'}>{critLabel[h.criticidad] ?? h.criticidad}</Chip>
+              <span className="tabular ml-auto text-xs text-muted-foreground">{fmtTime(h.fecha)}</span>
+            </div>
+            <p className="mt-1.5 text-sm text-foreground">{h.descripcion}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <Chip tone={estadoTone[h.estado] ?? 'neutral'}>{estadoLabel[h.estado] ?? h.estado}</Chip>
+              <span className="tabular text-xs text-muted-foreground">{fmtDate(h.fecha)}</span>
+            </div>
+          </ListCard>
+        ))}
+        {hallazgos.length === 0 && <p className="px-1 text-sm text-muted-foreground">Sin hallazgos del turno.</p>}
       </div>
     </div>
   );

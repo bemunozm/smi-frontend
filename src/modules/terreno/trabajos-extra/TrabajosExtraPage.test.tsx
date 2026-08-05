@@ -10,11 +10,11 @@ describe('TrabajosExtraPage', () => {
     const qc = new QueryClient();
     qc.setQueryData(
       ['equipos'],
-      [{ id: 'e1', codigo: 'EX-001', tipo: 'Excavadora', marca: 'Cat', modelo: '336', estado: 'OPERATIVO', horometroActual: 100, kilometrajeActual: 0 }],
+      [{ id: 'e1', codigo: 'CM-003', tipo: 'Camión', marca: 'Volvo', modelo: 'FMX', estado: 'OPERATIVO', horometroActual: 100, kilometrajeActual: 0 }],
     );
     qc.setQueryData(
       ['trabajos-extra'],
-      [{ id: 'r1', equipoId: 'e1', cliente: 'Minera Norte', horasMaquina: 12, tonelaje: null, tarifa: 85000, monto: 1020000, fotoUrl: null, fecha: '2026-08-01T00:00:00.000Z', equipo: { codigo: 'EX-001' } }],
+      [{ id: 'r1', equipoId: 'e1', cliente: 'Minera Norte', horasMaquina: 12, tonelaje: null, tarifa: 85000, monto: 1020000, fotoUrl: null, fecha: '2026-08-01T09:00:00.000Z', equipo: { codigo: 'CM-003' } }],
     );
 
     render(
@@ -23,7 +23,8 @@ describe('TrabajosExtraPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('Trabajos extraordinarios')).toBeTruthy();
+    expect(screen.getByText('Trabajo extraordinario')).toBeTruthy();
+    expect(screen.getByText('Registrar trabajo')).toBeTruthy();
     expect(screen.getByText('Minera Norte')).toBeTruthy();
   });
 });
