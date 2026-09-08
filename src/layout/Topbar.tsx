@@ -7,6 +7,7 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
 import { roleChipColor } from '../config/role-colors';
+import { NotificationBell } from '../components/notifications/NotificationBell';
 
 function initialsFrom(name: string | undefined, email: string): string {
   const source = name?.trim() || email;
@@ -84,46 +85,50 @@ export function Topbar() {
       <div className="hidden md:block" />
 
       {user ? (
-        <Dropdown>
-          <Button aria-label="Menú de usuario" className="h-auto gap-2 px-1.5 py-1" variant="ghost">
-            <Avatar size="sm">
-              {user.image ? <Avatar.Image alt={user.name} src={user.image} /> : null}
-              <Avatar.Fallback>{initialsFrom(user.name, user.email)}</Avatar.Fallback>
-            </Avatar>
-            <span className="hidden text-sm font-medium text-foreground sm:inline">
-              {user.name || user.email}
-            </span>
-          </Button>
-          <Dropdown.Popover placement="bottom end">
-            <div className="flex items-center gap-3 px-3 py-3">
-              <Avatar size="md">
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+
+          <Dropdown>
+            <Button aria-label="Menú de usuario" className="h-auto gap-2 px-1.5 py-1" variant="ghost">
+              <Avatar size="sm">
                 {user.image ? <Avatar.Image alt={user.name} src={user.image} /> : null}
                 <Avatar.Fallback>{initialsFrom(user.name, user.email)}</Avatar.Fallback>
               </Avatar>
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {user.name || user.email}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">{user.email}</span>
-                {role ? (
-                  <Chip className="w-fit" color={roleChipColor(role)} size="sm" variant="soft">
-                    {role}
-                  </Chip>
-                ) : null}
+              <span className="hidden text-sm font-medium text-foreground sm:inline">
+                {user.name || user.email}
+              </span>
+            </Button>
+            <Dropdown.Popover placement="bottom end">
+              <div className="flex items-center gap-3 px-3 py-3">
+                <Avatar size="md">
+                  {user.image ? <Avatar.Image alt={user.name} src={user.image} /> : null}
+                  <Avatar.Fallback>{initialsFrom(user.name, user.email)}</Avatar.Fallback>
+                </Avatar>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {user.name || user.email}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                  {role ? (
+                    <Chip className="w-fit" color={roleChipColor(role)} size="sm" variant="soft">
+                      {role}
+                    </Chip>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <Dropdown.Menu onAction={handleAction}>
-              <Dropdown.Item id="profile" textValue="Ver perfil">
-                <UserIcon />
-                <Label>Ver perfil</Label>
-              </Dropdown.Item>
-              <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
-                <SignOutIcon />
-                <Label>Cerrar sesión</Label>
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
+              <Dropdown.Menu onAction={handleAction}>
+                <Dropdown.Item id="profile" textValue="Ver perfil">
+                  <UserIcon />
+                  <Label>Ver perfil</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
+                  <SignOutIcon />
+                  <Label>Cerrar sesión</Label>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        </div>
       ) : null}
     </header>
   );

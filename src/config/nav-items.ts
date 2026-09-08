@@ -1,4 +1,4 @@
-import { ROLES, type Role } from '../types/roles';
+import { ALL_ROLES, ROLES, type Role } from '../types/roles';
 
 export interface NavItem {
   label: string;
@@ -35,7 +35,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   { label: 'Terreno', to: '/terreno', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   { label: 'Mantenimiento', to: '/mantenimiento', roles: [ROLES.ADMIN, ROLES.MANTENEDOR] },
-  { label: 'Notificaciones', to: '/notificaciones', roles: [ROLES.ADMIN] },
+  // Universal: todos los roles autenticados ven y usan notificaciones.
+  { label: 'Notificaciones', to: '/notificaciones', roles: ALL_ROLES },
   { label: 'Reportes', to: '/reportes', roles: [ROLES.ADMIN] },
   { label: 'Usuarios', to: '/usuarios', roles: [ROLES.ADMIN] },
 ];
