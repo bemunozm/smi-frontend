@@ -13,6 +13,7 @@ import { InsumoKardexView } from './views/InsumoKardexView';
 import { InventarioView } from './views/InventarioView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
+import { NotificacionesView } from './views/NotificacionesView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
@@ -36,6 +37,9 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <DashboardView /> },
           { path: '/perfil', element: <ProfileView /> },
+          // Notificaciones es universal (todos los roles autenticados): solo
+          // exige estar dentro de `ProtectedRoute`, sin `allowedRoles`.
+          { path: '/notificaciones', element: <NotificacionesView /> },
           // Flota + Inventario (Amin). La LECTURA la comparten los roles que
           // necesitan consultar equipos y stock: Terreno para saber qué máquina
           // opera, Taller para saber si hay repuesto. La escritura la restringe
@@ -58,7 +62,6 @@ export const router = createBrowserRouter([
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
             children: [
-              { path: '/notificaciones', element: <PlaceholderView title="Notificaciones" /> },
               { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
               { path: '/usuarios', element: <UsersView /> },
             ],
