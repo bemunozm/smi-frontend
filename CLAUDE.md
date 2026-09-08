@@ -79,10 +79,12 @@ cp .env.example .env          # VITE_API_URL=http://localhost:3000
 npm run dev                   # http://localhost:5173  (el backend debe correr en :3000)
 ```
 
-## Git (GitHub Flow, Conventional Commits)
-- `main` estable y **protegida (PR obligatorio)**. **Nunca push directo a main.**
-- Rama por funcionalidad: `feat/<dominio>/<descripcion>` (`fix/…`, `chore/…`, `docs/…`).
-- Commits: `tipo(contexto): descripción` en **inglés**, imperativo, ≤100 chars, sin mayúscula inicial ni punto final. Sin co-autoría de IA.
+## Flujo de trabajo y Git
+La **metodología completa** (regla de oro, Producto→RFC→Desarrollo, review cruzado, Definition of Done de producción, tableros) vive en **`CONTRIBUTING.md`** — léela antes de tomar una tarea. Esencial:
+- **Regla de oro:** sin **ticket de Producto** + **RFC aprobado**, no se desarrolla.
+- `main` estable y **protegida**: PR obligatorio + **review del otro dev** + CI verde. **Nunca push directo a main.**
+- Rama por funcionalidad: `feat/<dominio>/<descripcion>` (`fix/…`, `chore/…`, `docs/…`). El cuerpo del PR referencia `PROD·RFC·DEV`.
+- Commits: `tipo(contexto): descripción` en **inglés**, imperativo, ≤100 chars, sin mayúscula inicial ni punto final. **Sin co-autoría de IA.**
 
 ## Prohibiciones
 - ❌ `any` (usa `unknown` + type guards) · ❌ `export default` · ❌ vistas llamadas `*Page` (son `*View`)
