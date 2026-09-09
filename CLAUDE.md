@@ -86,6 +86,15 @@ La **metodología completa** (regla de oro, Producto→RFC→Desarrollo, review 
 - Rama por funcionalidad: `feat/<dominio>/<descripcion>` (`fix/…`, `chore/…`, `docs/…`). El cuerpo del PR referencia `PROD·RFC·DEV`.
 - Commits: `tipo(contexto): descripción` en **inglés**, imperativo, ≤100 chars, sin mayúscula inicial ni punto final. **Sin co-autoría de IA.**
 
+## Convenciones de nombres e idioma
+**El código y la base de datos van en INGLÉS** (estándar universal). Español SOLO para textos visibles al usuario final (labels/mensajes de UI) y comentarios. Aplica a: tipos, componentes, hooks, funciones, variables, archivos, endpoints que consume, ramas y commits.
+- Tipos / clases / componentes React: `PascalCase` (`EquipmentList`, `StockBadge`).
+- Variables, funciones y hooks: `camelCase` (`useEquipmentList`, `currentBranchId`).
+- Constantes `UPPER_SNAKE`; archivos `kebab-case` (`equipment-list.view.tsx` / según patrón del repo); rutas/paths `kebab-case`.
+- Los **textos de UI** (labels, botones, mensajes al usuario) van en **español** (usuario final chileno).
+
+**Migración gradual (el código actual está en español, herencia de la demo):** cada dueño de módulo **renombra su dominio a inglés al tocarlo**; todo lo NUEVO nace en inglés. Se acepta un híbrido temporal hasta completar. Meta: 100% inglés.
+
 ## Prohibiciones
 - ❌ `any` (usa `unknown` + type guards) · ❌ `export default` · ❌ vistas llamadas `*Page` (son `*View`)
 - ❌ Duplicar la sesión/token en Zustand (usa `useSession`/`useCurrentUser`)
