@@ -44,7 +44,7 @@ describe('InventarioView', () => {
     const qc = new QueryClient();
     qc.setQueryData(['inventario', 'insumos', {}], [CON_STOCK, BAJO_MINIMO]);
     qc.setQueryData(['inventario', 'resumen'], { total: 2, bajoMinimo: 1 });
-    qc.setQueryData(['equipos'], []);
+    qc.setQueryData(['equipment'], []);
 
     render(
       <QueryClientProvider client={qc}>
@@ -65,7 +65,7 @@ describe('InventarioView', () => {
     const qc = new QueryClient();
     qc.setQueryData(['inventario', 'insumos', {}], [CON_STOCK]);
     qc.setQueryData(['inventario', 'resumen'], { total: 1, bajoMinimo: 0 });
-    qc.setQueryData(['equipos'], []);
+    qc.setQueryData(['equipment'], []);
 
     render(
       <QueryClientProvider client={qc}>
@@ -97,7 +97,7 @@ describe('InsumoKardexView', () => {
           referenciaId: null,
           observacion: 'Consumo en mantención de EX-001',
           fecha: '2026-08-02T10:00:00.000Z',
-          equipo: { id: 'eq_1', codigo: 'EX-001' },
+          equipo: { id: 'eq_1', internalCode: 'EX-001' },
         },
         {
           id: 'mov_1',

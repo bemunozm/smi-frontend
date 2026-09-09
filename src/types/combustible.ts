@@ -18,5 +18,5 @@ export interface RegistroCombustible {
   tipo: string;
   fotoUrl: string | null;
   fecha: string;
-  equipo?: { codigo: string };
+  equipo?: { internalCode: string };
 }

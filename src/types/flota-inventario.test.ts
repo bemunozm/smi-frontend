@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { EquipoFormSchema, toEquipoPayload } from './equipo';
+import { EquipmentFormSchema, toEquipmentPayload, toUpdateEquipmentPayload } from './equipment';
 import {
   estaBajoMinimo,
   MovimientoFormSchema,
@@ -21,62 +21,116 @@ const INSUMO_BASE: Insumo = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
-describe('EquipoFormSchema', () => {
+describe('EquipmentFormSchema', () => {
   const valido = {
-    codigo: 'ex-001',
-    tipo: 'Excavadora',
-    marca: 'Caterpillar',
-    modelo: '336',
-    anio: '2019',
-    estado: 'DISPONIBLE' as const,
+    internalCode: 'ex-001',
+    licensePlate: '',
+    equipmentClass: 'HEAVY' as const,
+    type: 'Excavadora',
+    brand: 'Caterpillar',
+    model: '336',
+    year: '2019',
+    controlUnit: 'HOURS' as const,
+    status: 'OPERATIONAL' as const,
+    homeBranchId: '',
   };
 
   it('acepta el año vacío (es opcional)', () => {
-    expect(EquipoFormSchema.safeParse({ ...valido, anio: '' }).success).toBe(true);
+    expect(EquipmentFormSchema.safeParse({ ...valido, year: '' }).success).toBe(true);
   });
 
   it('rechaza un año que no tenga 4 dígitos', () => {
-    expect(EquipoFormSchema.safeParse({ ...valido, anio: '19' }).success).toBe(false);
+    expect(EquipmentFormSchema.safeParse({ ...valido, year: '19' }).success).toBe(false);
   });
 
   it('rechaza un año fuera del rango razonable', () => {
-    expect(EquipoFormSchema.safeParse({ ...valido, anio: '1800' }).success).toBe(false);
+    expect(EquipmentFormSchema.safeParse({ ...valido, year: '1800' }).success).toBe(false);
   });
 
   it('rechaza el código vacío', () => {
-    expect(EquipoFormSchema.safeParse({ ...valido, codigo: '' }).success).toBe(false);
+    expect(EquipmentFormSchema.safeParse({ ...valido, internalCode: '' }).success).toBe(false);
   });
 });
 
-describe('toEquipoPayload', () => {
+describe('toEquipmentPayload', () => {
   it('normaliza el código a mayúsculas y sin espacios', () => {
-    const payload = toEquipoPayload({
-      codigo: '  ex-001 ',
-      tipo: ' Excavadora ',
-      marca: 'Caterpillar',
-      modelo: '336',
-      anio: '2019',
-      estado: 'DISPONIBLE',
+    const payload = toEquipmentPayload({
+      internalCode: '  ex-001 ',
+      licensePlate: '',
+      equipmentClass: 'HEAVY',
+      type: ' Excavadora ',
+      brand: 'Caterpillar',
+      model: '336',
+      year: '2019',
+      controlUnit: 'HOURS',
+      status: 'OPERATIONAL',
+      homeBranchId: '',
     });
 
-    expect(payload.codigo).toBe('EX-001');
-    expect(payload.tipo).toBe('Excavadora');
-    expect(payload.anio).toBe(2019);
+    expect(payload.internalCode).toBe('EX-001');
+    expect(payload.type).toBe('Excavadora');
+    expect(payload.year).toBe(2019);
   });
 
-  it('omite el año cuando viene vacío en vez de mandar null', () => {
-    // El DTO del backend lo marca `@IsOptional()` y corre con
+  it('omite el año, la patente y la sucursal cuando vienen vacíos en vez de mandar null', () => {
+    // El DTO del backend los marca `@IsOptional()` y corre con
     // `forbidNonWhitelisted`: un `null` explícito haría fallar la validación.
-    const payload = toEquipoPayload({
-      codigo: 'CM-002',
-      tipo: 'Camión',
-      marca: 'Volvo',
-      modelo: 'FMX',
-      anio: '',
-      estado: 'EN_RUTA',
+    const payload = toEquipmentPayload({
+      internalCode: 'CM-002',
+      licensePlate: '',
+      equipmentClass: 'HEAVY',
+      type: 'Camión',
+      brand: 'Volvo',
+      model: 'FMX',
+      year: '',
+      controlUnit: 'KM',
+      status: 'IN_WORKSHOP',
+      homeBranchId: '',
     });
 
-    expect('anio' in payload).toBe(false);
+    expect('year' in payload).toBe(false);
+    expect('licensePlate' in payload).toBe(false);
+    expect('homeBranchId' in payload).toBe(false);
+  });
+});
+
+describe('toUpdateEquipmentPayload', () => {
+  const valido = {
+    internalCode: 'ex-001',
+    licensePlate: '',
+    equipmentClass: 'HEAVY' as const,
+    type: 'Excavadora',
+    brand: 'Caterpillar',
+    model: '336',
+    year: '',
+    controlUnit: 'HOURS' as const,
+    status: 'OPERATIONAL' as const,
+    homeBranchId: '',
+  };
+
+  it('manda `null` explícito en patente, año y sucursal cuando vienen vacíos (a diferencia de crear)', () => {
+    // Contrato acordado con backend: en UPDATE es la única forma de limpiar un
+    // valor ya guardado (los 3 campos son `@IsOptional()` y aceptan `null`).
+    const payload = toUpdateEquipmentPayload(valido);
+
+    expect(payload.licensePlate).toBeNull();
+    expect(payload.year).toBeNull();
+    expect(payload.homeBranchId).toBeNull();
+    // El código interno no es editable — el builder de update ni lo recibe.
+    expect('internalCode' in payload).toBe(false);
+  });
+
+  it('normaliza y manda el valor cuando el campo viene informado', () => {
+    const payload = toUpdateEquipmentPayload({
+      ...valido,
+      licensePlate: ' ab-cd-12 ',
+      year: '2019',
+      homeBranchId: 'branch_1',
+    });
+
+    expect(payload.licensePlate).toBe('AB-CD-12');
+    expect(payload.year).toBe(2019);
+    expect(payload.homeBranchId).toBe('branch_1');
   });
 });
 

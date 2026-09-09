@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ESTADOS_EQUIPO } from './equipo';
+import { EQUIPMENT_STATUS } from './equipment';
 
 /**
  * Contrato de `GET /api/equipos/:id/ficha` — vista consolidada del equipo:
@@ -34,17 +34,21 @@ export const EventoFichaSchema = z.object({
 });
 export type EventoFicha = z.infer<typeof EventoFichaSchema>;
 
-/** Datos técnicos del equipo dentro de la ficha (subset de `Equipo`). */
+/**
+ * Datos técnicos del equipo dentro de la ficha (subset de `Equipment`, ver
+ * `types/equipment.ts`). Identificadores en inglés — mismo contrato que
+ * expone `GET /api/equipment/:id/ficha`.
+ */
 export const FichaTecnicaSchema = z.object({
   id: z.string(),
-  codigo: z.string(),
-  tipo: z.string(),
-  marca: z.string(),
-  modelo: z.string(),
-  anio: z.number().int().nullable(),
-  estado: z.enum(ESTADOS_EQUIPO),
-  horometroActual: z.number(),
-  kilometrajeActual: z.number(),
+  internalCode: z.string(),
+  type: z.string(),
+  brand: z.string(),
+  model: z.string(),
+  year: z.number().int().nullable(),
+  status: z.enum(EQUIPMENT_STATUS),
+  currentHourmeter: z.number().nullable(),
+  currentMileage: z.number().nullable(),
 });
 export type FichaTecnica = z.infer<typeof FichaTecnicaSchema>;
 

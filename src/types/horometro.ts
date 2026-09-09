@@ -22,5 +22,5 @@ export interface RegistroHorometro {
   valorFinal: number | null;
   nivelCombustible: number | null;
   fecha: string;
-  equipo?: { codigo: string };
+  equipo?: { internalCode: string };
 }

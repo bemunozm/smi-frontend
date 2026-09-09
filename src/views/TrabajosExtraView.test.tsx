@@ -9,8 +9,8 @@ describe('TrabajosExtraView', () => {
   it('renderiza con datos sin lanzar', () => {
     const qc = new QueryClient();
     qc.setQueryData(
-      ['equipos'],
-      [{ id: 'e1', codigo: 'CM-003', tipo: 'Camión', marca: 'Volvo', modelo: 'FMX', estado: 'OPERATIVO', horometroActual: 100, kilometrajeActual: 0 }],
+      ['equipment'],
+      [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }],
     );
     qc.setQueryData(
       ['trabajos-extra'],
@@ -28,7 +28,7 @@ describe('TrabajosExtraView', () => {
           descripcion: 'Carga de material',
           observaciones: null,
           fecha: '2026-08-01T09:00:00.000Z',
-          equipo: { codigo: 'CM-003' },
+          equipo: { internalCode: 'CM-003' },
         },
       ],
     );

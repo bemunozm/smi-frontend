@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useResumenFlota } from '../hooks/useEquipos';
+import { useResumenFleet } from '../hooks/useEquipment';
 import { useInsumos, useResumenInventario } from '../hooks/useInventario';
 import {
   useDashboardSummary,
@@ -32,13 +32,13 @@ import {
   HALLAZGOS_TENDENCIA_COLOR,
   TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
-  equipoEstadoChartColor,
+  equipmentStatusChartColor,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
-import { estadoEquipoLabel, unidadSimbolo } from '../config/flota-colors';
-import { ESTADOS_EQUIPO } from '../types/equipo';
+import { equipmentStatusLabel, unidadSimbolo } from '../config/flota-colors';
+import { EQUIPMENT_STATUS } from '../types/equipment';
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -231,11 +231,11 @@ function MantencionMockKpiCards() {
   );
 }
 
-/** ← Flota (Amin, real): `useResumenFlota()` — el backend ya agrega
+/** ← Flota (Benjamín, real): `useResumenFleet()` — el backend ya agrega
  * `disponibles`/`total`, no se cuenta en cliente. Query independiente: si
  * Flota cae, el resto de los KPIs sigue con normalidad. */
 function EquiposDisponiblesKpiCard() {
-  const { data, isPending, isError, error } = useResumenFlota();
+  const { data, isPending, isError, error } = useResumenFleet();
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -375,21 +375,21 @@ function SummaryCards() {
   );
 }
 
-/** Dona — composición de estados de la flota (DISPONIBLE/EN_RUTA/
- * EN_MANTENCION/DE_BAJA). Aporta la MEZCLA de estados que la card "Equipos
+/** Dona — composición de estados de la flota (OPERATIONAL/IN_WORKSHOP/
+ * OUT_OF_SERVICE). Aporta la MEZCLA de estados que la card "Equipos
  * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
- * con el resto. Datos ← Flota/Amin, REAL: `useResumenFlota().porEstado` ya
- * viene agregado por el backend, solo se remapea a la forma que espera el
+ * con el resto. Datos ← Flota/Benjamín, REAL: `useResumenFleet().porEstado`
+ * ya viene agregado por el backend, solo se remapea a la forma que espera el
  * `Pie` (no se cuenta en cliente). */
 function FlotaComposicionSection() {
-  const { data, isPending, isError, error } = useResumenFlota();
+  const { data, isPending, isError, error } = useResumenFleet();
 
   const chartData = data
-    ? ESTADOS_EQUIPO.map((estado) => ({
-        estado,
-        cantidad: data.porEstado[estado] ?? 0,
-        label: estadoEquipoLabel(estado),
-        fill: equipoEstadoChartColor(estado),
+    ? EQUIPMENT_STATUS.map((status) => ({
+        status,
+        cantidad: data.porEstado[status] ?? 0,
+        label: equipmentStatusLabel(status),
+        fill: equipmentStatusChartColor(status),
       }))
     : undefined;
 
@@ -435,7 +435,7 @@ function FlotaComposicionSection() {
                     strokeWidth={2}
                   >
                     {chartData.map((entry) => (
-                      <Cell fill={entry.fill} key={entry.estado} />
+                      <Cell fill={entry.fill} key={entry.status} />
                     ))}
                   </Pie>
                 </PieChart>
@@ -443,7 +443,7 @@ function FlotaComposicionSection() {
             </div>
             <ChartLegendRow
               items={chartData.map((item) => ({
-                key: item.estado,
+                key: item.status,
                 label: item.label,
                 value: String(item.cantidad),
                 color: item.fill,

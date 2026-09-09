@@ -4,7 +4,7 @@ import { Button, Card, Chip, Spinner, ToggleButton, ToggleButtonGroup } from '@h
 
 import { EventoTimelineItem } from '../components/ficha/EventoTimelineItem';
 import { isOneOf } from '../config/ficha-colors';
-import { estadoEquipoChipColor, estadoEquipoLabel } from '../config/flota-colors';
+import { equipmentStatusChipColor, equipmentStatusLabel } from '../config/flota-colors';
 import { useFicha } from '../hooks/useFicha';
 import { EVENTO_TIPOS, type EventoFichaTipo } from '../types/ficha';
 import { eventoTipoLabel } from '../config/ficha-colors';
@@ -92,15 +92,17 @@ export function FichaEquipoView() {
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            {equipo.codigo}
+            {equipo.internalCode}
           </h1>
-          <Chip color={estadoEquipoChipColor(equipo.estado)} variant="soft">
-            {estadoEquipoLabel(equipo.estado)}
+          <Chip color={equipmentStatusChipColor(equipo.status)} variant="soft">
+            {equipmentStatusLabel(equipo.status)}
           </Chip>
         </div>
         <p className="text-sm text-muted-foreground">
-          {equipo.tipo} · {equipo.marca} {equipo.modelo}
-          {equipo.anio ? ` · ${equipo.anio}` : ''} · Horómetro {NUMERO.format(equipo.horometroActual)} h
+          {equipo.type} · {equipo.brand} {equipo.model}
+          {equipo.year ? ` · ${equipo.year}` : ''}
+          {equipo.currentHourmeter != null ? ` · Horómetro ${NUMERO.format(equipo.currentHourmeter)} h` : ''}
+          {equipo.currentMileage != null ? ` · Kilometraje ${NUMERO.format(equipo.currentMileage)} km` : ''}
         </p>
       </div>
 

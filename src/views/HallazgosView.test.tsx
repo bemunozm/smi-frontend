@@ -9,12 +9,12 @@ describe('HallazgosView', () => {
   it('renderiza con datos sin lanzar', () => {
     const qc = new QueryClient();
     qc.setQueryData(
-      ['equipos'],
-      [{ id: 'e1', codigo: 'PE-004', tipo: 'Perforadora', marca: 'Sandvik', modelo: 'DP1500', estado: 'DETENIDO', horometroActual: 300, kilometrajeActual: 0 }],
+      ['equipment'],
+      [{ id: 'e1', internalCode: 'PE-004', type: 'Perforadora' }],
     );
     qc.setQueryData(
       ['hallazgos'],
-      [{ id: 'h1', equipoId: 'e1', descripcion: 'Fuga de aceite hidráulico', prioridad: 'ALTA', estado: 'ABIERTO', fotoUrl: null, fecha: '2026-08-01T08:12:00.000Z', equipo: { codigo: 'PE-004' } }],
+      [{ id: 'h1', equipoId: 'e1', descripcion: 'Fuga de aceite hidráulico', prioridad: 'ALTA', estado: 'ABIERTO', fotoUrl: null, fecha: '2026-08-01T08:12:00.000Z', equipo: { internalCode: 'PE-004' } }],
     );
 
     render(

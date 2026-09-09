@@ -30,9 +30,9 @@ import {
  * dominio — y si esa petición falla, cada pieza lo refleja en su propio
  * `isError` sin tumbar el resto del dashboard (que sigue en mock).
  *
- * Flota/Inventario (Amin) también está integrado a `main` con datos reales,
+ * Flota/Inventario también está integrado a `main` con datos reales,
  * pero no tiene hooks propios acá: `DashboardView` consume DIRECTO
- * `useResumenFlota()` (`hooks/useEquipos.ts`) y `useInsumos({ bajoStock: true })`
+ * `useResumenFleet()` (`hooks/useEquipment.ts`) y `useInsumos({ bajoStock: true })`
  * / `useResumenInventario()` (`hooks/useInventario.ts`) — el backend ya
  * agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`, así que no hace
  * falta una capa de agregación en cliente como la de Terreno.

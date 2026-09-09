@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, ImageIcon } from 'lucide-react';
 import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput } from '../types/combustible';
 import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustible';
-import { useEquipos } from '../hooks/useEquipos';
+import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
 import { fmtDate, fmtNum, fmtTime } from '../lib/format';
 import {
@@ -26,7 +26,7 @@ const TIPO_ITEMS = [
 const tipoLabel: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
 
 export function CombustibleView() {
-  const { data: equipos = [] } = useEquipos();
+  const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useCombustibleList();
   const crear = useCreateCombustible();
 
@@ -56,7 +56,7 @@ export function CombustibleView() {
             <option value="">Seleccioná…</option>
             {equipos.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.codigo} — {e.tipo}
+                {e.internalCode} — {e.type}
               </option>
             ))}
           </SelectField>
@@ -107,7 +107,7 @@ export function CombustibleView() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-semibold text-foreground">{r.equipo?.codigo ?? r.equipoId}</div>
+                <div className="font-semibold text-foreground">{r.equipo?.internalCode ?? r.equipoId}</div>
                 <div className="tabular text-xs text-muted-foreground">
                   {fmtDate(r.fecha)} · {fmtTime(r.fecha)}
                 </div>

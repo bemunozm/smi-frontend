@@ -52,7 +52,10 @@ export const MovimientoSchema = z.object({
   referenciaId: z.string().nullable(),
   observacion: z.string().nullable(),
   fecha: z.string().datetime(),
-  equipo: z.object({ id: z.string(), codigo: z.string() }).nullable().optional(),
+  // `internalCode`: la relación ahora apunta a `Equipment` (rename técnico
+  // mínimo tras la migración de Flota — ver `types/equipment.ts`). El resto
+  // de este dominio (Insumo/Movimiento) sigue en español.
+  equipo: z.object({ id: z.string(), internalCode: z.string() }).nullable().optional(),
 });
 export type Movimiento = z.infer<typeof MovimientoSchema>;
 
