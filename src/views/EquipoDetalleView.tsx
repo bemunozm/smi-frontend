@@ -101,9 +101,18 @@ export function EquipoDetalleView() {
           {equipo.tipo} · {equipo.marca} {equipo.modelo}
           {equipo.anio ? ` · ${equipo.anio}` : ''}
         </p>
-        <Link className="text-sm text-(--accent) hover:underline" to={`/equipos/${equipo.id}/ficha`}>
-          Ver ficha completa →
-        </Link>
+        <div className="flex flex-wrap gap-4">
+          <Link className="text-sm text-(--accent) hover:underline" to={`/equipos/${equipo.id}/ficha`}>
+            Ver ficha completa →
+          </Link>
+          {/* PROD-12 (Joaquín): qué repuestos le sirven a esta máquina. */}
+          <Link
+            className="text-sm text-(--accent) hover:underline"
+            to={`/equipos/${equipo.id}/repuestos`}
+          >
+            Repuestos compatibles →
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

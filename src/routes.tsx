@@ -11,6 +11,7 @@ import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
 import { InsumoKardexView } from './views/InsumoKardexView';
 import { InventarioView } from './views/InventarioView';
+import { RepuestosEquipoView } from './views/RepuestosEquipoView';
 import { StockSucursalView } from './views/StockSucursalView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
@@ -56,6 +57,8 @@ export const router = createBrowserRouter([
               { path: '/equipos', element: <EquiposView /> },
               { path: '/equipos/:id', element: <EquipoDetalleView /> },
               { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
+              // Repuestos compatibles (Joaquín, PROD-12)
+              { path: '/equipos/:id/repuestos', element: <RepuestosEquipoView /> },
               { path: '/inventario', element: <InventarioView /> },
               // Stock por sucursal (Joaquín, PROD-11). Convive con
               // `/inventario/:id`: react-router rankea el segmento estático por
