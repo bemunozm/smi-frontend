@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -20,6 +20,8 @@ import {
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useSucursales } from '../hooks/useSucursales';
+import { useDesgloseInsumo } from '../hooks/useStock';
 import { useEquipos } from '../hooks/useEquipos';
 import {
   useAjustarStock,
@@ -31,6 +33,8 @@ import {
   useUpdateInsumo,
 } from '../hooks/useInventario';
 import { UNIDAD_LABELS, unidadSimbolo } from '../config/flota-colors';
+import { sucursalPorDefecto } from '../types/sucursal';
+import { TIPOS_INSUMO, TIPO_INSUMO_LABELS } from '../types/stock';
 import { ROLES } from '../types/roles';
 import {
   AjusteFormSchema,
@@ -54,6 +58,71 @@ const UNIDAD_OPTIONS = UNIDADES_INSUMO.map((unidad) => ({
   value: unidad,
   label: UNIDAD_LABELS[unidad],
 }));
+
+const TIPO_OPTIONS = TIPOS_INSUMO.map((tipo) => ({
+  value: tipo,
+  label: TIPO_INSUMO_LABELS[tipo],
+}));
+
+/**
+ * Selector de bodega para los formularios que MUEVEN saldo (RFC-11). Desde que
+ * el inventario es multi-sucursal, un movimiento sin bodega explícita se
+ * imputaría a la principal en silencio: alguien en Faena Norte registraría su
+ * compra en Casa Matriz y el descuadre solo aparecería en el conteo físico.
+ */
+function SucursalField({
+  value,
+  onChange,
+  label = 'Sucursal',
+  errorMessage,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  errorMessage?: string;
+}) {
+  const { data: sucursales } = useSucursales({ activa: true });
+
+  // La principal se preselecciona en cuanto llega la lista, para que el caso
+  // habitual (empresa de una sola bodega) no exija un clic extra.
+  useEffect(() => {
+    if (value || !sucursales) return;
+    const inicial = sucursalPorDefecto(sucursales);
+    if (inicial) onChange(inicial.id);
+  }, [sucursales, value, onChange]);
+
+  return (
+    <Select
+      fullWidth
+      isInvalid={!!errorMessage}
+      value={value}
+      onChange={(nuevo) => {
+        if (nuevo) onChange(String(nuevo));
+      }}
+    >
+      <Label>{label}</Label>
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          {(sucursales ?? []).map((sucursal) => (
+            <ListBox.Item
+              key={sucursal.id}
+              id={sucursal.id}
+              textValue={sucursal.nombre}
+            >
+              {sucursal.nombre}
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+      {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
+    </Select>
+  );
+}
 
 const ORIGEN_LABELS: Record<(typeof ORIGENES_MOVIMIENTO)[number], string> = {
   COMPRA: 'Compra / reposición',
@@ -81,6 +150,8 @@ const DEFAULT_INSUMO: InsumoFormValues = {
   nombre: '',
   descripcion: '',
   unidad: 'UNIDAD',
+  tipo: 'SUMINISTRO',
+  sucursalId: '',
   stock: '0',
   stockMinimo: '0',
 };
@@ -224,6 +295,56 @@ function CreateInsumoModal() {
                         )}
                       />
 
+                      <Controller
+                        control={control}
+                        name="tipo"
+                        render={({ field }) => (
+                          <Select
+                            fullWidth
+                            isInvalid={!!errors.tipo}
+                            name={field.name}
+                            value={field.value}
+                            onChange={(value) => {
+                              if (value) field.onChange(value);
+                            }}
+                          >
+                            <Label>Clasificación</Label>
+                            <Select.Trigger>
+                              <Select.Value />
+                              <Select.Indicator />
+                            </Select.Trigger>
+                            <Select.Popover>
+                              <ListBox>
+                                {TIPO_OPTIONS.map((option) => (
+                                  <ListBox.Item
+                                    key={option.value}
+                                    id={option.value}
+                                    textValue={option.label}
+                                  >
+                                    {option.label}
+                                    <ListBox.ItemIndicator />
+                                  </ListBox.Item>
+                                ))}
+                              </ListBox>
+                            </Select.Popover>
+                            {errors.tipo ? <FieldError>{errors.tipo.message}</FieldError> : null}
+                          </Select>
+                        )}
+                      />
+
+                      <Controller
+                        control={control}
+                        name="sucursalId"
+                        render={({ field }) => (
+                          <SucursalField
+                            errorMessage={errors.sucursalId?.message}
+                            label="Bodega que recibe el stock inicial"
+                            value={field.value}
+                            onChange={field.onChange}
+                          />
+                        )}
+                      />
+
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Controller
                           control={control}
@@ -267,8 +388,9 @@ function CreateInsumoModal() {
                       </div>
 
                       <p className="text-xs text-(--muted)">
-                        El stock inicial queda registrado como una entrada por compra: el kardex
-                        parte explicando de dónde salió el saldo.
+                        El stock inicial queda registrado como una entrada por compra en la
+                        bodega elegida: el kardex parte explicando de dónde salió el saldo y
+                        dónde quedó.
                       </p>
                     </form>
                   </Modal.Body>
@@ -313,6 +435,7 @@ function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
     resolver: zodResolver(MovimientoFormSchema),
     defaultValues: {
       insumoId: '',
+      sucursalId: '',
       tipo: 'SALIDA',
       origen: 'INTERVENCION',
       cantidad: '',
@@ -394,6 +517,19 @@ function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
                         )}
                       />
 
+                      <Controller
+                        control={control}
+                        name="sucursalId"
+                        render={({ field }) => (
+                          <SucursalField
+                            errorMessage={errors.sucursalId?.message}
+                            label="Bodega del movimiento"
+                            value={field.value}
+                            onChange={field.onChange}
+                          />
+                        )}
+                      />
+
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Controller
                           control={control}
@@ -441,7 +577,7 @@ function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
                               <Label>
                                 Cantidad
                                 {seleccionado
-                                  ? ` (${unidadSimbolo(seleccionado.unidad)}) · stock ${NUMERO.format(seleccionado.stock)}`
+                                  ? ` (${unidadSimbolo(seleccionado.unidad)}) · total empresa ${NUMERO.format(seleccionado.stock)}`
                                   : ''}
                               </Label>
                               <Input inputMode="decimal" placeholder="0" />
@@ -594,6 +730,9 @@ function EditInsumoModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
       nombre: insumo.nombre,
       descripcion: insumo.descripcion ?? '',
       unidad: insumo.unidad,
+      tipo: insumo.tipo,
+      // Editar la ficha no mueve saldo, así que no hay bodega que elegir.
+      sucursalId: '',
       stock: String(insumo.stock),
       stockMinimo: String(insumo.stockMinimo),
     },
@@ -761,11 +900,21 @@ function AjusteModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
     formState: { errors },
   } = useForm<AjusteFormValues>({
     resolver: zodResolver(AjusteFormSchema),
-    values: { stockContado: String(insumo.stock), observacion: '' },
+    defaultValues: { sucursalId: '', stockContado: '', observacion: '' },
   });
 
+  const sucursalId = watch('sucursalId');
+
+  // Un conteo físico se hace EN una bodega: la diferencia hay que calcularla
+  // contra el saldo de ESA bodega. Compararla contra el total de la empresa
+  // registraría como faltante todo lo que está guardado en otra sucursal.
+  const { data: desglose } = useDesgloseInsumo(isOpen ? insumo.id : null);
+  const enSistema =
+    desglose?.sucursales.find((fila) => fila.sucursalId === sucursalId)?.stock ??
+    0;
+
   const contado = Number(watch('stockContado'));
-  const diferencia = Number.isFinite(contado) ? contado - insumo.stock : 0;
+  const diferencia = Number.isFinite(contado) ? contado - enSistema : 0;
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -778,6 +927,7 @@ function AjusteModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
                   id: insumo.id,
                   input: {
                     stockContado: Number(values.stockContado),
+                    sucursalId: values.sucursalId,
                     ...(values.observacion.trim()
                       ? { observacion: values.observacion.trim() }
                       : {}),
@@ -802,10 +952,24 @@ function AjusteModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
                     noValidate
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
+                    <Controller
+                      control={control}
+                      name="sucursalId"
+                      render={({ field }) => (
+                        <SucursalField
+                          errorMessage={errors.sucursalId?.message}
+                          label="Bodega que estás contando"
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                      )}
+                    />
+
                     <p className="text-sm text-(--muted)">
-                      El sistema tiene <strong>{NUMERO.format(insumo.stock)}</strong>{' '}
-                      {unidadSimbolo(insumo.unidad)}. Ingresa lo que contaste en bodega y se
-                      registrará la diferencia como movimiento.
+                      El sistema tiene <strong>{NUMERO.format(enSistema)}</strong>{' '}
+                      {unidadSimbolo(insumo.unidad)} en esa bodega (total empresa:{' '}
+                      {NUMERO.format(insumo.stock)}). Ingresa lo que contaste y se registrará
+                      la diferencia como movimiento.
                     </p>
 
                     <Controller

@@ -8,6 +8,10 @@ import { z } from 'zod';
 export const UNIDADES_INSUMO = ['UNIDAD', 'LITRO', 'KILOGRAMO', 'METRO'] as const;
 export type UnidadInsumo = (typeof UNIDADES_INSUMO)[number];
 
+/** Suministro (consumible) vs. repuesto (pieza) — RFC-11. */
+export const TIPOS_INSUMO = ['SUMINISTRO', 'REPUESTO'] as const;
+export type TipoInsumo = (typeof TIPOS_INSUMO)[number];
+
 export const TIPOS_MOVIMIENTO = ['ENTRADA', 'SALIDA'] as const;
 export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number];
 
@@ -28,6 +32,9 @@ export const InsumoSchema = z.object({
   nombre: z.string(),
   descripcion: z.string().nullable(),
   unidad: z.enum(UNIDADES_INSUMO),
+  tipo: z.enum(TIPOS_INSUMO),
+  /** Saldo TOTAL sumado sobre todas las sucursales (RFC-11). El saldo por
+   *  bodega vive en `types/stock.ts`. */
   stock: z.number(),
   stockMinimo: z.number(),
   createdAt: z.string().datetime(),
@@ -43,6 +50,9 @@ export function estaBajoMinimo(insumo: Insumo): boolean {
 export const MovimientoSchema = z.object({
   id: z.string(),
   insumoId: z.string(),
+  /** Bodega donde ocurrió el movimiento (RFC-11): sin ella el kardex de un
+   *  insumo repartido en varias sucursales muestra saldos que "saltan". */
+  sucursalId: z.string(),
   tipo: z.enum(TIPOS_MOVIMIENTO),
   origen: z.enum(ORIGENES_MOVIMIENTO),
   cantidad: z.number(),
@@ -53,6 +63,10 @@ export const MovimientoSchema = z.object({
   observacion: z.string().nullable(),
   fecha: z.string().datetime(),
   equipo: z.object({ id: z.string(), codigo: z.string() }).nullable().optional(),
+  sucursal: z
+    .object({ id: z.string(), codigo: z.string(), nombre: z.string() })
+    .nullable()
+    .optional(),
 });
 export type Movimiento = z.infer<typeof MovimientoSchema>;
 
@@ -127,6 +141,10 @@ export const InsumoFormSchema = z.object({
   nombre: z.string().min(1, 'El nombre es obligatorio').max(80),
   descripcion: z.string().max(240).or(z.literal('')),
   unidad: z.enum(UNIDADES_INSUMO),
+  tipo: z.enum(TIPOS_INSUMO),
+  /** Bodega que recibe el stock inicial. Vacío al editar: la edición no mueve
+   *  saldos, así que no necesita bodega. */
+  sucursalId: z.string(),
   stock: cantidadField('El stock inicial es obligatorio'),
   stockMinimo: cantidadField('El stock mínimo es obligatorio'),
 });
@@ -137,12 +155,22 @@ export interface CreateInsumoInput {
   nombre: string;
   descripcion?: string;
   unidad: UnidadInsumo;
+  tipo: TipoInsumo;
+  /** Bodega del stock inicial. Sin ella, el backend usa la principal. */
+  sucursalId?: string;
   stock?: number;
   stockMinimo: number;
 }
 
-/** `stock` no se puede editar: solo se mueve con movimientos o ajuste. */
-export type UpdateInsumoInput = Omit<CreateInsumoInput, 'codigo' | 'stock'>;
+/**
+ * `stock` no se puede editar: solo se mueve con movimientos o ajuste. Tampoco
+ * `sucursalId`: solo tiene sentido para imputar el stock inicial, y el backend
+ * (con `forbidNonWhitelisted`) rechazaría el campo en un PATCH.
+ */
+export type UpdateInsumoInput = Omit<
+  CreateInsumoInput,
+  'codigo' | 'stock' | 'sucursalId'
+>;
 
 export function toInsumoPayload(values: InsumoFormValues): CreateInsumoInput {
   return {
@@ -152,6 +180,8 @@ export function toInsumoPayload(values: InsumoFormValues): CreateInsumoInput {
     // el string vacío pasaría, pero deja basura en la base.
     ...(values.descripcion.trim() ? { descripcion: values.descripcion.trim() } : {}),
     unidad: values.unidad,
+    tipo: values.tipo,
+    ...(values.sucursalId ? { sucursalId: values.sucursalId } : {}),
     stock: Number(values.stock),
     stockMinimo: Number(values.stockMinimo),
   };
@@ -159,6 +189,7 @@ export function toInsumoPayload(values: InsumoFormValues): CreateInsumoInput {
 
 export const MovimientoFormSchema = z.object({
   insumoId: z.string().min(1, 'Selecciona un insumo'),
+  sucursalId: z.string().min(1, 'Selecciona una sucursal'),
   tipo: z.enum(TIPOS_MOVIMIENTO),
   origen: z.enum(ORIGENES_MOVIMIENTO),
   cantidad: cantidadField('La cantidad es obligatoria').refine(
@@ -172,6 +203,7 @@ export type MovimientoFormValues = z.infer<typeof MovimientoFormSchema>;
 
 export interface CreateMovimientoInput {
   insumoId: string;
+  sucursalId: string;
   tipo: TipoMovimiento;
   origen: OrigenMovimiento;
   cantidad: number;
@@ -184,6 +216,7 @@ export function toMovimientoPayload(
 ): CreateMovimientoInput {
   return {
     insumoId: values.insumoId,
+    sucursalId: values.sucursalId,
     tipo: values.tipo,
     origen: values.origen,
     cantidad: Number(values.cantidad),
@@ -193,6 +226,7 @@ export function toMovimientoPayload(
 }
 
 export const AjusteFormSchema = z.object({
+  sucursalId: z.string().min(1, 'Selecciona la sucursal que estás contando'),
   stockContado: cantidadField('Ingresa la cantidad contada'),
   observacion: z.string().max(240).or(z.literal('')),
 });

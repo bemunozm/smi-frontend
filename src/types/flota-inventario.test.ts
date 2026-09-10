@@ -15,6 +15,7 @@ const INSUMO_BASE: Insumo = {
   nombre: 'Aceite motor 15W-40',
   descripcion: null,
   unidad: 'LITRO',
+  tipo: 'SUMINISTRO',
   stock: 100,
   stockMinimo: 50,
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -87,6 +88,8 @@ describe('toInsumoPayload', () => {
       nombre: ' Filtro de aceite ',
       descripcion: '',
       unidad: 'UNIDAD',
+      tipo: 'REPUESTO',
+      sucursalId: 'suc_1',
       stock: '40',
       stockMinimo: '10',
     });
@@ -128,6 +131,7 @@ describe('toMovimientoPayload', () => {
   it('omite equipoId y observación cuando vienen vacíos', () => {
     const payload = toMovimientoPayload({
       insumoId: 'ins_1',
+      sucursalId: 'suc_1',
       tipo: 'SALIDA',
       origen: 'INTERVENCION',
       cantidad: '12.5',
@@ -137,6 +141,7 @@ describe('toMovimientoPayload', () => {
 
     expect(payload).toEqual({
       insumoId: 'ins_1',
+      sucursalId: 'suc_1',
       tipo: 'SALIDA',
       origen: 'INTERVENCION',
       cantidad: 12.5,
@@ -146,6 +151,7 @@ describe('toMovimientoPayload', () => {
   it('incluye equipoId cuando se selecciona una unidad', () => {
     const payload = toMovimientoPayload({
       insumoId: 'ins_1',
+      sucursalId: 'suc_1',
       tipo: 'SALIDA',
       origen: 'INTERVENCION',
       cantidad: '5',

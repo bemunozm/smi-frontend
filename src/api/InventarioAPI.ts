@@ -99,7 +99,7 @@ interface AjusteResultado {
 /** Conteo físico: el backend calcula la diferencia y registra el movimiento. */
 async function ajustarStock(
   id: string,
-  input: { stockContado: number; observacion?: string },
+  input: { stockContado: number; sucursalId?: string; observacion?: string },
 ): Promise<AjusteResultado> {
   try {
     const response = await axiosInstance.post(

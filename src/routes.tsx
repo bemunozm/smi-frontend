@@ -11,6 +11,7 @@ import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
 import { InsumoKardexView } from './views/InsumoKardexView';
 import { InventarioView } from './views/InventarioView';
+import { StockSucursalView } from './views/StockSucursalView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
 import { NotificacionesView } from './views/NotificacionesView';
@@ -56,6 +57,10 @@ export const router = createBrowserRouter([
               { path: '/equipos/:id', element: <EquipoDetalleView /> },
               { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
               { path: '/inventario', element: <InventarioView /> },
+              // Stock por sucursal (Joaquín, PROD-11). Convive con
+              // `/inventario/:id`: react-router rankea el segmento estático por
+              // sobre el dinámico, así que "stock" nunca se toma como un id.
+              { path: '/inventario/stock', element: <StockSucursalView /> },
               { path: '/inventario/:id', element: <InsumoKardexView /> },
             ],
           },

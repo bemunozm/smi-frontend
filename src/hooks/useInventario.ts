@@ -117,7 +117,7 @@ export function useAjustarStock() {
       input,
     }: {
       id: string;
-      input: { stockContado: number; observacion?: string };
+      input: { stockContado: number; sucursalId?: string; observacion?: string };
     }) => InventarioAPI.ajustarStock(id, input),
     onSuccess: (resultado) => {
       invalidar();
