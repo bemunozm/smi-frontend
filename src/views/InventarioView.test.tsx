@@ -1,135 +1,158 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 
-import { InsumoKardexView } from './InsumoKardexView';
 import { InventarioView } from './InventarioView';
+import { useUiStore } from '../store/ui';
+import type { InventoryItem } from '../types/inventory';
 
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
-    user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+    user: {
+      id: 'u1',
+      name: 'Admin SMI',
+      email: 'admin@smi.local',
+      role: 'ADMIN',
+    },
     role: 'ADMIN',
     isPending: false,
     isAuthenticated: true,
   }),
 }));
 
-afterEach(cleanup);
-
-const CON_STOCK = {
-  id: 'ins_1',
-  codigo: 'ACE-001',
-  nombre: 'Aceite motor 15W-40',
-  descripcion: null,
-  unidad: 'LITRO' as const,
-  stock: 220,
-  stockMinimo: 200,
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-};
-
-const BAJO_MINIMO = {
-  ...CON_STOCK,
-  id: 'ins_2',
-  codigo: 'NEU-001',
-  nombre: 'Neumático 29.5R25',
-  unidad: 'UNIDAD' as const,
-  stock: 2,
-  stockMinimo: 4,
-};
-
-describe('InventarioView', () => {
-  it('marca con "Stock bajo" solo los insumos en o bajo su mínimo', () => {
-    const qc = new QueryClient();
-    qc.setQueryData(['inventario', 'insumos', {}], [CON_STOCK, BAJO_MINIMO]);
-    qc.setQueryData(['inventario', 'resumen'], { total: 2, bajoMinimo: 1 });
-    qc.setQueryData(['equipment'], []);
-
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <InventarioView />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-
-    expect(screen.getByText('Neumático 29.5R25')).toBeTruthy();
-    // Un chip "Stock bajo" (NEU-001) y un chip "OK" (ACE-001).
-    expect(screen.getAllByText('Stock bajo')).toHaveLength(1);
-    expect(screen.getAllByText('OK')).toHaveLength(1);
-    expect(screen.getByText('1 bajo el mínimo')).toBeTruthy();
-  });
-
-  it('muestra el stock con el símbolo de su unidad', () => {
-    const qc = new QueryClient();
-    qc.setQueryData(['inventario', 'insumos', {}], [CON_STOCK]);
-    qc.setQueryData(['inventario', 'resumen'], { total: 1, bajoMinimo: 0 });
-    qc.setQueryData(['equipment'], []);
-
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <InventarioView />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-
-    expect(screen.getByText('220 L')).toBeTruthy();
-  });
+afterEach(() => {
+  cleanup();
+  useUiStore.setState({ selectedBranchId: null });
 });
 
-describe('InsumoKardexView', () => {
-  it('muestra el saldo que el backend guardó en cada movimiento', () => {
-    const qc = new QueryClient();
-    qc.setQueryData(['inventario', 'kardex', 'ins_1'], {
-      insumo: CON_STOCK,
-      movimientos: [
-        {
-          id: 'mov_2',
-          insumoId: 'ins_1',
-          tipo: 'SALIDA',
-          origen: 'INTERVENCION',
-          cantidad: 60,
-          saldoResultante: 220,
-          responsableId: 'u1',
-          equipoId: 'eq_1',
-          referenciaId: null,
-          observacion: 'Consumo en mantención de EX-001',
-          fecha: '2026-08-02T10:00:00.000Z',
-          equipo: { id: 'eq_1', internalCode: 'EX-001' },
-        },
-        {
-          id: 'mov_1',
-          insumoId: 'ins_1',
-          tipo: 'ENTRADA',
-          origen: 'COMPRA',
-          cantidad: 280,
-          saldoResultante: 280,
-          responsableId: 'u1',
-          equipoId: null,
-          referenciaId: null,
-          observacion: null,
-          fecha: '2026-08-01T10:00:00.000Z',
-          equipo: null,
-        },
-      ],
-    });
+const CASA = { id: 'b1', name: 'Casa Matriz' };
+const FAENA = { id: 'b2', name: 'Faena' };
 
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/inventario/ins_1']}>
-          <Routes>
-            <Route element={<InsumoKardexView />} path="/inventario/:id" />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+const BRANCHES = [
+  {
+    ...CASA,
+    address: 'Iquique',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    ...FAENA,
+    address: null,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+];
 
-    expect(screen.getByText('Entrada')).toBeTruthy();
-    expect(screen.getByText('Salida')).toBeTruthy();
-    // Saldos tal como vienen del backend — la vista no los recalcula.
-    expect(screen.getByText('280')).toBeTruthy();
-    expect(screen.getByText('EX-001')).toBeTruthy();
+function item(
+  over: Partial<InventoryItem> & Pick<InventoryItem, 'id' | 'sku' | 'name'>,
+): InventoryItem {
+  return {
+    description: null,
+    unit: 'UNIT',
+    type: 'PART',
+    categoryId: null,
+    category: null,
+    partNumber: null,
+    defaultSupplier: null,
+    isCritical: false,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    stocks: [],
+    ...over,
+  };
+}
+
+/** Hay saldo acá y con holgura. */
+const DISPONIBLE = item({
+  id: 'i1',
+  sku: 'FIL-001',
+  name: 'Filtro de aceite motor',
+  stocks: [{ branchId: 'b1', quantity: 30, minimumQuantity: 10, branch: CASA }],
+});
+
+/** Hay saldo acá, pero cruzó el mínimo de la bodega. */
+const BAJO_MINIMO = item({
+  id: 'i2',
+  sku: 'COR-001',
+  name: 'Correa de alternador',
+  stocks: [{ branchId: 'b1', quantity: 2, minimumQuantity: 5, branch: CASA }],
+});
+
+/** No hay acá pero sí en la otra bodega: se pide traslado, no compra. */
+const EN_OTRA = item({
+  id: 'i3',
+  sku: 'NEU-001',
+  name: 'Neumático 29.5R25',
+  stocks: [{ branchId: 'b2', quantity: 2, minimumQuantity: 0, branch: FAENA }],
+});
+
+/** No hay en ninguna parte. */
+const SIN_STOCK = item({ id: 'i4', sku: 'BAT-001', name: 'Batería 12V' });
+
+function renderView(items: InventoryItem[]) {
+  const qc = new QueryClient();
+  qc.setQueryData(['branches', { isActive: true }], BRANCHES);
+  qc.setQueryData(
+    ['inventory', 'items', { type: 'SUPPLY', isActive: true }],
+    items,
+  );
+
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <InventarioView />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('InventarioView', () => {
+  it('renderiza sin reventar', () => {
+    // Regresión: `<Tabs.Indicator />` hacía explotar la vista entera con
+    // "<SharedElement> must be rendered inside a <SharedElementTransition>".
+    // Un test de render la habría atrapado antes de que llegara al navegador.
+    expect(() => renderView([DISPONIBLE])).not.toThrow();
+    expect(screen.getByText('Suministros')).toBeTruthy();
+    expect(screen.getByText('Repuestos')).toBeTruthy();
+  });
+
+  it('es una sola pantalla: trae el selector de sucursal y las dos pestañas', () => {
+    renderView([DISPONIBLE]);
+
+    // El doble listado (Inventario + Stock por sucursal) mostraba cifras
+    // distintas del mismo ítem. Ahora hay una sola vista con la bodega arriba.
+    expect(screen.getByText('Sucursal')).toBeTruthy();
+    expect(screen.getByText('Stock acá')).toBeTruthy();
+    expect(screen.getByText('Total empresa')).toBeTruthy();
+  });
+
+  it('distingue los tres estados de disponibilidad', () => {
+    renderView([DISPONIBLE, EN_OTRA, SIN_STOCK]);
+
+    // Cada uno lleva a una acción distinta: usar, pedir traslado, comprar. Y
+    // el que está en otra bodega la NOMBRA: decir "en otra sucursal" obliga a
+    // adivinar a cuál pedirle.
+    expect(screen.getAllByText('En esta bodega')).toHaveLength(1);
+    expect(screen.getAllByText('En Faena')).toHaveLength(1);
+    expect(screen.getAllByText('Sin stock')).toHaveLength(1);
+  });
+
+  it('no confunde "quedan pocos" con "no hay"', () => {
+    renderView([BAJO_MINIMO]);
+
+    // Quedan 2 y el mínimo es 5: se puede montar hoy, pero hay que reponer.
+    expect(screen.getAllByText('En esta bodega')).toHaveLength(1);
+    expect(screen.getAllByText('Bajo mínimo')).toHaveLength(1);
+  });
+
+  it('cuenta los ítems bajo el mínimo de la bodega elegida', () => {
+    renderView([DISPONIBLE, BAJO_MINIMO, EN_OTRA]);
+
+    // EN_OTRA tiene 0 acá pero sin umbral propio en esta bodega: no alerta.
+    expect(screen.getByText('1 bajo el mínimo en Casa Matriz')).toBeTruthy();
   });
 });

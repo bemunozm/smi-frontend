@@ -17,7 +17,7 @@ import {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useResumenFleet } from '../hooks/useEquipment';
-import { useInsumos, useResumenInventario } from '../hooks/useInventario';
+import { useItems } from '../hooks/useInventory';
 import {
   useDashboardSummary,
   useHallazgosAbiertosResumen,
@@ -37,7 +37,8 @@ import {
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
-import { equipmentStatusLabel, unidadSimbolo } from '../config/flota-colors';
+import { equipmentStatusLabel } from '../config/flota-colors';
+import { UNIT_SYMBOLS } from '../types/inventory';
 import { EQUIPMENT_STATUS } from '../types/equipment';
 
 /**
@@ -265,11 +266,34 @@ function EquiposDisponiblesKpiCard() {
   );
 }
 
-/** ← Inventario (Amin, real): `useResumenInventario().bajoMinimo` — conteo
- * agregado en el backend, mismo dato que alimenta la tabla de abajo
- * (`InsumosBajoStockSection`). */
+/**
+ * Filas (ítem × bodega) cuya existencia cruzó el mínimo DE ESA BODEGA.
+ *
+ * Con el modelo multi-sucursal (RFC-3) no hay un "bajo mínimo" global: el mismo
+ * ítem puede estar sobrado en una bodega y en falta en otra. El KPI cuenta pares
+ * ítem-bodega, y la tabla los nombra con su sucursal — un aviso que no dice
+ * dónde no le sirve a quien tiene que reponer.
+ *
+ * `minimumQuantity = 0` es "esa bodega no fijó umbral" y no cuenta.
+ */
+function useLowStockRows() {
+  const { data, isPending, isError, error } = useItems({ isActive: true });
+
+  const rows = (data ?? []).flatMap((item) =>
+    item.stocks
+      .filter(
+        (stock) =>
+          stock.minimumQuantity > 0 && stock.quantity <= stock.minimumQuantity,
+      )
+      .map((stock) => ({ item, stock })),
+  );
+
+  return { rows, isPending, isError, error };
+}
+
+/** ← Inventario (real): pares ítem-bodega bajo el mínimo de su sucursal. */
 function InsumosBajoMinimoKpiCard() {
-  const { data, isPending, isError, error } = useResumenInventario();
+  const { rows, isPending, isError, error } = useLowStockRows();
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -285,15 +309,13 @@ function InsumosBajoMinimoKpiCard() {
     );
   }
 
-  if (!data) return null;
-
   return (
     <KpiCard
-      hint={data.bajoMinimo > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
-      hintTone={data.bajoMinimo > 0 ? 'warning' : 'muted'}
+      hint={rows.length > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
+      hintTone={rows.length > 0 ? 'warning' : 'muted'}
       isReal
-      label="Insumos bajo mínimo"
-      value={String(data.bajoMinimo)}
+      label="Ítems bajo mínimo"
+      value={String(rows.length)}
     />
   );
 }
@@ -711,13 +733,9 @@ function MantencionesProximasSection() {
   );
 }
 
-/** Insumos con stock por debajo del mínimo — mismo patrón de `Table` que
- * `MantencionesProximasSection`. Datos ← Inventario/Amin, REAL:
- * `useInsumos({ bajoStock: true })` — el backend ya filtra por
- * `stock <= stockMinimo`, mismo dato que alimenta el KPI
- * `InsumosBajoMinimoKpiCard`. */
+/** Ítems bajo el mínimo de su bodega — mismo dato que el KPI de arriba. */
 function InsumosBajoStockSection() {
-  const { data: insumos, isPending, isError, error } = useInsumos({ bajoStock: true });
+  const { rows, isPending, isError, error } = useLowStockRows();
 
   return (
     <Card className="flex flex-col gap-3">
@@ -726,7 +744,9 @@ function InsumosBajoStockSection() {
           <Card.Title>Insumos bajo stock mínimo</Card.Title>
           <RealDataChip />
         </div>
-        <Card.Description>Repuestos e insumos que requieren reposición.</Card.Description>
+        <Card.Description>
+          Repuestos e insumos que requieren reposición, con la bodega donde faltan.
+        </Card.Description>
       </Card.Header>
 
       {isPending ? (
@@ -741,46 +761,48 @@ function InsumosBajoStockSection() {
         </p>
       ) : null}
 
-      {!isPending && !isError && insumos && insumos.length > 0 ? (
+      {!isPending && !isError && rows.length > 0 ? (
         <Table variant="secondary">
           <Table.ScrollContainer>
-            <Table.Content aria-label="Insumos bajo stock mínimo" className="min-w-full">
+            <Table.Content aria-label="Ítems bajo stock mínimo" className="min-w-full">
               <Table.Header>
-                <Table.Column isRowHeader>Insumo</Table.Column>
-                <Table.Column>Stock actual</Table.Column>
-                <Table.Column>Stock mínimo</Table.Column>
+                <Table.Column isRowHeader>Ítem</Table.Column>
+                <Table.Column>Bodega</Table.Column>
+                <Table.Column>Existencia</Table.Column>
+                <Table.Column>Mínimo</Table.Column>
                 <Table.Column>Estado</Table.Column>
               </Table.Header>
               <Table.Body>
-                <Table.Collection items={insumos}>
-                  {(insumo) => (
-                    <Table.Row>
-                      <Table.Cell>
-                        <span className="font-mono text-xs text-muted-foreground">{insumo.codigo}</span>{' '}
-                        {insumo.nombre}
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">
-                        {insumo.stock} {unidadSimbolo(insumo.unidad)}
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">
-                        {insumo.stockMinimo} {unidadSimbolo(insumo.unidad)}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Chip color={insumo.stock === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
-                          {insumo.stock === 0 ? 'Sin stock' : 'Bajo mínimo'}
-                        </Chip>
-                      </Table.Cell>
-                    </Table.Row>
-                  )}
-                </Table.Collection>
+                {rows.map(({ item, stock }) => (
+                  <Table.Row key={`${item.id}-${stock.branchId}`}>
+                    <Table.Cell>
+                      <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>{' '}
+                      {item.name}
+                    </Table.Cell>
+                    <Table.Cell className="text-sm">{stock.branch.name}</Table.Cell>
+                    <Table.Cell className="font-mono text-sm">
+                      {stock.quantity} {UNIT_SYMBOLS[item.unit]}
+                    </Table.Cell>
+                    <Table.Cell className="font-mono text-sm">
+                      {stock.minimumQuantity} {UNIT_SYMBOLS[item.unit]}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip color={stock.quantity === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                        {stock.quantity === 0 ? 'Sin stock' : 'Bajo mínimo'}
+                      </Chip>
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
               </Table.Body>
             </Table.Content>
           </Table.ScrollContainer>
         </Table>
       ) : null}
 
-      {!isPending && !isError && insumos && insumos.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">No hay insumos bajo su stock mínimo.</p>
+      {!isPending && !isError && rows.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">
+          No hay ítems bajo el mínimo de su bodega.
+        </p>
       ) : null}
     </Card>
   );

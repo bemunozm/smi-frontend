@@ -147,6 +147,25 @@
    diseño sin reimplementar cada componente.
    ========================================================================== */
 @layer components {
+  /* Pestañas: HeroUI pinta la pestaña NO seleccionada con `text-muted`, que en
+     este tema es una SUPERFICIE casi blanca (ver el aviso de `--color-muted` en
+     CLAUDE.md) — quedaba texto blanco sobre fondo claro, ilegible. Y la
+     seleccionada usa `text-segment-foreground`, token que este tema no define.
+     Se repuntan los dos a los colores de texto del design system.
+
+     El fondo de la seleccionada lo pinta acá y no `<Tabs.Indicator />` porque
+     ese componente revienta en esta versión de HeroUI ("<SharedElement> must be
+     rendered inside a <SharedElementTransition>"). */
+  .tabs__tab {
+    color: var(--color-muted-foreground);
+  }
+
+  .tabs__tab[data-selected='true'] {
+    color: var(--color-foreground);
+    background-color: var(--surface-secondary);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+  }
+
   /* Campos de texto/número/búsqueda: 48px de alto (refs) */
   .input {
     height: 48px;

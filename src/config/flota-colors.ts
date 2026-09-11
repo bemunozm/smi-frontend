@@ -6,7 +6,6 @@ import {
   type EquipmentClass,
   type EquipmentStatus,
 } from '../types/equipment';
-import type { UnidadInsumo } from '../types/inventario';
 
 /** Colores semánticos de HeroUI (Chip) — mismo criterio que `role-colors.ts`. */
 export type FlotaChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
@@ -60,22 +59,3 @@ export function controlUnitLabel(unit: ControlUnit): string {
 /** Opciones `{value,label}` para el selector de unidad de control. */
 export const CONTROL_UNIT_OPTIONS: ReadonlyArray<{ value: ControlUnit; label: string }> =
   CONTROL_UNIT.map((value) => ({ value, label: CONTROL_UNIT_LABEL[value] }));
-
-/** Símbolo corto de la unidad, para mostrar junto a las cantidades. */
-const UNIDAD_SIMBOLO: Record<UnidadInsumo, string> = {
-  UNIDAD: 'u',
-  LITRO: 'L',
-  KILOGRAMO: 'kg',
-  METRO: 'm',
-};
-
-export function unidadSimbolo(unidad: UnidadInsumo): string {
-  return UNIDAD_SIMBOLO[unidad];
-}
-
-export const UNIDAD_LABELS: Record<UnidadInsumo, string> = {
-  UNIDAD: 'Unidades',
-  LITRO: 'Litros',
-  KILOGRAMO: 'Kilogramos',
-  METRO: 'Metros',
-};

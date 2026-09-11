@@ -9,7 +9,7 @@ import { EquipoDetalleView } from './views/EquipoDetalleView';
 import { EquiposView } from './views/EquiposView';
 import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
-import { InsumoKardexView } from './views/InsumoKardexView';
+import { ItemKardexView } from './views/ItemKardexView';
 import { InventarioView } from './views/InventarioView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
@@ -56,7 +56,7 @@ export const router = createBrowserRouter([
               { path: '/equipos/:id', element: <EquipoDetalleView /> },
               { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
               { path: '/inventario', element: <InventarioView /> },
-              { path: '/inventario/:id', element: <InsumoKardexView /> },
+              { path: '/inventario/:id', element: <ItemKardexView /> },
             ],
           },
           {
