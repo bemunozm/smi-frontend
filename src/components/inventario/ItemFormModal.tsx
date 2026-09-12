@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm, type Control } from 'react-hook-form';
 import {
@@ -14,7 +15,12 @@ import {
 } from '@heroui/react';
 
 import { useCategories } from '../../hooks/useCategories';
-import { useCreateItem, useUpdateItem } from '../../hooks/useInventory';
+import {
+  useCreateItem,
+  useSetMinimum,
+  useUpdateItem,
+} from '../../hooks/useInventory';
+import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
 import {
   ITEM_TYPES,
@@ -23,6 +29,7 @@ import {
   ItemFormSchema,
   UNITS_OF_MEASURE,
   UNIT_LABELS,
+  stockAt,
   toCreateItemPayload,
   toItemEditValues,
   toUpdateItemPayload,
@@ -400,14 +407,17 @@ export function NewItemModal({
  */
 export function EditItemModal({
   item,
+  branches,
   isOpen,
   onOpenChange,
 }: {
   item: InventoryItem;
+  branches: Branch[];
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const updateItem = useUpdateItem();
+  const setMinimum = useSetMinimum();
   const { data: categories } = useCategories();
   const {
     control,
@@ -418,16 +428,57 @@ export function EditItemModal({
     defaultValues: toItemEditValues(item),
   });
 
+  /**
+   * Los mínimos son **por sucursal** (el umbral de la empresa y el de una
+   * bodega no son la misma magnitud), así que se editan como una fila por
+   * sucursal dentro de la ficha. Antes vivían en una acción aparte y había que
+   * abrirla una vez por bodega y por ítem.
+   *
+   * No van en el mismo formulario que el resto porque no viajan en el mismo
+   * endpoint: la ficha es un PATCH del ítem y cada mínimo es un PUT sobre la
+   * existencia de esa bodega.
+   */
+  const [minimums, setMinimums] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      branches.map((branch) => [
+        branch.id,
+        String(stockAt(item, branch.id)?.minimumQuantity ?? 0),
+      ]),
+    ),
+  );
+
+  async function saveMinimums(): Promise<void> {
+    const changed = branches.filter((branch) => {
+      const next = Number(minimums[branch.id]);
+      const current = stockAt(item, branch.id)?.minimumQuantity ?? 0;
+      return Number.isFinite(next) && next >= 0 && next !== current;
+    });
+
+    await Promise.all(
+      changed.map((branch) =>
+        setMinimum.mutateAsync({
+          itemId: item.id,
+          branchId: branch.id,
+          minimumQuantity: Number(minimums[branch.id]),
+        }),
+      ),
+    );
+  }
+
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-lg">
           {({ close }) => {
             const onSubmit = (values: ItemEditFormValues): void => {
-              updateItem.mutate(
-                { id: item.id, input: toUpdateItemPayload(values) },
-                { onSuccess: () => close() },
-              );
+              void (async () => {
+                await updateItem.mutateAsync({
+                  id: item.id,
+                  input: toUpdateItemPayload(values),
+                });
+                await saveMinimums();
+                close();
+              })();
             };
 
             return (
@@ -450,6 +501,30 @@ export function EditItemModal({
                       control={control as unknown as Control<ItemCardValues>}
                       errors={errors}
                     />
+
+                    <SectionLabel>Stock mínimo por sucursal</SectionLabel>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {branches.map((branch) => (
+                        <TextField
+                          fullWidth
+                          key={branch.id}
+                          onChange={(value) =>
+                            setMinimums((current) => ({
+                              ...current,
+                              [branch.id]: value,
+                            }))
+                          }
+                          value={minimums[branch.id] ?? '0'}
+                        >
+                          <Label>{branch.name}</Label>
+                          <Input inputMode="decimal" placeholder="0" />
+                        </TextField>
+                      ))}
+                    </div>
+                    <p className="-mt-2 text-xs text-muted-foreground">
+                      En <strong>0</strong> esa bodega deja de alertar por este
+                      ítem.
+                    </p>
 
                     <SectionLabel>Estado</SectionLabel>
                     <Controller

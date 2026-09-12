@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { InventoryAPI, type ItemFilters } from '../api/InventoryAPI';
+import {
+  InventoryAPI,
+  type ItemFilters,
+  type MovementFilters,
+} from '../api/InventoryAPI';
 import {
   UNIT_SYMBOLS,
   type AdjustStockInput,
@@ -17,6 +21,18 @@ export function useItems(filters: ItemFilters = {}) {
   return useQuery({
     queryKey: [...INVENTORY_KEY, 'items', filters],
     queryFn: () => InventoryAPI.listItems(filters),
+  });
+}
+
+/**
+ * Historial de TODO el inventario. Comparte la raíz `['inventory']` con el
+ * resto para que cualquier movimiento lo invalide junto con los saldos: si el
+ * listado se actualiza y el historial no, quedan contándose cosas distintas.
+ */
+export function useMovements(filters: MovementFilters = {}) {
+  return useQuery({
+    queryKey: [...INVENTORY_KEY, 'movements', filters],
+    queryFn: () => InventoryAPI.listMovements(filters),
   });
 }
 

@@ -1,94 +1,116 @@
 import type { ReactNode } from 'react';
+import { CheckCircle2, OctagonAlert, TriangleAlert } from 'lucide-react';
 
-import type { InventoryItem } from '../../types/inventory';
+import type { InventoryItem, ItemStock } from '../../types/inventory';
 
 export const NUMBER = new Intl.NumberFormat('es-CL', {
   maximumFractionDigits: 2,
 });
 
-/**
- * Dónde está lo que falta acá. Se nombran las bodegas en vez de decir "en otra
- * sucursal": el bodeguero tiene que saber a cuál pedirle, y con dos sucursales
- * "otra" ya obliga a adivinar.
- */
-function elsewhereLabel(item: InventoryItem, branchId: string): string {
-  const names = item.stocks
-    .filter((stock) => stock.branchId !== branchId && stock.quantity > 0)
-    .map((stock) => stock.branch.name);
-  return `En ${names.join(' y ')}`;
-}
+/** Centinela del selector: "todas" no es un id de sucursal. */
+export const ALL_BRANCHES = '__all__';
+
+// --- Estado de existencias -------------------------------------------------
 
 export type StatusTone = 'ok' | 'riesgo' | 'peligro';
 
 /**
- * El estado del ítem **en la bodega que se está mirando**, en un solo rótulo.
+ * Cuánto por encima del mínimo se considera que el ítem "va a caer". Es un
+ * supuesto nuestro, no una regla del negocio: el modelo solo guarda el mínimo,
+ * y sin un margen no existiría el estado ámbar — se pasaría de verde a rojo sin
+ * aviso, que es justo cuando ya es tarde para comprar.
  *
- * Antes eran dos chips ("En esta bodega" + "Bajo mínimo") y se leían como dos
- * cosas del mismo tono. Acá hay uno solo, y el color significa siempre lo
- * mismo:
+ * 25 % es el valor de partida. Si la empresa define su propio margen (o un
+ * punto de reorden por ítem), este número sale de acá y pasa al modelo.
+ */
+const RISK_MARGIN = 1.25;
+
+export interface StockStatus {
+  label: string;
+  tone: StatusTone;
+}
+
+/**
+ * Estado de UNA bodega. Tres escalones, y el color significa siempre lo mismo:
  *
- * - **verde · OK** — hay saldo y está sobre el mínimo. No hay nada que hacer.
- * - **ámbar · en riesgo** — no hay acá, pero sí en otra bodega. Se resuelve
- *   con un traspaso, no con una compra; por eso no es rojo.
- * - **rojo · peligro** — o cruzó el mínimo de esta bodega, o no hay en ninguna
- *   parte. Las dos exigen acción, y ninguna se resuelve sola.
+ * - **verde · OK** — hay holgura sobre el mínimo. No hay nada que hacer.
+ * - **ámbar · Riesgo de stock bajo** — todavía no cruza el mínimo, pero le
+ *   queda poco. Es el único momento útil para comprar sin urgencia.
+ * - **rojo · Bajo stock mínimo / Sin stock** — hay que reponer ya.
+ *
+ * Con `minimumQuantity = 0` la bodega no fijó umbral: no hay contra qué medir
+ * la holgura, así que solo se distingue "hay" de "no hay".
+ */
+function statusOf(stock: ItemStock | undefined): StockStatus {
+  const quantity = stock?.quantity ?? 0;
+  const minimum = stock?.minimumQuantity ?? 0;
+
+  if (quantity <= 0) return { label: 'Sin stock', tone: 'peligro' };
+  if (minimum <= 0) return { label: 'OK', tone: 'ok' };
+  if (quantity <= minimum)
+    return { label: 'Bajo stock mínimo', tone: 'peligro' };
+  if (quantity <= minimum * RISK_MARGIN)
+    return { label: 'Riesgo de stock bajo', tone: 'riesgo' };
+  return { label: 'OK', tone: 'ok' };
+}
+
+const WORST: Record<StatusTone, number> = { ok: 0, riesgo: 1, peligro: 2 };
+
+/**
+ * Estado del ítem en la bodega elegida, o **el peor de todas** cuando se está
+ * mirando el inventario general.
+ *
+ * El peor y no el promedio: si Faena está sin filtros y Casa Matriz sobrada, el
+ * ítem tiene un problema, y promediarlo lo escondería detrás de un verde.
  */
 export function stockStatus(
   item: InventoryItem,
-  branchId: string,
-): { label: string; tone: StatusTone } {
-  const here = item.stocks.find((stock) => stock.branchId === branchId);
-  const quantity = here?.quantity ?? 0;
-  const minimum = here?.minimumQuantity ?? 0;
-  const total = item.stocks.reduce((sum, stock) => sum + stock.quantity, 0);
-
-  if (quantity > 0) {
-    // `minimumQuantity = 0` significa "esta bodega no fijó umbral" y no alerta.
-    return minimum > 0 && quantity <= minimum
-      ? { label: 'Bajo stock mínimo', tone: 'peligro' }
-      : { label: 'OK', tone: 'ok' };
+  branchId: string | typeof ALL_BRANCHES,
+): StockStatus {
+  if (branchId !== ALL_BRANCHES) {
+    return statusOf(item.stocks.find((stock) => stock.branchId === branchId));
   }
 
-  return total > 0
-    ? { label: elsewhereLabel(item, branchId), tone: 'riesgo' }
-    : { label: 'Sin stock', tone: 'peligro' };
+  if (item.stocks.length === 0) return { label: 'Sin stock', tone: 'peligro' };
+
+  return item.stocks
+    .map(statusOf)
+    .reduce((worst, current) =>
+      WORST[current.tone] > WORST[worst.tone] ? current : worst,
+    );
 }
 
-const TONE_STYLES: Record<StatusTone, { chip: string; dot: string }> = {
+const TONE_STYLES: Record<
+  StatusTone,
+  { chip: string; icon: typeof CheckCircle2 }
+> = {
   ok: {
     chip: 'bg-[var(--success-soft)] text-[var(--success-soft-foreground)]',
-    dot: 'bg-[var(--success)]',
+    icon: CheckCircle2,
   },
   riesgo: {
     chip: 'bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]',
-    dot: 'bg-[var(--warning)]',
+    icon: TriangleAlert,
   },
   peligro: {
     chip: 'bg-[var(--danger-soft)] text-[var(--danger-soft-foreground)]',
-    dot: 'bg-[var(--danger)]',
+    icon: OctagonAlert,
   },
 };
 
 /**
- * El chip de estado. Lleva un punto del color saturado además del fondo suave:
- * los fondos `*-soft` del tema son tan lavados que a este tamaño el rosa del
- * peligro y el amarillo del riesgo se confunden. El punto da el color a plena
- * saturación, y el texto dice el estado — el color refuerza, no carga solo con
- * el significado.
+ * El chip de estado. Lleva icono además del color porque los fondos `*-soft`
+ * del tema son muy lavados: a este tamaño el rosa del peligro y el amarillo del
+ * riesgo se confunden. Con el icono el estado se reconoce de un vistazo aunque
+ * el color no llegue — y también para quien no distingue rojo de verde.
  */
-export function StatusChip({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: StatusTone;
-}) {
-  const styles = TONE_STYLES[tone];
+export function StatusChip({ label, tone }: StockStatus) {
+  const { chip, icon: Icon } = TONE_STYLES[tone];
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${styles.chip}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${chip}`}
     >
-      <span aria-hidden className={`size-1.5 rounded-full ${styles.dot}`} />
+      <Icon aria-hidden size={13} />
       {label}
     </span>
   );
@@ -108,11 +130,48 @@ export function CriticalBadge() {
 }
 
 /**
+ * Dónde está el ítem, bodega por bodega. Responde la pregunta que el total no
+ * responde: "hay 55 litros, ¿pero dónde?" — que con dos faenas es la diferencia
+ * entre usarlo hoy y pedir un traslado.
+ */
+export function BranchBreakdown({
+  item,
+  highlightBranchId,
+}: {
+  item: InventoryItem;
+  highlightBranchId?: string;
+}) {
+  const withStock = item.stocks.filter((stock) => stock.quantity > 0);
+
+  if (withStock.length === 0) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {withStock.map((stock) => (
+        <span
+          className={`text-sm ${
+            stock.branchId === highlightBranchId
+              ? 'font-medium text-foreground'
+              : 'text-muted-foreground'
+          }`}
+          key={stock.branchId}
+        >
+          {stock.branch.name}{' '}
+          <span className="font-mono">{NUMBER.format(stock.quantity)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// --- Piezas de formulario --------------------------------------------------
+
+/**
  * Control segmentado del diseño del equipo. Reemplaza a `<Tabs>` de HeroUI en
  * esta pantalla por dos razones: es lo que dibujan los tres artboards (PC,
- * tablet y teléfono), y `<Tabs.Indicator />` revienta en esta versión de HeroUI
- * — la pestaña seleccionada se pintaba con un override en `index.css` para
- * suplirlo. Acá el estado seleccionado es parte del componente.
+ * tablet y teléfono), y `<Tabs.Indicator />` revienta en esta versión de HeroUI.
  */
 export function Segmented<T extends string>({
   options,
@@ -154,7 +213,7 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Encabezado de bloque dentro de una hoja de acciones. */
+/** Encabezado de bloque dentro de un formulario o una hoja de acciones. */
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <p className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
@@ -165,7 +224,7 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 
 /**
  * Cuadro de cifras de un modal: "Stock acá 60 L", "Casa Matriz 60 → 59 L". Se
- * usa en traspaso, mínimo y conteo para que la decisión se tome mirando los
+ * usa en movimiento, traspaso y conteo para que la decisión se tome mirando los
  * números, sin tener que cerrar el modal para ir a ver la fila.
  */
 export function StatBox({
@@ -185,7 +244,7 @@ export function StatBox({
   );
 }
 
-/** Botón de la grilla de acciones rápidas. */
+/** Botón de la grilla de acciones rápidas (teléfono y tablet). */
 export function QuickAction({
   icon,
   label,
@@ -216,6 +275,33 @@ export function QuickAction({
         {icon}
       </span>
       {label}
+    </button>
+  );
+}
+
+/** Botón de icono de la fila de escritorio. */
+export function RowAction({
+  icon,
+  label,
+  isDanger,
+  onPress,
+}: {
+  icon: ReactNode;
+  label: string;
+  isDanger?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <button
+      aria-label={label}
+      className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-[var(--surface-secondary)] ${
+        isDanger ? 'text-danger' : 'text-muted-foreground hover:text-foreground'
+      }`}
+      onClick={onPress}
+      title={label}
+      type="button"
+    >
+      {icon}
     </button>
   );
 }

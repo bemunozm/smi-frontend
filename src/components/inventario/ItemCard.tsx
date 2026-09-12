@@ -2,22 +2,29 @@ import { ChevronRight } from 'lucide-react';
 
 import {
   UNIT_SYMBOLS,
-  isBelowMinimumAt,
   quantityAt,
   stockAt,
+  totalQuantity,
   type InventoryItem,
 } from '../../types/inventory';
-import { CriticalBadge, NUMBER, StatusChip, stockStatus } from './shared';
+import {
+  ALL_BRANCHES,
+  BranchBreakdown,
+  CriticalBadge,
+  NUMBER,
+  StatusChip,
+  stockStatus,
+} from './shared';
 
 /**
  * El ítem en teléfono y tablet. **Toda la tarjeta es tocable** y abre el panel
  * de acciones: en una pantalla de 390 px no cabe una columna de acciones, y
- * repartir seis botones chicos por tarjeta es justo lo que no se puede apretar
- * con guantes.
+ * repartir cuatro botones chicos por tarjeta es justo lo que no se puede
+ * apretar con guantes.
  *
- * La cifra de existencia va grande y la unidad al lado, porque es el dato que
- * se viene a buscar; el mínimo la acompaña en chico para que "8" y "8 de un
- * mínimo de 10" no se lean igual.
+ * La cifra va grande y la unidad al lado, porque es el dato que se viene a
+ * buscar; debajo, en chico, en qué sucursal está — que con dos faenas es la
+ * diferencia entre usarlo hoy y pedir un traslado.
  */
 export function ItemCard({
   item,
@@ -28,11 +35,11 @@ export function ItemCard({
   branchId: string;
   onOpen: () => void;
 }) {
+  const isAll = branchId === ALL_BRANCHES;
   const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
+  const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
+  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
   const status = stockStatus(item, branchId);
-  const belowMinimum = isBelowMinimumAt(item, branchId);
 
   return (
     <button
@@ -64,16 +71,18 @@ export function ItemCard({
       <div className="mt-3 flex items-baseline gap-2">
         <span
           className={`font-mono text-[28px] leading-none font-bold ${
-            belowMinimum ? 'text-danger' : 'text-foreground'
+            status.tone === 'peligro' ? 'text-danger' : 'text-foreground'
           }`}
         >
-          {NUMBER.format(here)}
+          {NUMBER.format(quantity)}
         </span>
         <span className="font-mono text-sm font-semibold text-muted-foreground">
           {symbol}
         </span>
         <span className="text-xs text-muted-foreground">
-          {minimum > 0 ? (
+          {isAll ? (
+            'en total'
+          ) : minimum > 0 ? (
             <>
               / mín <span className="font-mono">{NUMBER.format(minimum)}</span>
             </>
@@ -81,6 +90,13 @@ export function ItemCard({
             'sin mínimo fijado'
           )}
         </span>
+      </div>
+
+      <div className="mt-2">
+        <BranchBreakdown
+          highlightBranchId={isAll ? undefined : branchId}
+          item={item}
+        />
       </div>
     </button>
   );

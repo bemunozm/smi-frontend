@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Button,
-  Chip,
   Input,
   Label,
   ListBox,
@@ -11,17 +10,24 @@ import {
   Table,
   TextField,
 } from '@heroui/react';
+import { ArrowLeftRight, Pencil, ScrollText, Trash2 } from 'lucide-react';
 
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
-import { ItemActionsModal } from '../components/inventario/ItemActionsModal';
+import {
+  ItemActionsModal,
+  type ItemAction,
+} from '../components/inventario/ItemActionsModal';
 import { ItemCard } from '../components/inventario/ItemCard';
 import {
   EditItemModal,
   NewItemModal,
 } from '../components/inventario/ItemFormModal';
 import {
+  ALL_BRANCHES,
+  BranchBreakdown,
   CriticalBadge,
   NUMBER,
+  RowAction,
   Segmented,
   StatusChip,
   stockStatus,
@@ -29,78 +35,55 @@ import {
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useEquipment } from '../hooks/useEquipment';
-import { useCreateMovement, useItems } from '../hooks/useInventory';
+import { useItems } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
 import type { Branch } from '../types/branch';
 import {
   UNIT_SYMBOLS,
-  isBelowMinimumAt,
   quantityAt,
   stockAt,
   totalQuantity,
   type InventoryItem,
   type ItemType,
-  type MovementDirection,
 } from '../types/inventory';
 
-/** Centinela del filtro: "todas" no es un id de categoría. */
+/** Centinela del filtro de categoría: "todas" no es un id. */
 const ALL_CATEGORIES = '__all__';
 
-type StockFilter = 'todos' | 'bajo';
+type StockFilter = 'todos' | 'alerta';
+
+/** Qué abre cada icono de la fila. */
+export interface RowTarget {
+  item: InventoryItem;
+  view: ItemAction;
+}
+
+const ICON = 16;
 
 // --- Fila de escritorio ----------------------------------------------------
 
-/**
- * La tabla es solo para pantallas anchas. Debajo de `lg` la misma información
- * se muestra en tarjetas (`ItemCard`) — es lo que dibujan los tres artboards
- * del equipo: tarjetas en teléfono Y en tablet, tabla recién en PC.
- */
 function ItemRow({
   item,
   branchId,
   canWrite,
-  canIssue,
+  isAdmin,
   onOpen,
+  onEdit,
 }: {
   item: InventoryItem;
   branchId: string;
   canWrite: boolean;
-  canIssue: boolean;
-  onOpen: () => void;
+  isAdmin: boolean;
+  onOpen: (view: ItemAction) => void;
+  onEdit: () => void;
 }) {
-  const [amount, setAmount] = useState('');
-  const createMovement = useCreateMovement();
-
-  const here = quantityAt(item, branchId);
-  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
+  const navigate = useNavigate();
+  const isAll = branchId === ALL_BRANCHES;
+  const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
+  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
   const status = stockStatus(item, branchId);
-  const belowMinimum = isBelowMinimumAt(item, branchId);
-
-  const quantity = Number(amount);
-  const validAmount = Number.isFinite(quantity) && quantity > 0;
-
-  function move(direction: MovementDirection): void {
-    if (!validAmount) return;
-    createMovement.mutate(
-      {
-        input: {
-          itemId: item.id,
-          branchId,
-          // El motivo no se adivina: es el que dice el botón. Entrar material
-          // es una recepción; sacarlo donde hay equipos es consumo de
-          // mantención. Los demás motivos se eligen en «Registrar movimiento».
-          reason: direction === 'IN' ? 'PURCHASE' : 'INTERVENTION',
-          direction,
-          quantity,
-        },
-        item,
-      },
-      { onSuccess: () => setAmount('') },
-    );
-  }
 
   return (
     <Table.Row>
@@ -116,8 +99,6 @@ function ItemRow({
         <div className="flex flex-col">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-foreground">{item.name}</span>
-            {/* Su falta detiene la máquina: se marca aunque el saldo todavía
-                no cruce el mínimo. */}
             {item.isCritical ? <CriticalBadge /> : null}
           </div>
           {item.partNumber ? (
@@ -130,63 +111,61 @@ function ItemRow({
       <Table.Cell className="text-sm text-muted-foreground">
         {item.category?.name ?? 'Sin categoría'}
       </Table.Cell>
+      <Table.Cell>
+        <BranchBreakdown
+          highlightBranchId={isAll ? undefined : branchId}
+          item={item}
+        />
+      </Table.Cell>
       <Table.Cell
         className={`font-mono text-sm ${
-          belowMinimum ? 'font-semibold text-danger' : 'text-foreground'
+          status.tone === 'peligro'
+            ? 'font-semibold text-danger'
+            : 'text-foreground'
         }`}
       >
-        {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
+        {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
       </Table.Cell>
-      <Table.Cell className="font-mono text-sm text-muted-foreground">
-        {NUMBER.format(totalQuantity(item))}
-      </Table.Cell>
-      <Table.Cell className="font-mono text-sm text-muted-foreground">
-        {minimum > 0 ? NUMBER.format(minimum) : '—'}
-      </Table.Cell>
+      {isAll ? null : (
+        <Table.Cell className="font-mono text-sm text-muted-foreground">
+          {minimum > 0 ? NUMBER.format(minimum) : '—'}
+        </Table.Cell>
+      )}
       <Table.Cell>
         <StatusChip label={status.label} tone={status.tone} />
       </Table.Cell>
       <Table.Cell>
-        {/* El atajo del escritorio: el bodeguero frente al PC escribe una
-            cantidad y aprieta dos veces. Todo lo demás — motivo distinto,
-            traspaso, mínimo, conteo, ficha — vive en «Acciones», que es el
-            mismo panel que se abre en teléfono. */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {canWrite ? (
-            <>
-              <input
-                aria-label={`Cantidad para ${item.sku}`}
-                className="h-8 w-16 rounded-md border border-border bg-transparent px-2 text-right font-mono text-sm text-foreground"
-                inputMode="decimal"
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="0"
-                value={amount}
-              />
-              <Button
-                aria-label={`Registrar recepción de ${item.sku}`}
-                isDisabled={!validAmount || createMovement.isPending}
-                onPress={() => move('IN')}
-                size="sm"
-                variant="secondary"
-              >
-                +
-              </Button>
-              <Button
-                aria-label={`Registrar consumo de ${item.sku}`}
-                isDisabled={
-                  !canIssue || !validAmount || createMovement.isPending
-                }
-                onPress={() => move('OUT')}
-                size="sm"
-                variant="secondary"
-              >
-                −
-              </Button>
-            </>
+        {/* Cuatro acciones, siempre las mismas y en el mismo orden. Antes eran
+            seis enlaces más un campo de cantidad con `+`/`−`, y había que
+            leerlos todos para encontrar el que se buscaba. */}
+        <div className="flex items-center justify-end gap-1.5">
+          {isAdmin ? (
+            <RowAction
+              icon={<Pencil size={ICON} />}
+              label="Editar ítem"
+              onPress={onEdit}
+            />
           ) : null}
-          <Button onPress={onOpen} size="sm" variant="secondary">
-            {canWrite ? 'Acciones' : 'Ver'}
-          </Button>
+          {canWrite ? (
+            <RowAction
+              icon={<ArrowLeftRight size={ICON} />}
+              label="Registrar movimiento"
+              onPress={() => onOpen('movement')}
+            />
+          ) : null}
+          <RowAction
+            icon={<ScrollText size={ICON} />}
+            label="Ver historial"
+            onPress={() => void navigate(`/inventario/${item.id}`)}
+          />
+          {isAdmin ? (
+            <RowAction
+              icon={<Trash2 size={ICON} />}
+              isDanger
+              label="Eliminar ítem"
+              onPress={() => onOpen('delete')}
+            />
+          ) : null}
         </div>
       </Table.Cell>
     </Table.Row>
@@ -212,23 +191,23 @@ function ItemsList({
   items,
   branchId,
   canWrite,
-  canIssue,
+  isAdmin,
   onOpen,
+  onEdit,
 }: {
   items: InventoryItem[];
   branchId: string;
   canWrite: boolean;
-  canIssue: boolean;
-  onOpen: (item: InventoryItem) => void;
+  isAdmin: boolean;
+  onOpen: (item: InventoryItem, view: ItemAction) => void;
+  onEdit: (item: InventoryItem) => void;
 }) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const isAll = branchId === ALL_BRANCHES;
 
   if (items.length === 0) return <EmptyState />;
 
   // Tarjetas en teléfono Y en tablet; la tabla aparece recién en escritorio.
-  // Es el corte que dibujan los tres artboards del equipo: a 834 px de ancho
-  // una tabla de ocho columnas todavía obliga a desplazarse en horizontal para
-  // leer una fila.
   if (!isDesktop) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -237,7 +216,7 @@ function ItemsList({
             branchId={branchId}
             item={item}
             key={item.id}
-            onOpen={() => onOpen(item)}
+            onOpen={() => onOpen(item, 'actions')}
           />
         ))}
       </div>
@@ -247,14 +226,14 @@ function ItemsList({
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Inventario" className="min-w-240">
+        <Table.Content aria-label="Inventario" className="min-w-260">
           <Table.Header>
             <Table.Column isRowHeader>SKU</Table.Column>
             <Table.Column>Nombre</Table.Column>
             <Table.Column>Categoría</Table.Column>
-            <Table.Column>Stock acá</Table.Column>
-            <Table.Column>Total empresa</Table.Column>
-            <Table.Column>Mínimo</Table.Column>
+            <Table.Column>Sucursal</Table.Column>
+            <Table.Column>{isAll ? 'Stock total' : 'Stock acá'}</Table.Column>
+            {isAll ? null : <Table.Column>Mínimo</Table.Column>}
             <Table.Column>Estado</Table.Column>
             <Table.Column>Acciones</Table.Column>
           </Table.Header>
@@ -262,11 +241,12 @@ function ItemsList({
             {items.map((item) => (
               <ItemRow
                 branchId={branchId}
-                canIssue={canIssue}
                 canWrite={canWrite}
+                isAdmin={isAdmin}
                 item={item}
                 key={item.id}
-                onOpen={() => onOpen(item)}
+                onEdit={() => onEdit(item)}
+                onOpen={(view) => onOpen(item, view)}
               />
             ))}
           </Table.Body>
@@ -291,21 +271,19 @@ export function InventarioView() {
   const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
   const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
 
-  const [openItem, setOpenItem] = useState<InventoryItem | null>(null);
+  const [target, setTarget] = useState<RowTarget | null>(null);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
   const { data: categories } = useCategories();
 
-  // La primera sucursal se elige una sola vez, cuando llega la lista. Cuando
-  // T12 suba el selector al layout, esto se va y la vista solo lee del store.
-  useEffect(() => {
-    if (selectedBranchId || !branches || branches.length === 0) return;
-    setSelectedBranchId(branches[0].id);
-  }, [branches, selectedBranchId, setSelectedBranchId]);
-
-  const branchId = selectedBranchId ?? '';
+  /**
+   * El inventario **general** es lo que se ve primero: con dos faenas, la
+   * pregunta de partida es "¿cuánto hay en la empresa?", y recién después "¿en
+   * cuál?". Elegir una sucursal es un filtro, no el punto de entrada.
+   */
+  const branchId = selectedBranchId ?? ALL_BRANCHES;
   const branchName =
     branches?.find((branch) => branch.id === branchId)?.name ?? '';
 
@@ -318,32 +296,24 @@ export function InventarioView() {
 
   const all = useMemo(() => data ?? [], [data]);
 
-  const belowMinimumCount = useMemo(
-    () => all.filter((item) => isBelowMinimumAt(item, branchId)).length,
+  const alertCount = useMemo(
+    () =>
+      all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
     [all, branchId],
   );
 
   const items = useMemo(
     () =>
-      stockFilter === 'bajo'
-        ? all.filter((item) => isBelowMinimumAt(item, branchId))
+      stockFilter === 'alerta'
+        ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
         : all,
     [all, stockFilter, branchId],
   );
 
-  // El consumo se registra donde operan las máquinas. Se deriva de si la
-  // bodega tiene equipos asignados (`Equipment.homeBranch`) en vez de comparar
-  // el nombre contra "Faena": el modelo todavía no tiene un campo que diga qué
-  // sucursal es operativa — está propuesto como `Branch.isOperational`.
-  const { data: branchEquipment } = useEquipment(
-    branchId ? { homeBranchId: branchId } : {},
-  );
-  const canIssue = canWrite && (branchEquipment?.length ?? 0) > 0;
-
-  // La ficha se abre desde el panel de acciones: se cierra uno y se abre el
-  // otro para no apilar dos modales.
+  // La ficha se abre desde su propio modal: se cierra el panel y se abre el
+  // otro para no apilar dos.
   const openEdit = (item: InventoryItem): void => {
-    setOpenItem(null);
+    setTarget(null);
     setEditItem(item);
   };
 
@@ -358,19 +328,23 @@ export function InventarioView() {
             Inventario
           </h1>
           <p className="text-sm text-muted-foreground">
-            Existencias de suministros y repuestos en{' '}
-            <strong className="font-semibold text-foreground">
-              {branchName}
-            </strong>
-            , con su mínimo de reposición y el movimiento de cada salida.
+            {branchId === ALL_BRANCHES
+              ? 'Existencias de suministros y repuestos en toda la empresa, con el desglose por sucursal.'
+              : `Existencias de suministros y repuestos en ${branchName}, con su mínimo de reposición.`}
           </p>
         </div>
-        {isAdmin && branchId ? (
-          <div className="hidden items-center gap-2 sm:flex">
-            <CategoriesModal />
+        <div className="hidden items-center gap-2 sm:flex">
+          <Link
+            className="inline-flex h-10 items-center rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
+            to="/inventario/movimientos"
+          >
+            Historial
+          </Link>
+          {isAdmin ? <CategoriesModal /> : null}
+          {isAdmin ? (
             <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <Segmented
@@ -383,9 +357,6 @@ export function InventarioView() {
         value={tab}
       />
 
-      {/* Filtros. En teléfono se apilan a ancho completo; desde `sm` van en
-          fila. El selector de sucursal vive acá hasta que T12 lo suba a la
-          barra superior del layout, que es donde lo pone el diseño. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select
           onChange={(value) => {
@@ -400,6 +371,10 @@ export function InventarioView() {
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
+              <ListBox.Item id={ALL_BRANCHES} textValue="Todas las sucursales">
+                Todas las sucursales
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
               {(branches ?? []).map((branch: Branch) => (
                 <ListBox.Item
                   id={branch.id}
@@ -414,11 +389,7 @@ export function InventarioView() {
           </Select.Popover>
         </Select>
 
-        <TextField
-          aria-label="Buscar ítem"
-          onChange={setSearch}
-          value={search}
-        >
+        <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
@@ -454,40 +425,38 @@ export function InventarioView() {
           </Select.Popover>
         </Select>
 
-        {/* Con el conteo en la propia pestaña no hace falta un chip aparte
-            diciendo cuántos hay bajo el mínimo: el filtro ya lo dice. */}
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-(--label-color)">
             Existencias
           </span>
+          {/* El filtro agrupa ámbar y rojo: los dos piden una decisión de
+              compra, y separarlos obligaba a mirar dos listas. */}
           <Segmented
             label="Filtro de existencias"
             onChange={setStockFilter}
             options={[
               { id: 'todos', label: `Todos · ${all.length}` },
-              { id: 'bajo', label: `Bajo mínimo · ${belowMinimumCount}` },
+              { id: 'alerta', label: `Con alerta · ${alertCount}` },
             ]}
             value={stockFilter}
           />
         </div>
       </div>
 
-      {/* En teléfono los botones de cabecera se van al final de los filtros,
-          a ancho completo: arriba compiten con el título y quedan chicos. */}
-      {isAdmin && branchId ? (
-        <div className="flex gap-2 sm:hidden">
-          <CategoriesModal />
+      <div className="flex gap-2 sm:hidden">
+        <Link
+          className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground"
+          to="/inventario/movimientos"
+        >
+          Historial
+        </Link>
+        {isAdmin ? <CategoriesModal /> : null}
+        {isAdmin ? (
           <Button className="flex-1" onPress={() => setIsCreating(true)}>
             Nuevo ítem
           </Button>
-        </div>
-      ) : null}
-
-      {canWrite && branchId && !canIssue ? (
-        <Chip size="sm" variant="soft">
-          {branchName} no tiene equipos asignados: solo recibe material
-        </Chip>
-      ) : null}
+        ) : null}
+      </div>
 
       {isError ? (
         <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
@@ -504,30 +473,31 @@ export function InventarioView() {
       ) : (
         <ItemsList
           branchId={branchId}
-          canIssue={canIssue}
           canWrite={canWrite}
+          isAdmin={isAdmin}
           items={items}
-          onOpen={setOpenItem}
+          onEdit={openEdit}
+          onOpen={(item, view) => setTarget({ item, view })}
         />
       )}
 
-      {openItem ? (
+      {target ? (
         <ItemActionsModal
           branchId={branchId}
-          branchName={branchName}
           branches={branches ?? []}
-          canIssue={canIssue}
           canWrite={canWrite}
+          initialView={target.view}
           isAdmin={isAdmin}
           isOpen
-          item={openItem}
-          onEdit={() => openEdit(openItem)}
-          onOpenChange={(open) => !open && setOpenItem(null)}
+          item={target.item}
+          onEdit={() => openEdit(target.item)}
+          onOpenChange={(open) => !open && setTarget(null)}
         />
       ) : null}
 
       {editItem ? (
         <EditItemModal
+          branches={branches ?? []}
           isOpen
           item={editItem}
           onOpenChange={(open) => !open && setEditItem(null)}
@@ -536,8 +506,12 @@ export function InventarioView() {
 
       {isCreating ? (
         <NewItemModal
-          branchId={branchId}
-          branchName={branchName}
+          branchId={branchId === ALL_BRANCHES ? (branches?.[0]?.id ?? '') : branchId}
+          branchName={
+            branchId === ALL_BRANCHES
+              ? (branches?.[0]?.name ?? '')
+              : branchName
+          }
           defaultType={tab}
           isOpen
           onOpenChange={setIsCreating}

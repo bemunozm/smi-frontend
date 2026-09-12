@@ -2,6 +2,7 @@ import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import {
   AdjustResponseSchema,
+  MovementListResponseSchema,
   DeleteItemResponseSchema,
   ItemListResponseSchema,
   ItemResponseSchema,
@@ -162,7 +163,31 @@ async function transfer(input: {
   }
 }
 
+export interface MovementFilters {
+  branchId?: string;
+  direction?: 'IN' | 'OUT';
+  reason?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
+/** Kardex general: el historial de todo el inventario, no el de un ítem. */
+async function listMovements(
+  filters: MovementFilters = {},
+): Promise<StockMovement[]> {
+  try {
+    const response = await axiosInstance.get('/api/inventory/movements', {
+      params: cleanParams(filters),
+    });
+    return MovementListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener el historial.');
+  }
+}
+
 export const InventoryAPI = {
+  listMovements,
   listItems,
   kardex,
   createItem,

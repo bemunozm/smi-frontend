@@ -11,6 +11,7 @@ import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
 import { ItemKardexView } from './views/ItemKardexView';
 import { InventarioView } from './views/InventarioView';
+import { MovimientosView } from './views/MovimientosView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
 import { NotificacionesView } from './views/NotificacionesView';
@@ -56,6 +57,9 @@ export const router = createBrowserRouter([
               { path: '/equipos/:id', element: <EquipoDetalleView /> },
               { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
               { path: '/inventario', element: <InventarioView /> },
+              // Antes que `:id`: si no, "movimientos" se leería como el id de
+              // un ítem y la pantalla pediría un kardex que no existe.
+              { path: '/inventario/movimientos', element: <MovimientosView /> },
               { path: '/inventario/:id', element: <ItemKardexView /> },
             ],
           },

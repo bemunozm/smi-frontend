@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Button,
   Chip,
-  FieldError,
   Input,
   Label,
   ListBox,
@@ -17,8 +14,6 @@ import {
 import {
   ArrowLeft,
   ArrowLeftRight,
-  ClipboardCheck,
-  MoveVertical,
   Pencil,
   ScrollText,
   Trash2,
@@ -29,27 +24,20 @@ import {
   useAdjustStock,
   useCreateMovement,
   useDeleteItem,
-  useSetMinimum,
   useTransferStock,
 } from '../../hooks/useInventory';
 import type { Branch } from '../../types/branch';
 import {
-  AdjustFormSchema,
   MOVEMENT_REASON_LABELS,
-  MinimumFormSchema,
-  MovementFormSchema,
   REASONS_BY_DIRECTION,
   UNIT_SYMBOLS,
   quantityAt,
   stockAt,
-  type AdjustFormValues,
   type InventoryItem,
-  type MinimumFormValues,
-  type MovementDirection,
-  type MovementFormValues,
+  type MovementReason,
 } from '../../types/inventory';
 import {
-  CriticalBadge,
+  ALL_BRANCHES,
   NUMBER,
   QuickAction,
   SectionLabel,
@@ -60,317 +48,188 @@ import {
 } from './shared';
 
 /**
- * Qué se está haciendo con el ítem. El diseño del equipo resuelve las acciones
- * de una fila con UN panel que cambia de contenido, en vez de seis enlaces
- * sueltos en una columna: en el teléfono no hay columna de acciones donde
- * ponerlos, y en el escritorio seis enlaces obligan a leerlos todos para
- * encontrar el que se busca.
+ * Qué se está haciendo con el ítem. Son tres porque las otras dos acciones de
+ * la fila viven fuera: la ficha tiene su propio formulario y el historial es
+ * una pantalla.
  */
-type ActionView =
-  | 'actions'
-  | 'movement'
-  | 'transfer'
-  | 'minimum'
-  | 'count'
-  | 'delete';
+export type ItemAction = 'actions' | 'movement' | 'delete';
 
-interface PanelProps {
-  item: InventoryItem;
-  branchId: string;
-  branchName: string;
-  close: () => void;
-  back: () => void;
-}
+/**
+ * Los cuatro modos del formulario de movimiento. Van juntos a propósito: las
+ * cuatro operaciones responden a la misma pregunta ("¿cuánto y en qué bodega?")
+ * y separarlas en cuatro botones obligaba a saber de antemano cuál era la
+ * correcta. El traspaso es el caso que más se beneficia — antes estaba escondido
+ * detrás de una acción distinta pese a ser, para el bodeguero, una salida que
+ * entra en otro lado.
+ */
+type MovementMode = 'in' | 'out' | 'transfer' | 'count';
+
+const MODE_LABELS: Record<MovementMode, string> = {
+  in: 'Entrada',
+  out: 'Salida',
+  transfer: 'Traspaso',
+  count: 'Conteo',
+};
 
 const ICON = 20;
 
-// --- Movimiento ------------------------------------------------------------
+// --- Formulario de movimiento ----------------------------------------------
 
 function MovementPanel({
   item,
-  branchId,
-  branchName,
-  canIssue,
-  close,
-  back,
-}: PanelProps & { canIssue: boolean }) {
-  const createMovement = useCreateMovement();
-  const [direction, setDirection] = useState<MovementDirection>('IN');
-
-  const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const reasons = REASONS_BY_DIRECTION[direction];
-
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<MovementFormValues>({
-    resolver: zodResolver(MovementFormSchema),
-    values: {
-      quantity: '',
-      reason: reasons[0],
-      equipmentId: '',
-      documentNumber: '',
-      notes: '',
-    },
-  });
-
-  const typed = Number(useWatch({ control, name: 'quantity' }));
-  const valid = Number.isFinite(typed) && typed > 0;
-  const notEnough = direction === 'OUT' && valid && typed > here;
-
-  const onSubmit = (values: MovementFormValues): void => {
-    createMovement.mutate(
-      {
-        input: {
-          itemId: item.id,
-          branchId,
-          direction,
-          reason: values.reason,
-          quantity: Number(values.quantity),
-          ...(values.documentNumber.trim()
-            ? { documentNumber: values.documentNumber.trim() }
-            : {}),
-          ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
-        },
-        item,
-      },
-      { onSuccess: () => close() },
-    );
-  };
-
-  return (
-    <>
-      <Modal.Body>
-        <form
-          className="flex flex-col gap-4"
-          id={`movement-form-${item.id}`}
-          noValidate
-          onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-        >
-          <BackButton onPress={back} />
-          <SectionLabel>Registrar movimiento</SectionLabel>
-
-          {/* La salida solo se ofrece donde se consume material. En una bodega
-              sin equipos asignados no hay nada que consumir: lo que sale de
-              ahí sale por traspaso, y ese es otro asiento. */}
-          {canIssue ? (
-            <Segmented
-              label="Dirección del movimiento"
-              onChange={setDirection}
-              options={[
-                { id: 'IN', label: 'Entrada' },
-                { id: 'OUT', label: 'Salida' },
-              ]}
-              value={direction}
-            />
-          ) : null}
-
-          <StatBox
-            rows={[
-              {
-                label: `Stock en ${branchName}`,
-                value: `${NUMBER.format(here)} ${symbol}`,
-              },
-              {
-                label: 'Queda después',
-                value: valid
-                  ? `${NUMBER.format(
-                      direction === 'IN' ? here + typed : here - typed,
-                    )} ${symbol}`
-                  : '—',
-              },
-            ]}
-          />
-
-          <Controller
-            control={control}
-            name="quantity"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                isInvalid={!!errors.quantity}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Cantidad ({symbol})</Label>
-                <Input autoFocus inputMode="decimal" placeholder="0" />
-                {errors.quantity ? (
-                  <FieldError>{errors.quantity.message}</FieldError>
-                ) : null}
-              </TextField>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="reason"
-            render={({ field }) => (
-              <Select
-                fullWidth
-                name={field.name}
-                onChange={(value) => {
-                  if (value) field.onChange(value);
-                }}
-                value={field.value}
-              >
-                <Label>Motivo</Label>
-                <Select.Trigger>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {reasons.map((reason) => (
-                      <ListBox.Item
-                        id={reason}
-                        key={reason}
-                        textValue={MOVEMENT_REASON_LABELS[reason]}
-                      >
-                        {MOVEMENT_REASON_LABELS[reason]}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-            )}
-          />
-
-          {/* El papel que respalda el movimiento. Va en su propio campo y no
-              mezclado en la observación: por la guía se busca, por la nota
-              se lee. */}
-          <Controller
-            control={control}
-            name="documentNumber"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Documento (opcional)</Label>
-                <Input placeholder="N.º de guía, OC…" />
-              </TextField>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="notes"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Observación (opcional)</Label>
-                <Input placeholder="Ej. compra al proveedor habitual" />
-              </TextField>
-            )}
-          />
-
-          {notEnough ? (
-            <Alert tone="danger">
-              En {branchName} hay {NUMBER.format(here)} {symbol}: no alcanza para
-              sacar {NUMBER.format(typed)}.
-            </Alert>
-          ) : null}
-        </form>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button onPress={back} variant="secondary">
-          Volver
-        </Button>
-        <Button
-          form={`movement-form-${item.id}`}
-          isDisabled={notEnough}
-          isPending={createMovement.isPending}
-          type="submit"
-        >
-          {({ isPending }) =>
-            isPending ? <Spinner color="current" size="sm" /> : 'Guardar'
-          }
-        </Button>
-      </Modal.Footer>
-    </>
-  );
-}
-
-// --- Traspaso --------------------------------------------------------------
-
-/**
- * Mostrar los dos saldos resultantes no es adorno: mover material entre faenas
- * es la operación más cara de deshacer (hay que traerlo de vuelta), y el error
- * típico es sacar de más de la bodega que justo estaba al límite. Verlo antes
- * de apretar evita el viaje.
- */
-function TransferPanel({
-  item,
-  branchId,
-  branchName,
   branches,
+  defaultBranchId,
   close,
   back,
-}: PanelProps & { branches: Branch[] }) {
+}: {
+  item: InventoryItem;
+  branches: Branch[];
+  /** Bodega preseleccionada; vacía cuando se está mirando el inventario general. */
+  defaultBranchId: string;
+  close: () => void;
+  back: () => void;
+}) {
+  const createMovement = useCreateMovement();
   const transfer = useTransferStock();
-  const others = branches.filter((branch) => branch.id !== branchId);
-  const [destination, setDestination] = useState(others[0]?.id ?? '');
+  const adjust = useAdjustStock();
+
+  const [mode, setMode] = useState<MovementMode>('in');
+  const [branchId, setBranchId] = useState(
+    defaultBranchId || branches[0]?.id || '',
+  );
+  const [destinationId, setDestinationId] = useState('');
   const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState<MovementReason>('PURCHASE');
   const [documentNumber, setDocumentNumber] = useState('');
   const [notes, setNotes] = useState('');
 
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
-  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const there = destination ? quantityAt(item, destination) : 0;
-  const destinationName =
-    others.find((branch) => branch.id === destination)?.name ?? 'Destino';
+  const branchName =
+    branches.find((branch) => branch.id === branchId)?.name ?? '';
+  const others = branches.filter((branch) => branch.id !== branchId);
+  const destination = others.find((branch) => branch.id === destinationId);
+  const there = destinationId ? quantityAt(item, destinationId) : 0;
 
   const quantity = Number(amount);
-  const valid = Number.isFinite(quantity) && quantity > 0;
-  const notEnough = valid && quantity > here;
-  const leavesBelowMinimum =
-    valid && !notEnough && minimum > 0 && here - quantity <= minimum;
+  const validAmount = Number.isFinite(quantity) && quantity > 0;
+  const takesStock = mode === 'out' || mode === 'transfer';
+  const notEnough = takesStock && validAmount && quantity > here;
+  const missingDestination = mode === 'transfer' && !destinationId;
+
+  // El conteo no suma ni resta: se escribe lo que hay, y el sistema calcula la
+  // diferencia. Por eso admite 0 y su validación es distinta.
+  const counted = Number(amount);
+  const validCount = Number.isFinite(counted) && counted >= 0 && amount !== '';
+  const difference = validCount ? counted - here : 0;
+
+  const canSubmit =
+    !!branchId &&
+    !notEnough &&
+    !missingDestination &&
+    (mode === 'count' ? validCount : validAmount);
+
+  const isPending =
+    createMovement.isPending || transfer.isPending || adjust.isPending;
+
+  function resultingBalance(): string {
+    if (mode === 'count') return validCount ? NUMBER.format(counted) : '—';
+    if (!validAmount) return '—';
+    return NUMBER.format(mode === 'in' ? here + quantity : here - quantity);
+  }
+
+  function submit(): void {
+    const onSuccess = { onSuccess: () => close() };
+
+    if (mode === 'transfer') {
+      transfer.mutate(
+        {
+          itemId: item.id,
+          sourceBranchId: branchId,
+          destinationBranchId: destinationId,
+          quantity,
+          ...(documentNumber.trim()
+            ? { documentNumber: documentNumber.trim() }
+            : {}),
+          ...(notes.trim() ? { notes: notes.trim() } : {}),
+        },
+        onSuccess,
+      );
+      return;
+    }
+
+    if (mode === 'count') {
+      adjust.mutate(
+        {
+          id: item.id,
+          input: {
+            branchId,
+            countedQuantity: counted,
+            ...(notes.trim() ? { notes: notes.trim() } : {}),
+          },
+        },
+        onSuccess,
+      );
+      return;
+    }
+
+    createMovement.mutate(
+      {
+        input: {
+          itemId: item.id,
+          branchId,
+          direction: mode === 'in' ? 'IN' : 'OUT',
+          reason,
+          quantity,
+          ...(documentNumber.trim()
+            ? { documentNumber: documentNumber.trim() }
+            : {}),
+          ...(notes.trim() ? { notes: notes.trim() } : {}),
+        },
+        item,
+      },
+      onSuccess,
+    );
+  }
 
   return (
     <>
       <Modal.Body>
         <div className="flex flex-col gap-4">
           <BackButton onPress={back} />
-          <SectionLabel>Traspasar a otra sucursal</SectionLabel>
+          <SectionLabel>Registrar movimiento</SectionLabel>
 
-          <TextField
-            fullWidth
-            onChange={setAmount}
-            value={amount}
-          >
-            <Label>Cantidad ({symbol})</Label>
-            <Input autoFocus inputMode="decimal" placeholder="0" />
-          </TextField>
+          <Segmented
+            label="Tipo de movimiento"
+            onChange={(next) => {
+              setMode(next);
+              setAmount(next === 'count' ? String(here) : '');
+              setReason(next === 'in' ? 'PURCHASE' : 'INTERVENTION');
+            }}
+            options={[
+              { id: 'in', label: MODE_LABELS.in },
+              { id: 'out', label: MODE_LABELS.out },
+              { id: 'transfer', label: MODE_LABELS.transfer },
+              { id: 'count', label: MODE_LABELS.count },
+            ]}
+            value={mode}
+          />
 
           <Select
             fullWidth
             onChange={(value) => {
-              if (value) setDestination(String(value));
+              if (value) setBranchId(String(value));
             }}
-            value={destination}
+            value={branchId}
           >
-            <Label>Bodega de destino</Label>
+            <Label>{mode === 'transfer' ? 'Sucursal de origen' : 'Sucursal'}</Label>
             <Select.Trigger>
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
             <Select.Popover>
               <ListBox>
-                {others.map((branch) => (
+                {branches.map((branch) => (
                   <ListBox.Item
                     id={branch.id}
                     key={branch.id}
@@ -384,285 +243,99 @@ function TransferPanel({
             </Select.Popover>
           </Select>
 
-          {/* El traspaso no crea ni destruye material: lo que sale de una
-              bodega entra en la otra. */}
-          <StatBox
-            rows={[
-              {
-                label: branchName,
-                value: `${NUMBER.format(here)} → ${NUMBER.format(
-                  valid ? here - quantity : here,
-                )} ${symbol}`,
-              },
-              {
-                label: destinationName,
-                value: `${NUMBER.format(there)} → ${NUMBER.format(
-                  valid ? there + quantity : there,
-                )} ${symbol}`,
-              },
-            ]}
-          />
-
-          <TextField fullWidth onChange={setDocumentNumber} value={documentNumber}>
-            <Label>Documento (opcional)</Label>
-            <Input placeholder="N.º de guía de despacho" />
-          </TextField>
-
-          <TextField fullWidth onChange={setNotes} value={notes}>
-            <Label>Observación (opcional)</Label>
-            <Input placeholder="Notas adicionales" />
-          </TextField>
-
-          {/* El traspaso deja DOS asientos con el mismo folio (salida en el
-              origen, entrada en el destino) y no altera el total de la
-              empresa. Decirlo acá evita la duda de si el material "se duplica". */}
-          <p className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent-soft-foreground)]">
-            Genera dos asientos con el mismo folio: salida en {branchName} y
-            entrada en {destinationName}. El total de la empresa no cambia.
-          </p>
-
-          {notEnough ? (
-            <Alert tone="danger">
-              En {branchName} hay {NUMBER.format(here)} {symbol}: no alcanza para
-              mover {NUMBER.format(quantity)}.
-            </Alert>
+          {mode === 'transfer' ? (
+            <Select
+              fullWidth
+              onChange={(value) => {
+                if (value) setDestinationId(String(value));
+              }}
+              value={destinationId}
+            >
+              <Label>Sucursal de destino</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {others.map((branch) => (
+                    <ListBox.Item
+                      id={branch.id}
+                      key={branch.id}
+                      textValue={branch.name}
+                    >
+                      {branch.name}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           ) : null}
 
-          {leavesBelowMinimum ? (
-            <Alert tone="warning">
-              {branchName} queda en {NUMBER.format(here - quantity)} {symbol}, en
-              o bajo su mínimo de {NUMBER.format(minimum)}.
-            </Alert>
+          <TextField fullWidth onChange={setAmount} value={amount}>
+            <Label>
+              {mode === 'count' ? 'Stock contado' : 'Cantidad'} ({symbol})
+            </Label>
+            <Input autoFocus inputMode="decimal" placeholder="0" />
+          </TextField>
+
+          {mode === 'in' || mode === 'out' ? (
+            <Select
+              fullWidth
+              onChange={(value) => {
+                if (value) setReason(String(value) as MovementReason);
+              }}
+              value={reason}
+            >
+              <Label>Motivo / origen</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {REASONS_BY_DIRECTION[mode === 'in' ? 'IN' : 'OUT'].map(
+                    (option) => (
+                      <ListBox.Item
+                        id={option}
+                        key={option}
+                        textValue={MOVEMENT_REASON_LABELS[option]}
+                      >
+                        {MOVEMENT_REASON_LABELS[option]}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ),
+                  )}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           ) : null}
-        </div>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button onPress={back} variant="secondary">
-          Volver
-        </Button>
-        <Button
-          isDisabled={!valid || !destination || notEnough}
-          isPending={transfer.isPending}
-          onPress={() =>
-            transfer.mutate(
-              {
-                itemId: item.id,
-                sourceBranchId: branchId,
-                destinationBranchId: destination,
-                quantity,
-                ...(documentNumber.trim()
-                  ? { documentNumber: documentNumber.trim() }
-                  : {}),
-                ...(notes.trim() ? { notes: notes.trim() } : {}),
-              },
-              { onSuccess: () => close() },
-            )
-          }
-        >
-          {({ isPending }) =>
-            isPending ? (
-              <Spinner color="current" size="sm" />
-            ) : (
-              'Confirmar traspaso'
-            )
-          }
-        </Button>
-      </Modal.Footer>
-    </>
-  );
-}
-
-// --- Mínimo ----------------------------------------------------------------
-
-function MinimumPanel({ item, branchId, branchName, close, back }: PanelProps) {
-  const setMinimum = useSetMinimum();
-  const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const current = stockAt(item, branchId)?.minimumQuantity ?? 0;
-
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<MinimumFormValues>({
-    resolver: zodResolver(MinimumFormSchema),
-    values: { minimumQuantity: String(current) },
-  });
-
-  // Se mira lo escrito para decir, antes de guardar, si ese umbral deja el
-  // ítem alertando hoy mismo. Un mínimo se fija contra el saldo real de la
-  // bodega, y ese saldo está a la vista dos líneas más arriba.
-  const typed = Number(useWatch({ control, name: 'minimumQuantity' }));
-  const willAlert = Number.isFinite(typed) && typed > 0 && here <= typed;
-
-  const onSubmit = (values: MinimumFormValues): void => {
-    setMinimum.mutate(
-      {
-        itemId: item.id,
-        branchId,
-        minimumQuantity: Number(values.minimumQuantity),
-      },
-      { onSuccess: () => close() },
-    );
-  };
-
-  return (
-    <>
-      <Modal.Body>
-        <form
-          className="flex flex-col gap-4"
-          id={`minimum-form-${item.id}`}
-          noValidate
-          onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-        >
-          <BackButton onPress={back} />
-          <SectionLabel>Stock mínimo en {branchName}</SectionLabel>
 
           <StatBox
             rows={[
               {
-                label: `Stock en ${branchName}`,
+                label: `Stock en ${branchName || 'la sucursal'}`,
                 value: `${NUMBER.format(here)} ${symbol}`,
               },
               {
-                label: 'Mínimo vigente',
-                value:
-                  current > 0
-                    ? `${NUMBER.format(current)} ${symbol}`
-                    : 'sin umbral',
+                label: mode === 'count' ? 'Queda registrado' : 'Queda después',
+                value: `${resultingBalance()} ${symbol}`,
               },
+              ...(mode === 'transfer' && destination
+                ? [
+                    {
+                      label: destination.name,
+                      value: `${NUMBER.format(there)} → ${NUMBER.format(
+                        validAmount ? there + quantity : there,
+                      )} ${symbol}`,
+                    },
+                  ]
+                : []),
             ]}
           />
 
-          <Controller
-            control={control}
-            name="minimumQuantity"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                isInvalid={!!errors.minimumQuantity}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Stock mínimo ({symbol})</Label>
-                <Input autoFocus inputMode="decimal" />
-                {errors.minimumQuantity ? (
-                  <FieldError>{errors.minimumQuantity.message}</FieldError>
-                ) : null}
-              </TextField>
-            )}
-          />
-
-          {willAlert ? (
-            <Alert tone="warning">
-              Con {NUMBER.format(typed)} {symbol} el ítem queda marcado bajo
-              mínimo de inmediato: en {branchName} hay {NUMBER.format(here)}.
-            </Alert>
-          ) : null}
-
-          <p className="text-xs text-muted-foreground">
-            El umbral aplica solo a esta bodega — el de la empresa y el de una
-            sucursal no son la misma magnitud. En <strong>0</strong> esta bodega
-            deja de alertar por este ítem.
-          </p>
-        </form>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button onPress={back} variant="secondary">
-          Volver
-        </Button>
-        <Button
-          form={`minimum-form-${item.id}`}
-          isPending={setMinimum.isPending}
-          type="submit"
-        >
-          {({ isPending }) =>
-            isPending ? <Spinner color="current" size="sm" /> : 'Guardar'
-          }
-        </Button>
-      </Modal.Footer>
-    </>
-  );
-}
-
-// --- Conteo físico ---------------------------------------------------------
-
-function CountPanel({ item, branchId, branchName, close, back }: PanelProps) {
-  const adjust = useAdjustStock();
-  const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<AdjustFormValues>({
-    resolver: zodResolver(AdjustFormSchema),
-    values: { countedQuantity: String(here), notes: '' },
-  });
-
-  const counted = Number(useWatch({ control, name: 'countedQuantity' }));
-  const difference = Number.isFinite(counted) ? counted - here : 0;
-
-  const onSubmit = (values: AdjustFormValues): void => {
-    adjust.mutate(
-      {
-        id: item.id,
-        input: {
-          branchId,
-          countedQuantity: Number(values.countedQuantity),
-          ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
-        },
-      },
-      { onSuccess: () => close() },
-    );
-  };
-
-  return (
-    <>
-      <Modal.Body>
-        <form
-          className="flex flex-col gap-4"
-          id={`count-form-${item.id}`}
-          noValidate
-          onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-        >
-          <BackButton onPress={back} />
-          <SectionLabel>Ajustar por conteo</SectionLabel>
-
-          <p className="text-sm text-muted-foreground">
-            El sistema tiene{' '}
-            <strong className="text-foreground">
-              {NUMBER.format(here)} {symbol}
-            </strong>{' '}
-            en {branchName}. Ingresa lo que contaste en bodega y se registra la
-            diferencia.
-          </p>
-
-          <Controller
-            control={control}
-            name="countedQuantity"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                isInvalid={!!errors.countedQuantity}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Stock contado ({symbol})</Label>
-                <Input autoFocus inputMode="decimal" />
-                {errors.countedQuantity ? (
-                  <FieldError>{errors.countedQuantity.message}</FieldError>
-                ) : null}
-              </TextField>
-            )}
-          />
-
-          {difference !== 0 ? (
+          {mode === 'count' && validCount && difference !== 0 ? (
             <Chip
               color={difference > 0 ? 'success' : 'warning'}
               size="sm"
@@ -671,41 +344,52 @@ function CountPanel({ item, branchId, branchName, close, back }: PanelProps) {
               Diferencia: {difference > 0 ? '+' : ''}
               {NUMBER.format(difference)} {symbol}
             </Chip>
-          ) : (
-            <Chip size="sm" variant="soft">
-              Sin diferencia con el sistema
-            </Chip>
-          )}
+          ) : null}
 
-          <Controller
-            control={control}
-            name="notes"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                value={field.value}
-              >
-                <Label>Observación (opcional)</Label>
-                <Input placeholder="Ej. conteo mensual de bodega" />
-              </TextField>
-            )}
-          />
-        </form>
+          {mode !== 'count' ? (
+            <TextField
+              fullWidth
+              onChange={setDocumentNumber}
+              value={documentNumber}
+            >
+              <Label>Documento (opcional)</Label>
+              <Input placeholder="N.º de guía, OC…" />
+            </TextField>
+          ) : null}
+
+          <TextField fullWidth onChange={setNotes} value={notes}>
+            <Label>Observación (opcional)</Label>
+            <Input placeholder="Notas adicionales" />
+          </TextField>
+
+          {mode === 'transfer' ? (
+            <p className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent-soft-foreground)]">
+              Genera dos asientos con el mismo folio: salida en{' '}
+              {branchName || 'el origen'} y entrada en{' '}
+              {destination?.name ?? 'el destino'}. El total de la empresa no
+              cambia.
+            </p>
+          ) : null}
+
+          {notEnough ? (
+            <p className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
+              <TriangleAlert className="mt-0.5 shrink-0" size={16} />
+              <span>
+                En {branchName} hay {NUMBER.format(here)} {symbol}: no alcanza
+                para {mode === 'transfer' ? 'mover' : 'sacar'}{' '}
+                {NUMBER.format(quantity)}.
+              </span>
+            </p>
+          ) : null}
+        </div>
       </Modal.Body>
       <Modal.Footer>
         <Button onPress={back} variant="secondary">
           Volver
         </Button>
-        <Button
-          form={`count-form-${item.id}`}
-          isPending={adjust.isPending}
-          type="submit"
-        >
-          {({ isPending }) =>
-            isPending ? <Spinner color="current" size="sm" /> : 'Guardar ajuste'
+        <Button isDisabled={!canSubmit} isPending={isPending} onPress={submit}>
+          {({ isPending: pending }) =>
+            pending ? <Spinner color="current" size="sm" /> : 'Registrar'
           }
         </Button>
       </Modal.Footer>
@@ -715,7 +399,15 @@ function CountPanel({ item, branchId, branchName, close, back }: PanelProps) {
 
 // --- Baja ------------------------------------------------------------------
 
-function DeletePanel({ item, close, back }: PanelProps) {
+function DeletePanel({
+  item,
+  close,
+  back,
+}: {
+  item: InventoryItem;
+  close: () => void;
+  back: () => void;
+}) {
   const deleteItem = useDeleteItem();
 
   return (
@@ -728,7 +420,7 @@ function DeletePanel({ item, close, back }: PanelProps) {
             ¿Seguro que quieres eliminar{' '}
             <strong className="text-foreground">{item.name}</strong> ({item.sku}
             )? Si ya tiene movimientos, el backend lo impide para no perder su
-            kardex y sugiere darlo de baja en su lugar.
+            historial y sugiere darlo de baja en su lugar.
           </p>
         </div>
       </Modal.Body>
@@ -750,8 +442,6 @@ function DeletePanel({ item, close, back }: PanelProps) {
   );
 }
 
-// --- Piezas chicas ---------------------------------------------------------
-
 function BackButton({ onPress }: { onPress: () => void }) {
   return (
     <button
@@ -765,74 +455,48 @@ function BackButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-function Alert({
-  tone,
-  children,
-}: {
-  tone: 'danger' | 'warning';
-  children: React.ReactNode;
-}) {
-  return (
-    <p
-      className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
-        tone === 'danger'
-          ? 'bg-danger-soft text-danger-soft-foreground'
-          : 'bg-warning-soft text-warning-soft-foreground'
-      }`}
-    >
-      <TriangleAlert className="mt-0.5 shrink-0" size={16} />
-      <span>{children}</span>
-    </p>
-  );
-}
-
 // --- Modal -----------------------------------------------------------------
 
 export function ItemActionsModal({
   item,
   branchId,
-  branchName,
   branches,
   canWrite,
-  canIssue,
   isAdmin,
+  initialView,
   isOpen,
   onOpenChange,
   onEdit,
 }: {
   item: InventoryItem;
+  /** Sucursal en foco, o `ALL_BRANCHES` en el inventario general. */
   branchId: string;
-  branchName: string;
   branches: Branch[];
   canWrite: boolean;
-  /** Solo las bodegas con equipos consumen material. Ver `InventarioView`. */
-  canIssue: boolean;
   isAdmin: boolean;
+  /** Permite que la fila de escritorio abra directo la acción elegida. */
+  initialView: ItemAction;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  /** La ficha se edita en su propio formulario, que vive en la vista. */
   onEdit: () => void;
 }) {
-  const [view, setView] = useState<ActionView>('actions');
+  const [view, setView] = useState<ItemAction>(initialView);
   const navigate = useNavigate();
 
   const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
+  const isAll = branchId === ALL_BRANCHES;
   const status = stockStatus(item, branchId);
+  const here = isAll ? null : quantityAt(item, branchId);
+  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
+  const branchName = branches.find((b) => b.id === branchId)?.name ?? '';
+  const total = item.stocks.reduce((sum, stock) => sum + stock.quantity, 0);
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-lg">
           {({ close }) => {
-            const panelProps = {
-              item,
-              branchId,
-              branchName,
-              close,
-              back: () => setView('actions'),
-            };
+            const back = () => setView('actions');
 
             return (
               <>
@@ -843,20 +507,28 @@ export function ItemActionsModal({
                       {item.sku}
                     </Modal.Heading>
                     <StatusChip label={status.label} tone={status.tone} />
-                    {item.isCritical ? <CriticalBadge /> : null}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {item.name}
                     {item.partNumber ? ` · N° parte ${item.partNumber}` : ''}
                     <br />
-                    Existencia en {branchName}:{' '}
-                    <span className="font-mono font-semibold text-foreground">
-                      {NUMBER.format(here)} {symbol}
-                    </span>
-                    {minimum > 0 ? (
-                      <> · mín {NUMBER.format(minimum)}</>
+                    {isAll ? (
+                      <>
+                        Total en la empresa:{' '}
+                        <span className="font-mono font-semibold text-foreground">
+                          {NUMBER.format(total)} {symbol}
+                        </span>
+                      </>
                     ) : (
-                      <> · sin mínimo fijado</>
+                      <>
+                        Existencia en {branchName}:{' '}
+                        <span className="font-mono font-semibold text-foreground">
+                          {NUMBER.format(here ?? 0)} {symbol}
+                        </span>
+                        {minimum > 0
+                          ? ` · mín ${NUMBER.format(minimum)}`
+                          : ' · sin mínimo fijado'}
+                      </>
                     )}
                   </p>
                 </Modal.Header>
@@ -864,44 +536,8 @@ export function ItemActionsModal({
                 {view === 'actions' ? (
                   <>
                     <Modal.Body>
-                      <SectionLabel>Acciones rápidas</SectionLabel>
-                      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                        {canWrite ? (
-                          <QuickAction
-                            icon={<MoveVertical size={ICON} />}
-                            label="Registrar movimiento"
-                            onPress={() => setView('movement')}
-                          />
-                        ) : null}
-                        {canWrite && branches.length > 1 ? (
-                          <QuickAction
-                            icon={<ArrowLeftRight size={ICON} />}
-                            label="Traspasar a otra sucursal"
-                            onPress={() => setView('transfer')}
-                          />
-                        ) : null}
-                        {canWrite ? (
-                          <QuickAction
-                            icon={<TriangleAlert size={ICON} />}
-                            label="Stock mínimo"
-                            onPress={() => setView('minimum')}
-                          />
-                        ) : null}
-                        {isAdmin ? (
-                          <QuickAction
-                            icon={<ClipboardCheck size={ICON} />}
-                            label="Ajustar por conteo"
-                            onPress={() => setView('count')}
-                          />
-                        ) : null}
-                        <QuickAction
-                          icon={<ScrollText size={ICON} />}
-                          label="Ver kardex"
-                          onPress={() => {
-                            close();
-                            void navigate(`/inventario/${item.id}`);
-                          }}
-                        />
+                      <SectionLabel>Acciones</SectionLabel>
+                      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                         {isAdmin ? (
                           <QuickAction
                             icon={<Pencil size={ICON} />}
@@ -912,6 +548,21 @@ export function ItemActionsModal({
                             }}
                           />
                         ) : null}
+                        {canWrite ? (
+                          <QuickAction
+                            icon={<ArrowLeftRight size={ICON} />}
+                            label="Registrar movimiento"
+                            onPress={() => setView('movement')}
+                          />
+                        ) : null}
+                        <QuickAction
+                          icon={<ScrollText size={ICON} />}
+                          label="Ver historial"
+                          onPress={() => {
+                            close();
+                            void navigate(`/inventario/${item.id}`);
+                          }}
+                        />
                         {isAdmin ? (
                           <QuickAction
                             icon={<Trash2 size={ICON} />}
@@ -921,13 +572,6 @@ export function ItemActionsModal({
                           />
                         ) : null}
                       </div>
-
-                      {canWrite && !canIssue ? (
-                        <p className="mt-4 text-xs text-muted-foreground">
-                          {branchName} no tiene equipos asignados: acá el
-                          material entra y se traspasa, pero no se consume.
-                        </p>
-                      ) : null}
                     </Modal.Body>
                     <Modal.Footer>
                       <Button onPress={close} variant="secondary">
@@ -938,14 +582,18 @@ export function ItemActionsModal({
                 ) : null}
 
                 {view === 'movement' ? (
-                  <MovementPanel canIssue={canIssue} {...panelProps} />
+                  <MovementPanel
+                    back={back}
+                    branches={branches}
+                    close={close}
+                    defaultBranchId={isAll ? '' : branchId}
+                    item={item}
+                  />
                 ) : null}
-                {view === 'transfer' ? (
-                  <TransferPanel branches={branches} {...panelProps} />
+
+                {view === 'delete' ? (
+                  <DeletePanel back={back} close={close} item={item} />
                 ) : null}
-                {view === 'minimum' ? <MinimumPanel {...panelProps} /> : null}
-                {view === 'count' ? <CountPanel {...panelProps} /> : null}
-                {view === 'delete' ? <DeletePanel {...panelProps} /> : null}
               </>
             );
           }}
