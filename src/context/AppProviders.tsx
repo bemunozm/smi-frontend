@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toast } from '@heroui/react';
 
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { queryClient } from '../lib/query-client';
 import { ReloadPrompt } from '../components/pwa/ReloadPrompt';
 
@@ -26,7 +27,9 @@ export interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      {/* Envuelve al router entero: un error de render en cualquier pantalla
+          deja el mensaje a la vista en vez de una página en blanco. */}
+      <ErrorBoundary>{children}</ErrorBoundary>
       <Toast.Provider placement="bottom end" />
       <ReloadPrompt />
     </QueryClientProvider>
