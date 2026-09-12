@@ -40,10 +40,8 @@ import {
   MovementFormSchema,
   REASONS_BY_DIRECTION,
   UNIT_SYMBOLS,
-  isBelowMinimumAt,
   quantityAt,
   stockAt,
-  totalQuantity,
   type AdjustFormValues,
   type InventoryItem,
   type MinimumFormValues,
@@ -51,14 +49,14 @@ import {
   type MovementFormValues,
 } from '../../types/inventory';
 import {
-  AVAILABILITY_COLORS,
+  CriticalBadge,
   NUMBER,
   QuickAction,
   SectionLabel,
   Segmented,
   StatBox,
-  availability,
-  elsewhereLabel,
+  StatusChip,
+  stockStatus,
 } from './shared';
 
 /**
@@ -113,6 +111,7 @@ function MovementPanel({
       quantity: '',
       reason: reasons[0],
       equipmentId: '',
+      documentNumber: '',
       notes: '',
     },
   });
@@ -130,6 +129,9 @@ function MovementPanel({
           direction,
           reason: values.reason,
           quantity: Number(values.quantity),
+          ...(values.documentNumber.trim()
+            ? { documentNumber: values.documentNumber.trim() }
+            : {}),
           ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
         },
         item,
@@ -238,6 +240,26 @@ function MovementPanel({
             )}
           />
 
+          {/* El papel que respalda el movimiento. Va en su propio campo y no
+              mezclado en la observación: por la guía se busca, por la nota
+              se lee. */}
+          <Controller
+            control={control}
+            name="documentNumber"
+            render={({ field }) => (
+              <TextField
+                fullWidth
+                name={field.name}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                value={field.value}
+              >
+                <Label>Documento (opcional)</Label>
+                <Input placeholder="N.º de guía, OC…" />
+              </TextField>
+            )}
+          />
+
           <Controller
             control={control}
             name="notes"
@@ -302,6 +324,8 @@ function TransferPanel({
   const others = branches.filter((branch) => branch.id !== branchId);
   const [destination, setDestination] = useState(others[0]?.id ?? '');
   const [amount, setAmount] = useState('');
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [notes, setNotes] = useState('');
 
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
@@ -379,6 +403,24 @@ function TransferPanel({
             ]}
           />
 
+          <TextField fullWidth onChange={setDocumentNumber} value={documentNumber}>
+            <Label>Documento (opcional)</Label>
+            <Input placeholder="N.º de guía de despacho" />
+          </TextField>
+
+          <TextField fullWidth onChange={setNotes} value={notes}>
+            <Label>Observación (opcional)</Label>
+            <Input placeholder="Notas adicionales" />
+          </TextField>
+
+          {/* El traspaso deja DOS asientos con el mismo folio (salida en el
+              origen, entrada en el destino) y no altera el total de la
+              empresa. Decirlo acá evita la duda de si el material "se duplica". */}
+          <p className="rounded-lg bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent-soft-foreground)]">
+            Genera dos asientos con el mismo folio: salida en {branchName} y
+            entrada en {destinationName}. El total de la empresa no cambia.
+          </p>
+
           {notEnough ? (
             <Alert tone="danger">
               En {branchName} hay {NUMBER.format(here)} {symbol}: no alcanza para
@@ -408,6 +450,10 @@ function TransferPanel({
                 sourceBranchId: branchId,
                 destinationBranchId: destination,
                 quantity,
+                ...(documentNumber.trim()
+                  ? { documentNumber: documentNumber.trim() }
+                  : {}),
+                ...(notes.trim() ? { notes: notes.trim() } : {}),
               },
               { onSuccess: () => close() },
             )
@@ -773,8 +819,7 @@ export function ItemActionsModal({
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
   const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const state = availability(here, totalQuantity(item));
-  const belowMinimum = isBelowMinimumAt(item, branchId);
+  const status = stockStatus(item, branchId);
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -797,20 +842,8 @@ export function ItemActionsModal({
                     <Modal.Heading className="font-mono text-xl font-semibold">
                       {item.sku}
                     </Modal.Heading>
-                    <Chip
-                      color={AVAILABILITY_COLORS[state]}
-                      size="sm"
-                      variant="soft"
-                    >
-                      {state === 'en-bodega'
-                        ? 'En esta bodega'
-                        : elsewhereLabel(item, branchId)}
-                    </Chip>
-                    {belowMinimum ? (
-                      <Chip color="danger" size="sm" variant="soft">
-                        Bajo mínimo
-                      </Chip>
-                    ) : null}
+                    <StatusChip label={status.label} tone={status.tone} />
+                    {item.isCritical ? <CriticalBadge /> : null}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {item.name}

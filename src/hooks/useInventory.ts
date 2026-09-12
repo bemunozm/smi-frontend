@@ -189,6 +189,7 @@ export function useTransferStock() {
       sourceBranchId: string;
       destinationBranchId: string;
       quantity: number;
+      documentNumber?: string;
       notes?: string;
     }) => InventoryAPI.transfer(input),
     onSuccess: (message) => {

@@ -225,7 +225,7 @@ describe('InventarioView', () => {
     // Cada uno lleva a una acción distinta: usar, pedir traslado, comprar. Y
     // el que está en otra bodega la NOMBRA: decir "en otra sucursal" obliga a
     // adivinar a cuál pedirle.
-    expect(screen.getAllByText('En esta bodega')).toHaveLength(1);
+    expect(screen.getAllByText('OK')).toHaveLength(1);
     expect(screen.getAllByText('En Faena')).toHaveLength(1);
     expect(screen.getAllByText('Sin stock')).toHaveLength(1);
   });
@@ -234,8 +234,10 @@ describe('InventarioView', () => {
     renderView([BAJO_MINIMO]);
 
     // Quedan 2 y el mínimo es 5: se puede montar hoy, pero hay que reponer.
-    expect(screen.getAllByText('En esta bodega')).toHaveLength(1);
-    expect(screen.getAllByText('Bajo mínimo')).toHaveLength(1);
+    // Es UN rótulo, no dos: antes convivían 'En esta bodega' y 'Bajo mínimo'
+    // y el verde del primero suavizaba la alerta del segundo.
+    expect(screen.queryByText('OK')).toBeNull();
+    expect(screen.getAllByText('Bajo stock mínimo')).toHaveLength(1);
   });
 
   it('marca los ítems críticos aunque tengan saldo', () => {
@@ -309,6 +311,21 @@ describe('InventarioView', () => {
       expect(screen.getByLabelText(/Stock mínimo/)).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
       expect(screen.getByText('Mínimo vigente')).toBeTruthy();
+    });
+
+    it('pide el documento aparte de la observación', () => {
+      // Por la guía se busca, por la nota se lee. Mezcladas en un solo campo,
+      // el número de guía deja de ser encontrable.
+      renderView([BAJO_MINIMO]);
+      openActions('COR-001');
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /Registrar movimiento/ }),
+      );
+
+      expect(screen.getByLabelText('Documento (opcional)')).toBeTruthy();
+      expect(screen.getByLabelText('Observación (opcional)')).toBeTruthy();
+      expect(screen.getByLabelText('Motivo')).toBeTruthy();
     });
 
     it('avisa antes de traspasar más de lo que hay', () => {

@@ -145,6 +145,7 @@ async function transfer(input: {
   sourceBranchId: string;
   destinationBranchId: string;
   quantity: number;
+  documentNumber?: string;
   notes?: string;
 }): Promise<string> {
   try {

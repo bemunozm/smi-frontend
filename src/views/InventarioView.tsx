@@ -20,11 +20,11 @@ import {
   NewItemModal,
 } from '../components/inventario/ItemFormModal';
 import {
-  AVAILABILITY_COLORS,
+  CriticalBadge,
   NUMBER,
   Segmented,
-  availability,
-  elsewhereLabel,
+  StatusChip,
+  stockStatus,
 } from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
@@ -76,7 +76,7 @@ function ItemRow({
 
   const here = quantityAt(item, branchId);
   const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const state = availability(here, totalQuantity(item));
+  const status = stockStatus(item, branchId);
   const belowMinimum = isBelowMinimumAt(item, branchId);
 
   const quantity = Number(amount);
@@ -118,11 +118,7 @@ function ItemRow({
             <span className="text-foreground">{item.name}</span>
             {/* Su falta detiene la máquina: se marca aunque el saldo todavía
                 no cruce el mínimo. */}
-            {item.isCritical ? (
-              <Chip color="danger" size="sm" variant="soft">
-                Crítico
-              </Chip>
-            ) : null}
+            {item.isCritical ? <CriticalBadge /> : null}
           </div>
           {item.partNumber ? (
             <span className="font-mono text-xs text-muted-foreground">
@@ -148,21 +144,7 @@ function ItemRow({
         {minimum > 0 ? NUMBER.format(minimum) : '—'}
       </Table.Cell>
       <Table.Cell>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Chip color={AVAILABILITY_COLORS[state]} size="sm" variant="soft">
-            {state === 'en-bodega'
-              ? 'En esta bodega'
-              : elsewhereLabel(item, branchId)}
-          </Chip>
-          {/* Reponer y no tener son cosas distintas: el ítem puede estar
-              disponible hoy y aun así haber cruzado el mínimo de la bodega.
-              Va en rojo porque es lo único de la fila que exige una acción. */}
-          {state === 'en-bodega' && belowMinimum ? (
-            <Chip color="danger" size="sm" variant="soft">
-              Bajo mínimo
-            </Chip>
-          ) : null}
-        </div>
+        <StatusChip label={status.label} tone={status.tone} />
       </Table.Cell>
       <Table.Cell>
         {/* El atajo del escritorio: el bodeguero frente al PC escribe una

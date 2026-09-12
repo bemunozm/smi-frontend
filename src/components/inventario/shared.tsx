@@ -7,38 +7,104 @@ export const NUMBER = new Intl.NumberFormat('es-CL', {
 });
 
 /**
- * Cómo se ve una fila. Son tres situaciones distintas y cada una lleva a una
- * acción distinta, por eso no se colapsan en "hay / no hay": usar lo que está
- * acá, pedir un traspaso, o comprar. La alerta de reposición va aparte: **tener
- * poco no es no tener**.
- */
-export type Availability = 'en-bodega' | 'en-otra' | 'sin-stock';
-
-export function availability(here: number, total: number): Availability {
-  if (here > 0) return 'en-bodega';
-  return total > 0 ? 'en-otra' : 'sin-stock';
-}
-
-export const AVAILABILITY_COLORS: Record<
-  Availability,
-  'success' | 'warning' | 'danger'
-> = {
-  'en-bodega': 'success',
-  'en-otra': 'warning',
-  'sin-stock': 'danger',
-};
-
-/**
  * Dónde está lo que falta acá. Se nombran las bodegas en vez de decir "en otra
  * sucursal": el bodeguero tiene que saber a cuál pedirle, y con dos sucursales
  * "otra" ya obliga a adivinar.
  */
-export function elsewhereLabel(item: InventoryItem, branchId: string): string {
+function elsewhereLabel(item: InventoryItem, branchId: string): string {
   const names = item.stocks
     .filter((stock) => stock.branchId !== branchId && stock.quantity > 0)
     .map((stock) => stock.branch.name);
-  if (names.length === 0) return 'Sin stock';
   return `En ${names.join(' y ')}`;
+}
+
+export type StatusTone = 'ok' | 'riesgo' | 'peligro';
+
+/**
+ * El estado del ítem **en la bodega que se está mirando**, en un solo rótulo.
+ *
+ * Antes eran dos chips ("En esta bodega" + "Bajo mínimo") y se leían como dos
+ * cosas del mismo tono. Acá hay uno solo, y el color significa siempre lo
+ * mismo:
+ *
+ * - **verde · OK** — hay saldo y está sobre el mínimo. No hay nada que hacer.
+ * - **ámbar · en riesgo** — no hay acá, pero sí en otra bodega. Se resuelve
+ *   con un traspaso, no con una compra; por eso no es rojo.
+ * - **rojo · peligro** — o cruzó el mínimo de esta bodega, o no hay en ninguna
+ *   parte. Las dos exigen acción, y ninguna se resuelve sola.
+ */
+export function stockStatus(
+  item: InventoryItem,
+  branchId: string,
+): { label: string; tone: StatusTone } {
+  const here = item.stocks.find((stock) => stock.branchId === branchId);
+  const quantity = here?.quantity ?? 0;
+  const minimum = here?.minimumQuantity ?? 0;
+  const total = item.stocks.reduce((sum, stock) => sum + stock.quantity, 0);
+
+  if (quantity > 0) {
+    // `minimumQuantity = 0` significa "esta bodega no fijó umbral" y no alerta.
+    return minimum > 0 && quantity <= minimum
+      ? { label: 'Bajo stock mínimo', tone: 'peligro' }
+      : { label: 'OK', tone: 'ok' };
+  }
+
+  return total > 0
+    ? { label: elsewhereLabel(item, branchId), tone: 'riesgo' }
+    : { label: 'Sin stock', tone: 'peligro' };
+}
+
+const TONE_STYLES: Record<StatusTone, { chip: string; dot: string }> = {
+  ok: {
+    chip: 'bg-[var(--success-soft)] text-[var(--success-soft-foreground)]',
+    dot: 'bg-[var(--success)]',
+  },
+  riesgo: {
+    chip: 'bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]',
+    dot: 'bg-[var(--warning)]',
+  },
+  peligro: {
+    chip: 'bg-[var(--danger-soft)] text-[var(--danger-soft-foreground)]',
+    dot: 'bg-[var(--danger)]',
+  },
+};
+
+/**
+ * El chip de estado. Lleva un punto del color saturado además del fondo suave:
+ * los fondos `*-soft` del tema son tan lavados que a este tamaño el rosa del
+ * peligro y el amarillo del riesgo se confunden. El punto da el color a plena
+ * saturación, y el texto dice el estado — el color refuerza, no carga solo con
+ * el significado.
+ */
+export function StatusChip({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: StatusTone;
+}) {
+  const styles = TONE_STYLES[tone];
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${styles.chip}`}
+    >
+      <span aria-hidden className={`size-1.5 rounded-full ${styles.dot}`} />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Distintivo del ítem crítico. A propósito NO es un chip de color: el color en
+ * esta pantalla habla del stock, y un segundo chip rojo al lado del estado
+ * haría dudar de cuál de los dos es el que manda.
+ */
+export function CriticalBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      Crítico
+    </span>
+  );
 }
 
 /**

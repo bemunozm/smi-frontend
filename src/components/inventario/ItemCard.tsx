@@ -1,4 +1,3 @@
-import { Chip } from '@heroui/react';
 import { ChevronRight } from 'lucide-react';
 
 import {
@@ -6,15 +5,9 @@ import {
   isBelowMinimumAt,
   quantityAt,
   stockAt,
-  totalQuantity,
   type InventoryItem,
 } from '../../types/inventory';
-import {
-  AVAILABILITY_COLORS,
-  NUMBER,
-  availability,
-  elsewhereLabel,
-} from './shared';
+import { CriticalBadge, NUMBER, StatusChip, stockStatus } from './shared';
 
 /**
  * El ítem en teléfono y tablet. **Toda la tarjeta es tocable** y abre el panel
@@ -38,15 +31,14 @@ export function ItemCard({
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
   const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const state = availability(here, totalQuantity(item));
+  const status = stockStatus(item, branchId);
   const belowMinimum = isBelowMinimumAt(item, branchId);
 
   return (
     <button
       // Sin etiqueta propia, el nombre accesible de la tarjeta es la ristra de
-      // todo lo que lleva dentro ("FIL-001 En esta bodega Filtro de aceite…").
-      // Lo que hace el botón es abrir las acciones del ítem, y eso es lo que
-      // debe anunciar.
+      // todo lo que lleva dentro ("FIL-001 OK Filtro de aceite…"). Lo que hace
+      // el botón es abrir las acciones del ítem, y eso es lo que debe anunciar.
       aria-label={`Acciones de ${item.sku}`}
       className="w-full cursor-pointer rounded-xl border border-border bg-card p-3.5 text-left shadow-sm transition-colors hover:bg-[var(--surface-secondary)]"
       onClick={onOpen}
@@ -57,21 +49,8 @@ export function ItemCard({
           <span className="font-mono text-[17px] font-semibold text-foreground">
             {item.sku}
           </span>
-          <Chip color={AVAILABILITY_COLORS[state]} size="sm" variant="soft">
-            {state === 'en-bodega'
-              ? 'En esta bodega'
-              : elsewhereLabel(item, branchId)}
-          </Chip>
-          {belowMinimum ? (
-            <Chip color="danger" size="sm" variant="soft">
-              Bajo mínimo
-            </Chip>
-          ) : null}
-          {item.isCritical ? (
-            <Chip color="danger" size="sm" variant="soft">
-              Crítico
-            </Chip>
-          ) : null}
+          <StatusChip label={status.label} tone={status.tone} />
+          {item.isCritical ? <CriticalBadge /> : null}
         </div>
         <ChevronRight className="shrink-0 text-muted-foreground" size={20} />
       </div>

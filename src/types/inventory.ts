@@ -70,6 +70,8 @@ export const StockMovementSchema = z.object({
   /** Saldo de ESA bodega después del asiento. */
   resultingBalance: z.number(),
   reference: z.string().nullable(),
+  /** Guía de despacho / OC que respalda el movimiento. */
+  documentNumber: z.string().nullable().optional(),
   performedById: z.string().nullable(),
   equipmentId: z.string().nullable(),
   notes: z.string().nullable(),
@@ -237,6 +239,8 @@ export interface CreateMovementInput {
   reason: MovementReason;
   quantity: number;
   equipmentId?: string;
+  /** Guía de despacho, OC o factura. Distinto de `reference`, que es interno. */
+  documentNumber?: string;
   notes?: string;
 }
 
@@ -364,6 +368,7 @@ export const MovementFormSchema = z.object({
   ),
   reason: z.enum(MOVEMENT_REASONS),
   equipmentId: z.string(),
+  documentNumber: z.string().max(60, 'Máximo 60 caracteres').or(z.literal('')),
   notes: z.string().max(240).or(z.literal('')),
 });
 export type MovementFormValues = z.infer<typeof MovementFormSchema>;
