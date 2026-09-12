@@ -1,1133 +1,82 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  Controller,
-  useForm,
-  useWatch,
-  type Control,
-} from 'react-hook-form';
-import {
-  AlertDialog,
   Button,
   Chip,
-  FieldError,
   Input,
   Label,
   ListBox,
-  Modal,
   Select,
   Spinner,
-  Switch,
   Table,
-  Tabs,
   TextField,
 } from '@heroui/react';
 
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
+import { ItemActionsModal } from '../components/inventario/ItemActionsModal';
+import { ItemCard } from '../components/inventario/ItemCard';
+import {
+  EditItemModal,
+  NewItemModal,
+} from '../components/inventario/ItemFormModal';
+import {
+  AVAILABILITY_COLORS,
+  NUMBER,
+  Segmented,
+  availability,
+  elsewhereLabel,
+} from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
-import { useEquipment } from '../hooks/useEquipment';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import {
-  useAdjustStock,
-  useCreateItem,
-  useCreateMovement,
-  useDeleteItem,
-  useItems,
-  useSetMinimum,
-  useTransferStock,
-  useUpdateItem,
-} from '../hooks/useInventory';
+import { useEquipment } from '../hooks/useEquipment';
+import { useCreateMovement, useItems } from '../hooks/useInventory';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
 import type { Branch } from '../types/branch';
-import type { ItemCategory } from '../types/category';
 import {
-  AdjustFormSchema,
-  ITEM_TYPES,
-  ITEM_TYPE_LABELS,
-  ItemEditFormSchema,
-  ItemFormSchema,
-  MinimumFormSchema,
-  UNITS_OF_MEASURE,
-  UNIT_LABELS,
   UNIT_SYMBOLS,
   isBelowMinimumAt,
   quantityAt,
   stockAt,
-  toCreateItemPayload,
-  toItemEditValues,
-  toUpdateItemPayload,
   totalQuantity,
-  type AdjustFormValues,
   type InventoryItem,
-  type ItemCardValues,
-  type ItemEditFormValues,
-  type ItemFormValues,
   type ItemType,
-  type MinimumFormValues,
   type MovementDirection,
 } from '../types/inventory';
 
-const NUMBER = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 });
+/** Centinela del filtro: "todas" no es un id de categoría. */
+const ALL_CATEGORIES = '__all__';
+
+type StockFilter = 'todos' | 'bajo';
+
+// --- Fila de escritorio ----------------------------------------------------
 
 /**
- * Cómo se ve una fila. Son tres situaciones distintas y cada una lleva a una
- * acción distinta, por eso no se colapsan en "hay / no hay": usar lo que está
- * acá, pedir un traspaso, o comprar. La alerta de reposición va aparte: **tener
- * poco no es no tener**.
+ * La tabla es solo para pantallas anchas. Debajo de `lg` la misma información
+ * se muestra en tarjetas (`ItemCard`) — es lo que dibujan los tres artboards
+ * del equipo: tarjetas en teléfono Y en tablet, tabla recién en PC.
  */
-type Availability = 'en-bodega' | 'en-otra' | 'sin-stock';
-
-function availability(here: number, total: number): Availability {
-  if (here > 0) return 'en-bodega';
-  return total > 0 ? 'en-otra' : 'sin-stock';
-}
-
-const AVAILABILITY_COLORS: Record<Availability, 'success' | 'warning' | 'danger'> =
-  {
-    'en-bodega': 'success',
-    'en-otra': 'warning',
-    'sin-stock': 'danger',
-  };
-
-// --- Ficha del ítem --------------------------------------------------------
-
-/** Opción del selector de categoría para "no clasificado". */
-const NO_CATEGORY = '__none__';
-
-/**
- * Los campos que comparten el alta y la edición. Se escriben una sola vez
- * porque son los mismos datos: lo único que cambia entre los dos formularios
- * es lo que los rodea (SKU y existencia inicial al crear; baja lógica al
- * editar).
- *
- * El `control` viene tipado con el esquema del formulario completo, que es más
- * ancho que `ItemCardValues`. `Control` es invariante en su parámetro, así que
- * el cast es inevitable; es seguro porque los nombres de campo que toca este
- * componente existen en ambos esquemas — `ItemFormSchema` y
- * `ItemEditFormSchema` extienden `ItemCardSchema`.
- */
-function ItemCardFields({
-  control,
-  categories,
-  errors,
-}: {
-  control: Control<ItemCardValues>;
-  categories: ItemCategory[];
-  errors: { name?: { message?: string } };
-}) {
-  return (
-    <>
-      <Controller
-        control={control}
-        name="name"
-        render={({ field }) => (
-          <TextField
-            fullWidth
-            isInvalid={!!errors.name}
-            name={field.name}
-            onBlur={field.onBlur}
-            onChange={field.onChange}
-            value={field.value}
-          >
-            <Label>Nombre</Label>
-            <Input placeholder="Filtro de aceite motor" />
-            {errors.name ? <FieldError>{errors.name.message}</FieldError> : null}
-          </TextField>
-        )}
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="type"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              name={field.name}
-              value={field.value}
-              onChange={(value) => {
-                if (value) field.onChange(value);
-              }}
-            >
-              <Label>Clasificación</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {ITEM_TYPES.map((type) => (
-                    <ListBox.Item
-                      key={type}
-                      id={type}
-                      textValue={ITEM_TYPE_LABELS[type]}
-                    >
-                      {ITEM_TYPE_LABELS[type]}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="unit"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              name={field.name}
-              value={field.value}
-              onChange={(value) => {
-                if (value) field.onChange(value);
-              }}
-            >
-              <Label>Unidad</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {UNITS_OF_MEASURE.map((unit) => (
-                    <ListBox.Item key={unit} id={unit} textValue={UNIT_LABELS[unit]}>
-                      {UNIT_LABELS[unit]}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          )}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="categoryId"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              name={field.name}
-              // El `Select` no maneja `''` como selección: se usa un centinela
-              // y se traduce a "sin categoría" al guardar.
-              value={field.value || NO_CATEGORY}
-              onChange={(value) => {
-                field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
-              }}
-            >
-              <Label>Categoría</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  <ListBox.Item id={NO_CATEGORY} textValue="Sin categoría">
-                    Sin categoría
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                  {categories.map((category) => (
-                    <ListBox.Item
-                      key={category.id}
-                      id={category.id}
-                      textValue={category.name}
-                    >
-                      {category.name}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="partNumber"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Nº de parte (opcional)</Label>
-              <Input placeholder="1R-0750" />
-            </TextField>
-          )}
-        />
-      </div>
-
-      <Controller
-        control={control}
-        name="defaultSupplier"
-        render={({ field }) => (
-          <TextField
-            fullWidth
-            name={field.name}
-            onBlur={field.onBlur}
-            onChange={field.onChange}
-            value={field.value}
-          >
-            <Label>Proveedor habitual (opcional)</Label>
-            <Input placeholder="Comercial Iquique Ltda." />
-          </TextField>
-        )}
-      />
-
-      <Controller
-        control={control}
-        name="isCritical"
-        render={({ field }) => (
-          <Switch isSelected={field.value} onChange={field.onChange}>
-            Crítico: su falta detiene la máquina
-          </Switch>
-        )}
-      />
-    </>
-  );
-}
-
-// --- Alta de ítem ----------------------------------------------------------
-
-const EMPTY_ITEM: ItemFormValues = {
-  sku: '',
-  name: '',
-  description: '',
-  unit: 'UNIT',
-  type: 'SUPPLY',
-  categoryId: '',
-  partNumber: '',
-  defaultSupplier: '',
-  isCritical: false,
-  initialQuantity: '0',
-};
-
-function NewItemModal({
-  branchId,
-  branchName,
-  defaultType,
-}: {
-  branchId: string;
-  branchName: string;
-  defaultType: ItemType;
-}) {
-  const createItem = useCreateItem();
-  const { data: categories } = useCategories();
-  const {
-    control,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<ItemFormValues>({
-    resolver: zodResolver(ItemFormSchema),
-    defaultValues: { ...EMPTY_ITEM, type: defaultType },
-  });
-
-  return (
-    <Modal>
-      <Button>Nuevo ítem</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: ItemFormValues): void => {
-                createItem.mutate(toCreateItemPayload(values, branchId), {
-                  onSuccess: () => {
-                    reset({ ...EMPTY_ITEM, type: defaultType });
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Nuevo ítem
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="new-item-form"
-                      noValidate
-                      onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-                    >
-                      <Controller
-                        control={control}
-                        name="sku"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.sku}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>SKU</Label>
-                            <Input autoFocus placeholder="FIL-001" />
-                            {errors.sku ? (
-                              <FieldError>{errors.sku.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <ItemCardFields
-                        categories={categories ?? []}
-                        control={control as unknown as Control<ItemCardValues>}
-                        errors={errors}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="initialQuantity"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.initialQuantity}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Existencia inicial en {branchName}</Label>
-                            <Input inputMode="decimal" placeholder="0" />
-                            {errors.initialQuantity ? (
-                              <FieldError>
-                                {errors.initialQuantity.message}
-                              </FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <p className="text-xs text-muted-foreground">
-                        La existencia inicial queda registrada como una entrada por
-                        compra en {branchName}: el kardex parte explicando de dónde
-                        salió el saldo. El mínimo se fija después, con la acción
-                        «Mínimo» de la fila.
-                      </p>
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button
-                      form="new-item-form"
-                      isPending={createItem.isPending}
-                      type="submit"
-                    >
-                      {({ isPending }) =>
-                        isPending ? <Spinner color="current" size="sm" /> : 'Crear'
-                      }
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
-  );
-}
-
-// --- Edición de la ficha ---------------------------------------------------
-
-/**
- * Corrige la ficha, no el saldo. No ofrece SKU ni existencia: el SKU es la
- * referencia con la que el ítem aparece en el kardex histórico, y el saldo solo
- * se mueve con movimientos (`+`, `−`, traspaso o conteo). El backend rechaza
- * los dos campos, así que el formulario ni los muestra.
- */
-function EditItemModal({
-  item,
-  isOpen,
-  onOpenChange,
-}: {
-  item: InventoryItem;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const updateItem = useUpdateItem();
-  const { data: categories } = useCategories();
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ItemEditFormValues>({
-    resolver: zodResolver(ItemEditFormSchema),
-    defaultValues: toItemEditValues(item),
-  });
-
-  return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-lg">
-          {({ close }) => {
-            const onSubmit = (values: ItemEditFormValues): void => {
-              updateItem.mutate(
-                { id: item.id, input: toUpdateItemPayload(values) },
-                { onSuccess: () => close() },
-              );
-            };
-
-            return (
-              <>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Editar · {item.sku}
-                  </Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form
-                    className="flex flex-col gap-4"
-                    id="edit-item-form"
-                    noValidate
-                    onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-                  >
-                    <ItemCardFields
-                      categories={categories ?? []}
-                      control={control as unknown as Control<ItemCardValues>}
-                      errors={errors}
-                    />
-
-                    <Controller
-                      control={control}
-                      name="isActive"
-                      render={({ field }) => (
-                        <Switch isSelected={field.value} onChange={field.onChange}>
-                          Activo en los selectores
-                        </Switch>
-                      )}
-                    />
-
-                    <p className="text-xs text-muted-foreground">
-                      Darlo de baja lo saca de los listados y selectores sin
-                      borrar su kardex: los movimientos históricos lo siguen
-                      nombrando. El SKU y la existencia no se editan acá — la
-                      existencia se corrige con «Conteo».
-                    </p>
-                  </form>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onPress={close}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    form="edit-item-form"
-                    isPending={updateItem.isPending}
-                    type="submit"
-                  >
-                    {({ isPending }) =>
-                      isPending ? <Spinner color="current" size="sm" /> : 'Guardar'
-                    }
-                  </Button>
-                </Modal.Footer>
-              </>
-            );
-          }}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
-}
-
-// --- Traspaso --------------------------------------------------------------
-
-/**
- * Confirmación del traspaso. La cantidad viene del campo de la fila — un solo
- * lugar donde escribir cuánto, el mismo que gobierna `+` y `−` — y acá se
- * elige el destino y se confirma.
- *
- * Mostrar los dos saldos resultantes no es adorno: mover material entre faenas
- * es la operación más cara de deshacer (hay que traerlo de vuelta), y el error
- * típico es sacar de más de la bodega que justamente estaba al límite. Verlo
- * antes de apretar evita el viaje.
- */
-function TransferModal({
-  item,
-  branchId,
-  branchName,
-  branches,
-  quantity,
-  isOpen,
-  onOpenChange,
-}: {
-  item: InventoryItem;
-  branchId: string;
-  branchName: string;
-  branches: Branch[];
-  quantity: number;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const transfer = useTransferStock();
-  const others = branches.filter((branch) => branch.id !== branchId);
-  const [destination, setDestination] = useState(others[0]?.id ?? '');
-
-  const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const there = destination ? quantityAt(item, destination) : 0;
-  const destinationName =
-    others.find((branch) => branch.id === destination)?.name ?? '';
-
-  const remaining = here - quantity;
-  const notEnough = quantity > here;
-  const leavesBelowMinimum = !notEnough && minimum > 0 && remaining <= minimum;
-
-  return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-md">
-          {({ close }) => (
-            <>
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                  Confirmar traspaso
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <div className="flex flex-col gap-4">
-                  <p className="text-sm text-foreground">
-                    Mover{' '}
-                    <strong>
-                      {NUMBER.format(quantity)} {symbol}
-                    </strong>{' '}
-                    de {item.sku} · {item.name}.
-                  </p>
-
-                  <Select
-                    fullWidth
-                    value={destination}
-                    onChange={(value) => {
-                      if (value) setDestination(String(value));
-                    }}
-                  >
-                    <Label>Bodega de destino</Label>
-                    <Select.Trigger>
-                      <Select.Value />
-                      <Select.Indicator />
-                    </Select.Trigger>
-                    <Select.Popover>
-                      <ListBox>
-                        {others.map((branch) => (
-                          <ListBox.Item
-                            key={branch.id}
-                            id={branch.id}
-                            textValue={branch.name}
-                          >
-                            {branch.name}
-                            <ListBox.ItemIndicator />
-                          </ListBox.Item>
-                        ))}
-                      </ListBox>
-                    </Select.Popover>
-                  </Select>
-
-                  {/* Cómo queda cada bodega después. El traspaso no crea ni
-                      destruye material: lo que sale de una entra en la otra. */}
-                  <div className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">{branchName}</span>
-                      <span className="font-mono text-foreground">
-                        {NUMBER.format(here)} → {NUMBER.format(remaining)}{' '}
-                        {symbol}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">
-                        {destinationName || 'Destino'}
-                      </span>
-                      <span className="font-mono text-foreground">
-                        {NUMBER.format(there)} →{' '}
-                        {NUMBER.format(there + quantity)} {symbol}
-                      </span>
-                    </div>
-                  </div>
-
-                  {notEnough ? (
-                    <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
-                      En {branchName} hay {NUMBER.format(here)} {symbol}: no
-                      alcanza para mover {NUMBER.format(quantity)}.
-                    </p>
-                  ) : null}
-
-                  {leavesBelowMinimum ? (
-                    <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
-                      {branchName} queda en {NUMBER.format(remaining)} {symbol},
-                      en o bajo su mínimo de {NUMBER.format(minimum)}.
-                    </p>
-                  ) : null}
-                </div>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="secondary" onPress={close}>
-                  Cancelar
-                </Button>
-                <Button
-                  isDisabled={!destination || quantity <= 0 || notEnough}
-                  isPending={transfer.isPending}
-                  onPress={() =>
-                    transfer.mutate(
-                      {
-                        itemId: item.id,
-                        sourceBranchId: branchId,
-                        destinationBranchId: destination,
-                        quantity,
-                      },
-                      { onSuccess: () => close() },
-                    )
-                  }
-                >
-                  {({ isPending }) =>
-                    isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      'Confirmar traspaso'
-                    )
-                  }
-                </Button>
-              </Modal.Footer>
-            </>
-          )}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
-}
-
-// --- Mínimo de la bodega ---------------------------------------------------
-
-function MinimumModal({
-  item,
-  branchId,
-  branchName,
-  isOpen,
-  onOpenChange,
-}: {
-  item: InventoryItem;
-  branchId: string;
-  branchName: string;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const setMinimum = useSetMinimum();
-  const symbol = UNIT_SYMBOLS[item.unit];
-  const here = quantityAt(item, branchId);
-  const current = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<MinimumFormValues>({
-    resolver: zodResolver(MinimumFormSchema),
-    values: { minimumQuantity: String(current) },
-  });
-
-  // Se mira lo escrito para decir, antes de guardar, si ese umbral deja el
-  // ítem alertando hoy mismo. Un mínimo se fija contra el saldo real de la
-  // bodega, y ese saldo está a la vista dos líneas más arriba.
-  const typed = useWatch({ control, name: 'minimumQuantity' });
-  const nextMinimum = Number(typed);
-  const validMinimum = Number.isFinite(nextMinimum) && nextMinimum >= 0;
-  const willAlert = validMinimum && nextMinimum > 0 && here <= nextMinimum;
-
-  return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-md">
-          {({ close }) => {
-            const onSubmit = (values: MinimumFormValues): void => {
-              setMinimum.mutate(
-                {
-                  itemId: item.id,
-                  branchId,
-                  minimumQuantity: Number(values.minimumQuantity),
-                },
-                { onSuccess: () => close() },
-              );
-            };
-
-            return (
-              <>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Mínimo en {branchName}
-                  </Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form
-                    className="flex flex-col gap-4"
-                    id={`minimum-form-${item.id}`}
-                    noValidate
-                    onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-                  >
-                    <p className="text-sm text-foreground">
-                      {item.sku} · {item.name}
-                    </p>
-
-                    {/* Los dos números contra los que se decide el umbral. Sin
-                        ellos hay que cerrar el modal para ir a mirar la fila. */}
-                    <div className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Stock en {branchName}
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {NUMBER.format(here)} {symbol}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Mínimo vigente
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {current > 0
-                            ? `${NUMBER.format(current)} ${symbol}`
-                            : 'sin umbral'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <Controller
-                      control={control}
-                      name="minimumQuantity"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.minimumQuantity}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>
-                            Stock mínimo ({UNIT_SYMBOLS[item.unit]})
-                          </Label>
-                          <Input autoFocus inputMode="decimal" />
-                          {errors.minimumQuantity ? (
-                            <FieldError>
-                              {errors.minimumQuantity.message}
-                            </FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-
-                    {willAlert ? (
-                      <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
-                        Con {NUMBER.format(nextMinimum)} {symbol} el ítem queda
-                        marcado bajo mínimo de inmediato: en {branchName} hay{' '}
-                        {NUMBER.format(here)}.
-                      </p>
-                    ) : null}
-
-                    <p className="text-xs text-muted-foreground">
-                      El umbral aplica solo a esta bodega — el de la empresa y
-                      el de una sucursal no son la misma magnitud. En{' '}
-                      <strong>0</strong> esta bodega deja de alertar por este
-                      ítem.
-                    </p>
-                  </form>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onPress={close}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    form={`minimum-form-${item.id}`}
-                    isPending={setMinimum.isPending}
-                    type="submit"
-                  >
-                    {({ isPending }) =>
-                      isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        'Guardar'
-                      )
-                    }
-                  </Button>
-                </Modal.Footer>
-              </>
-            );
-          }}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
-}
-
-// --- Conteo físico ---------------------------------------------------------
-
-function AdjustModal({
-  item,
-  branchId,
-  branchName,
-  isOpen,
-  onOpenChange,
-}: {
-  item: InventoryItem;
-  branchId: string;
-  branchName: string;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const adjust = useAdjustStock();
-  const here = quantityAt(item, branchId);
-  const {
-    control,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<AdjustFormValues>({
-    resolver: zodResolver(AdjustFormSchema),
-    values: { countedQuantity: String(here), notes: '' },
-  });
-
-  const counted = Number(watch('countedQuantity'));
-  const difference = Number.isFinite(counted) ? counted - here : 0;
-
-  return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-md">
-          {({ close }) => {
-            const onSubmit = (values: AdjustFormValues): void => {
-              adjust.mutate(
-                {
-                  id: item.id,
-                  input: {
-                    branchId,
-                    countedQuantity: Number(values.countedQuantity),
-                    ...(values.notes.trim()
-                      ? { notes: values.notes.trim() }
-                      : {}),
-                  },
-                },
-                { onSuccess: () => close() },
-              );
-            };
-
-            return (
-              <>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Conteo físico · {item.sku}
-                  </Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form
-                    className="flex flex-col gap-4"
-                    id={`adjust-form-${item.id}`}
-                    noValidate
-                    onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-                  >
-                    <p className="text-sm text-muted-foreground">
-                      El sistema tiene{' '}
-                      <strong>
-                        {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
-                      </strong>{' '}
-                      en {branchName}. Ingresa lo que contaste y se registra la
-                      diferencia.
-                    </p>
-
-                    <Controller
-                      control={control}
-                      name="countedQuantity"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.countedQuantity}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>Cantidad contada</Label>
-                          <Input autoFocus inputMode="decimal" />
-                          {errors.countedQuantity ? (
-                            <FieldError>
-                              {errors.countedQuantity.message}
-                            </FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-
-                    {difference !== 0 ? (
-                      <Chip
-                        color={difference > 0 ? 'success' : 'warning'}
-                        size="sm"
-                        variant="soft"
-                      >
-                        Diferencia: {difference > 0 ? '+' : ''}
-                        {NUMBER.format(difference)} {UNIT_SYMBOLS[item.unit]}
-                      </Chip>
-                    ) : null}
-                  </form>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onPress={close}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    form={`adjust-form-${item.id}`}
-                    isPending={adjust.isPending}
-                    type="submit"
-                  >
-                    {({ isPending }) =>
-                      isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        'Ajustar'
-                      )
-                    }
-                  </Button>
-                </Modal.Footer>
-              </>
-            );
-          }}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
-}
-
-// --- Baja ------------------------------------------------------------------
-
-function DeleteItemDialog({
-  item,
-  isOpen,
-  onOpenChange,
-}: {
-  item: InventoryItem;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const deleteItem = useDeleteItem();
-
-  return (
-    <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialog.Container>
-        <AlertDialog.Dialog className="sm:max-w-105">
-          {({ close }) => (
-            <>
-              <AlertDialog.Header>
-                <AlertDialog.Heading className="font-display text-lg font-semibold">
-                  Eliminar {item.sku}
-                </AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                <p className="text-sm text-muted-foreground">
-                  Si el ítem ya tiene movimientos, el backend lo impide para no
-                  perder su kardex y sugiere darlo de baja en su lugar.
-                </p>
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button variant="tertiary" onPress={close}>
-                  Cancelar
-                </Button>
-                <Button
-                  variant="danger"
-                  isPending={deleteItem.isPending}
-                  onPress={() =>
-                    deleteItem.mutate(item.id, { onSuccess: () => close() })
-                  }
-                >
-                  {({ isPending }) =>
-                    isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      'Eliminar'
-                    )
-                  }
-                </Button>
-              </AlertDialog.Footer>
-            </>
-          )}
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
-  );
-}
-
-// --- Fila ------------------------------------------------------------------
-
-type RowAction = 'transfer' | 'minimum' | 'adjust' | 'edit' | 'delete';
-
-/**
- * La acción abierta desde una fila. Vive en la tabla y no en la fila porque los
- * modales tienen que montarse FUERA de `<Table>`: dentro del cuerpo, el
- * colector de react-aria solo conserva filas y celdas, y se come en silencio
- * todo lo demás — los campos y los botones del modal desaparecían aunque el
- * título y los textos sí salieran. Se detectó con un test de render que vuelca
- * el DOM del diálogo.
- */
-interface ActiveRowAction {
-  item: InventoryItem;
-  action: RowAction;
-  /** Cantidad escrita en la fila; solo la usa el traspaso. */
-  quantity: number;
-}
-
-/**
- * Dónde está lo que falta acá. Se nombran las bodegas en vez de decir "en otra
- * sucursal": el bodeguero tiene que saber a cuál pedirle, y con dos sucursales
- * "otra" ya obliga a adivinar.
- */
-function elsewhereLabel(item: InventoryItem, branchId: string): string {
-  const names = item.stocks
-    .filter((stock) => stock.branchId !== branchId && stock.quantity > 0)
-    .map((stock) => stock.branch.name);
-  if (names.length === 0) return 'Sin stock';
-  return `En ${names.join(' y ')}`;
-}
-
 function ItemRow({
   item,
   branchId,
-  branches,
   canWrite,
   canIssue,
-  isAdmin,
-  onAction,
+  onOpen,
 }: {
   item: InventoryItem;
   branchId: string;
-  branches: Branch[];
   canWrite: boolean;
-  /** Solo las bodegas de faena consumen material. Ver `InventarioView`. */
   canIssue: boolean;
-  isAdmin: boolean;
-  onAction: (action: RowAction, quantity: number) => void;
+  onOpen: () => void;
 }) {
   const [amount, setAmount] = useState('');
   const createMovement = useCreateMovement();
 
   const here = quantityAt(item, branchId);
-  const total = totalQuantity(item);
   const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
-  const state = availability(here, total);
+  const state = availability(here, totalQuantity(item));
   const belowMinimum = isBelowMinimumAt(item, branchId);
 
   const quantity = Number(amount);
@@ -1140,12 +89,11 @@ function ItemRow({
         input: {
           itemId: item.id,
           branchId,
-          direction,
-          // El motivo no se adivina: es el que dice el botón. Entrar material es
-          // una recepción; sacarlo en faena es consumo de mantención. Los demás
-          // motivos (devolución, trabajo extraordinario) se registran desde el
-          // kardex, donde se elige explícitamente.
+          // El motivo no se adivina: es el que dice el botón. Entrar material
+          // es una recepción; sacarlo donde hay equipos es consumo de
+          // mantención. Los demás motivos se eligen en «Registrar movimiento».
           reason: direction === 'IN' ? 'PURCHASE' : 'INTERVENTION',
+          direction,
           quantity,
         },
         item,
@@ -1155,295 +103,198 @@ function ItemRow({
   }
 
   return (
-    <>
-      <Table.Row>
-        <Table.Cell>
-          <Link
-            className="font-mono text-sm font-medium text-(--accent) hover:underline"
-            to={`/inventario/${item.id}`}
-          >
-            {item.sku}
-          </Link>
-        </Table.Cell>
-        <Table.Cell>
-          <div className="flex flex-col">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-foreground">{item.name}</span>
-              {/* Su falta detiene la máquina: se marca aunque el saldo todavía
-                  no cruce el mínimo. */}
-              {item.isCritical ? (
-                <Chip color="danger" size="sm" variant="soft">
-                  Crítico
-                </Chip>
-              ) : null}
-            </div>
-            {item.partNumber ? (
-              <span className="font-mono text-xs text-muted-foreground">
-                {item.partNumber}
-              </span>
-            ) : null}
-          </div>
-        </Table.Cell>
-        <Table.Cell className="text-sm text-muted-foreground">
-          {item.category?.name ?? 'Sin categoría'}
-        </Table.Cell>
-        <Table.Cell
-          className={`font-mono text-sm ${
-            belowMinimum ? 'font-semibold text-danger' : 'text-foreground'
-          }`}
+    <Table.Row>
+      <Table.Cell>
+        <Link
+          className="font-mono text-sm font-medium text-(--accent) hover:underline"
+          to={`/inventario/${item.id}`}
         >
-          {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
-        </Table.Cell>
-        <Table.Cell className="font-mono text-sm text-muted-foreground">
-          {NUMBER.format(total)}
-        </Table.Cell>
-        <Table.Cell className="font-mono text-sm text-muted-foreground">
-          {minimum > 0 ? NUMBER.format(minimum) : '—'}
-        </Table.Cell>
-        <Table.Cell>
+          {item.sku}
+        </Link>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex flex-col">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip color={AVAILABILITY_COLORS[state]} size="sm" variant="soft">
-              {state === 'en-bodega'
-                ? 'En esta bodega'
-                : elsewhereLabel(item, branchId)}
-            </Chip>
-            {/* Reponer y no tener son cosas distintas: el ítem puede estar
-                disponible hoy y aun así haber cruzado el mínimo de la bodega.
-                Va en rojo porque es lo único de la fila que exige una acción
-                — en ámbar se leía como un matiz del "En esta bodega" verde. */}
-            {state === 'en-bodega' && belowMinimum ? (
+            <span className="text-foreground">{item.name}</span>
+            {/* Su falta detiene la máquina: se marca aunque el saldo todavía
+                no cruce el mínimo. */}
+            {item.isCritical ? (
               <Chip color="danger" size="sm" variant="soft">
-                Bajo mínimo
+                Crítico
               </Chip>
             ) : null}
           </div>
-        </Table.Cell>
-        <Table.Cell>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {canWrite ? (
-              <>
-                <input
-                  aria-label={`Cantidad para ${item.sku}`}
-                  className="h-8 w-16 rounded-md border border-border bg-transparent px-2 text-right font-mono text-sm text-foreground"
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                />
-                <Button
-                  aria-label={`Registrar recepción de ${item.sku}`}
-                  isDisabled={!validAmount || createMovement.isPending}
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => move('IN')}
-                >
-                  +
-                </Button>
-                <Button
-                  aria-label={`Registrar consumo de ${item.sku}`}
-                  isDisabled={
-                    !canIssue || !validAmount || createMovement.isPending
-                  }
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => move('OUT')}
-                >
-                  −
-                </Button>
-                {branches.length > 1 ? (
-                  <button
-                    className="text-sm text-(--accent) hover:underline disabled:text-muted-foreground disabled:no-underline"
-                    disabled={!validAmount}
-                    type="button"
-                    onClick={() => onAction('transfer', quantity)}
-                  >
-                    Traspasar
-                  </button>
-                ) : null}
-                <button
-                  className="text-sm text-muted-foreground hover:underline"
-                  type="button"
-                  onClick={() => onAction('minimum', quantity)}
-                >
-                  Mínimo
-                </button>
-              </>
-            ) : null}
-            {isAdmin ? (
-              <>
-                <button
-                  className="text-sm text-muted-foreground hover:underline"
-                  type="button"
-                  onClick={() => onAction('adjust', quantity)}
-                >
-                  Conteo
-                </button>
-                <button
-                  className="text-sm text-muted-foreground hover:underline"
-                  type="button"
-                  onClick={() => onAction('edit', quantity)}
-                >
-                  Editar
-                </button>
-                <button
-                  className="text-sm text-danger hover:underline"
-                  type="button"
-                  onClick={() => onAction('delete', quantity)}
-                >
-                  Eliminar
-                </button>
-              </>
-            ) : null}
-          </div>
-        </Table.Cell>
-      </Table.Row>
-    </>
+          {item.partNumber ? (
+            <span className="font-mono text-xs text-muted-foreground">
+              {item.partNumber}
+            </span>
+          ) : null}
+        </div>
+      </Table.Cell>
+      <Table.Cell className="text-sm text-muted-foreground">
+        {item.category?.name ?? 'Sin categoría'}
+      </Table.Cell>
+      <Table.Cell
+        className={`font-mono text-sm ${
+          belowMinimum ? 'font-semibold text-danger' : 'text-foreground'
+        }`}
+      >
+        {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
+      </Table.Cell>
+      <Table.Cell className="font-mono text-sm text-muted-foreground">
+        {NUMBER.format(totalQuantity(item))}
+      </Table.Cell>
+      <Table.Cell className="font-mono text-sm text-muted-foreground">
+        {minimum > 0 ? NUMBER.format(minimum) : '—'}
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Chip color={AVAILABILITY_COLORS[state]} size="sm" variant="soft">
+            {state === 'en-bodega'
+              ? 'En esta bodega'
+              : elsewhereLabel(item, branchId)}
+          </Chip>
+          {/* Reponer y no tener son cosas distintas: el ítem puede estar
+              disponible hoy y aun así haber cruzado el mínimo de la bodega.
+              Va en rojo porque es lo único de la fila que exige una acción. */}
+          {state === 'en-bodega' && belowMinimum ? (
+            <Chip color="danger" size="sm" variant="soft">
+              Bajo mínimo
+            </Chip>
+          ) : null}
+        </div>
+      </Table.Cell>
+      <Table.Cell>
+        {/* El atajo del escritorio: el bodeguero frente al PC escribe una
+            cantidad y aprieta dos veces. Todo lo demás — motivo distinto,
+            traspaso, mínimo, conteo, ficha — vive en «Acciones», que es el
+            mismo panel que se abre en teléfono. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {canWrite ? (
+            <>
+              <input
+                aria-label={`Cantidad para ${item.sku}`}
+                className="h-8 w-16 rounded-md border border-border bg-transparent px-2 text-right font-mono text-sm text-foreground"
+                inputMode="decimal"
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0"
+                value={amount}
+              />
+              <Button
+                aria-label={`Registrar recepción de ${item.sku}`}
+                isDisabled={!validAmount || createMovement.isPending}
+                onPress={() => move('IN')}
+                size="sm"
+                variant="secondary"
+              >
+                +
+              </Button>
+              <Button
+                aria-label={`Registrar consumo de ${item.sku}`}
+                isDisabled={
+                  !canIssue || !validAmount || createMovement.isPending
+                }
+                onPress={() => move('OUT')}
+                size="sm"
+                variant="secondary"
+              >
+                −
+              </Button>
+            </>
+          ) : null}
+          <Button onPress={onOpen} size="sm" variant="secondary">
+            {canWrite ? 'Acciones' : 'Ver'}
+          </Button>
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
-/**
- * Los modales de la fila, montados fuera de `<Table>`. Se renderiza uno solo a
- * la vez: la acción abierta es de la tabla, no de la fila.
- */
-function RowActionModals({
-  active,
-  branchId,
-  branchName,
-  branches,
-  onClose,
-}: {
-  active: ActiveRowAction;
-  branchId: string;
-  branchName: string;
-  branches: Branch[];
-  onClose: () => void;
-}) {
-  const close = (open: boolean): void => {
-    if (!open) onClose();
-  };
+// --- Listado ---------------------------------------------------------------
 
-  switch (active.action) {
-    case 'transfer':
-      return (
-        <TransferModal
-          branchId={branchId}
-          branchName={branchName}
-          branches={branches}
-          isOpen
-          item={active.item}
-          quantity={active.quantity}
-          onOpenChange={close}
-        />
-      );
-    case 'minimum':
-      return (
-        <MinimumModal
-          branchId={branchId}
-          branchName={branchName}
-          isOpen
-          item={active.item}
-          onOpenChange={close}
-        />
-      );
-    case 'adjust':
-      return (
-        <AdjustModal
-          branchId={branchId}
-          branchName={branchName}
-          isOpen
-          item={active.item}
-          onOpenChange={close}
-        />
-      );
-    case 'edit':
-      return <EditItemModal isOpen item={active.item} onOpenChange={close} />;
-    case 'delete':
-      return (
-        <DeleteItemDialog isOpen item={active.item} onOpenChange={close} />
-      );
-  }
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+      <p className="text-sm font-medium text-foreground">
+        No hay ítems que coincidan
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Ajusta la búsqueda o el filtro, o crea un ítem nuevo.
+      </p>
+    </div>
+  );
 }
 
-// --- Tabla -----------------------------------------------------------------
-
-function ItemsTable(props: {
+function ItemsList({
+  items,
+  branchId,
+  canWrite,
+  canIssue,
+  onOpen,
+}: {
   items: InventoryItem[];
   branchId: string;
-  branchName: string;
-  branches: Branch[];
   canWrite: boolean;
   canIssue: boolean;
-  isAdmin: boolean;
+  onOpen: (item: InventoryItem) => void;
 }) {
-  // El estado vive acá, antes del corte por lista vacía: los hooks no pueden
-  // quedar detrás de un `return` temprano.
-  const [active, setActive] = useState<ActiveRowAction | null>(null);
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
-  if (props.items.length === 0) {
+  if (items.length === 0) return <EmptyState />;
+
+  // Tarjetas en teléfono Y en tablet; la tabla aparece recién en escritorio.
+  // Es el corte que dibujan los tres artboards del equipo: a 834 px de ancho
+  // una tabla de ocho columnas todavía obliga a desplazarse en horizontal para
+  // leer una fila.
+  if (!isDesktop) {
     return (
-      <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-        <p className="text-sm font-medium text-foreground">
-          No hay ítems que coincidan
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Ajusta los filtros o cambia de sucursal.
-        </p>
+      <div className="flex flex-col gap-2.5">
+        {items.map((item) => (
+          <ItemCard
+            branchId={branchId}
+            item={item}
+            key={item.id}
+            onOpen={() => onOpen(item)}
+          />
+        ))}
       </div>
     );
   }
 
   return (
-    <>
-      <Table variant="secondary">
-        <Table.ScrollContainer>
-          <Table.Content aria-label="Inventario" className="min-w-270">
-            <Table.Header>
-              <Table.Column isRowHeader>SKU</Table.Column>
-              <Table.Column>Nombre</Table.Column>
-              <Table.Column>Categoría</Table.Column>
-              <Table.Column>Stock acá</Table.Column>
-              <Table.Column>Total empresa</Table.Column>
-              <Table.Column>Mínimo</Table.Column>
-              <Table.Column>Estado</Table.Column>
-              <Table.Column>Acciones</Table.Column>
-            </Table.Header>
-            <Table.Body>
-              {props.items.map((item) => (
-                <ItemRow
-                  key={item.id}
-                  branchId={props.branchId}
-                  branches={props.branches}
-                  canIssue={props.canIssue}
-                  canWrite={props.canWrite}
-                  isAdmin={props.isAdmin}
-                  item={item}
-                  onAction={(action, quantity) =>
-                    setActive({ item, action, quantity })
-                  }
-                />
-              ))}
-            </Table.Body>
-          </Table.Content>
-        </Table.ScrollContainer>
-      </Table>
-
-      {active ? (
-        <RowActionModals
-          active={active}
-          branchId={props.branchId}
-          branchName={props.branchName}
-          branches={props.branches}
-          onClose={() => setActive(null)}
-        />
-      ) : null}
-    </>
+    <Table variant="secondary">
+      <Table.ScrollContainer>
+        <Table.Content aria-label="Inventario" className="min-w-240">
+          <Table.Header>
+            <Table.Column isRowHeader>SKU</Table.Column>
+            <Table.Column>Nombre</Table.Column>
+            <Table.Column>Categoría</Table.Column>
+            <Table.Column>Stock acá</Table.Column>
+            <Table.Column>Total empresa</Table.Column>
+            <Table.Column>Mínimo</Table.Column>
+            <Table.Column>Estado</Table.Column>
+            <Table.Column>Acciones</Table.Column>
+          </Table.Header>
+          <Table.Body>
+            {items.map((item) => (
+              <ItemRow
+                branchId={branchId}
+                canIssue={canIssue}
+                canWrite={canWrite}
+                item={item}
+                key={item.id}
+                onOpen={() => onOpen(item)}
+              />
+            ))}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
   );
 }
 
 // --- Vista -----------------------------------------------------------------
-
-/** Centinela del filtro: "todas" no es un id de categoría. */
-const ALL_CATEGORIES = '__all__';
 
 export function InventarioView() {
   const { user } = useCurrentUser();
@@ -1456,7 +307,11 @@ export function InventarioView() {
   const [tab, setTab] = useState<ItemType>('SUPPLY');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
-  const [onlyBelowMinimum, setOnlyBelowMinimum] = useState(false);
+  const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
+
+  const [openItem, setOpenItem] = useState<InventoryItem | null>(null);
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
   const { data: categories } = useCategories();
@@ -1479,15 +334,19 @@ export function InventarioView() {
     ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
   });
 
-  const items = useMemo(() => {
-    const all = data ?? [];
-    if (!onlyBelowMinimum) return all;
-    return all.filter((item) => isBelowMinimumAt(item, branchId));
-  }, [data, onlyBelowMinimum, branchId]);
+  const all = useMemo(() => data ?? [], [data]);
 
   const belowMinimumCount = useMemo(
-    () => (data ?? []).filter((item) => isBelowMinimumAt(item, branchId)).length,
-    [data, branchId],
+    () => all.filter((item) => isBelowMinimumAt(item, branchId)).length,
+    [all, branchId],
+  );
+
+  const items = useMemo(
+    () =>
+      stockFilter === 'bajo'
+        ? all.filter((item) => isBelowMinimumAt(item, branchId))
+        : all,
+    [all, stockFilter, branchId],
   );
 
   // El consumo se registra donde operan las máquinas. Se deriva de si la
@@ -1499,13 +358,11 @@ export function InventarioView() {
   );
   const canIssue = canWrite && (branchEquipment?.length ?? 0) > 0;
 
-  const tableProps = {
-    branchId,
-    branchName,
-    branches: branches ?? [],
-    canWrite,
-    canIssue,
-    isAdmin,
+  // La ficha se abre desde el panel de acciones: se cierra uno y se abre el
+  // otro para no apilar dos modales.
+  const openEdit = (item: InventoryItem): void => {
+    setOpenItem(null);
+    setEditItem(item);
   };
 
   return (
@@ -1519,29 +376,40 @@ export function InventarioView() {
             Inventario
           </h1>
           <p className="text-sm text-muted-foreground">
-            Suministros y repuestos por bodega, con su mínimo de reposición y el
-            movimiento de cada salida.
+            Existencias de suministros y repuestos en{' '}
+            <strong className="font-semibold text-foreground">
+              {branchName}
+            </strong>
+            , con su mínimo de reposición y el movimiento de cada salida.
           </p>
         </div>
         {isAdmin && branchId ? (
-          <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 sm:flex">
             <CategoriesModal />
-            <NewItemModal
-              branchId={branchId}
-              branchName={branchName}
-              defaultType={tab}
-            />
+            <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
           </div>
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
+      <Segmented
+        label="Tipo de ítem"
+        onChange={setTab}
+        options={[
+          { id: 'SUPPLY', label: 'Suministros' },
+          { id: 'PART', label: 'Repuestos' },
+        ]}
+        value={tab}
+      />
+
+      {/* Filtros. En teléfono se apilan a ancho completo; desde `sm` van en
+          fila. El selector de sucursal vive acá hasta que T12 lo suba a la
+          barra superior del layout, que es donde lo pone el diseño. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select
-          className="w-full sm:w-56"
-          value={branchId}
           onChange={(value) => {
             if (value) setSelectedBranchId(String(value));
           }}
+          value={branchId}
         >
           <Label>Sucursal</Label>
           <Select.Trigger>
@@ -1550,10 +418,10 @@ export function InventarioView() {
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              {(branches ?? []).map((branch) => (
+              {(branches ?? []).map((branch: Branch) => (
                 <ListBox.Item
-                  key={branch.id}
                   id={branch.id}
+                  key={branch.id}
                   textValue={branch.name}
                 >
                   {branch.name}
@@ -1566,20 +434,18 @@ export function InventarioView() {
 
         <TextField
           aria-label="Buscar ítem"
-          className="w-full sm:w-64"
-          value={search}
           onChange={setSearch}
+          value={search}
         >
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
 
         <Select
-          className="w-full sm:w-56"
-          value={categoryId}
           onChange={(value) => {
             if (value) setCategoryId(String(value));
           }}
+          value={categoryId}
         >
           <Label>Categoría</Label>
           <Select.Trigger>
@@ -1594,8 +460,8 @@ export function InventarioView() {
               </ListBox.Item>
               {(categories ?? []).map((category) => (
                 <ListBox.Item
-                  key={category.id}
                   id={category.id}
+                  key={category.id}
                   textValue={category.name}
                 >
                   {category.name}
@@ -1606,26 +472,40 @@ export function InventarioView() {
           </Select.Popover>
         </Select>
 
-        <Switch
-          className="pb-2.5"
-          isSelected={onlyBelowMinimum}
-          onChange={setOnlyBelowMinimum}
-        >
-          Solo bajo mínimo
-        </Switch>
-
-        {canWrite && branchId && !canIssue ? (
-          <Chip className="mb-2.5" size="sm" variant="soft">
-            {branchName} no tiene equipos asignados: solo recibe material
-          </Chip>
-        ) : null}
-
-        {belowMinimumCount > 0 ? (
-          <Chip className="mb-2.5" color="danger" size="sm" variant="soft">
-            {belowMinimumCount} bajo el mínimo en {branchName}
-          </Chip>
-        ) : null}
+        {/* Con el conteo en la propia pestaña no hace falta un chip aparte
+            diciendo cuántos hay bajo el mínimo: el filtro ya lo dice. */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">
+            Existencias
+          </span>
+          <Segmented
+            label="Filtro de existencias"
+            onChange={setStockFilter}
+            options={[
+              { id: 'todos', label: `Todos · ${all.length}` },
+              { id: 'bajo', label: `Bajo mínimo · ${belowMinimumCount}` },
+            ]}
+            value={stockFilter}
+          />
+        </div>
       </div>
+
+      {/* En teléfono los botones de cabecera se van al final de los filtros,
+          a ancho completo: arriba compiten con el título y quedan chicos. */}
+      {isAdmin && branchId ? (
+        <div className="flex gap-2 sm:hidden">
+          <CategoriesModal />
+          <Button className="flex-1" onPress={() => setIsCreating(true)}>
+            Nuevo ítem
+          </Button>
+        </div>
+      ) : null}
+
+      {canWrite && branchId && !canIssue ? (
+        <Chip size="sm" variant="soft">
+          {branchName} no tiene equipos asignados: solo recibe material
+        </Chip>
+      ) : null}
 
       {isError ? (
         <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
@@ -1635,39 +515,52 @@ export function InventarioView() {
         </div>
       ) : null}
 
-      <Tabs
-        selectedKey={tab}
-        onSelectionChange={(key) => setTab(String(key) as ItemType)}
-      >
-        {/* Sin `<Tabs.Indicator />`: en esta versión de HeroUI revienta con
-            "<SharedElement> must be rendered inside a <SharedElementTransition>"
-            — el indicador usa `SelectionIndicator` de react-aria-components, que
-            necesita un provider que `Tabs.Root` no monta. Es decorativo; las
-            pestañas funcionan igual. Mismo problema en `MantenimientoView`. */}
-        <Tabs.List aria-label="Tipo de ítem">
-          <Tabs.Tab id="SUPPLY">Suministros</Tabs.Tab>
-          <Tabs.Tab id="PART">Repuestos</Tabs.Tab>
-        </Tabs.List>
+      {isPending ? (
+        <div className="flex justify-center py-16">
+          <Spinner color="accent" size="lg" />
+        </div>
+      ) : (
+        <ItemsList
+          branchId={branchId}
+          canIssue={canIssue}
+          canWrite={canWrite}
+          items={items}
+          onOpen={setOpenItem}
+        />
+      )}
 
-        <Tabs.Panel id="SUPPLY">
-          {isPending ? (
-            <div className="flex justify-center py-16">
-              <Spinner color="accent" size="lg" />
-            </div>
-          ) : (
-            <ItemsTable items={items} {...tableProps} />
-          )}
-        </Tabs.Panel>
-        <Tabs.Panel id="PART">
-          {isPending ? (
-            <div className="flex justify-center py-16">
-              <Spinner color="accent" size="lg" />
-            </div>
-          ) : (
-            <ItemsTable items={items} {...tableProps} />
-          )}
-        </Tabs.Panel>
-      </Tabs>
+      {openItem ? (
+        <ItemActionsModal
+          branchId={branchId}
+          branchName={branchName}
+          branches={branches ?? []}
+          canIssue={canIssue}
+          canWrite={canWrite}
+          isAdmin={isAdmin}
+          isOpen
+          item={openItem}
+          onEdit={() => openEdit(openItem)}
+          onOpenChange={(open) => !open && setOpenItem(null)}
+        />
+      ) : null}
+
+      {editItem ? (
+        <EditItemModal
+          isOpen
+          item={editItem}
+          onOpenChange={(open) => !open && setEditItem(null)}
+        />
+      ) : null}
+
+      {isCreating ? (
+        <NewItemModal
+          branchId={branchId}
+          branchName={branchName}
+          defaultType={tab}
+          isOpen
+          onOpenChange={setIsCreating}
+        />
+      ) : null}
     </div>
   );
 }
