@@ -213,6 +213,7 @@ export interface CreateItemInput {
   description?: string;
   unit: UnitOfMeasure;
   type: ItemType;
+  categoryId?: string;
   partNumber?: string;
   defaultSupplier?: string;
   isCritical?: boolean;
@@ -222,8 +223,12 @@ export interface CreateItemInput {
 
 export type UpdateItemInput = Omit<
   CreateItemInput,
-  'sku' | 'initialQuantity' | 'branchId'
-> & { isActive?: boolean };
+  'sku' | 'initialQuantity' | 'branchId' | 'categoryId'
+> & {
+  /** `null` desvincula la categoría; omitirlo la deja como está. */
+  categoryId?: string | null;
+  isActive?: boolean;
+};
 
 export interface CreateMovementInput {
   itemId: string;
@@ -252,16 +257,64 @@ const quantityField = (message: string) =>
       message: 'Ingresa un número válido',
     });
 
-export const ItemFormSchema = z.object({
-  sku: z.string().min(1, 'El SKU es obligatorio').max(20, 'Máximo 20 caracteres'),
+/**
+ * Ficha del ítem. `categoryId` es un string vacío cuando no se eligió
+ * categoría: el `Select` no sabe de `null`, y la conversión a "campo ausente"
+ * se hace al armar el payload.
+ */
+export const ItemCardSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio').max(80),
   description: z.string().max(240).or(z.literal('')),
   unit: z.enum(UNITS_OF_MEASURE),
   type: z.enum(ITEM_TYPES),
+  categoryId: z.string(),
   partNumber: z.string().max(60).or(z.literal('')),
+  defaultSupplier: z.string().max(120).or(z.literal('')),
+  isCritical: z.boolean(),
+});
+
+export type ItemCardValues = z.infer<typeof ItemCardSchema>;
+
+export const ItemFormSchema = ItemCardSchema.extend({
+  sku: z.string().min(1, 'El SKU es obligatorio').max(20, 'Máximo 20 caracteres'),
   initialQuantity: quantityField('La existencia inicial es obligatoria'),
 });
 export type ItemFormValues = z.infer<typeof ItemFormSchema>;
+
+/**
+ * Edición: sin `sku` ni existencia inicial. El SKU es la referencia con la que
+ * el ítem aparece en el kardex histórico — renombrarlo dejaría los reportes
+ * viejos hablando de otro código — y el saldo solo se mueve con movimientos.
+ * El backend rechaza ambos campos, así que el formulario ni los ofrece.
+ */
+export const ItemEditFormSchema = ItemCardSchema.extend({
+  /** Baja lógica: lo saca de los selectores sin perder su kardex. */
+  isActive: z.boolean(),
+});
+export type ItemEditFormValues = z.infer<typeof ItemEditFormSchema>;
+
+/**
+ * Campos de la ficha, ya limpios. Los textos vacíos se omiten en vez de
+ * mandarse como `''`: el backend corre con `forbidNonWhitelisted` y un string
+ * vacío solo deja basura en la base.
+ */
+function toCardPayload(values: z.infer<typeof ItemCardSchema>) {
+  return {
+    name: values.name.trim(),
+    ...(values.description.trim()
+      ? { description: values.description.trim() }
+      : {}),
+    unit: values.unit,
+    type: values.type,
+    ...(values.partNumber.trim()
+      ? { partNumber: values.partNumber.trim() }
+      : {}),
+    ...(values.defaultSupplier.trim()
+      ? { defaultSupplier: values.defaultSupplier.trim() }
+      : {}),
+    isCritical: values.isCritical,
+  };
+}
 
 export function toCreateItemPayload(
   values: ItemFormValues,
@@ -270,14 +323,37 @@ export function toCreateItemPayload(
   const initialQuantity = Number(values.initialQuantity);
   return {
     sku: values.sku.trim().toUpperCase(),
-    name: values.name.trim(),
-    // Se omite en vez de mandar `''`: el backend corre con
-    // `forbidNonWhitelisted` y un string vacío solo deja basura en la base.
-    ...(values.description.trim() ? { description: values.description.trim() } : {}),
-    unit: values.unit,
-    type: values.type,
-    ...(values.partNumber.trim() ? { partNumber: values.partNumber.trim() } : {}),
+    ...toCardPayload(values),
+    ...(values.categoryId ? { categoryId: values.categoryId } : {}),
     ...(initialQuantity > 0 ? { initialQuantity, branchId } : {}),
+  };
+}
+
+export function toUpdateItemPayload(
+  values: ItemEditFormValues,
+): UpdateItemInput {
+  return {
+    ...toCardPayload(values),
+    // Al editar, "sin categoría" viaja como `null` explícito y no omitido:
+    // omitirlo significa "no lo toques", y entonces un ítem mal clasificado se
+    // podría reclasificar pero nunca dejar sin categoría.
+    categoryId: values.categoryId || null,
+    isActive: values.isActive,
+  };
+}
+
+/** Carga la ficha guardada en el formulario de edición. */
+export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
+  return {
+    name: item.name,
+    description: item.description ?? '',
+    unit: item.unit,
+    type: item.type,
+    categoryId: item.categoryId ?? '',
+    partNumber: item.partNumber ?? '',
+    defaultSupplier: item.defaultSupplier ?? '',
+    isCritical: item.isCritical,
+    isActive: item.isActive,
   };
 }
 

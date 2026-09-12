@@ -5,6 +5,8 @@ import {
   isBelowMinimumAt,
   quantityAt,
   toCreateItemPayload,
+  toItemEditValues,
+  toUpdateItemPayload,
   totalQuantity,
   type InventoryItem,
 } from './inventory';
@@ -98,7 +100,10 @@ describe('toCreateItemPayload', () => {
         description: '',
         unit: 'UNIT',
         type: 'PART',
+        categoryId: '',
         partNumber: '',
+        defaultSupplier: '',
+        isCritical: false,
         initialQuantity: '0',
       },
       'b1',
@@ -108,6 +113,7 @@ describe('toCreateItemPayload', () => {
       name: 'Filtro',
       unit: 'UNIT',
       type: 'PART',
+      isCritical: false,
     });
   });
 
@@ -119,7 +125,10 @@ describe('toCreateItemPayload', () => {
         description: 'Serie C',
         unit: 'UNIT',
         type: 'PART',
+        categoryId: 'c1',
         partNumber: '1R-0750',
+        defaultSupplier: '  Comercial Iquique  ',
+        isCritical: true,
         initialQuantity: '40',
       },
       'b1',
@@ -127,8 +136,52 @@ describe('toCreateItemPayload', () => {
     expect(payload).toMatchObject({
       initialQuantity: 40,
       branchId: 'b1',
+      categoryId: 'c1',
       partNumber: '1R-0750',
+      defaultSupplier: 'Comercial Iquique',
+      isCritical: true,
       description: 'Serie C',
+    });
+  });
+});
+
+describe('toUpdateItemPayload', () => {
+  it('manda categoryId en null cuando se quitó la categoría', () => {
+    // Omitirlo significa "no lo toques" para el backend: si el formulario
+    // omitiera el campo vacío, un ítem mal clasificado se podría reclasificar
+    // pero nunca dejar sin categoría.
+    const payload = toUpdateItemPayload({
+      name: 'Filtro',
+      description: '',
+      unit: 'UNIT',
+      type: 'PART',
+      categoryId: '',
+      partNumber: '',
+      defaultSupplier: '',
+      isCritical: false,
+      isActive: true,
+    });
+
+    expect(payload.categoryId).toBeNull();
+  });
+
+  it('carga la ficha guardada sin perder los campos nulos', () => {
+    // `null` en la base es "" en el formulario: un `null` llegando a un input
+    // controlado lo vuelve no controlado y React se queja en consola.
+    const values = toItemEditValues({
+      ...item([]),
+      description: null,
+      partNumber: null,
+      defaultSupplier: null,
+      categoryId: null,
+      category: null,
+    });
+
+    expect(values).toMatchObject({
+      description: '',
+      partNumber: '',
+      defaultSupplier: '',
+      categoryId: '',
     });
   });
 });

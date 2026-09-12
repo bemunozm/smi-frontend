@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -93,9 +93,20 @@ const EN_OTRA = item({
 /** No hay en ninguna parte. */
 const SIN_STOCK = item({ id: 'i4', sku: 'BAT-001', name: 'Batería 12V' });
 
+const CATEGORIES = [
+  {
+    id: 'cat1',
+    name: 'Filtros',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    _count: { items: 1 },
+  },
+];
+
 function renderView(items: InventoryItem[]) {
   const qc = new QueryClient();
   qc.setQueryData(['branches', { isActive: true }], BRANCHES);
+  qc.setQueryData(['inventory', 'categories'], CATEGORIES);
   qc.setQueryData(
     ['inventory', 'items', { type: 'SUPPLY', isActive: true }],
     items,
@@ -147,6 +158,44 @@ describe('InventarioView', () => {
     // Quedan 2 y el mínimo es 5: se puede montar hoy, pero hay que reponer.
     expect(screen.getAllByText('En esta bodega')).toHaveLength(1);
     expect(screen.getAllByText('Bajo mínimo')).toHaveLength(1);
+  });
+
+  it('muestra la categoría del ítem y la deja vacía como «Sin categoría»', () => {
+    // Clasificar sirve para buscar: si la columna no dijera nada cuando falta,
+    // un ítem sin categoría parecería un error de carga en vez de un dato que
+    // todavía no se llenó.
+    renderView([
+      item({
+        id: 'i5',
+        sku: 'FIL-009',
+        name: 'Filtro separador',
+        categoryId: 'cat1',
+        category: { id: 'cat1', name: 'Filtros' },
+      }),
+      SIN_STOCK,
+    ]);
+
+    // Se busca dentro de la tabla: el selector de filtro también nombra las
+    // categorías, y contarlas todas juntas no diría nada de las filas.
+    const tabla = within(screen.getByLabelText('Inventario'));
+    expect(tabla.getAllByText('Filtros')).toHaveLength(1);
+    expect(tabla.getAllByText('Sin categoría')).toHaveLength(1);
+  });
+
+  it('marca los ítems críticos aunque tengan saldo', () => {
+    // Su falta detiene la máquina: el aviso no puede esperar a que el saldo
+    // cruce el mínimo.
+    renderView([item({ ...DISPONIBLE, isCritical: true })]);
+
+    expect(screen.getByText('Crítico')).toBeTruthy();
+  });
+
+  it('le ofrece al administrador editar la ficha', () => {
+    // El backend acepta PATCH desde T01, pero hasta ahora no había pantalla:
+    // un ítem mal cargado solo se podía borrar y volver a crear.
+    renderView([DISPONIBLE]);
+
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeTruthy();
   });
 
   it('cuenta los ítems bajo el mínimo de la bodega elegida', () => {

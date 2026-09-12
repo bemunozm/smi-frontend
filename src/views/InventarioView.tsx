@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, type Control } from 'react-hook-form';
 import {
   AlertDialog,
   Button,
@@ -19,7 +19,9 @@ import {
   TextField,
 } from '@heroui/react';
 
+import { CategoriesModal } from '../components/inventario/CategoriesModal';
 import { useBranches } from '../hooks/useBranches';
+import { useCategories } from '../hooks/useCategories';
 import { useEquipment } from '../hooks/useEquipment';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import {
@@ -30,14 +32,17 @@ import {
   useItems,
   useSetMinimum,
   useTransferStock,
+  useUpdateItem,
 } from '../hooks/useInventory';
 import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
 import type { Branch } from '../types/branch';
+import type { ItemCategory } from '../types/category';
 import {
   AdjustFormSchema,
   ITEM_TYPES,
   ITEM_TYPE_LABELS,
+  ItemEditFormSchema,
   ItemFormSchema,
   MinimumFormSchema,
   UNITS_OF_MEASURE,
@@ -47,9 +52,13 @@ import {
   quantityAt,
   stockAt,
   toCreateItemPayload,
+  toItemEditValues,
+  toUpdateItemPayload,
   totalQuantity,
   type AdjustFormValues,
   type InventoryItem,
+  type ItemCardValues,
+  type ItemEditFormValues,
   type ItemFormValues,
   type ItemType,
   type MinimumFormValues,
@@ -78,6 +87,211 @@ const AVAILABILITY_COLORS: Record<Availability, 'success' | 'warning' | 'danger'
     'sin-stock': 'danger',
   };
 
+// --- Ficha del ítem --------------------------------------------------------
+
+/** Opción del selector de categoría para "no clasificado". */
+const NO_CATEGORY = '__none__';
+
+/**
+ * Los campos que comparten el alta y la edición. Se escriben una sola vez
+ * porque son los mismos datos: lo único que cambia entre los dos formularios
+ * es lo que los rodea (SKU y existencia inicial al crear; baja lógica al
+ * editar).
+ *
+ * El `control` viene tipado con el esquema del formulario completo, que es más
+ * ancho que `ItemCardValues`. `Control` es invariante en su parámetro, así que
+ * el cast es inevitable; es seguro porque los nombres de campo que toca este
+ * componente existen en ambos esquemas — `ItemFormSchema` y
+ * `ItemEditFormSchema` extienden `ItemCardSchema`.
+ */
+function ItemCardFields({
+  control,
+  categories,
+  errors,
+}: {
+  control: Control<ItemCardValues>;
+  categories: ItemCategory[];
+  errors: { name?: { message?: string } };
+}) {
+  return (
+    <>
+      <Controller
+        control={control}
+        name="name"
+        render={({ field }) => (
+          <TextField
+            fullWidth
+            isInvalid={!!errors.name}
+            name={field.name}
+            onBlur={field.onBlur}
+            onChange={field.onChange}
+            value={field.value}
+          >
+            <Label>Nombre</Label>
+            <Input placeholder="Filtro de aceite motor" />
+            {errors.name ? <FieldError>{errors.name.message}</FieldError> : null}
+          </TextField>
+        )}
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Controller
+          control={control}
+          name="type"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              name={field.name}
+              value={field.value}
+              onChange={(value) => {
+                if (value) field.onChange(value);
+              }}
+            >
+              <Label>Clasificación</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {ITEM_TYPES.map((type) => (
+                    <ListBox.Item
+                      key={type}
+                      id={type}
+                      textValue={ITEM_TYPE_LABELS[type]}
+                    >
+                      {ITEM_TYPE_LABELS[type]}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="unit"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              name={field.name}
+              value={field.value}
+              onChange={(value) => {
+                if (value) field.onChange(value);
+              }}
+            >
+              <Label>Unidad</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {UNITS_OF_MEASURE.map((unit) => (
+                    <ListBox.Item key={unit} id={unit} textValue={UNIT_LABELS[unit]}>
+                      {UNIT_LABELS[unit]}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Controller
+          control={control}
+          name="categoryId"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              name={field.name}
+              // El `Select` no maneja `''` como selección: se usa un centinela
+              // y se traduce a "sin categoría" al guardar.
+              value={field.value || NO_CATEGORY}
+              onChange={(value) => {
+                field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
+              }}
+            >
+              <Label>Categoría</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  <ListBox.Item id={NO_CATEGORY} textValue="Sin categoría">
+                    Sin categoría
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                  {categories.map((category) => (
+                    <ListBox.Item
+                      key={category.id}
+                      id={category.id}
+                      textValue={category.name}
+                    >
+                      {category.name}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="partNumber"
+          render={({ field }) => (
+            <TextField
+              fullWidth
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            >
+              <Label>Nº de parte (opcional)</Label>
+              <Input placeholder="1R-0750" />
+            </TextField>
+          )}
+        />
+      </div>
+
+      <Controller
+        control={control}
+        name="defaultSupplier"
+        render={({ field }) => (
+          <TextField
+            fullWidth
+            name={field.name}
+            onBlur={field.onBlur}
+            onChange={field.onChange}
+            value={field.value}
+          >
+            <Label>Proveedor habitual (opcional)</Label>
+            <Input placeholder="Comercial Iquique Ltda." />
+          </TextField>
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="isCritical"
+        render={({ field }) => (
+          <Switch isSelected={field.value} onChange={field.onChange}>
+            Crítico: su falta detiene la máquina
+          </Switch>
+        )}
+      />
+    </>
+  );
+}
+
 // --- Alta de ítem ----------------------------------------------------------
 
 const EMPTY_ITEM: ItemFormValues = {
@@ -86,7 +300,10 @@ const EMPTY_ITEM: ItemFormValues = {
   description: '',
   unit: 'UNIT',
   type: 'SUPPLY',
+  categoryId: '',
   partNumber: '',
+  defaultSupplier: '',
+  isCritical: false,
   initialQuantity: '0',
 };
 
@@ -100,6 +317,7 @@ function NewItemModal({
   defaultType: ItemType;
 }) {
   const createItem = useCreateItem();
+  const { data: categories } = useCategories();
   const {
     control,
     handleSubmit,
@@ -141,138 +359,32 @@ function NewItemModal({
                       noValidate
                       onSubmit={(event) => void handleSubmit(onSubmit)(event)}
                     >
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="sku"
-                          render={({ field }) => (
-                            <TextField
-                              fullWidth
-                              isInvalid={!!errors.sku}
-                              name={field.name}
-                              onBlur={field.onBlur}
-                              onChange={field.onChange}
-                              value={field.value}
-                            >
-                              <Label>SKU</Label>
-                              <Input autoFocus placeholder="FIL-001" />
-                              {errors.sku ? (
-                                <FieldError>{errors.sku.message}</FieldError>
-                              ) : null}
-                            </TextField>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="partNumber"
-                          render={({ field }) => (
-                            <TextField
-                              fullWidth
-                              name={field.name}
-                              onBlur={field.onBlur}
-                              onChange={field.onChange}
-                              value={field.value}
-                            >
-                              <Label>Nº de parte (opcional)</Label>
-                              <Input placeholder="1R-0750" />
-                            </TextField>
-                          )}
-                        />
-                      </div>
-
                       <Controller
                         control={control}
-                        name="name"
+                        name="sku"
                         render={({ field }) => (
                           <TextField
                             fullWidth
-                            isInvalid={!!errors.name}
+                            isInvalid={!!errors.sku}
                             name={field.name}
                             onBlur={field.onBlur}
                             onChange={field.onChange}
                             value={field.value}
                           >
-                            <Label>Nombre</Label>
-                            <Input placeholder="Filtro de aceite motor" />
-                            {errors.name ? (
-                              <FieldError>{errors.name.message}</FieldError>
+                            <Label>SKU</Label>
+                            <Input autoFocus placeholder="FIL-001" />
+                            {errors.sku ? (
+                              <FieldError>{errors.sku.message}</FieldError>
                             ) : null}
                           </TextField>
                         )}
                       />
 
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="type"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Clasificación</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {ITEM_TYPES.map((type) => (
-                                    <ListBox.Item
-                                      key={type}
-                                      id={type}
-                                      textValue={ITEM_TYPE_LABELS[type]}
-                                    >
-                                      {ITEM_TYPE_LABELS[type]}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="unit"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Unidad</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {UNITS_OF_MEASURE.map((unit) => (
-                                    <ListBox.Item
-                                      key={unit}
-                                      id={unit}
-                                      textValue={UNIT_LABELS[unit]}
-                                    >
-                                      {UNIT_LABELS[unit]}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-                      </div>
+                      <ItemCardFields
+                        categories={categories ?? []}
+                        control={control as unknown as Control<ItemCardValues>}
+                        errors={errors}
+                      />
 
                       <Controller
                         control={control}
@@ -326,6 +438,108 @@ function NewItemModal({
         </Modal.Container>
       </Modal.Backdrop>
     </Modal>
+  );
+}
+
+// --- Edición de la ficha ---------------------------------------------------
+
+/**
+ * Corrige la ficha, no el saldo. No ofrece SKU ni existencia: el SKU es la
+ * referencia con la que el ítem aparece en el kardex histórico, y el saldo solo
+ * se mueve con movimientos (`+`, `−`, traspaso o conteo). El backend rechaza
+ * los dos campos, así que el formulario ni los muestra.
+ */
+function EditItemModal({
+  item,
+  isOpen,
+  onOpenChange,
+}: {
+  item: InventoryItem;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const updateItem = useUpdateItem();
+  const { data: categories } = useCategories();
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ItemEditFormValues>({
+    resolver: zodResolver(ItemEditFormSchema),
+    defaultValues: toItemEditValues(item),
+  });
+
+  return (
+    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-lg">
+          {({ close }) => {
+            const onSubmit = (values: ItemEditFormValues): void => {
+              updateItem.mutate(
+                { id: item.id, input: toUpdateItemPayload(values) },
+                { onSuccess: () => close() },
+              );
+            };
+
+            return (
+              <>
+                <Modal.CloseTrigger />
+                <Modal.Header>
+                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+                    Editar · {item.sku}
+                  </Modal.Heading>
+                </Modal.Header>
+                <Modal.Body>
+                  <form
+                    className="flex flex-col gap-4"
+                    id="edit-item-form"
+                    noValidate
+                    onSubmit={(event) => void handleSubmit(onSubmit)(event)}
+                  >
+                    <ItemCardFields
+                      categories={categories ?? []}
+                      control={control as unknown as Control<ItemCardValues>}
+                      errors={errors}
+                    />
+
+                    <Controller
+                      control={control}
+                      name="isActive"
+                      render={({ field }) => (
+                        <Switch isSelected={field.value} onChange={field.onChange}>
+                          Activo en los selectores
+                        </Switch>
+                      )}
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Darlo de baja lo saca de los listados y selectores sin
+                      borrar su kardex: los movimientos históricos lo siguen
+                      nombrando. El SKU y la existencia no se editan acá — la
+                      existencia se corrige con «Conteo».
+                    </p>
+                  </form>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="secondary" onPress={close}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    form="edit-item-form"
+                    isPending={updateItem.isPending}
+                    type="submit"
+                  >
+                    {({ isPending }) =>
+                      isPending ? <Spinner color="current" size="sm" /> : 'Guardar'
+                    }
+                  </Button>
+                </Modal.Footer>
+              </>
+            );
+          }}
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   );
 }
 
@@ -748,7 +962,7 @@ function DeleteItemDialog({
 
 // --- Fila ------------------------------------------------------------------
 
-type RowAction = 'transfer' | 'minimum' | 'adjust' | 'delete';
+type RowAction = 'transfer' | 'minimum' | 'adjust' | 'edit' | 'delete';
 
 /**
  * Dónde está lo que falta acá. Se nombran las bodegas en vez de decir "en otra
@@ -828,13 +1042,25 @@ function ItemRow({
         </Table.Cell>
         <Table.Cell>
           <div className="flex flex-col">
-            <span className="text-foreground">{item.name}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-foreground">{item.name}</span>
+              {/* Su falta detiene la máquina: se marca aunque el saldo todavía
+                  no cruce el mínimo. */}
+              {item.isCritical ? (
+                <Chip color="danger" size="sm" variant="soft">
+                  Crítico
+                </Chip>
+              ) : null}
+            </div>
             {item.partNumber ? (
               <span className="font-mono text-xs text-muted-foreground">
                 {item.partNumber}
               </span>
             ) : null}
           </div>
+        </Table.Cell>
+        <Table.Cell className="text-sm text-muted-foreground">
+          {item.category?.name ?? 'Sin categoría'}
         </Table.Cell>
         <Table.Cell className="font-mono text-sm text-foreground">
           {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
@@ -922,6 +1148,13 @@ function ItemRow({
                   Conteo
                 </button>
                 <button
+                  className="text-sm text-muted-foreground hover:underline"
+                  type="button"
+                  onClick={() => setAction('edit')}
+                >
+                  Editar
+                </button>
+                <button
                   className="text-sm text-danger hover:underline"
                   type="button"
                   onClick={() => setAction('delete')}
@@ -957,6 +1190,13 @@ function ItemRow({
         <AdjustModal
           branchId={branchId}
           branchName={branchName}
+          isOpen
+          item={item}
+          onOpenChange={(open) => !open && setAction(null)}
+        />
+      ) : null}
+      {action === 'edit' ? (
+        <EditItemModal
           isOpen
           item={item}
           onOpenChange={(open) => !open && setAction(null)}
@@ -1000,10 +1240,11 @@ function ItemsTable(props: {
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Inventario" className="min-w-230">
+        <Table.Content aria-label="Inventario" className="min-w-270">
           <Table.Header>
             <Table.Column isRowHeader>SKU</Table.Column>
             <Table.Column>Nombre</Table.Column>
+            <Table.Column>Categoría</Table.Column>
             <Table.Column>Stock acá</Table.Column>
             <Table.Column>Total empresa</Table.Column>
             <Table.Column>Mínimo</Table.Column>
@@ -1032,6 +1273,9 @@ function ItemsTable(props: {
 
 // --- Vista -----------------------------------------------------------------
 
+/** Centinela del filtro: "todas" no es un id de categoría. */
+const ALL_CATEGORIES = '__all__';
+
 export function InventarioView() {
   const { user } = useCurrentUser();
   const isAdmin = user?.role === ROLES.ADMIN;
@@ -1042,9 +1286,11 @@ export function InventarioView() {
 
   const [tab, setTab] = useState<ItemType>('SUPPLY');
   const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
   const [onlyBelowMinimum, setOnlyBelowMinimum] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
+  const { data: categories } = useCategories();
 
   // La primera sucursal se elige una sola vez, cuando llega la lista. Cuando
   // T12 suba el selector al layout, esto se va y la vista solo lee del store.
@@ -1061,6 +1307,7 @@ export function InventarioView() {
     type: tab,
     isActive: true,
     ...(search.trim() ? { q: search.trim() } : {}),
+    ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
   });
 
   const items = useMemo(() => {
@@ -1108,11 +1355,14 @@ export function InventarioView() {
           </p>
         </div>
         {isAdmin && branchId ? (
-          <NewItemModal
-            branchId={branchId}
-            branchName={branchName}
-            defaultType={tab}
-          />
+          <div className="flex items-center gap-2">
+            <CategoriesModal />
+            <NewItemModal
+              branchId={branchId}
+              branchName={branchName}
+              defaultType={tab}
+            />
+          </div>
         ) : null}
       </div>
 
@@ -1154,6 +1404,38 @@ export function InventarioView() {
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
+
+        <Select
+          className="w-full sm:w-56"
+          value={categoryId}
+          onChange={(value) => {
+            if (value) setCategoryId(String(value));
+          }}
+        >
+          <Label>Categoría</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
+                Todas
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {(categories ?? []).map((category) => (
+                <ListBox.Item
+                  key={category.id}
+                  id={category.id}
+                  textValue={category.name}
+                >
+                  {category.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
 
         <Switch
           className="pb-2.5"
