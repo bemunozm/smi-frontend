@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, type Control } from 'react-hook-form';
+import {
+  Controller,
+  useForm,
+  useWatch,
+  type Control,
+} from 'react-hook-form';
 import {
   AlertDialog,
   Button,
@@ -546,12 +551,19 @@ function EditItemModal({
 // --- Traspaso --------------------------------------------------------------
 
 /**
- * Pide solo el destino: la cantidad viene del campo de la fila, que es el mismo
- * que gobierna `+` y `−`. Un solo lugar donde escribir cuánto.
+ * Confirmación del traspaso. La cantidad viene del campo de la fila — un solo
+ * lugar donde escribir cuánto, el mismo que gobierna `+` y `−` — y acá se
+ * elige el destino y se confirma.
+ *
+ * Mostrar los dos saldos resultantes no es adorno: mover material entre faenas
+ * es la operación más cara de deshacer (hay que traerlo de vuelta), y el error
+ * típico es sacar de más de la bodega que justamente estaba al límite. Verlo
+ * antes de apretar evita el viaje.
  */
 function TransferModal({
   item,
   branchId,
+  branchName,
   branches,
   quantity,
   isOpen,
@@ -559,6 +571,7 @@ function TransferModal({
 }: {
   item: InventoryItem;
   branchId: string;
+  branchName: string;
   branches: Branch[];
   quantity: number;
   isOpen: boolean;
@@ -567,7 +580,17 @@ function TransferModal({
   const transfer = useTransferStock();
   const others = branches.filter((branch) => branch.id !== branchId);
   const [destination, setDestination] = useState(others[0]?.id ?? '');
+
+  const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
+  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
+  const there = destination ? quantityAt(item, destination) : 0;
+  const destinationName =
+    others.find((branch) => branch.id === destination)?.name ?? '';
+
+  const remaining = here - quantity;
+  const notEnough = quantity > here;
+  const leavesBelowMinimum = !notEnough && minimum > 0 && remaining <= minimum;
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -578,15 +601,17 @@ function TransferModal({
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                  Traspasar · {item.sku}
+                  Confirmar traspaso
                 </Modal.Heading>
               </Modal.Header>
               <Modal.Body>
                 <div className="flex flex-col gap-4">
-                  <p className="text-sm text-muted-foreground">
-                    Mover <strong>{NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}</strong>{' '}
-                    de {item.name}. Quedan {NUMBER.format(here)}{' '}
-                    {UNIT_SYMBOLS[item.unit]} en esta bodega.
+                  <p className="text-sm text-foreground">
+                    Mover{' '}
+                    <strong>
+                      {NUMBER.format(quantity)} {symbol}
+                    </strong>{' '}
+                    de {item.sku} · {item.name}.
                   </p>
 
                   <Select
@@ -616,6 +641,41 @@ function TransferModal({
                       </ListBox>
                     </Select.Popover>
                   </Select>
+
+                  {/* Cómo queda cada bodega después. El traspaso no crea ni
+                      destruye material: lo que sale de una entra en la otra. */}
+                  <div className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">{branchName}</span>
+                      <span className="font-mono text-foreground">
+                        {NUMBER.format(here)} → {NUMBER.format(remaining)}{' '}
+                        {symbol}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        {destinationName || 'Destino'}
+                      </span>
+                      <span className="font-mono text-foreground">
+                        {NUMBER.format(there)} →{' '}
+                        {NUMBER.format(there + quantity)} {symbol}
+                      </span>
+                    </div>
+                  </div>
+
+                  {notEnough ? (
+                    <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
+                      En {branchName} hay {NUMBER.format(here)} {symbol}: no
+                      alcanza para mover {NUMBER.format(quantity)}.
+                    </p>
+                  ) : null}
+
+                  {leavesBelowMinimum ? (
+                    <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+                      {branchName} queda en {NUMBER.format(remaining)} {symbol},
+                      en o bajo su mínimo de {NUMBER.format(minimum)}.
+                    </p>
+                  ) : null}
                 </div>
               </Modal.Body>
               <Modal.Footer>
@@ -623,7 +683,7 @@ function TransferModal({
                   Cancelar
                 </Button>
                 <Button
-                  isDisabled={!destination || quantity <= 0}
+                  isDisabled={!destination || quantity <= 0 || notEnough}
                   isPending={transfer.isPending}
                   onPress={() =>
                     transfer.mutate(
@@ -638,7 +698,11 @@ function TransferModal({
                   }
                 >
                   {({ isPending }) =>
-                    isPending ? <Spinner color="current" size="sm" /> : 'Traspasar'
+                    isPending ? (
+                      <Spinner color="current" size="sm" />
+                    ) : (
+                      'Confirmar traspaso'
+                    )
                   }
                 </Button>
               </Modal.Footer>
@@ -666,6 +730,8 @@ function MinimumModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const setMinimum = useSetMinimum();
+  const symbol = UNIT_SYMBOLS[item.unit];
+  const here = quantityAt(item, branchId);
   const current = stockAt(item, branchId)?.minimumQuantity ?? 0;
   const {
     control,
@@ -675,6 +741,14 @@ function MinimumModal({
     resolver: zodResolver(MinimumFormSchema),
     values: { minimumQuantity: String(current) },
   });
+
+  // Se mira lo escrito para decir, antes de guardar, si ese umbral deja el
+  // ítem alertando hoy mismo. Un mínimo se fija contra el saldo real de la
+  // bodega, y ese saldo está a la vista dos líneas más arriba.
+  const typed = useWatch({ control, name: 'minimumQuantity' });
+  const nextMinimum = Number(typed);
+  const validMinimum = Number.isFinite(nextMinimum) && nextMinimum >= 0;
+  const willAlert = validMinimum && nextMinimum > 0 && here <= nextMinimum;
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -707,10 +781,32 @@ function MinimumModal({
                     noValidate
                     onSubmit={(event) => void handleSubmit(onSubmit)(event)}
                   >
-                    <p className="text-sm text-muted-foreground">
-                      {item.sku} · {item.name}. Este umbral aplica solo a esta
-                      bodega. En <strong>0</strong> deja de alertar.
+                    <p className="text-sm text-foreground">
+                      {item.sku} · {item.name}
                     </p>
+
+                    {/* Los dos números contra los que se decide el umbral. Sin
+                        ellos hay que cerrar el modal para ir a mirar la fila. */}
+                    <div className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          Stock en {branchName}
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {NUMBER.format(here)} {symbol}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">
+                          Mínimo vigente
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {current > 0
+                            ? `${NUMBER.format(current)} ${symbol}`
+                            : 'sin umbral'}
+                        </span>
+                      </div>
+                    </div>
 
                     <Controller
                       control={control}
@@ -736,6 +832,21 @@ function MinimumModal({
                         </TextField>
                       )}
                     />
+
+                    {willAlert ? (
+                      <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+                        Con {NUMBER.format(nextMinimum)} {symbol} el ítem queda
+                        marcado bajo mínimo de inmediato: en {branchName} hay{' '}
+                        {NUMBER.format(here)}.
+                      </p>
+                    ) : null}
+
+                    <p className="text-xs text-muted-foreground">
+                      El umbral aplica solo a esta bodega — el de la empresa y
+                      el de una sucursal no son la misma magnitud. En{' '}
+                      <strong>0</strong> esta bodega deja de alertar por este
+                      ítem.
+                    </p>
                   </form>
                 </Modal.Body>
                 <Modal.Footer>
@@ -965,6 +1076,21 @@ function DeleteItemDialog({
 type RowAction = 'transfer' | 'minimum' | 'adjust' | 'edit' | 'delete';
 
 /**
+ * La acción abierta desde una fila. Vive en la tabla y no en la fila porque los
+ * modales tienen que montarse FUERA de `<Table>`: dentro del cuerpo, el
+ * colector de react-aria solo conserva filas y celdas, y se come en silencio
+ * todo lo demás — los campos y los botones del modal desaparecían aunque el
+ * título y los textos sí salieran. Se detectó con un test de render que vuelca
+ * el DOM del diálogo.
+ */
+interface ActiveRowAction {
+  item: InventoryItem;
+  action: RowAction;
+  /** Cantidad escrita en la fila; solo la usa el traspaso. */
+  quantity: number;
+}
+
+/**
  * Dónde está lo que falta acá. Se nombran las bodegas en vez de decir "en otra
  * sucursal": el bodeguero tiene que saber a cuál pedirle, y con dos sucursales
  * "otra" ya obliga a adivinar.
@@ -980,22 +1106,21 @@ function elsewhereLabel(item: InventoryItem, branchId: string): string {
 function ItemRow({
   item,
   branchId,
-  branchName,
   branches,
   canWrite,
   canIssue,
   isAdmin,
+  onAction,
 }: {
   item: InventoryItem;
   branchId: string;
-  branchName: string;
   branches: Branch[];
   canWrite: boolean;
   /** Solo las bodegas de faena consumen material. Ver `InventarioView`. */
   canIssue: boolean;
   isAdmin: boolean;
+  onAction: (action: RowAction, quantity: number) => void;
 }) {
-  const [action, setAction] = useState<RowAction | null>(null);
   const [amount, setAmount] = useState('');
   const createMovement = useCreateMovement();
 
@@ -1062,7 +1187,11 @@ function ItemRow({
         <Table.Cell className="text-sm text-muted-foreground">
           {item.category?.name ?? 'Sin categoría'}
         </Table.Cell>
-        <Table.Cell className="font-mono text-sm text-foreground">
+        <Table.Cell
+          className={`font-mono text-sm ${
+            belowMinimum ? 'font-semibold text-danger' : 'text-foreground'
+          }`}
+        >
           {NUMBER.format(here)} {UNIT_SYMBOLS[item.unit]}
         </Table.Cell>
         <Table.Cell className="font-mono text-sm text-muted-foreground">
@@ -1079,9 +1208,11 @@ function ItemRow({
                 : elsewhereLabel(item, branchId)}
             </Chip>
             {/* Reponer y no tener son cosas distintas: el ítem puede estar
-                disponible hoy y aun así haber cruzado el mínimo de la bodega. */}
+                disponible hoy y aun así haber cruzado el mínimo de la bodega.
+                Va en rojo porque es lo único de la fila que exige una acción
+                — en ámbar se leía como un matiz del "En esta bodega" verde. */}
             {state === 'en-bodega' && belowMinimum ? (
-              <Chip color="warning" size="sm" variant="soft">
+              <Chip color="danger" size="sm" variant="soft">
                 Bajo mínimo
               </Chip>
             ) : null}
@@ -1124,7 +1255,7 @@ function ItemRow({
                     className="text-sm text-(--accent) hover:underline disabled:text-muted-foreground disabled:no-underline"
                     disabled={!validAmount}
                     type="button"
-                    onClick={() => setAction('transfer')}
+                    onClick={() => onAction('transfer', quantity)}
                   >
                     Traspasar
                   </button>
@@ -1132,7 +1263,7 @@ function ItemRow({
                 <button
                   className="text-sm text-muted-foreground hover:underline"
                   type="button"
-                  onClick={() => setAction('minimum')}
+                  onClick={() => onAction('minimum', quantity)}
                 >
                   Mínimo
                 </button>
@@ -1143,21 +1274,21 @@ function ItemRow({
                 <button
                   className="text-sm text-muted-foreground hover:underline"
                   type="button"
-                  onClick={() => setAction('adjust')}
+                  onClick={() => onAction('adjust', quantity)}
                 >
                   Conteo
                 </button>
                 <button
                   className="text-sm text-muted-foreground hover:underline"
                   type="button"
-                  onClick={() => setAction('edit')}
+                  onClick={() => onAction('edit', quantity)}
                 >
                   Editar
                 </button>
                 <button
                   className="text-sm text-danger hover:underline"
                   type="button"
-                  onClick={() => setAction('delete')}
+                  onClick={() => onAction('delete', quantity)}
                 >
                   Eliminar
                 </button>
@@ -1166,51 +1297,71 @@ function ItemRow({
           </div>
         </Table.Cell>
       </Table.Row>
+    </>
+  );
+}
 
-      {action === 'transfer' ? (
+/**
+ * Los modales de la fila, montados fuera de `<Table>`. Se renderiza uno solo a
+ * la vez: la acción abierta es de la tabla, no de la fila.
+ */
+function RowActionModals({
+  active,
+  branchId,
+  branchName,
+  branches,
+  onClose,
+}: {
+  active: ActiveRowAction;
+  branchId: string;
+  branchName: string;
+  branches: Branch[];
+  onClose: () => void;
+}) {
+  const close = (open: boolean): void => {
+    if (!open) onClose();
+  };
+
+  switch (active.action) {
+    case 'transfer':
+      return (
         <TransferModal
           branchId={branchId}
+          branchName={branchName}
           branches={branches}
           isOpen
-          item={item}
-          quantity={quantity}
-          onOpenChange={(open) => !open && setAction(null)}
+          item={active.item}
+          quantity={active.quantity}
+          onOpenChange={close}
         />
-      ) : null}
-      {action === 'minimum' ? (
+      );
+    case 'minimum':
+      return (
         <MinimumModal
           branchId={branchId}
           branchName={branchName}
           isOpen
-          item={item}
-          onOpenChange={(open) => !open && setAction(null)}
+          item={active.item}
+          onOpenChange={close}
         />
-      ) : null}
-      {action === 'adjust' ? (
+      );
+    case 'adjust':
+      return (
         <AdjustModal
           branchId={branchId}
           branchName={branchName}
           isOpen
-          item={item}
-          onOpenChange={(open) => !open && setAction(null)}
+          item={active.item}
+          onOpenChange={close}
         />
-      ) : null}
-      {action === 'edit' ? (
-        <EditItemModal
-          isOpen
-          item={item}
-          onOpenChange={(open) => !open && setAction(null)}
-        />
-      ) : null}
-      {action === 'delete' ? (
-        <DeleteItemDialog
-          isOpen
-          item={item}
-          onOpenChange={(open) => !open && setAction(null)}
-        />
-      ) : null}
-    </>
-  );
+      );
+    case 'edit':
+      return <EditItemModal isOpen item={active.item} onOpenChange={close} />;
+    case 'delete':
+      return (
+        <DeleteItemDialog isOpen item={active.item} onOpenChange={close} />
+      );
+  }
 }
 
 // --- Tabla -----------------------------------------------------------------
@@ -1224,6 +1375,10 @@ function ItemsTable(props: {
   canIssue: boolean;
   isAdmin: boolean;
 }) {
+  // El estado vive acá, antes del corte por lista vacía: los hooks no pueden
+  // quedar detrás de un `return` temprano.
+  const [active, setActive] = useState<ActiveRowAction | null>(null);
+
   if (props.items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
@@ -1238,36 +1393,50 @@ function ItemsTable(props: {
   }
 
   return (
-    <Table variant="secondary">
-      <Table.ScrollContainer>
-        <Table.Content aria-label="Inventario" className="min-w-270">
-          <Table.Header>
-            <Table.Column isRowHeader>SKU</Table.Column>
-            <Table.Column>Nombre</Table.Column>
-            <Table.Column>Categoría</Table.Column>
-            <Table.Column>Stock acá</Table.Column>
-            <Table.Column>Total empresa</Table.Column>
-            <Table.Column>Mínimo</Table.Column>
-            <Table.Column>Estado</Table.Column>
-            <Table.Column>Acciones</Table.Column>
-          </Table.Header>
-          <Table.Body>
-            {props.items.map((item) => (
-              <ItemRow
-                key={item.id}
-                branchId={props.branchId}
-                branchName={props.branchName}
-                branches={props.branches}
-                canIssue={props.canIssue}
-                canWrite={props.canWrite}
-                isAdmin={props.isAdmin}
-                item={item}
-              />
-            ))}
-          </Table.Body>
-        </Table.Content>
-      </Table.ScrollContainer>
-    </Table>
+    <>
+      <Table variant="secondary">
+        <Table.ScrollContainer>
+          <Table.Content aria-label="Inventario" className="min-w-270">
+            <Table.Header>
+              <Table.Column isRowHeader>SKU</Table.Column>
+              <Table.Column>Nombre</Table.Column>
+              <Table.Column>Categoría</Table.Column>
+              <Table.Column>Stock acá</Table.Column>
+              <Table.Column>Total empresa</Table.Column>
+              <Table.Column>Mínimo</Table.Column>
+              <Table.Column>Estado</Table.Column>
+              <Table.Column>Acciones</Table.Column>
+            </Table.Header>
+            <Table.Body>
+              {props.items.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  branchId={props.branchId}
+                  branches={props.branches}
+                  canIssue={props.canIssue}
+                  canWrite={props.canWrite}
+                  isAdmin={props.isAdmin}
+                  item={item}
+                  onAction={(action, quantity) =>
+                    setActive({ item, action, quantity })
+                  }
+                />
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
+
+      {active ? (
+        <RowActionModals
+          active={active}
+          branchId={props.branchId}
+          branchName={props.branchName}
+          branches={props.branches}
+          onClose={() => setActive(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -1452,7 +1621,7 @@ export function InventarioView() {
         ) : null}
 
         {belowMinimumCount > 0 ? (
-          <Chip className="mb-2.5" color="warning" size="sm" variant="soft">
+          <Chip className="mb-2.5" color="danger" size="sm" variant="soft">
             {belowMinimumCount} bajo el mínimo en {branchName}
           </Chip>
         ) : null}

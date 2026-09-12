@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -196,6 +202,20 @@ describe('InventarioView', () => {
     renderView([DISPONIBLE]);
 
     expect(screen.getByRole('button', { name: 'Editar' })).toBeTruthy();
+  });
+
+  it('abre los modales con sus campos y sus botones', () => {
+    // Regresión: los modales colgaban de `<Table.Body>`, y el colector de
+    // react-aria conserva ahí solo filas y celdas — se comía los `TextField` y
+    // los `Button` sin avisar. En pantalla salía un modal con título y texto
+    // pero sin input ni Guardar, así que el mínimo no se podía cambiar.
+    renderView([BAJO_MINIMO]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mínimo' }));
+
+    expect(screen.getByLabelText(/Stock mínimo/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
+    expect(screen.getByText('Mínimo vigente')).toBeTruthy();
   });
 
   it('cuenta los ítems bajo el mínimo de la bodega elegida', () => {
