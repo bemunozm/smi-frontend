@@ -11,7 +11,13 @@ import {
 } from '@heroui/react';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
-import { ALL_BRANCHES, NUMBER, Segmented } from '../components/inventario/shared';
+import {
+  ALL_BRANCHES,
+  MovementKindChip,
+  NUMBER,
+  Segmented,
+  movementKind,
+} from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
 import { useMovements } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -52,18 +58,23 @@ const DATE = new Intl.DateTimeFormat('es-CL', {
   minute: '2-digit',
 });
 
-/** El renglón del historial, en palabras: de dónde salió y a dónde entró. */
-function movementLabel(movement: StockMovement): string {
-  if (movement.reason === 'TRANSFER') {
-    const counterpart =
-      movement.direction === 'OUT'
-        ? movement.destinationBranch?.name
-        : movement.sourceBranch?.name;
-    return movement.direction === 'OUT'
-      ? `Traspaso hacia ${counterpart ?? 'otra sucursal'}`
-      : `Traspaso desde ${counterpart ?? 'otra sucursal'}`;
-  }
-  return MOVEMENT_REASON_LABELS[movement.reason];
+/**
+ * El recorrido del movimiento. En un traspaso la bodega sola no basta: el
+ * asiento de salida en Casa Matriz y el de entrada en Faena se ven idénticos si
+ * no se dice de dónde a dónde fue. Se escribe siempre en el orden real del
+ * material, origen → destino, mire uno el asiento que mire.
+ */
+function routeLabel(movement: StockMovement): string {
+  const here = movement.branch?.name ?? '—';
+  if (movement.reason !== 'TRANSFER') return here;
+
+  const from =
+    movement.direction === 'OUT' ? here : (movement.sourceBranch?.name ?? '—');
+  const to =
+    movement.direction === 'OUT'
+      ? (movement.destinationBranch?.name ?? '—')
+      : here;
+  return `${from} → ${to}`;
 }
 
 function DirectionMark({ movement }: { movement: StockMovement }) {
@@ -97,9 +108,12 @@ function MovementCard({ movement }: { movement: StockMovement }) {
       <span className="text-sm text-muted-foreground">
         {movement.item?.name}
       </span>
-      <span className="text-sm text-foreground">{movementLabel(movement)}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <MovementKindChip kind={movementKind(movement)} />
+        <span className="text-sm text-foreground">{routeLabel(movement)}</span>
+      </div>
       <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-        <span>{movement.branch?.name}</span>
+        <span>{MOVEMENT_REASON_LABELS[movement.reason]}</span>
         <span>{DATE.format(new Date(movement.occurredAt))}</span>
         <span>
           Saldo:{' '}
@@ -247,8 +261,9 @@ export function MovimientosView() {
               <Table.Header>
                 <Table.Column isRowHeader>Fecha</Table.Column>
                 <Table.Column>Ítem</Table.Column>
-                <Table.Column>Sucursal</Table.Column>
                 <Table.Column>Movimiento</Table.Column>
+                <Table.Column>Sucursal</Table.Column>
+                <Table.Column>Motivo</Table.Column>
                 <Table.Column>Cantidad</Table.Column>
                 <Table.Column>Saldo</Table.Column>
                 <Table.Column>Documento</Table.Column>
@@ -272,11 +287,14 @@ export function MovimientosView() {
                         </span>
                       </div>
                     </Table.Cell>
-                    <Table.Cell className="text-sm text-foreground">
-                      {movement.branch?.name ?? '—'}
+                    <Table.Cell>
+                      <MovementKindChip kind={movementKind(movement)} />
+                    </Table.Cell>
+                    <Table.Cell className="text-sm whitespace-nowrap text-foreground">
+                      {routeLabel(movement)}
                     </Table.Cell>
                     <Table.Cell className="text-sm text-muted-foreground">
-                      {movementLabel(movement)}
+                      {MOVEMENT_REASON_LABELS[movement.reason]}
                     </Table.Cell>
                     <Table.Cell>
                       <DirectionMark movement={movement} />

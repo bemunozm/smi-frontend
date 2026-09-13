@@ -153,13 +153,15 @@ describe('FichaItemView', () => {
     expect(screen.getAllByText('Bajo stock mínimo').length).toBeGreaterThan(1);
   });
 
-  it('el kardex explica el traspaso y muestra el documento', () => {
+  it('el historial etiqueta el tipo y explica el traspaso', () => {
+    // «Kardex» es el término contable; los administradores leen «historial».
     renderFicha();
 
-    const kardex = within(screen.getByLabelText('Kardex'));
-    expect(kardex.getByText('Traspaso entre sucursales')).toBeTruthy();
-    expect(kardex.getByText(/hacia Faena/)).toBeTruthy();
-    expect(kardex.getByText(/GD-9002/)).toBeTruthy();
+    const historial = within(screen.getByLabelText('Historial de movimientos'));
+    expect(historial.getByText('Traspaso')).toBeTruthy();
+    expect(historial.getByText('Traspaso entre sucursales')).toBeTruthy();
+    expect(historial.getByText(/hacia Faena/)).toBeTruthy();
+    expect(historial.getByText(/GD-9002/)).toBeTruthy();
   });
 
   it('en teléfono apila las filas en vez de usar tablas', () => {

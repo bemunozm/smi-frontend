@@ -5,12 +5,19 @@ import {
   Input,
   Label,
   ListBox,
+  Modal,
   Select,
   Spinner,
   Table,
   TextField,
 } from '@heroui/react';
-import { ArrowLeftRight, FileText, Pencil, Trash2 } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  FileText,
+  History,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
 import {
@@ -27,10 +34,11 @@ import {
   BranchBreakdown,
   CriticalBadge,
   NUMBER,
-  RowAction,
+  RowMenu,
   Segmented,
   StatusChip,
   stockStatus,
+  type RowMenuOption,
 } from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
@@ -52,15 +60,21 @@ import {
 /** Centinela del filtro de categoría: "todas" no es un id. */
 const ALL_CATEGORIES = '__all__';
 
-type StockFilter = 'todos' | 'alerta';
+/**
+ * Hasta cuántas sucursales caben como control segmentado antes de volver al
+ * desplegable. El diseño las dibuja segmentadas («Todas · Norte · Sur»), que se
+ * lee y se aprieta más rápido — pero solo mientras entren en el ancho.
+ */
+const MAX_SEGMENTED_BRANCHES = 3;
 
-/** Qué abre cada icono de la fila. */
-export interface RowTarget {
+type StockFilter = 'todos' | 'atencion';
+
+interface RowTarget {
   item: InventoryItem;
   view: ItemAction;
 }
 
-const ICON = 16;
+const MENU_ICON = 15;
 
 // --- Fila de escritorio ----------------------------------------------------
 
@@ -84,6 +98,38 @@ function ItemRow({
   const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
   const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
   const status = stockStatus(item, branchId);
+
+  const options: RowMenuOption[] = [
+    ...(isAdmin
+      ? [
+          {
+            id: 'edit',
+            label: 'Editar ítem',
+            icon: <Pencil size={MENU_ICON} />,
+          },
+        ]
+      : []),
+    ...(canWrite
+      ? [
+          {
+            id: 'movement',
+            label: 'Registrar movimiento',
+            icon: <ArrowLeftRight size={MENU_ICON} />,
+          },
+        ]
+      : []),
+    { id: 'ficha', label: 'Ver ficha', icon: <FileText size={MENU_ICON} /> },
+    ...(isAdmin
+      ? [
+          {
+            id: 'delete',
+            label: 'Eliminar ítem',
+            icon: <Trash2 size={MENU_ICON} />,
+            isDanger: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Table.Row>
@@ -111,12 +157,6 @@ function ItemRow({
       <Table.Cell className="text-sm text-muted-foreground">
         {item.category?.name ?? 'Sin categoría'}
       </Table.Cell>
-      <Table.Cell>
-        <BranchBreakdown
-          highlightBranchId={isAll ? undefined : branchId}
-          item={item}
-        />
-      </Table.Cell>
       <Table.Cell
         className={`font-mono text-sm ${
           status.tone === 'peligro'
@@ -125,6 +165,12 @@ function ItemRow({
         }`}
       >
         {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
+      </Table.Cell>
+      <Table.Cell>
+        <BranchBreakdown
+          highlightBranchId={isAll ? undefined : branchId}
+          item={item}
+        />
       </Table.Cell>
       {isAll ? null : (
         <Table.Cell className="font-mono text-sm text-muted-foreground">
@@ -135,37 +181,16 @@ function ItemRow({
         <StatusChip label={status.label} tone={status.tone} />
       </Table.Cell>
       <Table.Cell>
-        {/* Cuatro acciones, siempre las mismas y en el mismo orden. Antes eran
-            seis enlaces más un campo de cantidad con `+`/`−`, y había que
-            leerlos todos para encontrar el que se buscaba. */}
-        <div className="flex items-center justify-end gap-1.5">
-          {isAdmin ? (
-            <RowAction
-              icon={<Pencil size={ICON} />}
-              label="Editar ítem"
-              onPress={onEdit}
-            />
-          ) : null}
-          {canWrite ? (
-            <RowAction
-              icon={<ArrowLeftRight size={ICON} />}
-              label="Registrar movimiento"
-              onPress={() => onOpen('movement')}
-            />
-          ) : null}
-          <RowAction
-            icon={<FileText size={ICON} />}
-            label="Ver ficha"
-            onPress={() => void navigate(`/inventario/${item.id}`)}
+        <div className="flex justify-end">
+          <RowMenu
+            label={`Acciones de ${item.sku}`}
+            onAction={(id) => {
+              if (id === 'edit') return onEdit();
+              if (id === 'ficha') return void navigate(`/inventario/${item.id}`);
+              onOpen(id as ItemAction);
+            }}
+            options={options}
           />
-          {isAdmin ? (
-            <RowAction
-              icon={<Trash2 size={ICON} />}
-              isDanger
-              label="Eliminar ítem"
-              onPress={() => onOpen('delete')}
-            />
-          ) : null}
         </div>
       </Table.Cell>
     </Table.Row>
@@ -186,6 +211,8 @@ function EmptyState() {
     </div>
   );
 }
+
+const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
 
 function ItemsList({
   items,
@@ -226,16 +253,22 @@ function ItemsList({
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Inventario" className="min-w-260">
+        <Table.Content aria-label="Inventario" className="min-w-240">
           <Table.Header>
-            <Table.Column isRowHeader>SKU</Table.Column>
-            <Table.Column>Nombre</Table.Column>
-            <Table.Column>Categoría</Table.Column>
-            <Table.Column>Sucursal</Table.Column>
-            <Table.Column>{isAll ? 'Stock total' : 'Stock acá'}</Table.Column>
-            {isAll ? null : <Table.Column>Mínimo</Table.Column>}
-            <Table.Column>Estado</Table.Column>
-            <Table.Column>Acciones</Table.Column>
+            <Table.Column className={COLUMN_CLASS} isRowHeader>
+              SKU
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Nombre</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Categoría</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>
+              {isAll ? 'Existencia · total' : 'Existencia acá'}
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Sucursal</Table.Column>
+            {isAll ? null : (
+              <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>
+            )}
+            <Table.Column className={COLUMN_CLASS}>Estado</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Acciones</Table.Column>
           </Table.Header>
           <Table.Body>
             {items.map((item) => (
@@ -253,6 +286,90 @@ function ItemsList({
         </Table.Content>
       </Table.ScrollContainer>
     </Table>
+  );
+}
+
+// --- Elegir ítem para un movimiento suelto ---------------------------------
+
+/**
+ * El botón «Registrar movimiento» de la cabecera no sabe sobre qué ítem se va a
+ * mover material, así que lo pregunta primero. Es el camino del bodeguero que
+ * llega con la guía en la mano y busca el ítem, en vez del que ya lo tiene a la
+ * vista en su fila.
+ */
+function PickItemModal({
+  items,
+  isOpen,
+  onOpenChange,
+  onPick,
+}: {
+  items: InventoryItem[];
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPick: (item: InventoryItem) => void;
+}) {
+  const [itemId, setItemId] = useState('');
+
+  return (
+    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-md">
+          {({ close }) => (
+            <>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+                  Registrar movimiento
+                </Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <Select
+                  fullWidth
+                  onChange={(value) => {
+                    if (value) setItemId(String(value));
+                  }}
+                  value={itemId}
+                >
+                  <Label>¿Sobre qué ítem?</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {items.map((item) => (
+                        <ListBox.Item
+                          id={item.id}
+                          key={item.id}
+                          textValue={`${item.sku} · ${item.name}`}
+                        >
+                          {item.sku} · {item.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button onPress={close} variant="secondary">
+                  Cancelar
+                </Button>
+                <Button
+                  isDisabled={!itemId}
+                  onPress={() => {
+                    const picked = items.find((item) => item.id === itemId);
+                    if (picked) onPick(picked);
+                  }}
+                >
+                  Continuar
+                </Button>
+              </Modal.Footer>
+            </>
+          )}
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   );
 }
 
@@ -274,6 +391,7 @@ export function InventarioView() {
   const [target, setTarget] = useState<RowTarget | null>(null);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isPicking, setIsPicking] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
   const { data: categories } = useCategories();
@@ -284,8 +402,6 @@ export function InventarioView() {
    * cuál?". Elegir una sucursal es un filtro, no el punto de entrada.
    */
   const branchId = selectedBranchId ?? ALL_BRANCHES;
-  const branchName =
-    branches?.find((branch) => branch.id === branchId)?.name ?? '';
 
   const { data, isPending, isError, error } = useItems({
     type: tab,
@@ -297,21 +413,30 @@ export function InventarioView() {
   const all = useMemo(() => data ?? [], [data]);
 
   const alertCount = useMemo(
-    () =>
-      all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
+    () => all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
     [all, branchId],
   );
 
   const items = useMemo(
     () =>
-      stockFilter === 'alerta'
+      stockFilter === 'atencion'
         ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
         : all,
     [all, stockFilter, branchId],
   );
 
-  // La ficha se abre desde su propio modal: se cierra el panel y se abre el
-  // otro para no apilar dos.
+  const branchOptions = [
+    { id: ALL_BRANCHES, label: 'Todas' },
+    ...(branches ?? []).map((branch: Branch) => ({
+      id: branch.id,
+      label: branch.name,
+    })),
+  ];
+  const useSegmentedBranches =
+    branchOptions.length <= MAX_SEGMENTED_BRANCHES + 1;
+  const branchLabel =
+    branchOptions.find((option) => option.id === branchId)?.label ?? '';
+
   const openEdit = (item: InventoryItem): void => {
     setTarget(null);
     setEditItem(item);
@@ -319,32 +444,41 @@ export function InventarioView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Inventario
-          </span>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Inventario
-          </h1>
-          <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+          SMI · Inventario
+        </span>
+        <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+          Inventario general
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Existencias de suministros y repuestos{' '}
+          <strong className="font-semibold text-foreground">
             {branchId === ALL_BRANCHES
-              ? 'Existencias de suministros y repuestos en toda la empresa, con el desglose por sucursal.'
-              : `Existencias de suministros y repuestos en ${branchName}, con su mínimo de reposición.`}
-          </p>
-        </div>
-        <div className="hidden items-center gap-2 sm:flex">
-          <Link
-            className="inline-flex h-10 items-center rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
-            to="/inventario/movimientos"
-          >
-            Historial
-          </Link>
-          {isAdmin ? <CategoriesModal /> : null}
-          {isAdmin ? (
-            <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
-          ) : null}
-        </div>
+              ? 'en todas las sucursales'
+              : `en ${branchLabel}`}
+          </strong>
+          , con semáforo de mínimos y trazabilidad de cada movimiento.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
+          to="/inventario/movimientos"
+        >
+          <History size={16} />
+          Historial general
+        </Link>
+        {canWrite ? (
+          <Button onPress={() => setIsPicking(true)} variant="secondary">
+            Registrar movimiento
+          </Button>
+        ) : null}
+        {isAdmin ? <CategoriesModal /> : null}
+        {isAdmin ? (
+          <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
+        ) : null}
       </div>
 
       <Segmented
@@ -358,41 +492,51 @@ export function InventarioView() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Select
-          onChange={(value) => {
-            if (value) setSelectedBranchId(String(value));
-          }}
-          value={branchId}
-        >
-          <Label>Sucursal</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id={ALL_BRANCHES} textValue="Todas las sucursales">
-                Todas las sucursales
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {(branches ?? []).map((branch: Branch) => (
-                <ListBox.Item
-                  id={branch.id}
-                  key={branch.id}
-                  textValue={branch.name}
-                >
-                  {branch.name}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-
         <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">
+            Sucursal
+          </span>
+          {useSegmentedBranches ? (
+            <Segmented
+              label="Filtro de sucursal"
+              onChange={setSelectedBranchId}
+              options={branchOptions}
+              value={branchId}
+            />
+          ) : (
+            <Select
+              aria-label="Sucursal"
+              onChange={(value) => {
+                if (value) setSelectedBranchId(String(value));
+              }}
+              value={branchId}
+            >
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {branchOptions.map((option) => (
+                    <ListBox.Item
+                      id={option.id}
+                      key={option.id}
+                      textValue={option.label}
+                    >
+                      {option.label}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        </div>
 
         <Select
           onChange={(value) => {
@@ -427,35 +571,20 @@ export function InventarioView() {
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-(--label-color)">
-            Existencias
+            Estado
           </span>
-          {/* El filtro agrupa ámbar y rojo: los dos piden una decisión de
+          {/* El filtro junta ámbar y rojo: los dos piden una decisión de
               compra, y separarlos obligaba a mirar dos listas. */}
           <Segmented
-            label="Filtro de existencias"
+            label="Filtro de estado"
             onChange={setStockFilter}
             options={[
               { id: 'todos', label: `Todos · ${all.length}` },
-              { id: 'alerta', label: `Con alerta · ${alertCount}` },
+              { id: 'atencion', label: `Requieren atención · ${alertCount}` },
             ]}
             value={stockFilter}
           />
         </div>
-      </div>
-
-      <div className="flex gap-2 sm:hidden">
-        <Link
-          className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground"
-          to="/inventario/movimientos"
-        >
-          Historial
-        </Link>
-        {isAdmin ? <CategoriesModal /> : null}
-        {isAdmin ? (
-          <Button className="flex-1" onPress={() => setIsCreating(true)}>
-            Nuevo ítem
-          </Button>
-        ) : null}
       </div>
 
       {isError ? (
@@ -480,6 +609,18 @@ export function InventarioView() {
           onOpen={(item, view) => setTarget({ item, view })}
         />
       )}
+
+      {isPicking ? (
+        <PickItemModal
+          isOpen
+          items={all}
+          onOpenChange={setIsPicking}
+          onPick={(item) => {
+            setIsPicking(false);
+            setTarget({ item, view: 'movement' });
+          }}
+        />
+      ) : null}
 
       {target ? (
         <ItemActionsModal
@@ -506,11 +647,11 @@ export function InventarioView() {
 
       {isCreating ? (
         <NewItemModal
-          branchId={branchId === ALL_BRANCHES ? (branches?.[0]?.id ?? '') : branchId}
+          branchId={
+            branchId === ALL_BRANCHES ? (branches?.[0]?.id ?? '') : branchId
+          }
           branchName={
-            branchId === ALL_BRANCHES
-              ? (branches?.[0]?.name ?? '')
-              : branchName
+            branchId === ALL_BRANCHES ? (branches?.[0]?.name ?? '') : branchLabel
           }
           defaultType={tab}
           isOpen

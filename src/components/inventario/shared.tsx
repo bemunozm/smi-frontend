@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react';
-import { CheckCircle2, OctagonAlert, TriangleAlert } from 'lucide-react';
+import { Button, Dropdown, Label } from '@heroui/react';
+import {
+  CheckCircle2,
+  EllipsisVertical,
+  OctagonAlert,
+  TriangleAlert,
+} from 'lucide-react';
 
 import type { InventoryItem, ItemStock } from '../../types/inventory';
 
@@ -148,21 +154,87 @@ export function BranchBreakdown({
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      {withStock.map((stock) => (
-        <span
-          className={`text-sm ${
-            stock.branchId === highlightBranchId
-              ? 'font-medium text-foreground'
-              : 'text-muted-foreground'
-          }`}
-          key={stock.branchId}
-        >
-          {stock.branch.name}{' '}
-          <span className="font-mono">{NUMBER.format(stock.quantity)}</span>
-        </span>
-      ))}
+    <div className="flex flex-col gap-1">
+      {withStock.map((stock) => {
+        const tone = stockStatus(item, stock.branchId).tone;
+        return (
+          <span
+            className={`flex items-center gap-1.5 text-sm ${
+              stock.branchId === highlightBranchId
+                ? 'font-medium text-foreground'
+                : 'text-muted-foreground'
+            }`}
+            key={stock.branchId}
+          >
+            {/* El punto dice cómo está ESA bodega. Sin él, "Casa Matriz 50 ·
+                Faena 5" se lee como dos cifras sueltas y hay que ir al mínimo
+                de cada una para saber cuál es la que preocupa. */}
+            <span
+              aria-hidden
+              className={`size-1.5 shrink-0 rounded-full ${DOT_COLORS[tone]}`}
+            />
+            {stock.branch.name}{' '}
+            <span className="font-mono">{NUMBER.format(stock.quantity)}</span>
+          </span>
+        );
+      })}
     </div>
+  );
+}
+
+const DOT_COLORS: Record<StatusTone, string> = {
+  ok: 'bg-[var(--success)]',
+  riesgo: 'bg-[var(--warning)]',
+  peligro: 'bg-[var(--danger)]',
+};
+
+// --- Movimientos -----------------------------------------------------------
+
+export type MovementKind = 'entrada' | 'salida' | 'traspaso' | 'ajuste';
+
+/**
+ * Qué clase de movimiento es, en los términos en que lo piensa el bodeguero.
+ * No coincide con `direction`: un traspaso son dos asientos, uno IN y otro OUT,
+ * y los dos son el mismo hecho — mostrarlos como "entrada" y "salida" haría
+ * parecer que entró material que en realidad solo cambió de bodega.
+ */
+export function movementKind(movement: {
+  direction: 'IN' | 'OUT';
+  reason: string;
+}): MovementKind {
+  if (movement.reason === 'TRANSFER') return 'traspaso';
+  if (movement.reason === 'PHYSICAL_ADJUSTMENT') return 'ajuste';
+  return movement.direction === 'IN' ? 'entrada' : 'salida';
+}
+
+const KIND_STYLES: Record<MovementKind, { label: string; chip: string }> = {
+  entrada: {
+    label: 'Entrada',
+    chip: 'bg-[var(--success-soft)] text-[var(--success-soft-foreground)]',
+  },
+  salida: {
+    label: 'Salida',
+    chip: 'bg-[var(--danger-soft)] text-[var(--danger-soft-foreground)]',
+  },
+  traspaso: {
+    label: 'Traspaso',
+    chip: 'bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)]',
+  },
+  ajuste: {
+    label: 'Ajuste',
+    chip: 'bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)]',
+  },
+};
+
+/** La etiqueta de color del tipo de movimiento, en listados e historiales. */
+export function MovementKindChip({ kind }: { kind: MovementKind }) {
+  const { label, chip } = KIND_STYLES[kind];
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${chip}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -279,29 +351,53 @@ export function QuickAction({
   );
 }
 
-/** Botón de icono de la fila de escritorio. */
-export function RowAction({
-  icon,
-  label,
-  isDanger,
-  onPress,
-}: {
-  icon: ReactNode;
+export interface RowMenuOption {
+  id: string;
   label: string;
+  icon: ReactNode;
   isDanger?: boolean;
-  onPress: () => void;
+}
+
+/**
+ * Las acciones de una fila, detrás de los tres puntos.
+ *
+ * Cuatro iconos sueltos por fila obligan a reconocer cada dibujo antes de
+ * apretar, y con veinte filas son ochenta objetos compitiendo por la atención
+ * en una columna que casi nunca se usa. Detrás del menú las acciones tienen
+ * nombre escrito, que es lo que se lee sin dudar.
+ *
+ * Solo en escritorio: en teléfono y tablet la tarjeta entera abre el panel, que
+ * ya muestra las mismas acciones con su etiqueta.
+ */
+export function RowMenu({
+  options,
+  onAction,
+  label,
+}: {
+  options: RowMenuOption[];
+  onAction: (id: string) => void;
+  label: string;
 }) {
   return (
-    <button
-      aria-label={label}
-      className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-[var(--surface-secondary)] ${
-        isDanger ? 'text-danger' : 'text-muted-foreground hover:text-foreground'
-      }`}
-      onClick={onPress}
-      title={label}
-      type="button"
-    >
-      {icon}
-    </button>
+    <Dropdown>
+      <Button aria-label={label} size="sm" variant="ghost">
+        <EllipsisVertical size={16} />
+      </Button>
+      <Dropdown.Popover placement="bottom end">
+        <Dropdown.Menu onAction={(key) => onAction(String(key))}>
+          {options.map((option) => (
+            <Dropdown.Item
+              id={option.id}
+              key={option.id}
+              textValue={option.label}
+              variant={option.isDanger ? 'danger' : undefined}
+            >
+              {option.icon}
+              <Label>{option.label}</Label>
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }

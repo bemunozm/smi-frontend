@@ -180,7 +180,7 @@ describe('InventarioView', () => {
       renderView([OK, SOLO_FAENA], { size: 'desktop' });
 
       const tabla = within(screen.getByLabelText('Inventario'));
-      expect(tabla.getByText('Stock total')).toBeTruthy();
+      expect(tabla.getByText('Existencia · total')).toBeTruthy();
       // Los dos ítems se ven aunque estén en bodegas distintas.
       expect(tabla.getByText('FIL-001')).toBeTruthy();
       expect(tabla.getByText('NEU-001')).toBeTruthy();
@@ -199,7 +199,7 @@ describe('InventarioView', () => {
       renderView([OK], { size: 'desktop', branchId: 'b1' });
 
       const tabla = within(screen.getByLabelText('Inventario'));
-      expect(tabla.getByText('Stock acá')).toBeTruthy();
+      expect(tabla.getByText('Existencia acá')).toBeTruthy();
       expect(tabla.getByText('Mínimo')).toBeTruthy();
     });
 
@@ -245,7 +245,7 @@ describe('InventarioView', () => {
       renderView([OK, RIESGO, BAJO], { branchId: 'b1' });
 
       // Ámbar y rojo se cuentan juntos: los dos piden una decisión de compra.
-      expect(screen.getByText('Con alerta · 2')).toBeTruthy();
+      expect(screen.getByText('Requieren atención · 2')).toBeTruthy();
       expect(screen.getByText('Todos · 3')).toBeTruthy();
     });
 
@@ -268,29 +268,37 @@ describe('InventarioView', () => {
     });
 
     it('no monta las dos estructuras a la vez', () => {
+      // Montar tabla y tarjetas para tapar una con `hidden` duplica cada ítem
+      // en el DOM y se lo hace leer dos veces a un lector de pantalla.
       renderView([OK], { size: 'desktop' });
 
-      expect(
-        screen.queryByRole('button', { name: 'Acciones de FIL-001' }),
-      ).toBeNull();
+      expect(screen.getAllByText('FIL-001')).toHaveLength(1);
     });
   });
 
   describe('acciones', () => {
-    it('la fila de escritorio trae las cuatro y nada más', () => {
+    it('en escritorio las guarda detrás de los tres puntos', () => {
+      // Cuatro iconos por fila son ochenta objetos en una tabla de veinte
+      // filas; detrás del menú las acciones tienen nombre escrito.
       renderView([OK], { size: 'desktop' });
 
+      expect(screen.queryByText('Editar ítem')).toBeNull();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Acciones de FIL-001' }),
+      );
+
+      // Se busca dentro del menú: «Registrar movimiento» también es un botón
+      // de la cabecera, para el que llega con la guía y todavía no eligió ítem.
+      const menu = within(screen.getByRole('menu'));
       for (const label of [
         'Editar ítem',
         'Registrar movimiento',
         'Ver ficha',
         'Eliminar ítem',
       ]) {
-        expect(screen.getByRole('button', { name: label })).toBeTruthy();
+        expect(menu.getByText(label)).toBeTruthy();
       }
-      // El atajo de cantidad con `+`/`−` se retiró: todo movimiento pasa por
-      // el formulario, que pide motivo y documento.
-      expect(screen.queryByLabelText('Cantidad para FIL-001')).toBeNull();
     });
 
     it('en teléfono las cuatro viven en el panel de la tarjeta', () => {

@@ -102,12 +102,13 @@ describe('MovimientosView', () => {
     expect(tabla.getByText('GD-4471')).toBeTruthy();
   });
 
-  it('nombra la contraparte del traspaso en vez de decir solo "traspaso"', () => {
-    // Un traspaso son dos asientos; sin decir hacia dónde, el renglón de
+  it('escribe el recorrido del traspaso, origen → destino', () => {
+    // Un traspaso son dos asientos; sin decir de dónde a dónde, el renglón de
     // salida se lee igual que material consumido.
     renderView([TRASPASO_SALIDA]);
 
-    expect(screen.getByText('Traspaso hacia Faena')).toBeTruthy();
+    expect(screen.getByText('Casa Matriz → Faena')).toBeTruthy();
+    expect(screen.getByText('Traspaso')).toBeTruthy();
   });
 
   it('agrupa por lo que la gente pregunta, no por la dirección del asiento', () => {

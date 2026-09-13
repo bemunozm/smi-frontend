@@ -10,8 +10,10 @@ import { EditItemModal } from '../components/inventario/ItemFormModal';
 import {
   ALL_BRANCHES,
   CriticalBadge,
+  MovementKindChip,
   NUMBER,
   StatusChip,
+  movementKind,
   stockStatus,
 } from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
@@ -203,9 +205,9 @@ function StockByBranch({ item }: { item: InventoryItem }) {
   );
 }
 
-// --- Kardex ----------------------------------------------------------------
+// --- Historial de movimientos ----------------------------------------------
 
-function Kardex({
+function MovementHistory({
   item,
   movements,
 }: {
@@ -235,9 +237,12 @@ function Kardex({
               key={movement.id}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground">
-                  {MOVEMENT_REASON_LABELS[movement.reason]}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <MovementKindChip kind={movementKind(movement)} />
+                  <span className="text-sm text-muted-foreground">
+                    {MOVEMENT_REASON_LABELS[movement.reason]}
+                  </span>
+                </div>
                 <span
                   className={`font-mono text-sm font-bold ${
                     isIn ? 'text-[var(--success-soft-foreground)]' : 'text-danger'
@@ -273,9 +278,10 @@ function Kardex({
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Kardex" className="min-w-220">
+        <Table.Content aria-label="Historial de movimientos" className="min-w-240">
           <Table.Header>
             <Table.Column isRowHeader>Fecha</Table.Column>
+            <Table.Column>Movimiento</Table.Column>
             <Table.Column>Motivo</Table.Column>
             <Table.Column>Sucursal</Table.Column>
             <Table.Column>Cantidad</Table.Column>
@@ -296,6 +302,9 @@ function Kardex({
                         {DATE_TIME.format(new Date(movement.occurredAt))}
                       </span>
                     </div>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <MovementKindChip kind={movementKind(movement)} />
                   </Table.Cell>
                   <Table.Cell className="text-sm text-foreground">
                     {MOVEMENT_REASON_LABELS[movement.reason]}
@@ -472,9 +481,9 @@ export function FichaItemView() {
           </Select>
         }
         subtitle="Entradas, salidas, traspasos y ajustes, de lo más reciente a lo más antiguo. Cada renglón deja el saldo de SU bodega."
-        title="Kardex"
+        title="Historial de movimientos"
       >
-        <Kardex item={item} movements={movements} />
+        <MovementHistory item={item} movements={movements} />
       </Card>
 
       {action ? (
