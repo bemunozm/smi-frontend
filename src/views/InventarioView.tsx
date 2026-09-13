@@ -10,7 +10,7 @@ import {
   Table,
   TextField,
 } from '@heroui/react';
-import { ArrowLeftRight, Pencil, ScrollText, Trash2 } from 'lucide-react';
+import { ArrowLeftRight, FileText, Pencil, Trash2 } from 'lucide-react';
 
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
 import {
@@ -154,8 +154,8 @@ function ItemRow({
             />
           ) : null}
           <RowAction
-            icon={<ScrollText size={ICON} />}
-            label="Ver historial"
+            icon={<FileText size={ICON} />}
+            label="Ver ficha"
             onPress={() => void navigate(`/inventario/${item.id}`)}
           />
           {isAdmin ? (

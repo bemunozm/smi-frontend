@@ -283,7 +283,7 @@ describe('InventarioView', () => {
       for (const label of [
         'Editar ítem',
         'Registrar movimiento',
-        'Ver historial',
+        'Ver ficha',
         'Eliminar ítem',
       ]) {
         expect(screen.getByRole('button', { name: label })).toBeTruthy();
@@ -301,7 +301,7 @@ describe('InventarioView', () => {
       expect(
         screen.getByRole('button', { name: /Registrar movimiento/ }),
       ).toBeTruthy();
-      expect(screen.getByRole('button', { name: /Ver historial/ })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Ver ficha/ })).toBeTruthy();
     });
   });
 

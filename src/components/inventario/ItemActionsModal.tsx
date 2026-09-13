@@ -15,7 +15,7 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   Pencil,
-  ScrollText,
+  FileText,
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
@@ -556,8 +556,8 @@ export function ItemActionsModal({
                           />
                         ) : null}
                         <QuickAction
-                          icon={<ScrollText size={ICON} />}
-                          label="Ver historial"
+                          icon={<FileText size={ICON} />}
+                          label="Ver ficha"
                           onPress={() => {
                             close();
                             void navigate(`/inventario/${item.id}`);
