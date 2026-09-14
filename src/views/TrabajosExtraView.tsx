@@ -9,7 +9,7 @@ import {
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
-import { useEquipos } from '../hooks/useEquipos';
+import { useEquipment } from '../hooks/useEquipment';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
   Card,
@@ -31,7 +31,7 @@ const TURNOS = [
 ];
 
 export function TrabajosExtraView() {
-  const { data: equipos = [] } = useEquipos();
+  const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
   const crear = useCreateTrabajoExtra();
 
@@ -71,7 +71,7 @@ export function TrabajosExtraView() {
               <option value="">Seleccioná…</option>
               {equipos.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.codigo}
+                  {e.internalCode}
                 </option>
               ))}
             </SelectField>
@@ -151,7 +151,7 @@ export function TrabajosExtraView() {
           <ListCard key={r.id}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="font-semibold text-foreground">{r.equipo?.codigo ?? r.equipoId}</span>
+                <span className="font-semibold text-foreground">{r.equipo?.internalCode ?? r.equipoId}</span>
                 <span className="truncate text-sm text-muted-foreground">{r.operador}</span>
               </div>
               <Chip tone="info">{r.turno}</Chip>

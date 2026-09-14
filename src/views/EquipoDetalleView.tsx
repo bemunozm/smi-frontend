@@ -1,8 +1,13 @@
 import { Link, useParams } from 'react-router-dom';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 
-import { useEquipo } from '../hooks/useEquipos';
-import { estadoEquipoChipColor, estadoEquipoLabel } from '../config/flota-colors';
+import { useEquipmentDetail } from '../hooks/useEquipment';
+import {
+  controlUnitLabel,
+  equipmentClassLabel,
+  equipmentStatusChipColor,
+  equipmentStatusLabel,
+} from '../config/flota-colors';
 
 const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
 
@@ -54,7 +59,7 @@ function Contador({ label, value }: { label: string; value: number }) {
  */
 export function EquipoDetalleView() {
   const { id = '' } = useParams<{ id: string }>();
-  const { data: equipo, isPending, isError, error } = useEquipo(id);
+  const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
 
   if (isPending) {
     return (
@@ -80,6 +85,15 @@ export function EquipoDetalleView() {
     );
   }
 
+  const uso =
+    equipo.controlUnit === 'HOURS'
+      ? equipo.currentHourmeter != null
+        ? `${NUMERO.format(equipo.currentHourmeter)} h`
+        : '—'
+      : equipo.currentMileage != null
+        ? `${NUMERO.format(equipo.currentMileage)} km`
+        : '—';
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
@@ -91,15 +105,15 @@ export function EquipoDetalleView() {
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            {equipo.codigo}
+            {equipo.internalCode}
           </h1>
-          <Chip color={estadoEquipoChipColor(equipo.estado)} variant="soft">
-            {estadoEquipoLabel(equipo.estado)}
+          <Chip color={equipmentStatusChipColor(equipo.status)} variant="soft">
+            {equipmentStatusLabel(equipo.status)}
           </Chip>
         </div>
         <p className="text-sm text-(--muted)">
-          {equipo.tipo} · {equipo.marca} {equipo.modelo}
-          {equipo.anio ? ` · ${equipo.anio}` : ''}
+          {equipo.type} · {equipo.brand} {equipo.model}
+          {equipo.year ? ` · ${equipo.year}` : ''}
         </p>
         <Link className="text-sm text-(--accent) hover:underline" to={`/equipos/${equipo.id}/ficha`}>
           Ver ficha completa →
@@ -120,21 +134,17 @@ export function EquipoDetalleView() {
             <Card.Description>Identificación y uso acumulado de la unidad.</Card.Description>
           </Card.Header>
           <Card.Content className="mt-2">
-            <Dato label="Código / patente" value={equipo.codigo} />
-            <Dato label="Tipo" value={equipo.tipo} />
-            <Dato label="Marca" value={equipo.marca} />
-            <Dato label="Modelo" value={equipo.modelo} />
-            <Dato label="Año" value={equipo.anio ? String(equipo.anio) : '—'} />
-            <Dato label="Estado" value={estadoEquipoLabel(equipo.estado)} />
-            <Dato label="Horómetro actual" value={`${NUMERO.format(equipo.horometroActual)} h`} />
-            <Dato
-              label="Kilometraje actual"
-              value={
-                equipo.kilometrajeActual > 0
-                  ? `${NUMERO.format(equipo.kilometrajeActual)} km`
-                  : '—'
-              }
-            />
+            <Dato label="Código interno" value={equipo.internalCode} />
+            <Dato label="Patente" value={equipo.licensePlate ?? '—'} />
+            <Dato label="Clase" value={equipmentClassLabel(equipo.equipmentClass)} />
+            <Dato label="Tipo" value={equipo.type} />
+            <Dato label="Marca" value={equipo.brand} />
+            <Dato label="Modelo" value={equipo.model} />
+            <Dato label="Año" value={equipo.year ? String(equipo.year) : '—'} />
+            <Dato label="Estado" value={equipmentStatusLabel(equipo.status)} />
+            <Dato label="Unidad de control" value={controlUnitLabel(equipo.controlUnit)} />
+            <Dato label="Uso acumulado" value={uso} />
+            <Dato label="Sucursal base" value={equipo.homeBranch?.name ?? '—'} />
             <Dato label="Dado de alta" value={formatFecha(equipo.createdAt)} />
           </Card.Content>
         </Card>

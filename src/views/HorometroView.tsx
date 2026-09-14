@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, ScanLine, User } from 'lucide-react';
 import { horometroFormSchema, type HorometroForm, type HorometroFormInput } from '../types/horometro';
 import { useHorometroList, useCreateHorometro } from '../hooks/useHorometro';
-import { useEquipos } from '../hooks/useEquipos';
+import { useEquipment } from '../hooks/useEquipment';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
   Card,
@@ -24,7 +24,7 @@ const TURNOS = [
 ];
 
 export function HorometroView() {
-  const { data: equipos = [] } = useEquipos();
+  const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useHorometroList();
   const crear = useCreateHorometro();
 
@@ -66,7 +66,7 @@ export function HorometroView() {
             <option value="">Buscar o escanear equipo</option>
             {equipos.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.codigo} — {e.tipo}
+                {e.internalCode} — {e.type}
               </option>
             ))}
           </SelectField>
@@ -143,7 +143,7 @@ export function HorometroView() {
           <ListCard key={r.id}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground">{r.equipo?.codigo ?? r.equipoId}</span>
+                <span className="font-semibold text-foreground">{r.equipo?.internalCode ?? r.equipoId}</span>
                 <Chip tone="info">{r.turno}</Chip>
               </div>
               <Chip tone={r.valorFinal != null ? 'success' : 'neutral'}>

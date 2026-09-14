@@ -19,28 +19,34 @@ import {
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useBranch, useBranches } from '../hooks/useBranches';
 import {
-  useCreateEquipo,
-  useDeleteEquipo,
-  useEquipos,
-  useResumenFlota,
-  useUpdateEquipo,
-  useUpdateEstadoEquipo,
-} from '../hooks/useEquipos';
+  useCreateEquipment,
+  useDeleteEquipment,
+  useEquipment,
+  useResumenFleet,
+  useUpdateEquipment,
+  useUpdateEquipmentStatus,
+} from '../hooks/useEquipment';
 import {
-  ESTADO_OPTIONS,
-  estadoEquipoChipColor,
-  estadoEquipoLabel,
+  CONTROL_UNIT_OPTIONS,
+  EQUIPMENT_CLASS_OPTIONS,
+  EQUIPMENT_STATUS_OPTIONS,
+  equipmentClassLabel,
+  equipmentStatusChipColor,
+  equipmentStatusLabel,
 } from '../config/flota-colors';
 import { ROLES } from '../types/roles';
 import {
-  EquipoFormSchema,
-  ESTADOS_EQUIPO,
-  toEquipoPayload,
-  type Equipo,
-  type EquipoFormValues,
-  type EstadoEquipo,
-} from '../types/equipo';
+  EquipmentFormSchema,
+  EQUIPMENT_STATUS,
+  toEquipmentPayload,
+  toUpdateEquipmentPayload,
+  type Equipment,
+  type EquipmentClass,
+  type EquipmentFormValues,
+  type EquipmentStatus,
+} from '../types/equipment';
 
 const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
 
@@ -54,104 +60,99 @@ function KebabIcon() {
   );
 }
 
-const DEFAULT_FORM_VALUES: EquipoFormValues = {
-  codigo: '',
-  tipo: '',
-  marca: '',
-  modelo: '',
-  anio: '',
-  estado: 'DISPONIBLE',
+/** Uso acumulado de la unidad — horómetro o kilometraje según `controlUnit`;
+ * solo uno de los dos aplica (ver `types/equipment.ts`). */
+function formatearUso(equipo: Pick<Equipment, 'controlUnit' | 'currentHourmeter' | 'currentMileage'>): string {
+  if (equipo.controlUnit === 'HOURS') {
+    return equipo.currentHourmeter != null ? `${NUMERO.format(equipo.currentHourmeter)} h` : '—';
+  }
+  return equipo.currentMileage != null ? `${NUMERO.format(equipo.currentMileage)} km` : '—';
+}
+
+const DEFAULT_FORM_VALUES: EquipmentFormValues = {
+  internalCode: '',
+  licensePlate: '',
+  equipmentClass: 'LIGHT',
+  type: '',
+  brand: '',
+  model: '',
+  year: '',
+  controlUnit: 'HOURS',
+  status: 'OPERATIONAL',
+  homeBranchId: '',
 };
 
+/** `''` en el form significa "sin sucursal asignada" — el Select de HeroUI no
+ * admite un `id` vacío, así que se usa este sentinel solo para el widget. */
+const SIN_SUCURSAL = '__sin_sucursal__';
+
 interface CamposProps {
-  control: Control<EquipoFormValues>;
-  errors: FieldErrors<EquipoFormValues>;
-  /** El código es la clave de negocio: se fija al crear y el backend no lo edita. */
-  codigoEditable: boolean;
+  control: Control<EquipmentFormValues>;
+  errors: FieldErrors<EquipmentFormValues>;
+  /** El código interno es la clave de negocio: se fija al crear y el backend
+   * no lo edita. */
+  internalCodeEditable: boolean;
+  /** Sucursal asignada HOY al equipo que se está editando (`undefined` en
+   * creación). Existe para el caso borde de la sucursal base: el selector
+   * solo ofrece sucursales activas, pero si el equipo quedó homed a una que
+   * mientras tanto pasó a inactiva, igual debe verse seleccionada — si no,
+   * el `Select` queda en blanco aunque el campo sí tenga valor. */
+  currentHomeBranchId?: string | null;
 }
 
 /**
  * Campos del equipo, compartidos por el modal de creación y el de edición. Se
- * extraen en vez de duplicarse porque son seis y la única diferencia entre
- * ambos formularios es si `codigo` se puede escribir.
+ * extraen en vez de duplicarse porque son varios y la única diferencia entre
+ * ambos formularios es si `internalCode` se puede escribir.
  */
-function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
+function CamposEquipo({ control, errors, internalCodeEditable, currentHomeBranchId }: CamposProps) {
+  // El selector de sucursal base solo debe ofrecer sucursales activas.
+  const { data: sucursalesActivas } = useBranches({ isActive: true });
+  // Solo se pide si estamos editando (ver `currentHomeBranchId`); `useBranch`
+  // ya trae `enabled: !!id`, así que en creación (`undefined`) no dispara nada.
+  const { data: sucursalActual } = useBranch(currentHomeBranchId ?? '');
+  const yaEstaEnActivas = (sucursalesActivas ?? []).some((sucursal) => sucursal.id === sucursalActual?.id);
+  const opcionesSucursal =
+    sucursalActual && !yaEstaEnActivas ? [...(sucursalesActivas ?? []), sucursalActual] : (sucursalesActivas ?? []);
+
   return (
     <>
-      <Controller
-        control={control}
-        name="codigo"
-        render={({ field }) => (
-          <TextField
-            fullWidth
-            isDisabled={!codigoEditable}
-            isInvalid={!!errors.codigo}
-            name={field.name}
-            onBlur={field.onBlur}
-            onChange={field.onChange}
-            value={field.value}
-          >
-            <Label>Código / patente</Label>
-            <Input autoFocus={codigoEditable} placeholder="EX-001" />
-            {errors.codigo ? <FieldError>{errors.codigo.message}</FieldError> : null}
-          </TextField>
-        )}
-      />
-
-      <Controller
-        control={control}
-        name="tipo"
-        render={({ field }) => (
-          <TextField
-            fullWidth
-            isInvalid={!!errors.tipo}
-            name={field.name}
-            onBlur={field.onBlur}
-            onChange={field.onChange}
-            value={field.value}
-          >
-            <Label>Tipo</Label>
-            <Input placeholder="Excavadora, Camión, Cargador…" />
-            {errors.tipo ? <FieldError>{errors.tipo.message}</FieldError> : null}
-          </TextField>
-        )}
-      />
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Controller
           control={control}
-          name="marca"
+          name="internalCode"
           render={({ field }) => (
             <TextField
               fullWidth
-              isInvalid={!!errors.marca}
+              isDisabled={!internalCodeEditable}
+              isInvalid={!!errors.internalCode}
               name={field.name}
               onBlur={field.onBlur}
               onChange={field.onChange}
               value={field.value}
             >
-              <Label>Marca</Label>
-              <Input placeholder="Caterpillar" />
-              {errors.marca ? <FieldError>{errors.marca.message}</FieldError> : null}
+              <Label>Código interno</Label>
+              <Input autoFocus={internalCodeEditable} placeholder="EX-001" />
+              {errors.internalCode ? <FieldError>{errors.internalCode.message}</FieldError> : null}
             </TextField>
           )}
         />
 
         <Controller
           control={control}
-          name="modelo"
+          name="licensePlate"
           render={({ field }) => (
             <TextField
               fullWidth
-              isInvalid={!!errors.modelo}
+              isInvalid={!!errors.licensePlate}
               name={field.name}
               onBlur={field.onBlur}
               onChange={field.onChange}
               value={field.value}
             >
-              <Label>Modelo</Label>
-              <Input placeholder="336" />
-              {errors.modelo ? <FieldError>{errors.modelo.message}</FieldError> : null}
+              <Label>Patente (opcional)</Label>
+              <Input placeholder="AB-CD-12" />
+              {errors.licensePlate ? <FieldError>{errors.licensePlate.message}</FieldError> : null}
             </TextField>
           )}
         />
@@ -160,11 +161,105 @@ function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Controller
           control={control}
-          name="anio"
+          name="equipmentClass"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              isInvalid={!!errors.equipmentClass}
+              name={field.name}
+              value={field.value}
+              onChange={(value) => {
+                if (value) field.onChange(value as EquipmentClass);
+              }}
+            >
+              <Label>Clase</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {EQUIPMENT_CLASS_OPTIONS.map((option) => (
+                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                      {option.label}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+              {errors.equipmentClass ? <FieldError>{errors.equipmentClass.message}</FieldError> : null}
+            </Select>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="type"
           render={({ field }) => (
             <TextField
               fullWidth
-              isInvalid={!!errors.anio}
+              isInvalid={!!errors.type}
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            >
+              <Label>Tipo</Label>
+              <Input placeholder="Excavadora, Camión, Cargador…" />
+              {errors.type ? <FieldError>{errors.type.message}</FieldError> : null}
+            </TextField>
+          )}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Controller
+          control={control}
+          name="brand"
+          render={({ field }) => (
+            <TextField
+              fullWidth
+              isInvalid={!!errors.brand}
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            >
+              <Label>Marca</Label>
+              <Input placeholder="Caterpillar" />
+              {errors.brand ? <FieldError>{errors.brand.message}</FieldError> : null}
+            </TextField>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="model"
+          render={({ field }) => (
+            <TextField
+              fullWidth
+              isInvalid={!!errors.model}
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            >
+              <Label>Modelo</Label>
+              <Input placeholder="336" />
+              {errors.model ? <FieldError>{errors.model.message}</FieldError> : null}
+            </TextField>
+          )}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Controller
+          control={control}
+          name="year"
+          render={({ field }) => (
+            <TextField
+              fullWidth
+              isInvalid={!!errors.year}
               name={field.name}
               onBlur={field.onBlur}
               onChange={field.onChange}
@@ -172,22 +267,57 @@ function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
             >
               <Label>Año (opcional)</Label>
               <Input inputMode="numeric" placeholder="2019" />
-              {errors.anio ? <FieldError>{errors.anio.message}</FieldError> : null}
+              {errors.year ? <FieldError>{errors.year.message}</FieldError> : null}
             </TextField>
           )}
         />
 
         <Controller
           control={control}
-          name="estado"
+          name="controlUnit"
           render={({ field }) => (
             <Select
               fullWidth
-              isInvalid={!!errors.estado}
+              isInvalid={!!errors.controlUnit}
               name={field.name}
               value={field.value}
               onChange={(value) => {
                 if (value) field.onChange(value);
+              }}
+            >
+              <Label>Unidad de control</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {CONTROL_UNIT_OPTIONS.map((option) => (
+                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                      {option.label}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+              {errors.controlUnit ? <FieldError>{errors.controlUnit.message}</FieldError> : null}
+            </Select>
+          )}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Controller
+          control={control}
+          name="status"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              isInvalid={!!errors.status}
+              name={field.name}
+              value={field.value}
+              onChange={(value) => {
+                if (value) field.onChange(value as EquipmentStatus);
               }}
             >
               <Label>Estado</Label>
@@ -197,7 +327,7 @@ function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
-                  {ESTADO_OPTIONS.map((option) => (
+                  {EQUIPMENT_STATUS_OPTIONS.map((option) => (
                     <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
                       {option.label}
                       <ListBox.ItemIndicator />
@@ -205,7 +335,47 @@ function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
                   ))}
                 </ListBox>
               </Select.Popover>
-              {errors.estado ? <FieldError>{errors.estado.message}</FieldError> : null}
+              {errors.status ? <FieldError>{errors.status.message}</FieldError> : null}
+            </Select>
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="homeBranchId"
+          render={({ field }) => (
+            <Select
+              fullWidth
+              isInvalid={!!errors.homeBranchId}
+              name={field.name}
+              value={field.value || SIN_SUCURSAL}
+              onChange={(value) => {
+                if (value) field.onChange(value === SIN_SUCURSAL ? '' : value);
+              }}
+            >
+              <Label>Sucursal base (opcional)</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  <ListBox.Item id={SIN_SUCURSAL} textValue="Sin sucursal">
+                    Sin sucursal
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                  {opcionesSucursal.map((sucursal) => (
+                    <ListBox.Item key={sucursal.id} id={sucursal.id} textValue={sucursal.name}>
+                      {sucursal.name}
+                      {!sucursal.isActive ? (
+                        <span className="text-(--muted)"> (inactiva)</span>
+                      ) : null}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+              {errors.homeBranchId ? <FieldError>{errors.homeBranchId.message}</FieldError> : null}
             </Select>
           )}
         />
@@ -215,14 +385,14 @@ function CamposEquipo({ control, errors, codigoEditable }: CamposProps) {
 }
 
 function CreateEquipoModal() {
-  const createEquipo = useCreateEquipo();
+  const createEquipment = useCreateEquipment();
   const {
     control,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<EquipoFormValues>({
-    resolver: zodResolver(EquipoFormSchema),
+  } = useForm<EquipmentFormValues>({
+    resolver: zodResolver(EquipmentFormSchema),
     defaultValues: DEFAULT_FORM_VALUES,
   });
 
@@ -233,8 +403,8 @@ function CreateEquipoModal() {
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-lg">
             {({ close }) => {
-              const onSubmit = (values: EquipoFormValues): void => {
-                createEquipo.mutate(toEquipoPayload(values), {
+              const onSubmit = (values: EquipmentFormValues): void => {
+                createEquipment.mutate(toEquipmentPayload(values), {
                   onSuccess: () => {
                     reset();
                     close();
@@ -257,14 +427,14 @@ function CreateEquipoModal() {
                       noValidate
                       onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                     >
-                      <CamposEquipo codigoEditable control={control} errors={errors} />
+                      <CamposEquipo control={control} errors={errors} internalCodeEditable />
                     </form>
                   </Modal.Body>
                   <Modal.Footer>
                     <Button variant="secondary" onPress={close}>
                       Cancelar
                     </Button>
-                    <Button form="create-equipo-form" isPending={createEquipo.isPending} type="submit">
+                    <Button form="create-equipo-form" isPending={createEquipment.isPending} type="submit">
                       {({ isPending }) =>
                         isPending ? <Spinner color="current" size="sm" /> : 'Crear equipo'
                       }
@@ -281,28 +451,32 @@ function CreateEquipoModal() {
 }
 
 interface EquipoModalProps {
-  equipo: Equipo;
+  equipo: Equipment;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }
 
 function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
-  const updateEquipo = useUpdateEquipo();
+  const updateEquipment = useUpdateEquipment();
   const {
     control,
     handleSubmit,
     formState: { errors },
-  } = useForm<EquipoFormValues>({
-    resolver: zodResolver(EquipoFormSchema),
+  } = useForm<EquipmentFormValues>({
+    resolver: zodResolver(EquipmentFormSchema),
     // `values` (no `defaultValues`): el modal vive montado en la fila, así que
     // el form debe re-sincronizarse cuando la tabla se refresca.
     values: {
-      codigo: equipo.codigo,
-      tipo: equipo.tipo,
-      marca: equipo.marca,
-      modelo: equipo.modelo,
-      anio: equipo.anio ? String(equipo.anio) : '',
-      estado: equipo.estado,
+      internalCode: equipo.internalCode,
+      licensePlate: equipo.licensePlate ?? '',
+      equipmentClass: equipo.equipmentClass,
+      type: equipo.type,
+      brand: equipo.brand,
+      model: equipo.model,
+      year: equipo.year ? String(equipo.year) : '',
+      controlUnit: equipo.controlUnit,
+      status: equipo.status,
+      homeBranchId: equipo.homeBranchId ?? '',
     },
   });
 
@@ -311,9 +485,11 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-lg">
           {({ close }) => {
-            const onSubmit = (values: EquipoFormValues): void => {
-              const { codigo: _codigo, ...input } = toEquipoPayload(values);
-              updateEquipo.mutate({ id: equipo.id, input }, { onSuccess: () => close() });
+            const onSubmit = (values: EquipmentFormValues): void => {
+              updateEquipment.mutate(
+                { id: equipo.id, input: toUpdateEquipmentPayload(values) },
+                { onSuccess: () => close() },
+              );
             };
 
             return (
@@ -321,7 +497,7 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
                 <Modal.CloseTrigger />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Editar {equipo.codigo}
+                    Editar {equipo.internalCode}
                   </Modal.Heading>
                 </Modal.Header>
                 <Modal.Body>
@@ -331,7 +507,12 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
                     noValidate
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
-                    <CamposEquipo codigoEditable={false} control={control} errors={errors} />
+                    <CamposEquipo
+                      control={control}
+                      currentHomeBranchId={equipo.homeBranchId}
+                      errors={errors}
+                      internalCodeEditable={false}
+                    />
                   </form>
                 </Modal.Body>
                 <Modal.Footer>
@@ -340,7 +521,7 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
                   </Button>
                   <Button
                     form={`edit-equipo-form-${equipo.id}`}
-                    isPending={updateEquipo.isPending}
+                    isPending={updateEquipment.isPending}
                     type="submit"
                   >
                     {({ isPending }) =>
@@ -358,7 +539,7 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
 }
 
 function DeleteEquipoAlertDialog({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
-  const deleteEquipo = useDeleteEquipo();
+  const deleteEquipment = useDeleteEquipment();
 
   return (
     <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -369,13 +550,13 @@ function DeleteEquipoAlertDialog({ equipo, isOpen, onOpenChange }: EquipoModalPr
               <AlertDialog.CloseTrigger />
               <AlertDialog.Header>
                 <AlertDialog.Icon status="danger" />
-                <AlertDialog.Heading>¿Eliminar {equipo.codigo}?</AlertDialog.Heading>
+                <AlertDialog.Heading>¿Eliminar {equipo.internalCode}?</AlertDialog.Heading>
               </AlertDialog.Header>
               <AlertDialog.Body>
                 <p>
                   Esta acción no se puede deshacer. Si la unidad ya tiene registros de terreno,
                   mantenciones o consumos, el sistema la rechazará: en ese caso, cámbiala a{' '}
-                  <strong>De baja</strong> para retirarla conservando su historial.
+                  <strong>Fuera de servicio</strong> para retirarla conservando su historial.
                 </p>
               </AlertDialog.Body>
               <AlertDialog.Footer>
@@ -383,13 +564,13 @@ function DeleteEquipoAlertDialog({ equipo, isOpen, onOpenChange }: EquipoModalPr
                   Cancelar
                 </Button>
                 <Button
-                  isPending={deleteEquipo.isPending}
+                  isPending={deleteEquipment.isPending}
                   variant="danger"
                   onPress={() => {
-                    deleteEquipo.mutate(equipo.id, { onSuccess: () => close() });
+                    deleteEquipment.mutate(equipo.id, { onSuccess: () => close() });
                   }}
                 >
-                  {deleteEquipo.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  {deleteEquipment.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
                 </Button>
               </AlertDialog.Footer>
             </>
@@ -406,17 +587,30 @@ function DeleteEquipoAlertDialog({ equipo, isOpen, onOpenChange }: EquipoModalPr
  * modal de edición completo — además es la única escritura que el SUPERVISOR
  * tiene permitida sobre la flota.
  */
-function EquipoActionsMenu({ equipo, puedeEditarFicha }: { equipo: Equipo; puedeEditarFicha: boolean }) {
+function EquipoActionsMenu({
+  equipo,
+  puedeEditarFicha,
+  puedeCambiarEstado,
+}: {
+  equipo: Equipment;
+  puedeEditarFicha: boolean;
+  /** `PATCH /equipment/:id/status` solo lo autoriza el backend a ADMIN y
+   * SUPERVISOR — MANTENEDOR recibe 403 si lo intenta, así que los ítems
+   * "Marcar como…" ni se muestran para el resto de los roles. */
+  puedeCambiarEstado: boolean;
+}) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const updateEstado = useUpdateEstadoEquipo();
+  const updateStatus = useUpdateEquipmentStatus();
 
-  const otrosEstados = ESTADOS_EQUIPO.filter((estado) => estado !== equipo.estado);
+  const otrosEstados = puedeCambiarEstado
+    ? EQUIPMENT_STATUS.filter((status) => status !== equipo.status)
+    : [];
 
   return (
     <>
       <Dropdown>
-        <Button isIconOnly aria-label={`Acciones para ${equipo.codigo}`} size="sm" variant="secondary">
+        <Button isIconOnly aria-label={`Acciones para ${equipo.internalCode}`} size="sm" variant="secondary">
           <KebabIcon />
         </Button>
         <Dropdown.Popover placement="bottom end">
@@ -426,21 +620,21 @@ function EquipoActionsMenu({ equipo, puedeEditarFicha }: { equipo: Equipo; puede
               const clave = String(key);
               if (clave === 'edit') return setIsEditOpen(true);
               if (clave === 'delete') return setIsDeleteOpen(true);
-              if (clave.startsWith('estado:')) {
-                updateEstado.mutate({
+              if (clave.startsWith('status:')) {
+                updateStatus.mutate({
                   id: equipo.id,
-                  estado: clave.slice('estado:'.length) as EstadoEquipo,
+                  status: clave.slice('status:'.length) as EquipmentStatus,
                 });
               }
             }}
           >
-            {otrosEstados.map((estado) => (
+            {otrosEstados.map((status) => (
               <Dropdown.Item
-                key={estado}
-                id={`estado:${estado}`}
-                textValue={`Marcar como ${estadoEquipoLabel(estado)}`}
+                key={status}
+                id={`status:${status}`}
+                textValue={`Marcar como ${equipmentStatusLabel(status)}`}
               >
-                <Label>Marcar como {estadoEquipoLabel(estado)}</Label>
+                <Label>Marcar como {equipmentStatusLabel(status)}</Label>
               </Dropdown.Item>
             ))}
             <Dropdown.Item id="edit" textValue="Editar ficha">
@@ -461,7 +655,7 @@ function EquipoActionsMenu({ equipo, puedeEditarFicha }: { equipo: Equipo; puede
 
 /** Contadores por estado — el mismo dato que alimenta el KPI del dashboard. */
 function ResumenFlota() {
-  const { data: resumen } = useResumenFlota();
+  const { data: resumen } = useResumenFleet();
 
   if (!resumen) return null;
 
@@ -470,9 +664,9 @@ function ResumenFlota() {
       <Chip size="sm" variant="secondary">
         {resumen.total} equipos
       </Chip>
-      {ESTADOS_EQUIPO.map((estado) => (
-        <Chip color={estadoEquipoChipColor(estado)} key={estado} size="sm" variant="soft">
-          {estadoEquipoLabel(estado)}: {resumen.porEstado[estado] ?? 0}
+      {EQUIPMENT_STATUS.map((status) => (
+        <Chip color={equipmentStatusChipColor(status)} key={status} size="sm" variant="soft">
+          {equipmentStatusLabel(status)}: {resumen.porEstado[status] ?? 0}
         </Chip>
       ))}
     </div>
@@ -482,19 +676,24 @@ function ResumenFlota() {
 const TODOS = '__todos__';
 
 export function EquiposView() {
-  const { user } = useCurrentUser();
-  const [estado, setEstado] = useState<EstadoEquipo | typeof TODOS>(TODOS);
+  const { user, role } = useCurrentUser();
+  const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
+  const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
   const [busqueda, setBusqueda] = useState('');
 
   const puedeEditarFicha = user?.role === ROLES.ADMIN;
+  // `PATCH /equipment/:id/status` solo lo autoriza el backend a ADMIN y
+  // SUPERVISOR (MANTENEDOR recibe 403 vía `/equipos`) — ver Fix 3 del review QA.
+  const puedeCambiarEstado = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
 
   const {
     data: equipos,
     isPending,
     isError,
     error,
-  } = useEquipos({
-    ...(estado === TODOS ? {} : { estado }),
+  } = useEquipment({
+    ...(status === TODOS ? {} : { status }),
+    ...(equipmentClass === TODOS ? {} : { equipmentClass }),
     ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
   });
 
@@ -525,15 +724,44 @@ export function EquiposView() {
           onChange={setBusqueda}
         >
           <Label>Buscar</Label>
-          <Input placeholder="Código, marca o modelo" />
+          <Input placeholder="Código, patente, marca o modelo" />
         </TextField>
+
+        <Select
+          className="w-full sm:w-48"
+          aria-label="Filtrar por clase"
+          value={equipmentClass}
+          onChange={(value) => {
+            if (value) setEquipmentClass(value as EquipmentClass | typeof TODOS);
+          }}
+        >
+          <Label>Clase</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={TODOS} textValue="Todas las clases">
+                Todas las clases
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {EQUIPMENT_CLASS_OPTIONS.map((option) => (
+                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                  {option.label}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
 
         <Select
           className="w-full sm:w-56"
           aria-label="Filtrar por estado"
-          value={estado}
+          value={status}
           onChange={(value) => {
-            if (value) setEstado(value as EstadoEquipo | typeof TODOS);
+            if (value) setStatus(value as EquipmentStatus | typeof TODOS);
           }}
         >
           <Label>Estado</Label>
@@ -547,7 +775,7 @@ export function EquiposView() {
                 Todos los estados
                 <ListBox.ItemIndicator />
               </ListBox.Item>
-              {ESTADO_OPTIONS.map((option) => (
+              {EQUIPMENT_STATUS_OPTIONS.map((option) => (
                 <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
                   {option.label}
                   <ListBox.ItemIndicator />
@@ -586,11 +814,11 @@ export function EquiposView() {
             <Table.Content aria-label="Equipos" className="min-w-200">
               <Table.Header>
                 <Table.Column isRowHeader>Código</Table.Column>
+                <Table.Column>Clase</Table.Column>
                 <Table.Column>Tipo</Table.Column>
                 <Table.Column>Marca / modelo</Table.Column>
                 <Table.Column>Estado</Table.Column>
-                <Table.Column>Horómetro</Table.Column>
-                <Table.Column>Kilometraje</Table.Column>
+                <Table.Column>Uso</Table.Column>
                 <Table.Column>Acciones</Table.Column>
               </Table.Header>
               <Table.Body>
@@ -602,30 +830,28 @@ export function EquiposView() {
                           className="font-mono text-sm font-medium text-(--accent) hover:underline"
                           to={`/equipos/${equipo.id}`}
                         >
-                          {equipo.codigo}
+                          {equipo.internalCode}
                         </Link>
                       </Table.Cell>
-                      <Table.Cell>{equipo.tipo}</Table.Cell>
+                      <Table.Cell>{equipmentClassLabel(equipo.equipmentClass)}</Table.Cell>
+                      <Table.Cell>{equipo.type}</Table.Cell>
                       <Table.Cell>
-                        {equipo.marca} {equipo.modelo}
-                        {equipo.anio ? <span className="text-(--muted)"> · {equipo.anio}</span> : null}
+                        {equipo.brand} {equipo.model}
+                        {equipo.year ? <span className="text-(--muted)"> · {equipo.year}</span> : null}
                       </Table.Cell>
                       <Table.Cell>
-                        <Chip color={estadoEquipoChipColor(equipo.estado)} size="sm" variant="soft">
-                          {estadoEquipoLabel(equipo.estado)}
+                        <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
+                          {equipmentStatusLabel(equipo.status)}
                         </Chip>
                       </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">
-                        {NUMERO.format(equipo.horometroActual)} h
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">
-                        {equipo.kilometrajeActual > 0
-                          ? `${NUMERO.format(equipo.kilometrajeActual)} km`
-                          : '—'}
-                      </Table.Cell>
+                      <Table.Cell className="font-mono text-sm">{formatearUso(equipo)}</Table.Cell>
                       <Table.Cell>
                         <div className="flex justify-end">
-                          <EquipoActionsMenu equipo={equipo} puedeEditarFicha={puedeEditarFicha} />
+                          <EquipoActionsMenu
+                            equipo={equipo}
+                            puedeCambiarEstado={puedeCambiarEstado}
+                            puedeEditarFicha={puedeEditarFicha}
+                          />
                         </div>
                       </Table.Cell>
                     </Table.Row>

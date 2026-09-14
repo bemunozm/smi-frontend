@@ -18,7 +18,7 @@ function delay(ms: number): Promise<void> {
 /**
  * MOCK — bloque Núcleo, único dominio que todavía no integró a `main`
  * (Terreno y Flota/Inventario ya lo hicieron: ver `hooks/useDashboard.ts` y
- * `hooks/useEquipos.ts#useResumenFlota` / `hooks/useInventario.ts#useResumenInventario`
+ * `hooks/useEquipment.ts#useResumenFleet` / `hooks/useInventario.ts#useResumenInventario`
  * respectivamente). Cada campo documenta su contrato real (ver también
  * `types/dashboard.ts` y `DASHBOARD-CONTRACTS.md` en la raíz del proyecto):
  *

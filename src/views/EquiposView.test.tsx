@@ -17,18 +17,28 @@ vi.mock('../hooks/useCurrentUser', () => ({
   }),
 }));
 
+// Los formularios (create/edit) consultan sucursales para el selector
+// `homeBranch` — mockeada sin datos porque estos tests no abren esos modales.
+vi.mock('../hooks/useBranches', () => ({
+  useBranches: () => ({ data: [] }),
+}));
+
 afterEach(cleanup);
 
 const EQUIPO = {
   id: 'eq_1',
-  codigo: 'EX-001',
-  tipo: 'Excavadora',
-  marca: 'Caterpillar',
-  modelo: '336',
-  anio: 2019,
-  estado: 'DISPONIBLE' as const,
-  horometroActual: 1200,
-  kilometrajeActual: 0,
+  internalCode: 'EX-001',
+  licensePlate: null,
+  equipmentClass: 'HEAVY' as const,
+  type: 'Excavadora',
+  brand: 'Caterpillar',
+  model: '336',
+  year: 2019,
+  controlUnit: 'HOURS' as const,
+  currentHourmeter: 1200,
+  currentMileage: null,
+  status: 'OPERATIONAL' as const,
+  homeBranchId: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -46,28 +56,28 @@ function renderConDatos(ui: React.ReactElement, seed: (qc: QueryClient) => void,
 describe('EquiposView', () => {
   it('lista los equipos con su estado y uso', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(['equipos'], [EQUIPO]);
-      qc.setQueryData(['equipos', 'resumen'], {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
-        porEstado: { DISPONIBLE: 1, EN_RUTA: 0, EN_MANTENCION: 0, DE_BAJA: 0 },
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
     expect(screen.getByText('EX-001')).toBeTruthy();
     expect(screen.getByText('Excavadora')).toBeTruthy();
     // El estado se muestra con la etiqueta en español, no con el valor del enum.
-    expect(screen.getAllByText('Disponible').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Operativo').length).toBeGreaterThan(0);
     expect(screen.getByText('1.200 h')).toBeTruthy();
   });
 
   it('muestra el estado vacío cuando ningún equipo coincide', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(['equipos'], []);
-      qc.setQueryData(['equipos', 'resumen'], {
+      qc.setQueryData(['equipment'], []);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 0,
         disponibles: 0,
-        porEstado: { DISPONIBLE: 0, EN_RUTA: 0, EN_MANTENCION: 0, DE_BAJA: 0 },
+        porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
@@ -79,8 +89,9 @@ describe('EquiposView', () => {
 describe('EquipoDetalleView', () => {
   it('muestra la ficha técnica y los contadores por dominio', () => {
     const qc = new QueryClient();
-    qc.setQueryData(['equipos', 'eq_1'], {
+    qc.setQueryData(['equipment', 'eq_1'], {
       ...EQUIPO,
+      homeBranch: null,
       _count: { combustibles: 2, horometros: 3, trabajosExtra: 1, hallazgos: 4, movimientos: 5 },
       movimientos: [
         {
@@ -106,7 +117,7 @@ describe('EquipoDetalleView', () => {
       </QueryClientProvider>,
     );
 
-    // El código aparece dos veces: en el título y en la fila "Código / patente".
+    // El código aparece dos veces: en el título y en la fila "Código interno".
     expect(screen.getAllByText('EX-001').length).toBe(2);
     expect(screen.getByText('Aceite motor 15W-40')).toBeTruthy();
     expect(screen.getByText('1.200 h')).toBeTruthy();

@@ -174,7 +174,7 @@ export function InsumoKardexView() {
                               className="text-(--accent) hover:underline"
                               to={`/equipos/${movimiento.equipo.id}`}
                             >
-                              {movimiento.equipo.codigo}
+                              {movimiento.equipo.internalCode}
                             </Link>
                           ) : (
                             '—'

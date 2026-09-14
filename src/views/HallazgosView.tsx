@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight } from 'lucide-react';
 import { hallazgoFormSchema, type HallazgoForm } from '../types/hallazgos';
 import { useHallazgosList, useCreateHallazgo } from '../hooks/useHallazgos';
-import { useEquipos } from '../hooks/useEquipos';
+import { useEquipment } from '../hooks/useEquipment';
 import { fmtDate, fmtTime } from '../lib/format';
 import {
   Card,
@@ -52,7 +52,7 @@ const estadoLabel: Record<string, string> = {
 };
 
 export function HallazgosView() {
-  const { data: equipos = [] } = useEquipos();
+  const { data: equipos = [] } = useEquipment();
   const { data: hallazgos = [] } = useHallazgosList();
   const crear = useCreateHallazgo();
 
@@ -84,7 +84,7 @@ export function HallazgosView() {
             <option value="">Seleccioná…</option>
             {equipos.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.codigo} — {e.tipo}
+                {e.internalCode} — {e.type}
               </option>
             ))}
           </SelectField>
@@ -119,7 +119,7 @@ export function HallazgosView() {
         {hallazgos.map((h) => (
           <ListCard key={h.id} accent={prioridadAccent[h.prioridad]}>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">{h.equipo?.codigo ?? h.equipoId}</span>
+              <span className="font-semibold text-foreground">{h.equipo?.internalCode ?? h.equipoId}</span>
               <Chip tone={prioridadTone[h.prioridad] ?? 'neutral'}>{prioridadLabel[h.prioridad] ?? h.prioridad}</Chip>
               <span className="tabular ml-auto text-xs text-muted-foreground">{fmtTime(h.fecha)}</span>
             </div>

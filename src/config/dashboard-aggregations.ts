@@ -41,12 +41,13 @@ export function hallazgosAbiertosPorPrioridad(hallazgos: Hallazgo[]): HallazgosP
 }
 
 /** Top N hallazgos recientes — el backend ya devuelve `orderBy fecha desc`,
- * así que solo se recorta y se remapea el shape (`equipo.codigo` → `equipo`,
- * `prioridad` → `criticidad`) al contrato que ya consume `DashboardView`.
+ * así que solo se recorta y se remapea el shape (`equipo.internalCode` →
+ * `equipo`, `prioridad` → `criticidad`) al contrato que ya consume `DashboardView`.
  *
- * En el tipo de Terreno (Alexander) `equipo` es opcional (`equipo?: { codigo }`)
- * — el backend lo incluye siempre en la práctica, pero el tipo no lo garantiza,
- * así que se usa optional chaining con fallback.
+ * En el tipo de Terreno (Alexander) `equipo` es opcional
+ * (`equipo?: { internalCode }`) — el backend lo incluye siempre en la
+ * práctica, pero el tipo no lo garantiza, así que se usa optional chaining
+ * con fallback.
  *
  * `prioridad`/`estado` son `string` en el tipo de Terreno (no union literal —
  * su dominio no valida con Zod), mientras que `HallazgoResumen` sigue
@@ -56,7 +57,7 @@ export function hallazgosAbiertosPorPrioridad(hallazgos: Hallazgo[]): HallazgosP
 export function hallazgosRecientes(hallazgos: Hallazgo[], limit = 5): HallazgoResumen[] {
   return hallazgos.slice(0, limit).map((h) => ({
     id: h.id,
-    equipo: h.equipo?.codigo ?? '—',
+    equipo: h.equipo?.internalCode ?? '—',
     descripcion: h.descripcion,
     criticidad: h.prioridad as Criticidad,
     estado: h.estado as HallazgoEstado,

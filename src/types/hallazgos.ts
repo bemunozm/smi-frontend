@@ -19,5 +19,5 @@ export interface Hallazgo {
   estado: string;
   fotoUrl: string | null;
   fecha: string;
-  equipo?: { codigo: string };
+  equipo?: { internalCode: string };
 }

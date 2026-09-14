@@ -9,12 +9,12 @@ describe('HorometroView', () => {
   it('renderiza con datos sin lanzar', () => {
     const qc = new QueryClient();
     qc.setQueryData(
-      ['equipos'],
-      [{ id: 'e1', codigo: 'EX-001', tipo: 'Excavadora', marca: 'Cat', modelo: '336', estado: 'OPERATIVO', horometroActual: 1180, kilometrajeActual: 0 }],
+      ['equipment'],
+      [{ id: 'e1', internalCode: 'EX-001', type: 'Excavadora' }],
     );
     qc.setQueryData(
       ['horometro'],
-      [{ id: 'r1', equipoId: 'e1', operador: 'Juan Rojas', turno: 'DIURNO', valorInicial: 1180, valorFinal: 1200, nivelCombustible: 75, fecha: '2026-08-01T09:00:00.000Z', equipo: { codigo: 'EX-001' } }],
+      [{ id: 'r1', equipoId: 'e1', operador: 'Juan Rojas', turno: 'DIURNO', valorInicial: 1180, valorFinal: 1200, nivelCombustible: 75, fecha: '2026-08-01T09:00:00.000Z', equipo: { internalCode: 'EX-001' } }],
     );
 
     render(

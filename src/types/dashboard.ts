@@ -3,8 +3,8 @@ import { z } from 'zod';
 /**
  * Contrato de datos del dashboard del bloque Núcleo.
  *
- * Terreno (Alexander) y Flota/Inventario (Amin) ya están integrados a
- * `main` con datos REALES. Terreno: sus 4 piezas (KPI "Hallazgos abiertos",
+ * Terreno (Alexander) y Flota/Inventario (Benjamín/Joaquín) ya están
+ * integrados a `main` con datos REALES. Terreno: sus 4 piezas (KPI "Hallazgos abiertos",
  * lista de recientes, tendencia semanal, horas extraordinarias por mes) se
  * calculan en cliente desde `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts`
  * vía `config/dashboard-aggregations.ts` — ver `hooks/useDashboard.ts`. Los
@@ -15,10 +15,10 @@ import { z } from 'zod';
  * `interface` planas, dominio de Terreno — `types/hallazgos.ts` /
  * `types/trabajosExtra.ts` en la entrada).
  *
- * Flota/Inventario (Amin) NO se lee desde acá: `DashboardView` consume
- * directo `useResumenFlota()`/`useInsumos()` de `hooks/useEquipos.ts` /
- * `hooks/useInventario.ts` y sus tipos (`ResumenFlota`, `Insumo`) de
- * `types/equipo.ts` / `types/inventario.ts` — sin capa de agregación propia
+ * Flota/Inventario NO se lee desde acá: `DashboardView` consume
+ * directo `useResumenFleet()`/`useInsumos()` de `hooks/useEquipment.ts` /
+ * `hooks/useInventario.ts` y sus tipos (`ResumenFleet`, `Insumo`) de
+ * `types/equipment.ts` / `types/inventario.ts` — sin capa de agregación propia
  * (el backend ya agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`).
  *
  * Mantenimiento (Joaquín) sigue sin integrar (Fase 2, motor preventivo por
@@ -57,7 +57,7 @@ export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema
  * KPIs que siguen sin dueño integrado a `main` (Mantenimiento, Fase 2) —
  * únicos campos que todavía sirve `api/DashboardAPI.ts` como mock.
  * `equiposDisponibles`/`insumosBajoMinimo` salieron de acá (ahora reales, ver
- * `hooks/useEquipos.ts#useResumenFlota` / `hooks/useInventario.ts#useResumenInventario`),
+ * `hooks/useEquipment.ts#useResumenFleet` / `hooks/useInventario.ts#useResumenInventario`),
  * igual que `hallazgosAbiertos` (real) e `ingresosTrabajosExtra` (eliminado —
  * el campo `monto` de `TrabajoExtraordinario` no existe en el modelo real,
  * solo `totalHoras`, cubierto por el gráfico de horas extraordinarias).

@@ -49,5 +49,5 @@ export interface TrabajoExtraordinario {
   descripcion: string;
   observaciones: string | null;
   fecha: string;
-  equipo?: { codigo: string };
+  equipo?: { internalCode: string };
 }

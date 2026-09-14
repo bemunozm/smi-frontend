@@ -1,34 +1,65 @@
-import { ESTADOS_EQUIPO, type EstadoEquipo } from '../types/equipo';
+import {
+  CONTROL_UNIT,
+  EQUIPMENT_CLASS,
+  EQUIPMENT_STATUS,
+  type ControlUnit,
+  type EquipmentClass,
+  type EquipmentStatus,
+} from '../types/equipment';
 import type { UnidadInsumo } from '../types/inventario';
 
 /** Colores semánticos de HeroUI (Chip) — mismo criterio que `role-colors.ts`. */
 export type FlotaChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
 
-const ESTADO_COLOR: Record<EstadoEquipo, FlotaChipColor> = {
-  DISPONIBLE: 'success',
-  EN_RUTA: 'accent',
-  EN_MANTENCION: 'warning',
-  DE_BAJA: 'danger',
+const EQUIPMENT_STATUS_COLOR: Record<EquipmentStatus, FlotaChipColor> = {
+  OPERATIONAL: 'success',
+  IN_WORKSHOP: 'warning',
+  OUT_OF_SERVICE: 'danger',
 };
 
-export function estadoEquipoChipColor(estado: EstadoEquipo): FlotaChipColor {
-  return ESTADO_COLOR[estado];
+export function equipmentStatusChipColor(status: EquipmentStatus): FlotaChipColor {
+  return EQUIPMENT_STATUS_COLOR[status];
 }
 
-const ESTADO_LABEL: Record<EstadoEquipo, string> = {
-  DISPONIBLE: 'Disponible',
-  EN_RUTA: 'En ruta',
-  EN_MANTENCION: 'En mantención',
-  DE_BAJA: 'De baja',
+const EQUIPMENT_STATUS_LABEL: Record<EquipmentStatus, string> = {
+  OPERATIONAL: 'Operativo',
+  IN_WORKSHOP: 'En taller',
+  OUT_OF_SERVICE: 'Fuera de servicio',
 };
 
-export function estadoEquipoLabel(estado: EstadoEquipo): string {
-  return ESTADO_LABEL[estado];
+export function equipmentStatusLabel(status: EquipmentStatus): string {
+  return EQUIPMENT_STATUS_LABEL[status];
 }
 
 /** Opciones `{value,label}` para los selects de estado. */
-export const ESTADO_OPTIONS: ReadonlyArray<{ value: EstadoEquipo; label: string }> =
-  ESTADOS_EQUIPO.map((estado) => ({ value: estado, label: ESTADO_LABEL[estado] }));
+export const EQUIPMENT_STATUS_OPTIONS: ReadonlyArray<{ value: EquipmentStatus; label: string }> =
+  EQUIPMENT_STATUS.map((status) => ({ value: status, label: EQUIPMENT_STATUS_LABEL[status] }));
+
+const EQUIPMENT_CLASS_LABEL: Record<EquipmentClass, string> = {
+  LIGHT: 'Liviano',
+  HEAVY: 'Pesado',
+};
+
+export function equipmentClassLabel(equipmentClass: EquipmentClass): string {
+  return EQUIPMENT_CLASS_LABEL[equipmentClass];
+}
+
+/** Opciones `{value,label}` para el filtro/selector liviano vs. pesado. */
+export const EQUIPMENT_CLASS_OPTIONS: ReadonlyArray<{ value: EquipmentClass; label: string }> =
+  EQUIPMENT_CLASS.map((value) => ({ value, label: EQUIPMENT_CLASS_LABEL[value] }));
+
+const CONTROL_UNIT_LABEL: Record<ControlUnit, string> = {
+  KM: 'Kilometraje',
+  HOURS: 'Horómetro',
+};
+
+export function controlUnitLabel(unit: ControlUnit): string {
+  return CONTROL_UNIT_LABEL[unit];
+}
+
+/** Opciones `{value,label}` para el selector de unidad de control. */
+export const CONTROL_UNIT_OPTIONS: ReadonlyArray<{ value: ControlUnit; label: string }> =
+  CONTROL_UNIT.map((value) => ({ value, label: CONTROL_UNIT_LABEL[value] }));
 
 /** Símbolo corto de la unidad, para mostrar junto a las cantidades. */
 const UNIDAD_SIMBOLO: Record<UnidadInsumo, string> = {

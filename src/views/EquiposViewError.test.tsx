@@ -18,14 +18,14 @@ vi.mock('../hooks/useCurrentUser', () => ({
 // convierte el error de axios en el `Error` que la vista termina mostrando.
 // Va en un archivo aparte porque `vi.mock` es de archivo: mockear la API acá
 // dejaría sin efecto el `setQueryData` de los tests del camino feliz.
-vi.mock('../api/EquipoAPI', () => ({
-  EquipoAPI: {
+vi.mock('../api/EquipmentAPI', () => ({
+  EquipmentAPI: {
     list: vi.fn(() => Promise.reject(new Error('No se pudo obtener la lista de equipos.'))),
     resumen: vi.fn(() => Promise.reject(new Error('No se pudo obtener el resumen de la flota.'))),
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
-    updateEstado: vi.fn(),
+    updateStatus: vi.fn(),
     remove: vi.fn(),
   },
 }));

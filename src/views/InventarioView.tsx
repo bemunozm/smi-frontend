@@ -20,7 +20,7 @@ import {
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useEquipos } from '../hooks/useEquipos';
+import { useEquipment } from '../hooks/useEquipment';
 import {
   useAjustarStock,
   useCreateInsumo,
@@ -302,7 +302,7 @@ const SIN_EQUIPO = '__sin_equipo__';
  */
 function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
   const createMovimiento = useCreateMovimiento();
-  const { data: equipos } = useEquipos();
+  const { data: equipos } = useEquipment();
   const {
     control,
     handleSubmit,
@@ -515,9 +515,9 @@ function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
                                   <ListBox.Item
                                     key={equipo.id}
                                     id={equipo.id}
-                                    textValue={`${equipo.codigo} · ${equipo.tipo}`}
+                                    textValue={`${equipo.internalCode} · ${equipo.type}`}
                                   >
-                                    {equipo.codigo} · {equipo.tipo}
+                                    {equipo.internalCode} · {equipo.type}
                                     <ListBox.ItemIndicator />
                                   </ListBox.Item>
                                 ))}

@@ -20,14 +20,14 @@ afterEach(cleanup);
 const FICHA: FichaEquipo = {
   equipo: {
     id: 'eq_1',
-    codigo: 'EX-001',
-    tipo: 'Excavadora',
-    marca: 'Caterpillar',
-    modelo: '336',
-    anio: 2019,
-    estado: 'DISPONIBLE',
-    horometroActual: 1200,
-    kilometrajeActual: 0,
+    internalCode: 'EX-001',
+    type: 'Excavadora',
+    brand: 'Caterpillar',
+    model: '336',
+    year: 2019,
+    status: 'OPERATIONAL',
+    currentHourmeter: 1200,
+    currentMileage: 0,
   },
   resumen: {
     combustibles: 2,
@@ -96,7 +96,7 @@ describe('FichaEquipoView', () => {
 
     // Cabecera: código en el título + estado en el chip.
     expect(screen.getByText('EX-001')).toBeTruthy();
-    expect(screen.getByText('Disponible')).toBeTruthy();
+    expect(screen.getByText('Operativo')).toBeTruthy();
 
     // Contadores del resumen (valores elegidos distintos entre sí a propósito).
     expect(screen.getByText('2')).toBeTruthy(); // combustibles
@@ -138,11 +138,11 @@ describe('FichaEquipoView', () => {
     expect(screen.getByText('Sin eventos registrados')).toBeTruthy();
   });
 
-  it('renderiza la cabecera cuando el equipo no tiene año registrado (anio: null)', () => {
-    // Regresión del bug bloqueante: el backend modela `Equipo.anio` como
+  it('renderiza la cabecera cuando el equipo no tiene año registrado (year: null)', () => {
+    // Regresión del bug bloqueante: el backend modela `Equipment.year` como
     // `Int?` — un equipo sin año no debe romper el parseo de la respuesta
     // (`FichaResponseSchema.parse`) ni la vista.
-    renderConFicha({ ...FICHA, equipo: { ...FICHA.equipo, anio: null } });
+    renderConFicha({ ...FICHA, equipo: { ...FICHA.equipo, year: null } });
 
     expect(screen.getByText('EX-001')).toBeTruthy();
     expect(screen.queryByText('Respuesta inválida')).toBeNull();

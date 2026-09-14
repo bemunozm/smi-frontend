@@ -1,6 +1,6 @@
-import type { EstadoEquipo } from '../types/equipo';
+import type { EquipmentStatus } from '../types/equipment';
 import type { Criticidad, HallazgoEstado, HallazgosPorCriticidad } from '../types/dashboard';
-import { estadoEquipoChipColor } from './flota-colors';
+import { equipmentStatusChipColor } from './flota-colors';
 
 /** Colores semánticos de HeroUI (Chip) aceptados por estos mapeos. */
 export type DashboardChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
@@ -81,14 +81,13 @@ export const CHART_NEUTRAL = {
 } as const;
 
 /** Color de relleno del gráfico de flota para un estado dado — puente entre
- * el color semántico de Chip que ya define `flota-colors.ts#estadoEquipoChipColor`
- * (fuente única de colores/labels de `EstadoEquipo`, dominio de Amin) y los
- * hex literales que necesita Recharts. Ya no duplica el mapeo estado→color:
- * antes vivía acá un `EQUIPO_ESTADO_COLOR` propio, desalineado del que ya
- * usan las vistas de Flota (`DE_BAJA` era `default` acá vs. `danger` en
- * `flota-colors.ts`) — se eliminó a favor de reusar el de Amin. */
-export function equipoEstadoChartColor(estado: EstadoEquipo): string {
-  return CHART_FILL[estadoEquipoChipColor(estado)];
+ * el color semántico de Chip que ya define `flota-colors.ts#equipmentStatusChipColor`
+ * (fuente única de colores/labels de `EquipmentStatus`, dominio de Benjamín) y
+ * los hex literales que necesita Recharts. Ya no duplica el mapeo
+ * estado→color: antes vivía acá un mapeo propio, desalineado del que ya usan
+ * las vistas de Flota — se eliminó a favor de reusar el de `flota-colors.ts`. */
+export function equipmentStatusChartColor(status: EquipmentStatus): string {
+  return CHART_FILL[equipmentStatusChipColor(status)];
 }
 
 /** Serie "abiertos vs cerrados" del gráfico de tendencia de hallazgos —
