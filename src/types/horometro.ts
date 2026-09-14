@@ -8,6 +8,7 @@ export const horometroFormSchema = z.object({
   valorInicial: nonNegNumber('Valor inválido'),
   valorFinal: optNumber,
   nivelCombustible: optNumber,
+  fotoUrl: z.string().optional(), // ruta servida por el backend (/uploads/...)
 });
 
 export type HorometroForm = z.infer<typeof horometroFormSchema>;
@@ -21,6 +22,7 @@ export interface RegistroHorometro {
   valorInicial: number;
   valorFinal: number | null;
   nivelCombustible: number | null;
+  fotoUrl: string | null;
   fecha: string;
   equipo?: { internalCode: string };
 }
