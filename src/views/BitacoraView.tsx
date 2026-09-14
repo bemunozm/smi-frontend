@@ -189,7 +189,7 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
         </div>
 
         {fields.length === 0 ? (
-          <p className="text-sm text-muted">Sin insumos registrados en esta intervención.</p>
+          <p className="text-sm text-muted-foreground">Sin insumos registrados en esta intervención.</p>
         ) : (
           <div className="flex flex-col gap-3">
             {fields.map((item, index) => (
@@ -295,13 +295,13 @@ export function BitacoraView() {
         <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
           Bitácora de intervenciones
         </h2>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-muted-foreground">
           Registra el trabajo realizado sobre una orden de trabajo y consulta su historial.
         </p>
       </div>
 
       <Select
-        fullWidth
+        className="w-full sm:max-w-md"
         placeholder="Selecciona una orden de trabajo"
         value={ordenId ?? undefined}
         onChange={(value) => setOrdenId(typeof value === 'string' ? value : null)}
@@ -326,85 +326,76 @@ export function BitacoraView() {
       {!ordenId ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">Ninguna orden seleccionada</p>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             Elige una orden de trabajo arriba para ver o registrar su bitácora.
           </p>
         </div>
       ) : null}
 
       {ordenId ? (
-        <>
-          {ordenSeleccionada ? (
-            <Card>
-              <Card.Content className="flex flex-wrap gap-6 text-sm">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                    Equipo
-                  </span>
-                  {ordenSeleccionada.equipoId}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <Card.Header>
+              <Card.Title>Registrar intervención</Card.Title>
+              <Card.Description>
+                {ordenSeleccionada
+                  ? `${ordenSeleccionada.equipoId} · ${ESTADO_OT_LABELS[ordenSeleccionada.estado]}`
+                  : 'Detalle de la orden seleccionada.'}
+              </Card.Description>
+            </Card.Header>
+            <Card.Content className="flex flex-col gap-4">
+              {!puedeRegistrar ? (
+                <div className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+                  Solo un usuario con rol Mantenedor puede registrar intervenciones. Puedes revisar
+                  la bitácora existente a la derecha.
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                    Estado
-                  </span>
-                  {ESTADO_OT_LABELS[ordenSeleccionada.estado]}
+              ) : null}
+
+              <IntervencionForm disabled={!puedeRegistrar} ordenId={ordenId} />
+            </Card.Content>
+          </Card>
+
+          <Card>
+            <Card.Header>
+              <Card.Title>Bitácora registrada</Card.Title>
+              <Card.Description>Historial de intervenciones de esta orden.</Card.Description>
+            </Card.Header>
+            <Card.Content>
+              {isPending ? (
+                <div className="flex justify-center py-8">
+                  <Spinner color="accent" size="sm" />
                 </div>
-              </Card.Content>
-            </Card>
-          ) : null}
+              ) : null}
 
-          {!puedeRegistrar ? (
-            <div className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
-              Solo un usuario con rol Mantenedor puede registrar intervenciones. Puedes revisar la
-              bitácora existente abajo.
-            </div>
-          ) : null}
+              {isError ? (
+                <p className="text-sm text-danger-soft-foreground" role="alert">
+                  {error instanceof Error ? error.message : 'No se pudo cargar la bitácora.'}
+                </p>
+              ) : null}
 
-          <IntervencionForm disabled={!puedeRegistrar} ordenId={ordenId} />
+              {!isPending && !isError && intervenciones && intervenciones.length === 0 ? (
+                <p className="py-4 text-sm text-muted-foreground">Todavía no hay intervenciones registradas.</p>
+              ) : null}
 
-          <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Bitácora registrada
-            </span>
-
-            {isPending ? (
-              <div className="flex justify-center py-8">
-                <Spinner color="accent" size="lg" />
-              </div>
-            ) : null}
-
-            {isError ? (
-              <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
-                {error instanceof Error ? error.message : 'No se pudo cargar la bitácora.'}
-              </div>
-            ) : null}
-
-            {!isPending && !isError && intervenciones && intervenciones.length === 0 ? (
-              <p className="text-sm text-muted">Todavía no hay intervenciones registradas.</p>
-            ) : null}
-
-            {!isPending && !isError && intervenciones && intervenciones.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                {intervenciones.map((intervencion) => (
-                  <Card key={intervencion.id}>
-                    <Card.Header>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Card.Title className="text-sm font-semibold text-foreground">
+              {!isPending && !isError && intervenciones && intervenciones.length > 0
+                ? intervenciones.map((intervencion) => (
+                    <div
+                      className="flex flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0"
+                      key={intervencion.id}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Chip size="sm" variant="secondary">
                           {TIPO_OT_LABELS[intervencion.tipo]}
-                        </Card.Title>
-                        <div className="flex items-center gap-2">
-                          {intervencion.soloLectura ? (
-                            <Chip color="default" size="sm" variant="soft">
-                              Solo lectura
-                            </Chip>
-                          ) : null}
-                          <span className="text-xs text-muted">{formatFecha(intervencion.fecha)}</span>
-                        </div>
+                        </Chip>
+                        {intervencion.soloLectura ? (
+                          <Chip color="default" size="sm" variant="soft">
+                            Solo lectura
+                          </Chip>
+                        ) : null}
+                        <span className="ms-auto text-xs text-muted-foreground">{formatFecha(intervencion.fecha)}</span>
                       </div>
-                    </Card.Header>
-                    <Card.Content className="flex flex-col gap-2 text-sm">
-                      <p className="text-foreground">{intervencion.detalle}</p>
-                      <div className="flex flex-wrap gap-4 text-xs text-muted">
+                      <p className="text-sm text-foreground">{intervencion.detalle}</p>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                         <span>Horas hombre: {intervencion.horasHombre}</span>
                         {intervencion.horometro !== null ? (
                           <span>Horómetro: {intervencion.horometro}</span>
@@ -419,13 +410,12 @@ export function BitacoraView() {
                           ))}
                         </div>
                       ) : null}
-                    </Card.Content>
-                  </Card>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </>
+                    </div>
+                  ))
+                : null}
+            </Card.Content>
+          </Card>
+        </div>
       ) : null}
     </div>
   );
