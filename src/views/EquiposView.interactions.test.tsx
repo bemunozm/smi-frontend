@@ -203,7 +203,9 @@ describe('EquiposView — filtros', () => {
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
 
     renderView();
-    await screen.findByText('EX-001');
+    // "EX-001" aparece en la tabla (PC) y en la tarjeta equivalente
+    // (tablet/celular) — ambas vistas conviven en el DOM en jsdom.
+    await screen.findAllByText('EX-001');
 
     fireEvent.change(screen.getByLabelText('Buscar equipo'), { target: { value: 'EX-001' } });
 
@@ -216,7 +218,9 @@ describe('EquiposView — filtros', () => {
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
 
     renderView();
-    await screen.findByText('EX-001');
+    // "EX-001" aparece en la tabla (PC) y en la tarjeta equivalente
+    // (tablet/celular) — ambas vistas conviven en el DOM en jsdom.
+    await screen.findAllByText('EX-001');
 
     fireEvent.click(screen.getByRole('button', { name: /Clase/ }));
     elegirOpcion('Liviano');
@@ -230,7 +234,9 @@ describe('EquiposView — filtros', () => {
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
 
     renderView();
-    await screen.findByText('EX-001');
+    // "EX-001" aparece en la tabla (PC) y en la tarjeta equivalente
+    // (tablet/celular) — ambas vistas conviven en el DOM en jsdom.
+    await screen.findAllByText('EX-001');
 
     fireEvent.click(screen.getByRole('button', { name: /Estado/ }));
     elegirOpcion('En taller');

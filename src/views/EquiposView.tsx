@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm, type Control, type FieldErrors } from 'react-hook-form';
 import {
   AlertDialog,
   Button,
+  Card,
   Chip,
   Dropdown,
   FieldError,
@@ -697,6 +698,22 @@ export function EquiposView() {
     ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
   });
 
+  // Solo para resolver el nombre de la sucursal en la tarjeta mobile (la
+  // tabla PC no la muestra como columna). Reutiliza la MISMA query que ya usa
+  // el formulario de creación/edición (`CamposEquipo` → `useBranches({
+  // isActive: true })`) en vez de pedir la lista sin filtro: antes esto
+  // disparaba un segundo round-trip en TODA carga de la pantalla —incluso en
+  // PC, donde la tarjeta mobile está oculta con `md:hidden`— y encima
+  // duplicaba la query si un modal de equipo estaba abierto a la vez.
+  // Trade-off aceptado: un equipo homed a una sucursal ya INACTIVA no
+  // encuentra su nombre acá (no está en la lista filtrada) y cae al mismo
+  // fallback '—' que cualquier sucursal desconocida.
+  const { data: sucursalesActivas } = useBranches({ isActive: true });
+  const sucursalPorId = useMemo(
+    () => new Map((sucursalesActivas ?? []).map((sucursal) => [sucursal.id, sucursal.name])),
+    [sucursalesActivas],
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -718,7 +735,7 @@ export function EquiposView() {
 
       <div className="flex flex-wrap items-end gap-3">
         <TextField
-          className="w-full sm:w-64"
+          className="w-full md:w-64"
           aria-label="Buscar equipo"
           value={busqueda}
           onChange={setBusqueda}
@@ -728,7 +745,7 @@ export function EquiposView() {
         </TextField>
 
         <Select
-          className="w-full sm:w-48"
+          className="w-full md:w-48"
           aria-label="Filtrar por clase"
           value={equipmentClass}
           onChange={(value) => {
@@ -757,7 +774,7 @@ export function EquiposView() {
         </Select>
 
         <Select
-          className="w-full sm:w-56"
+          className="w-full md:w-56"
           aria-label="Filtrar por estado"
           value={status}
           onChange={(value) => {
@@ -809,58 +826,103 @@ export function EquiposView() {
       ) : null}
 
       {!isPending && !isError && equipos.length > 0 ? (
-        <Table variant="secondary">
-          <Table.ScrollContainer>
-            <Table.Content aria-label="Equipos" className="min-w-200">
-              <Table.Header>
-                <Table.Column isRowHeader>Código</Table.Column>
-                <Table.Column>Clase</Table.Column>
-                <Table.Column>Tipo</Table.Column>
-                <Table.Column>Marca / modelo</Table.Column>
-                <Table.Column>Estado</Table.Column>
-                <Table.Column>Uso</Table.Column>
-                <Table.Column>Acciones</Table.Column>
-              </Table.Header>
-              <Table.Body>
-                <Table.Collection items={equipos}>
-                  {(equipo) => (
-                    <Table.Row>
-                      <Table.Cell>
-                        <Link
-                          className="font-mono text-sm font-medium text-(--accent) hover:underline"
-                          to={`/equipos/${equipo.id}`}
-                        >
-                          {equipo.internalCode}
-                        </Link>
-                      </Table.Cell>
-                      <Table.Cell>{equipmentClassLabel(equipo.equipmentClass)}</Table.Cell>
-                      <Table.Cell>{equipo.type}</Table.Cell>
-                      <Table.Cell>
-                        {equipo.brand} {equipo.model}
-                        {equipo.year ? <span className="text-(--muted)"> · {equipo.year}</span> : null}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
-                          {equipmentStatusLabel(equipo.status)}
-                        </Chip>
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">{formatearUso(equipo)}</Table.Cell>
-                      <Table.Cell>
-                        <div className="flex justify-end">
-                          <EquipoActionsMenu
-                            equipo={equipo}
-                            puedeCambiarEstado={puedeCambiarEstado}
-                            puedeEditarFicha={puedeEditarFicha}
-                          />
-                        </div>
-                      </Table.Cell>
-                    </Table.Row>
-                  )}
-                </Table.Collection>
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
+        <>
+          {/* PC: tabla completa (≥ md). */}
+          <div className="hidden md:block">
+            <Table variant="secondary">
+              <Table.ScrollContainer>
+                <Table.Content aria-label="Equipos" className="min-w-200">
+                  <Table.Header>
+                    <Table.Column isRowHeader>Código</Table.Column>
+                    <Table.Column>Clase</Table.Column>
+                    <Table.Column>Tipo</Table.Column>
+                    <Table.Column>Marca / modelo</Table.Column>
+                    <Table.Column>Estado</Table.Column>
+                    <Table.Column>Uso</Table.Column>
+                    <Table.Column>Acciones</Table.Column>
+                  </Table.Header>
+                  <Table.Body>
+                    <Table.Collection items={equipos}>
+                      {(equipo) => (
+                        <Table.Row>
+                          <Table.Cell>
+                            <Link
+                              className="font-mono text-sm font-semibold text-(--accent) hover:underline"
+                              to={`/equipos/${equipo.id}`}
+                            >
+                              {equipo.internalCode}
+                            </Link>
+                          </Table.Cell>
+                          <Table.Cell>{equipmentClassLabel(equipo.equipmentClass)}</Table.Cell>
+                          <Table.Cell>{equipo.type}</Table.Cell>
+                          <Table.Cell>
+                            {equipo.brand} {equipo.model}
+                            {equipo.year ? <span className="text-(--muted)"> · {equipo.year}</span> : null}
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
+                              {equipmentStatusLabel(equipo.status)}
+                            </Chip>
+                          </Table.Cell>
+                          <Table.Cell className="font-mono text-sm font-semibold text-foreground">
+                            {formatearUso(equipo)}
+                          </Table.Cell>
+                          <Table.Cell>
+                            <div className="flex justify-end">
+                              <EquipoActionsMenu
+                                equipo={equipo}
+                                puedeCambiarEstado={puedeCambiarEstado}
+                                puedeEditarFicha={puedeEditarFicha}
+                              />
+                            </div>
+                          </Table.Cell>
+                        </Table.Row>
+                      )}
+                    </Table.Collection>
+                  </Table.Body>
+                </Table.Content>
+              </Table.ScrollContainer>
+            </Table>
+          </div>
+
+          {/* Tablet/celular (< md): tarjetas apiladas — la ficha completa
+             (editar/eliminar/cambiar estado) sigue siendo solo PC, así que
+             acá no se repite `EquipoActionsMenu`: toda la tarjeta es un solo
+             link a la ficha. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
+            {equipos.map((equipo) => (
+              <Link
+                className="block rounded-(--radius) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+                key={equipo.id}
+                to={`/equipos/${equipo.id}`}
+              >
+                <Card className="h-full transition-colors active:bg-surface-secondary">
+                  <Card.Content className="flex flex-col gap-3 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-mono text-sm font-semibold text-(--accent)">
+                        {equipo.internalCode}
+                      </span>
+                      <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
+                        {equipmentStatusLabel(equipo.status)}
+                      </Chip>
+                    </div>
+                    <p className="text-sm text-foreground">
+                      {equipo.type} · {equipo.brand} {equipo.model}
+                    </p>
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                      <span className="font-mono text-base font-semibold text-foreground">
+                        {formatearUso(equipo)}
+                      </span>
+                      <span className="text-xs text-(--muted)">
+                        {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
+                      </span>
+                    </div>
+                  </Card.Content>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </>
       ) : null}
     </div>
   );
