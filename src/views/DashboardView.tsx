@@ -64,7 +64,7 @@ const TOOLTIP_CONTENT_STYLE: CSSProperties = {
   borderRadius: 8,
   boxShadow: CHART_NEUTRAL.overlayShadow,
   fontSize: 12,
-  fontFamily: '"Geist Variable", ui-sans-serif, system-ui, sans-serif',
+  fontFamily: '"IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif',
   padding: '8px 12px',
 };
 
