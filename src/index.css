@@ -1,17 +1,19 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 
-/* Fuentes self-hosted (@fontsource-variable) — un solo archivo variable por
-   familia, cubre todo el rango de pesos que usan las referencias de diseño. */
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/space-grotesk";
-@import "@fontsource-variable/geist-mono";
+/* Fuentes self-hosted — IBM Plex. Sans es un solo archivo variable (cubre
+   todo el rango de pesos); Mono no tiene build variable en @fontsource, así
+   que se importan los 3 pesos estáticos que usa la UI (400/500/600). */
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
 /* ==========================================================================
-   DESIGN SYSTEM — "SMI cálido"
-   Extraído de las referencias de diseño de Terreno y Mantenimiento
-   (archivos .dc.html de los compañeros). Tema único, claro y cálido —
-   sin modo oscuro en esta app.
+   DESIGN SYSTEM — Theme B "Industrial/terreno"
+   Paleta fría (grises azulados + acento azul + semáforo de estado), pensada
+   para uso en exterior/tablet en condiciones de luz dura. Reemplaza al tema
+   "SMI cálido" original. Tema único, claro — sin modo oscuro en esta app.
 
    Mapeo: cada variable de acá es una variable semántica que HeroUI v3
    espera (@heroui/styles) — mismos nombres que usa su theme por defecto,
@@ -23,112 +25,109 @@
 :root,
 [data-theme="light"] {
   /* --- Superficies base ---------------------------------------------- */
-  /* Fondo de la app: crema cálido (refs: body/wrapper bg) */
-  --background: #efede9;
-  --foreground: #0d0c0a;
+  /* Fondo de la app: gris frío (Theme B) */
+  --background: #e9ebee;
+  --foreground: #14171c;
 
-  /* Tarjetas / formularios: blanco puro sobre el fondo crema (refs: form
-     card bg #FFFFFF). "secondary"/"tertiary" quedan como tonos crema más
-     suaves, usados para sidebar/paneles elevados y campos "computados". */
+  /* Tarjetas / formularios: blanco puro sobre el fondo gris. "secondary"/
+     "tertiary" quedan como grises fríos más suaves, usados para sidebar/
+     paneles elevados y campos "computados". */
   --surface: #ffffff;
-  --surface-foreground: #0d0c0a;
-  --surface-secondary: #faf8f4;
-  --surface-secondary-foreground: #0d0c0a;
-  --surface-tertiary: #f8f7f5;
-  --surface-tertiary-foreground: #0d0c0a;
+  --surface-foreground: #14171c;
+  --surface-secondary: #f2f4f6;
+  --surface-secondary-foreground: #14171c;
+  --surface-tertiary: #eef0f3;
+  --surface-tertiary-foreground: #14171c;
 
   /* Overlays (modal/popover/menu): blanco, igual que las cards */
   --overlay: #ffffff;
-  --overlay-foreground: #0d0c0a;
+  --overlay-foreground: #14171c;
 
-  /* Texto secundario/muted (refs: #928D80 eyebrows, #48453F body muted) */
-  --muted: #928d80;
+  /* Texto secundario/muted */
+  --muted: #5b6470;
 
-  /* "default" = superficie neutra para chips/tags sin color semántico
-     (refs: tag "MAÑANA" bg #EFEDE9 fg #48453F) */
-  --default: #efede9;
-  --default-foreground: #48453f;
+  /* "default" = superficie neutra para chips/tags sin color semántico */
+  --default: #e2e5e9;
+  --default-foreground: #464c54;
 
-  /* --- Acento (marca) --------------------------------------------------
-     refs: #1E50EA primary, hover #1239B5, #4072FF como acento secundario
-     decorativo (logo mark). accent-soft = EBF1FF/1239B5 (chips/tints). */
-  --accent: #1e50ea;
+  /* --- Acento (marca) — azul industrial. accent-soft = tint claro para
+     chips/fondos, accent-soft-foreground = azul oscuro para texto sobre
+     ese tint. */
+  --accent: #1d4ed8;
   --accent-foreground: #ffffff;
-  --accent-soft: #ebf1ff;
-  --accent-soft-hover: #d2deff;
-  --accent-soft-foreground: #1239b5;
+  --accent-soft: #dfe6fb;
+  --accent-soft-hover: #c7d4f7;
+  --accent-soft-foreground: #1e3a8a;
 
-  /* --- Campos de formulario --------------------------------------------
-     refs: input 48px alto, borde rgba(13,12,10,.16), radio 6px, bg blanco,
-     placeholder #BFBBB1. Ver overrides de altura/radio más abajo en
-     @layer components (.input/.select__trigger) — acá solo color. */
+  /* --- Campos de formulario ---------------------------------------------
+     Ver overrides de altura/radio más abajo en @layer components
+     (.input/.select__trigger) — acá solo color. */
   --field-background: #ffffff;
-  --field-foreground: #0d0c0a;
-  --field-placeholder: #bfbbb1;
-  --field-border: rgba(13, 12, 10, 0.16);
+  --field-foreground: #14171c;
+  --field-placeholder: #9aa1ab;
+  --field-border: #c4c9d0;
 
-  /* --- Semánticos (status) ----------------------------------------------
-     refs: success dot #0E9F6E / texto #0E6B4D / soft bg #D9F4E7
-           warning dot #E8A33D / texto #8A5A09 / soft bg #FCEFD0
-           danger  texto #A31E22 / soft bg #FBE0E1 / sólido bg #A31E22 */
-  --success: #0e9f6e;
+  /* --- Semánticos (status) — semáforo de flota: Operativo=success,
+     En taller=warning, Fuera de servicio=danger (mapeo en flota-colors.ts,
+     sin cambios — acá solo se refresca el hex real de cada color). */
+  --success: #12813f;
   --success-foreground: #ffffff;
-  --success-soft: #d9f4e7;
-  --success-soft-hover: #c3ecda;
-  --success-soft-foreground: #0e6b4d;
+  --success-soft: #d5f5df;
+  --success-soft-hover: #c0eecc;
+  --success-soft-foreground: #12813f;
 
-  --warning: #e8a33d;
-  --warning-foreground: #3d2a06;
-  --warning-soft: #fcefd0;
-  --warning-soft-hover: #f8e3b0;
-  --warning-soft-foreground: #8a5a09;
+  --warning: #92590a;
+  --warning-foreground: #ffffff;
+  --warning-soft: #fdebc8;
+  --warning-soft-hover: #fbdfa6;
+  --warning-soft-foreground: #92590a;
 
-  --danger: #a31e22;
+  --danger: #b01818;
   --danger-foreground: #ffffff;
-  --danger-soft: #fbe0e1;
-  --danger-soft-hover: #f6c9cb;
-  --danger-soft-foreground: #a31e22;
+  --danger-soft: #fbdcdc;
+  --danger-soft-hover: #f6c5c5;
+  --danger-soft-foreground: #b01818;
 
-  /* --- Bordes / separadores ----------------------------------------------
-     refs no usan un hex plano para el borde — usan negro cálido (#0D0C0A)
-     mezclado en distintas opacidades sobre el fondo crema: 0.08 en tarjetas,
-     0.10 en contenedores grandes, 0.16 en campos, 0.22 en dashed/upload. */
-  --border: rgba(13, 12, 10, 0.08);
-  --separator: rgba(13, 12, 10, 0.08);
+  /* --- Bordes / separadores — grises fríos sólidos (antes negro cálido en
+     distintas opacidades; Theme B usa un hex plano único). */
+  --border: #d8dce1;
+  --separator: #d8dce1;
   --focus: var(--accent);
   --link: var(--accent);
 
   /* --- Radios --------------------------------------------------------
-     refs: campos/botones 6px, tarjetas 8-10px, píldoras 999px (ya default
-     en Chip). HeroUI deriva --field-radius = --radius*1.5 por defecto —
-     acá lo invertimos a propósito (campos MÁS chicos que las cards). */
+     Sin cambios de estructura: campos/botones 6px, tarjetas 8-10px, píldoras
+     999px (ya default en Chip). HeroUI deriva --field-radius =
+     --radius*1.5 por defecto — acá lo invertimos a propósito (campos MÁS
+     chicos que las cards). */
   --radius: 10px;
   --field-radius: 6px;
   --field-border-width: 1px;
 
-  /* --- Sombras cálidas (refs: rgba(13,12,10,x) en vez de negro puro) --- */
-  --surface-shadow: 0 1px 3px rgba(13, 12, 10, 0.05), 0 1px 2px rgba(13, 12, 10, 0.04);
-  --overlay-shadow: 0 24px 64px rgba(13, 12, 10, 0.12), 0 8px 16px rgba(13, 12, 10, 0.06);
+  /* --- Sombras frías (rgba sobre el nuevo --foreground, no negro cálido) --- */
+  --surface-shadow: 0 1px 3px rgba(20, 23, 28, 0.06), 0 1px 2px rgba(20, 23, 28, 0.04);
+  --overlay-shadow: 0 24px 64px rgba(20, 23, 28, 0.14), 0 8px 16px rgba(20, 23, 28, 0.08);
   --field-shadow: none;
 
-  /* Color de labels de campo (refs: 11px uppercase 0.06em #6B6760 600) —
-     token propio, sin equivalente directo en HeroUI. */
-  --label-color: #6b6760;
-  /* Color de "eyebrow" de sección/página (refs: 11px uppercase 0.14em
-     #928D80 500). */
-  --eyebrow-color: #928d80;
+  /* Color de labels de campo (11px uppercase tracking amplio) — token
+     propio, sin equivalente directo en HeroUI. */
+  --label-color: #454c56;
+  /* Color de "eyebrow" de sección/página (11px uppercase tracking amplio). */
+  --eyebrow-color: #5b6470;
 }
 
 /* ==========================================================================
-   Tipografía — refs: Geist (UI/body 300–800), Space Grotesk (headings/
-   display 400–700), Geist Mono (IDs, códigos, cifras). Namespace --font-*
-   de Tailwind v4: --font-sans/--font-mono son los utilities estándar
-   (font-sans/font-mono); --font-display genera el utility font-display.
+   Tipografía — IBM Plex Sans (UI/body/headings/display), IBM Plex Mono
+   (IDs, códigos, cifras). Namespace --font-* de Tailwind v4: --font-sans/
+   --font-mono son los utilities estándar (font-sans/font-mono);
+   --font-display genera el utility font-display. El family real registrado
+   por @fontsource-variable es "IBM Plex Sans Variable" (con sufijo) — el
+   estático de mono NO lleva sufijo ("IBM Plex Mono").
    ========================================================================== */
 @theme {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 @layer base {
@@ -225,7 +224,7 @@
    Aditivo: no toca el design system del equipo.
    ========================================================================== */
 :root {
-  --shadow-card: 0 1px 3px rgba(13, 12, 10, 0.06), 0 1px 2px rgba(13, 12, 10, 0.04);
+  --shadow-card: 0 1px 3px rgba(20, 23, 28, 0.06), 0 1px 2px rgba(20, 23, 28, 0.04);
 }
 
 @theme inline {
@@ -236,10 +235,10 @@
   --color-sidebar: var(--surface);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--accent-foreground);
-  --color-secondary: #0d0c0a;
+  --color-secondary: #14171c;
   --color-secondary-foreground: #ffffff;
   --color-muted: var(--surface-tertiary);
-  --color-muted-foreground: #6b6760;
+  --color-muted-foreground: #5b6470;
   --color-accent: var(--accent-soft);
   --color-accent-foreground: var(--accent-soft-foreground);
   --color-border: var(--border);

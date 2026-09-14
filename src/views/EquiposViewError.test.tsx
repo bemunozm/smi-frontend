@@ -30,6 +30,19 @@ vi.mock('../api/EquipmentAPI', () => ({
   },
 }));
 
+// `EquiposView` también resuelve el nombre de sucursal para la tarjeta mobile
+// vía `useBranches()` sin filtro — se mockea para que el test siga sin tocar
+// la red aunque la carga de equipos falle (esta query es independiente).
+vi.mock('../api/BranchAPI', () => ({
+  BranchAPI: {
+    list: vi.fn(() => Promise.resolve([])),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+}));
+
 afterEach(cleanup);
 
 describe('EquiposView (error)', () => {

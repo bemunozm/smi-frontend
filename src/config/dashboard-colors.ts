@@ -49,16 +49,16 @@ export function hallazgoEstadoLabel(estado: HallazgoEstado): string {
  * cambia, actualizar ambos archivos.
  */
 const HEX = {
-  accent: '#1e50ea',
-  success: '#0e9f6e',
-  warning: '#e8a33d',
-  danger: '#a31e22',
-  muted: '#928d80',
-  foreground: '#0d0c0a',
+  accent: '#1d4ed8',
+  success: '#12813f',
+  warning: '#92590a',
+  danger: '#b01818',
+  muted: '#5b6470',
+  foreground: '#14171c',
   surface: '#ffffff',
-  surfaceSecondary: '#faf8f4',
-  border: 'rgba(13, 12, 10, 0.08)',
-  overlayShadow: '0 24px 64px rgba(13, 12, 10, 0.12), 0 8px 16px rgba(13, 12, 10, 0.06)',
+  surfaceSecondary: '#f2f4f6',
+  border: '#d8dce1',
+  overlayShadow: '0 24px 64px rgba(20, 23, 28, 0.14), 0 8px 16px rgba(20, 23, 28, 0.08)',
 } as const;
 
 export const CHART_FILL: Record<DashboardChipColor, string> = {

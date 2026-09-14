@@ -43,8 +43,20 @@ const EQUIPO = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
+// Sin esto, el `QueryClient` por defecto (`staleTime: 0`) trata los datos
+// sembrados con `setQueryData` como stale de entrada: al montar, cada
+// `useQuery` dispara un refetch en segundo plano contra la API real (axios),
+// aunque la key ya esté seedeada — acá eso incluye `HorometroAPI`/
+// `CombustibleAPI`, que no están mockeadas en este archivo. `retry: false`
+// evita además que un fallo de red quede reintentando en segundo plano.
+function crearQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  });
+}
+
 function renderConDatos(ui: React.ReactElement, seed: (qc: QueryClient) => void, ruta = '/') {
-  const qc = new QueryClient();
+  const qc = crearQueryClient();
   seed(qc);
   return render(
     <QueryClientProvider client={qc}>
@@ -64,11 +76,14 @@ describe('EquiposView', () => {
       });
     });
 
-    expect(screen.getByText('EX-001')).toBeTruthy();
+    // El código y el uso aparecen dos veces: en la tabla (PC) y en la
+    // tarjeta equivalente (tablet/celular) — ambas vistas conviven en el DOM,
+    // la que se ve depende del breakpoint (CSS, no de jsdom).
+    expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
     expect(screen.getByText('Excavadora')).toBeTruthy();
     // El estado se muestra con la etiqueta en español, no con el valor del enum.
     expect(screen.getAllByText('Operativo').length).toBeGreaterThan(0);
-    expect(screen.getByText('1.200 h')).toBeTruthy();
+    expect(screen.getAllByText('1.200 h').length).toBeGreaterThan(0);
   });
 
   it('muestra el estado vacío cuando ningún equipo coincide', () => {
@@ -88,7 +103,7 @@ describe('EquiposView', () => {
 
 describe('EquipoDetalleView', () => {
   it('muestra la ficha técnica y los contadores por dominio', () => {
-    const qc = new QueryClient();
+    const qc = crearQueryClient();
     qc.setQueryData(['equipment', 'eq_1'], {
       ...EQUIPO,
       homeBranch: null,
@@ -106,6 +121,59 @@ describe('EquipoDetalleView', () => {
         },
       ],
     });
+    // `EquipoDetalleView` también consulta el historial de horómetro/combustible
+    // (sección "Combustible") — mismas queries globales que usa Terreno, sin
+    // filtro por equipo. Sin seedearlas acá, el `useQuery` real dispararía una
+    // request de axios de verdad contra un backend inexistente.
+    qc.setQueryData(
+      ['horometro'],
+      [
+        // Equipo distinto y más reciente: debe quedar afuera del "último nivel".
+        {
+          id: 'h_otro',
+          equipoId: 'eq_9',
+          operador: 'Pedro',
+          turno: 'NOCTURNO',
+          valorInicial: 10,
+          valorFinal: 20,
+          nivelCombustible: 10,
+          fecha: '2026-08-10T08:00:00.000Z',
+        },
+        {
+          id: 'h_viejo',
+          equipoId: 'eq_1',
+          operador: 'Juan',
+          turno: 'DIURNO',
+          valorInicial: 1150,
+          valorFinal: 1160,
+          nivelCombustible: 50,
+          fecha: '2026-08-01T08:00:00.000Z',
+        },
+        {
+          id: 'h_nuevo',
+          equipoId: 'eq_1',
+          operador: 'Ana',
+          turno: 'DIURNO',
+          valorInicial: 1180,
+          valorFinal: 1195,
+          nivelCombustible: 72,
+          fecha: '2026-08-05T08:00:00.000Z',
+        },
+      ],
+    );
+    qc.setQueryData(
+      ['combustible'],
+      [
+        {
+          id: 'c_1',
+          equipoId: 'eq_1',
+          litros: 80,
+          tipo: 'PETROLEO',
+          fotoUrl: null,
+          fecha: '2026-08-04T09:00:00.000Z',
+        },
+      ],
+    );
 
     render(
       <QueryClientProvider client={qc}>
@@ -120,11 +188,27 @@ describe('EquipoDetalleView', () => {
     // El código aparece dos veces: en el título y en la fila "Código interno".
     expect(screen.getAllByText('EX-001').length).toBe(2);
     expect(screen.getByText('Aceite motor 15W-40')).toBeTruthy();
+    // KPI hero: uso acumulado, ahora único (ya no se repite en la ficha técnica).
     expect(screen.getByText('1.200 h')).toBeTruthy();
     // El consumo se muestra con signo según el tipo de movimiento.
     expect(screen.getByText('−60')).toBeTruthy();
     // Los contadores por dominio vienen del `_count` que arma el backend.
     expect(screen.getByText('Hallazgos')).toBeTruthy();
     expect(screen.getByText('Lecturas horómetro')).toBeTruthy();
+
+    // Sección Combustible: último nivel = la lectura MÁS RECIENTE de ESTE
+    // equipo que trae `nivelCombustible` (72%, no 50% ni el 10% de "eq_9").
+    expect(screen.getByText('72%')).toBeTruthy();
+    expect(screen.getByText('Petróleo')).toBeTruthy();
+    expect(screen.getByText('80 L')).toBeTruthy();
+
+    // Los botones de registro abren el flujo foto→OCR→EXIF (Fase B) — ya no
+    // están deshabilitados. La interacción completa (capturar foto, ver el
+    // autorrelleno OCR/EXIF, guardar) se prueba en los tests dedicados de
+    // `RegistrarLecturaModal`/`RegistrarCargaCombustibleModal`.
+    const botonLectura = screen.getByRole('button', { name: 'Registrar lectura' });
+    const botonCarga = screen.getByRole('button', { name: 'Registrar carga' });
+    expect(botonLectura.hasAttribute('disabled')).toBe(false);
+    expect(botonCarga.hasAttribute('disabled')).toBe(false);
   });
 });
