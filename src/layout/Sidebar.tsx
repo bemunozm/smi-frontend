@@ -19,14 +19,14 @@ export function Sidebar({ role }: SidebarProps) {
       {isSidebarOpen ? (
         <button
           aria-label="Cerrar menú"
-          className="fixed inset-0 z-20 bg-black/40 md:hidden"
+          className="fixed inset-0 z-20 bg-black/40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
           type="button"
         />
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 inset-s-0 z-30 flex w-64 shrink-0 flex-col border-e border-border bg-surface-secondary transition-transform md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 inset-s-0 z-30 flex w-64 shrink-0 flex-col border-e border-border bg-surface-secondary transition-transform lg:static lg:translate-x-0 ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

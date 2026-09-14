@@ -1,964 +1,375 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertDialog,
   Button,
-  Chip,
-  Dropdown,
-  FieldError,
   Input,
   Label,
   ListBox,
   Modal,
   Select,
   Spinner,
-  Switch,
   Table,
   TextField,
 } from '@heroui/react';
+import {
+  ArrowLeftRight,
+  FileText,
+  History,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 
+import { CategoriesModal } from '../components/inventario/CategoriesModal';
+import {
+  ItemActionsModal,
+  type ItemAction,
+} from '../components/inventario/ItemActionsModal';
+import { ItemCard } from '../components/inventario/ItemCard';
+import {
+  EditItemModal,
+  NewItemModal,
+} from '../components/inventario/ItemFormModal';
+import {
+  ALL_BRANCHES,
+  BranchBreakdown,
+  CriticalBadge,
+  NUMBER,
+  RowMenu,
+  Segmented,
+  StatusChip,
+  stockStatus,
+  type RowMenuOption,
+} from '../components/inventario/shared';
+import { useBranches } from '../hooks/useBranches';
+import { useCategories } from '../hooks/useCategories';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useEquipment } from '../hooks/useEquipment';
-import {
-  useAjustarStock,
-  useCreateInsumo,
-  useCreateMovimiento,
-  useDeleteInsumo,
-  useInsumos,
-  useResumenInventario,
-  useUpdateInsumo,
-} from '../hooks/useInventario';
-import { UNIDAD_LABELS, unidadSimbolo } from '../config/flota-colors';
+import { useItems } from '../hooks/useInventory';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
+import type { Branch } from '../types/branch';
 import {
-  AjusteFormSchema,
-  estaBajoMinimo,
-  InsumoFormSchema,
-  ORIGENES_MOVIMIENTO,
-  toInsumoPayload,
-  toMovimientoPayload,
-  MovimientoFormSchema,
-  TIPOS_MOVIMIENTO,
-  UNIDADES_INSUMO,
-  type AjusteFormValues,
-  type Insumo,
-  type InsumoFormValues,
-  type MovimientoFormValues,
-} from '../types/inventario';
+  UNIT_SYMBOLS,
+  quantityAt,
+  stockAt,
+  totalQuantity,
+  type InventoryItem,
+  type ItemType,
+} from '../types/inventory';
 
-const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 });
-
-const UNIDAD_OPTIONS = UNIDADES_INSUMO.map((unidad) => ({
-  value: unidad,
-  label: UNIDAD_LABELS[unidad],
-}));
-
-const ORIGEN_LABELS: Record<(typeof ORIGENES_MOVIMIENTO)[number], string> = {
-  COMPRA: 'Compra / reposición',
-  DEVOLUCION: 'Devolución a bodega',
-  AJUSTE_FISICO: 'Ajuste por conteo físico',
-  INTERVENCION: 'Consumo en mantención',
-  ACTIVIDAD: 'Consumo en actividad',
-  TRABAJO_EXTRAORDINARIO: 'Consumo en trabajo extraordinario',
-};
-
-function KebabIcon() {
-  return (
-    <svg aria-hidden="true" fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
-      <circle cx="12" cy="5" r="1.9" />
-      <circle cx="12" cy="12" r="1.9" />
-      <circle cx="12" cy="19" r="1.9" />
-    </svg>
-  );
-}
-
-// --- Alta de insumo --------------------------------------------------------
-
-const DEFAULT_INSUMO: InsumoFormValues = {
-  codigo: '',
-  nombre: '',
-  descripcion: '',
-  unidad: 'UNIDAD',
-  stock: '0',
-  stockMinimo: '0',
-};
-
-function CreateInsumoModal() {
-  const createInsumo = useCreateInsumo();
-  const {
-    control,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<InsumoFormValues>({
-    resolver: zodResolver(InsumoFormSchema),
-    defaultValues: DEFAULT_INSUMO,
-  });
-
-  return (
-    <Modal>
-      <Button>Nuevo insumo</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: InsumoFormValues): void => {
-                createInsumo.mutate(toInsumoPayload(values), {
-                  onSuccess: () => {
-                    reset();
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Nuevo insumo
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="create-insumo-form"
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <Controller
-                        control={control}
-                        name="codigo"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.codigo}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Código</Label>
-                            <Input autoFocus placeholder="FIL-001" />
-                            {errors.codigo ? <FieldError>{errors.codigo.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="nombre"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.nombre}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Nombre</Label>
-                            <Input placeholder="Filtro de aceite motor" />
-                            {errors.nombre ? <FieldError>{errors.nombre.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="descripcion"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.descripcion}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Descripción (opcional)</Label>
-                            <Input placeholder="Compatible con motores serie C" />
-                            {errors.descripcion ? (
-                              <FieldError>{errors.descripcion.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="unidad"
-                        render={({ field }) => (
-                          <Select
-                            fullWidth
-                            isInvalid={!!errors.unidad}
-                            name={field.name}
-                            value={field.value}
-                            onChange={(value) => {
-                              if (value) field.onChange(value);
-                            }}
-                          >
-                            <Label>Unidad de medida</Label>
-                            <Select.Trigger>
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                {UNIDAD_OPTIONS.map((option) => (
-                                  <ListBox.Item
-                                    key={option.value}
-                                    id={option.value}
-                                    textValue={option.label}
-                                  >
-                                    {option.label}
-                                    <ListBox.ItemIndicator />
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                            {errors.unidad ? <FieldError>{errors.unidad.message}</FieldError> : null}
-                          </Select>
-                        )}
-                      />
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="stock"
-                          render={({ field }) => (
-                            <TextField
-                              fullWidth
-                              isInvalid={!!errors.stock}
-                              name={field.name}
-                              onBlur={field.onBlur}
-                              onChange={field.onChange}
-                              value={field.value}
-                            >
-                              <Label>Stock inicial</Label>
-                              <Input inputMode="decimal" placeholder="0" />
-                              {errors.stock ? <FieldError>{errors.stock.message}</FieldError> : null}
-                            </TextField>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="stockMinimo"
-                          render={({ field }) => (
-                            <TextField
-                              fullWidth
-                              isInvalid={!!errors.stockMinimo}
-                              name={field.name}
-                              onBlur={field.onBlur}
-                              onChange={field.onChange}
-                              value={field.value}
-                            >
-                              <Label>Stock mínimo</Label>
-                              <Input inputMode="decimal" placeholder="0" />
-                              {errors.stockMinimo ? (
-                                <FieldError>{errors.stockMinimo.message}</FieldError>
-                              ) : null}
-                            </TextField>
-                          )}
-                        />
-                      </div>
-
-                      <p className="text-xs text-(--muted)">
-                        El stock inicial queda registrado como una entrada por compra: el kardex
-                        parte explicando de dónde salió el saldo.
-                      </p>
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button form="create-insumo-form" isPending={createInsumo.isPending} type="submit">
-                      {({ isPending }) =>
-                        isPending ? <Spinner color="current" size="sm" /> : 'Crear insumo'
-                      }
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
-  );
-}
-
-// --- Movimiento manual -----------------------------------------------------
-
-const SIN_EQUIPO = '__sin_equipo__';
+/** Centinela del filtro de categoría: "todas" no es un id. */
+const ALL_CATEGORIES = '__all__';
 
 /**
- * Entrada o salida manual de bodega. El select de equipo es opcional: solo
- * aplica cuando el material se imputa a una unidad concreta.
+ * Hasta cuántas sucursales caben como control segmentado antes de volver al
+ * desplegable. El diseño las dibuja segmentadas («Todas · Norte · Sur»), que se
+ * lee y se aprieta más rápido — pero solo mientras entren en el ancho.
  */
-function CreateMovimientoModal({ insumos }: { insumos: Insumo[] }) {
-  const createMovimiento = useCreateMovimiento();
-  const { data: equipos } = useEquipment();
-  const {
-    control,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors },
-  } = useForm<MovimientoFormValues>({
-    resolver: zodResolver(MovimientoFormSchema),
-    defaultValues: {
-      insumoId: '',
-      tipo: 'SALIDA',
-      origen: 'INTERVENCION',
-      cantidad: '',
-      equipoId: '',
-      observacion: '',
-    },
-  });
+const MAX_SEGMENTED_BRANCHES = 3;
 
-  const insumoId = watch('insumoId');
-  const seleccionado = insumos.find((insumo) => insumo.id === insumoId);
+type StockFilter = 'todos' | 'atencion';
+
+interface RowTarget {
+  item: InventoryItem;
+  view: ItemAction;
+}
+
+const MENU_ICON = 15;
+
+// --- Fila de escritorio ----------------------------------------------------
+
+function ItemRow({
+  item,
+  branchId,
+  canWrite,
+  isAdmin,
+  onOpen,
+  onEdit,
+}: {
+  item: InventoryItem;
+  branchId: string;
+  canWrite: boolean;
+  isAdmin: boolean;
+  onOpen: (view: ItemAction) => void;
+  onEdit: () => void;
+}) {
+  const navigate = useNavigate();
+  const isAll = branchId === ALL_BRANCHES;
+  const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
+  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
+  const status = stockStatus(item, branchId);
+
+  const options: RowMenuOption[] = [
+    ...(isAdmin
+      ? [
+          {
+            id: 'edit',
+            label: 'Editar ítem',
+            icon: <Pencil size={MENU_ICON} />,
+          },
+        ]
+      : []),
+    ...(canWrite
+      ? [
+          {
+            id: 'movement',
+            label: 'Registrar movimiento',
+            icon: <ArrowLeftRight size={MENU_ICON} />,
+          },
+        ]
+      : []),
+    { id: 'ficha', label: 'Ver ficha', icon: <FileText size={MENU_ICON} /> },
+    ...(isAdmin
+      ? [
+          {
+            id: 'delete',
+            label: 'Eliminar ítem',
+            icon: <Trash2 size={MENU_ICON} />,
+            isDanger: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <Modal>
-      <Button variant="secondary">Registrar movimiento</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: MovimientoFormValues): void => {
-                createMovimiento.mutate(toMovimientoPayload(values), {
-                  onSuccess: () => {
-                    reset();
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Registrar movimiento
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="create-movimiento-form"
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <Controller
-                        control={control}
-                        name="insumoId"
-                        render={({ field }) => (
-                          <Select
-                            fullWidth
-                            isInvalid={!!errors.insumoId}
-                            name={field.name}
-                            value={field.value}
-                            onChange={(value) => {
-                              if (value) field.onChange(value);
-                            }}
-                          >
-                            <Label>Insumo</Label>
-                            <Select.Trigger>
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                {insumos.map((insumo) => (
-                                  <ListBox.Item
-                                    key={insumo.id}
-                                    id={insumo.id}
-                                    textValue={`${insumo.codigo} · ${insumo.nombre}`}
-                                  >
-                                    {insumo.codigo} · {insumo.nombre}
-                                    <ListBox.ItemIndicator />
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                            {errors.insumoId ? (
-                              <FieldError>{errors.insumoId.message}</FieldError>
-                            ) : null}
-                          </Select>
-                        )}
-                      />
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="tipo"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Tipo</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {TIPOS_MOVIMIENTO.map((tipo) => (
-                                    <ListBox.Item key={tipo} id={tipo} textValue={tipo}>
-                                      {tipo === 'ENTRADA' ? 'Entrada (suma)' : 'Salida (resta)'}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="cantidad"
-                          render={({ field }) => (
-                            <TextField
-                              fullWidth
-                              isInvalid={!!errors.cantidad}
-                              name={field.name}
-                              onBlur={field.onBlur}
-                              onChange={field.onChange}
-                              value={field.value}
-                            >
-                              <Label>
-                                Cantidad
-                                {seleccionado
-                                  ? ` (${unidadSimbolo(seleccionado.unidad)}) · stock ${NUMERO.format(seleccionado.stock)}`
-                                  : ''}
-                              </Label>
-                              <Input inputMode="decimal" placeholder="0" />
-                              {errors.cantidad ? (
-                                <FieldError>{errors.cantidad.message}</FieldError>
-                              ) : null}
-                            </TextField>
-                          )}
-                        />
-                      </div>
-
-                      <Controller
-                        control={control}
-                        name="origen"
-                        render={({ field }) => (
-                          <Select
-                            fullWidth
-                            name={field.name}
-                            value={field.value}
-                            onChange={(value) => {
-                              if (value) field.onChange(value);
-                            }}
-                          >
-                            <Label>Origen</Label>
-                            <Select.Trigger>
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                {ORIGENES_MOVIMIENTO.map((origen) => (
-                                  <ListBox.Item
-                                    key={origen}
-                                    id={origen}
-                                    textValue={ORIGEN_LABELS[origen]}
-                                  >
-                                    {ORIGEN_LABELS[origen]}
-                                    <ListBox.ItemIndicator />
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                          </Select>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="equipoId"
-                        render={({ field }) => (
-                          <Select
-                            fullWidth
-                            name={field.name}
-                            value={field.value || SIN_EQUIPO}
-                            onChange={(value) => {
-                              field.onChange(value === SIN_EQUIPO ? '' : String(value ?? ''));
-                            }}
-                          >
-                            <Label>Equipo (opcional)</Label>
-                            <Select.Trigger>
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                <ListBox.Item id={SIN_EQUIPO} textValue="Sin equipo asociado">
-                                  Sin equipo asociado
-                                  <ListBox.ItemIndicator />
-                                </ListBox.Item>
-                                {(equipos ?? []).map((equipo) => (
-                                  <ListBox.Item
-                                    key={equipo.id}
-                                    id={equipo.id}
-                                    textValue={`${equipo.internalCode} · ${equipo.type}`}
-                                  >
-                                    {equipo.internalCode} · {equipo.type}
-                                    <ListBox.ItemIndicator />
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                          </Select>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="observacion"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.observacion}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Observación (opcional)</Label>
-                            <Input placeholder="Cambio de aceite programado" />
-                            {errors.observacion ? (
-                              <FieldError>{errors.observacion.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button
-                      form="create-movimiento-form"
-                      isPending={createMovimiento.isPending}
-                      type="submit"
-                    >
-                      {({ isPending }) =>
-                        isPending ? <Spinner color="current" size="sm" /> : 'Registrar'
-                      }
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
+    <Table.Row>
+      <Table.Cell>
+        <Link
+          className="font-mono text-sm font-medium text-(--accent) hover:underline"
+          to={`/inventario/${item.id}`}
+        >
+          {item.sku}
+        </Link>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex flex-col">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-foreground">{item.name}</span>
+            {item.isCritical ? <CriticalBadge /> : null}
+          </div>
+          {item.partNumber ? (
+            <span className="font-mono text-xs text-muted-foreground">
+              {item.partNumber}
+            </span>
+          ) : null}
+        </div>
+      </Table.Cell>
+      <Table.Cell className="text-sm text-muted-foreground">
+        {item.category?.name ?? 'Sin categoría'}
+      </Table.Cell>
+      <Table.Cell
+        className={`font-mono text-sm ${
+          status.tone === 'peligro'
+            ? 'font-semibold text-danger'
+            : 'text-foreground'
+        }`}
+      >
+        {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
+      </Table.Cell>
+      <Table.Cell>
+        <BranchBreakdown
+          highlightBranchId={isAll ? undefined : branchId}
+          item={item}
+        />
+      </Table.Cell>
+      {isAll ? null : (
+        <Table.Cell className="font-mono text-sm text-muted-foreground">
+          {minimum > 0 ? NUMBER.format(minimum) : '—'}
+        </Table.Cell>
+      )}
+      <Table.Cell>
+        <StatusChip label={status.label} tone={status.tone} />
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex justify-end">
+          <RowMenu
+            label={`Acciones de ${item.sku}`}
+            onAction={(id) => {
+              if (id === 'edit') return onEdit();
+              if (id === 'ficha') return void navigate(`/inventario/${item.id}`);
+              onOpen(id as ItemAction);
             }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+            options={options}
+          />
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
-// --- Acciones por fila -----------------------------------------------------
+// --- Listado ---------------------------------------------------------------
 
-interface InsumoModalProps {
-  insumo: Insumo;
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+      <p className="text-sm font-medium text-foreground">
+        No hay ítems que coincidan
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Ajusta la búsqueda o el filtro, o crea un ítem nuevo.
+      </p>
+    </div>
+  );
 }
 
-function EditInsumoModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
-  const updateInsumo = useUpdateInsumo();
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<InsumoFormValues>({
-    resolver: zodResolver(InsumoFormSchema),
-    values: {
-      codigo: insumo.codigo,
-      nombre: insumo.nombre,
-      descripcion: insumo.descripcion ?? '',
-      unidad: insumo.unidad,
-      stock: String(insumo.stock),
-      stockMinimo: String(insumo.stockMinimo),
-    },
-  });
+const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
+
+function ItemsList({
+  items,
+  branchId,
+  canWrite,
+  isAdmin,
+  onOpen,
+  onEdit,
+}: {
+  items: InventoryItem[];
+  branchId: string;
+  canWrite: boolean;
+  isAdmin: boolean;
+  onOpen: (item: InventoryItem, view: ItemAction) => void;
+  onEdit: (item: InventoryItem) => void;
+}) {
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const isAll = branchId === ALL_BRANCHES;
+
+  if (items.length === 0) return <EmptyState />;
+
+  // Tarjetas en teléfono Y en tablet; la tabla aparece recién en escritorio.
+  if (!isDesktop) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        {items.map((item) => (
+          <ItemCard
+            branchId={branchId}
+            item={item}
+            key={item.id}
+            onOpen={() => onOpen(item, 'actions')}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-lg">
-          {({ close }) => {
-            const onSubmit = (values: InsumoFormValues): void => {
-              const { codigo: _codigo, stock: _stock, ...input } = toInsumoPayload(values);
-              updateInsumo.mutate({ id: insumo.id, input }, { onSuccess: () => close() });
-            };
-
-            return (
-              <>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Editar {insumo.codigo}
-                  </Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form
-                    className="flex flex-col gap-4"
-                    id={`edit-insumo-form-${insumo.id}`}
-                    noValidate
-                    onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                  >
-                    <Controller
-                      control={control}
-                      name="nombre"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.nombre}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>Nombre</Label>
-                          <Input autoFocus />
-                          {errors.nombre ? <FieldError>{errors.nombre.message}</FieldError> : null}
-                        </TextField>
-                      )}
-                    />
-
-                    <Controller
-                      control={control}
-                      name="descripcion"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.descripcion}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>Descripción (opcional)</Label>
-                          <Input />
-                          {errors.descripcion ? (
-                            <FieldError>{errors.descripcion.message}</FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Controller
-                        control={control}
-                        name="unidad"
-                        render={({ field }) => (
-                          <Select
-                            fullWidth
-                            name={field.name}
-                            value={field.value}
-                            onChange={(value) => {
-                              if (value) field.onChange(value);
-                            }}
-                          >
-                            <Label>Unidad</Label>
-                            <Select.Trigger>
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                {UNIDAD_OPTIONS.map((option) => (
-                                  <ListBox.Item
-                                    key={option.value}
-                                    id={option.value}
-                                    textValue={option.label}
-                                  >
-                                    {option.label}
-                                    <ListBox.ItemIndicator />
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                          </Select>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="stockMinimo"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.stockMinimo}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Stock mínimo</Label>
-                            <Input inputMode="decimal" />
-                            {errors.stockMinimo ? (
-                              <FieldError>{errors.stockMinimo.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-                    </div>
-
-                    <p className="text-xs text-(--muted)">
-                      El stock actual ({NUMERO.format(insumo.stock)}{' '}
-                      {unidadSimbolo(insumo.unidad)}) no se edita acá: se mueve con movimientos de
-                      inventario o con un ajuste por conteo físico.
-                    </p>
-                  </form>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onPress={close}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    form={`edit-insumo-form-${insumo.id}`}
-                    isPending={updateInsumo.isPending}
-                    type="submit"
-                  >
-                    {({ isPending }) =>
-                      isPending ? <Spinner color="current" size="sm" /> : 'Guardar cambios'
-                    }
-                  </Button>
-                </Modal.Footer>
-              </>
-            );
-          }}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+    <Table variant="secondary">
+      <Table.ScrollContainer>
+        <Table.Content aria-label="Inventario" className="min-w-240">
+          <Table.Header>
+            <Table.Column className={COLUMN_CLASS} isRowHeader>
+              SKU
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Nombre</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Categoría</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>
+              {isAll ? 'Existencia · total' : 'Existencia acá'}
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Sucursal</Table.Column>
+            {isAll ? null : (
+              <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>
+            )}
+            <Table.Column className={COLUMN_CLASS}>Estado</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Acciones</Table.Column>
+          </Table.Header>
+          <Table.Body>
+            {items.map((item) => (
+              <ItemRow
+                branchId={branchId}
+                canWrite={canWrite}
+                isAdmin={isAdmin}
+                item={item}
+                key={item.id}
+                onEdit={() => onEdit(item)}
+                onOpen={(view) => onOpen(item, view)}
+              />
+            ))}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
   );
 }
 
-function AjusteModal({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
-  const ajustar = useAjustarStock();
-  const {
-    control,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<AjusteFormValues>({
-    resolver: zodResolver(AjusteFormSchema),
-    values: { stockContado: String(insumo.stock), observacion: '' },
-  });
+// --- Elegir ítem para un movimiento suelto ---------------------------------
 
-  const contado = Number(watch('stockContado'));
-  const diferencia = Number.isFinite(contado) ? contado - insumo.stock : 0;
+/**
+ * El botón «Registrar movimiento» de la cabecera no sabe sobre qué ítem se va a
+ * mover material, así que lo pregunta primero. Es el camino del bodeguero que
+ * llega con la guía en la mano y busca el ítem, en vez del que ya lo tiene a la
+ * vista en su fila.
+ */
+function PickItemModal({
+  items,
+  isOpen,
+  onOpenChange,
+  onPick,
+}: {
+  items: InventoryItem[];
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPick: (item: InventoryItem) => void;
+}) {
+  const [itemId, setItemId] = useState('');
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-md">
-          {({ close }) => {
-            const onSubmit = (values: AjusteFormValues): void => {
-              ajustar.mutate(
-                {
-                  id: insumo.id,
-                  input: {
-                    stockContado: Number(values.stockContado),
-                    ...(values.observacion.trim()
-                      ? { observacion: values.observacion.trim() }
-                      : {}),
-                  },
-                },
-                { onSuccess: () => close() },
-              );
-            };
-
-            return (
-              <>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Conteo físico · {insumo.codigo}
-                  </Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form
-                    className="flex flex-col gap-4"
-                    id={`ajuste-form-${insumo.id}`}
-                    noValidate
-                    onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                  >
-                    <p className="text-sm text-(--muted)">
-                      El sistema tiene <strong>{NUMERO.format(insumo.stock)}</strong>{' '}
-                      {unidadSimbolo(insumo.unidad)}. Ingresa lo que contaste en bodega y se
-                      registrará la diferencia como movimiento.
-                    </p>
-
-                    <Controller
-                      control={control}
-                      name="stockContado"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.stockContado}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>Cantidad contada</Label>
-                          <Input autoFocus inputMode="decimal" />
-                          {errors.stockContado ? (
-                            <FieldError>{errors.stockContado.message}</FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-
-                    {diferencia !== 0 ? (
-                      <Chip color={diferencia > 0 ? 'success' : 'warning'} size="sm" variant="soft">
-                        Diferencia: {diferencia > 0 ? '+' : ''}
-                        {NUMERO.format(diferencia)} {unidadSimbolo(insumo.unidad)}
-                      </Chip>
-                    ) : (
-                      <Chip size="sm" variant="soft">
-                        Sin diferencia con el sistema
-                      </Chip>
-                    )}
-
-                    <Controller
-                      control={control}
-                      name="observacion"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.observacion}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>Observación (opcional)</Label>
-                          <Input placeholder="Conteo mensual de bodega" />
-                          {errors.observacion ? (
-                            <FieldError>{errors.observacion.message}</FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-                  </form>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onPress={close}>
-                    Cancelar
-                  </Button>
-                  <Button form={`ajuste-form-${insumo.id}`} isPending={ajustar.isPending} type="submit">
-                    {({ isPending }) =>
-                      isPending ? <Spinner color="current" size="sm" /> : 'Ajustar stock'
-                    }
-                  </Button>
-                </Modal.Footer>
-              </>
-            );
-          }}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
-}
-
-function DeleteInsumoAlertDialog({ insumo, isOpen, onOpenChange }: InsumoModalProps) {
-  const deleteInsumo = useDeleteInsumo();
-
-  return (
-    <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialog.Container>
-        <AlertDialog.Dialog className="sm:max-w-105">
           {({ close }) => (
             <>
-              <AlertDialog.CloseTrigger />
-              <AlertDialog.Header>
-                <AlertDialog.Icon status="danger" />
-                <AlertDialog.Heading>¿Eliminar {insumo.nombre}?</AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                <p>
-                  Solo se pueden eliminar insumos sin movimientos registrados. Si ya tiene kardex,
-                  el sistema rechazará la operación para no perder la trazabilidad.
-                </p>
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button variant="tertiary" onPress={close}>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+                  Registrar movimiento
+                </Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <Select
+                  fullWidth
+                  onChange={(value) => {
+                    if (value) setItemId(String(value));
+                  }}
+                  value={itemId}
+                >
+                  <Label>¿Sobre qué ítem?</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {items.map((item) => (
+                        <ListBox.Item
+                          id={item.id}
+                          key={item.id}
+                          textValue={`${item.sku} · ${item.name}`}
+                        >
+                          {item.sku} · {item.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button onPress={close} variant="secondary">
                   Cancelar
                 </Button>
                 <Button
-                  isPending={deleteInsumo.isPending}
-                  variant="danger"
+                  isDisabled={!itemId}
                   onPress={() => {
-                    deleteInsumo.mutate(insumo.id, { onSuccess: () => close() });
+                    const picked = items.find((item) => item.id === itemId);
+                    if (picked) onPick(picked);
                   }}
                 >
-                  {deleteInsumo.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  Continuar
                 </Button>
-              </AlertDialog.Footer>
+              </Modal.Footer>
             </>
           )}
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
-  );
-}
-
-function InsumoActionsMenu({ insumo }: { insumo: Insumo }) {
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isAjusteOpen, setIsAjusteOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-
-  return (
-    <>
-      <Dropdown>
-        <Button isIconOnly aria-label={`Acciones para ${insumo.nombre}`} size="sm" variant="secondary">
-          <KebabIcon />
-        </Button>
-        <Dropdown.Popover placement="bottom end">
-          <Dropdown.Menu
-            onAction={(key) => {
-              if (key === 'edit') setIsEditOpen(true);
-              if (key === 'ajuste') setIsAjusteOpen(true);
-              if (key === 'delete') setIsDeleteOpen(true);
-            }}
-          >
-            <Dropdown.Item id="ajuste" textValue="Ajustar por conteo físico">
-              <Label>Ajustar por conteo físico</Label>
-            </Dropdown.Item>
-            <Dropdown.Item id="edit" textValue="Editar ficha">
-              <Label>Editar ficha</Label>
-            </Dropdown.Item>
-            <Dropdown.Item id="delete" textValue="Eliminar" variant="danger">
-              <Label>Eliminar</Label>
-            </Dropdown.Item>
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown>
-
-      <EditInsumoModal insumo={insumo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
-      <AjusteModal insumo={insumo} isOpen={isAjusteOpen} onOpenChange={setIsAjusteOpen} />
-      <DeleteInsumoAlertDialog insumo={insumo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
-    </>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   );
 }
 
@@ -966,168 +377,286 @@ function InsumoActionsMenu({ insumo }: { insumo: Insumo }) {
 
 export function InventarioView() {
   const { user } = useCurrentUser();
-  const [busqueda, setBusqueda] = useState('');
-  const [soloBajoStock, setSoloBajoStock] = useState(false);
+  const isAdmin = user?.role === ROLES.ADMIN;
+  const canWrite = isAdmin || user?.role === ROLES.MANTENEDOR;
 
-  const esAdmin = user?.role === ROLES.ADMIN;
+  const selectedBranchId = useUiStore((state) => state.selectedBranchId);
+  const setSelectedBranchId = useUiStore((state) => state.setSelectedBranchId);
 
-  const { data: resumen } = useResumenInventario();
-  const {
-    data: insumos,
-    isPending,
-    isError,
-    error,
-  } = useInsumos({
-    ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
-    ...(soloBajoStock ? { bajoStock: true } : {}),
+  const [tab, setTab] = useState<ItemType>('SUPPLY');
+  const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
+  const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
+
+  const [target, setTarget] = useState<RowTarget | null>(null);
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isPicking, setIsPicking] = useState(false);
+
+  const { data: branches } = useBranches({ isActive: true });
+  const { data: categories } = useCategories();
+
+  /**
+   * El inventario **general** es lo que se ve primero: con dos faenas, la
+   * pregunta de partida es "¿cuánto hay en la empresa?", y recién después "¿en
+   * cuál?". Elegir una sucursal es un filtro, no el punto de entrada.
+   */
+  const branchId = selectedBranchId ?? ALL_BRANCHES;
+
+  const { data, isPending, isError, error } = useItems({
+    type: tab,
+    isActive: true,
+    ...(search.trim() ? { q: search.trim() } : {}),
+    ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
   });
 
-  // Los selects del modal de movimiento necesitan la lista completa, no la
-  // filtrada por la pantalla.
-  const { data: todosLosInsumos } = useInsumos();
+  const all = useMemo(() => data ?? [], [data]);
+
+  const alertCount = useMemo(
+    () => all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
+    [all, branchId],
+  );
+
+  const items = useMemo(
+    () =>
+      stockFilter === 'atencion'
+        ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
+        : all,
+    [all, stockFilter, branchId],
+  );
+
+  const branchOptions = [
+    { id: ALL_BRANCHES, label: 'Todas' },
+    ...(branches ?? []).map((branch: Branch) => ({
+      id: branch.id,
+      label: branch.name,
+    })),
+  ];
+  const useSegmentedBranches =
+    branchOptions.length <= MAX_SEGMENTED_BRANCHES + 1;
+  const branchLabel =
+    branchOptions.find((option) => option.id === branchId)?.label ?? '';
+
+  const openEdit = (item: InventoryItem): void => {
+    setTarget(null);
+    setEditItem(item);
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Inventario
-          </span>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Insumos y repuestos
-          </h1>
-          <p className="text-sm text-(--muted)">
-            Stock de bodega con alerta de mínimos y trazabilidad de cada movimiento.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {todosLosInsumos && todosLosInsumos.length > 0 ? (
-            <CreateMovimientoModal insumos={todosLosInsumos} />
-          ) : null}
-          {esAdmin ? <CreateInsumoModal /> : null}
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+          SMI · Inventario
+        </span>
+        <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+          Inventario general
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Existencias de suministros y repuestos{' '}
+          <strong className="font-semibold text-foreground">
+            {branchId === ALL_BRANCHES
+              ? 'en todas las sucursales'
+              : `en ${branchLabel}`}
+          </strong>
+          , con semáforo de mínimos y trazabilidad de cada movimiento.
+        </p>
       </div>
 
-      {resumen ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Chip size="sm" variant="secondary">
-            {resumen.total} insumos
-          </Chip>
-          <Chip color={resumen.bajoMinimo > 0 ? 'danger' : 'success'} size="sm" variant="soft">
-            {resumen.bajoMinimo} bajo el mínimo
-          </Chip>
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-end gap-4">
-        <TextField
-          className="w-full sm:w-64"
-          aria-label="Buscar insumo"
-          value={busqueda}
-          onChange={setBusqueda}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
+          to="/inventario/movimientos"
         >
+          <History size={16} />
+          Historial general
+        </Link>
+        {canWrite ? (
+          <Button onPress={() => setIsPicking(true)} variant="secondary">
+            Registrar movimiento
+          </Button>
+        ) : null}
+        {isAdmin ? <CategoriesModal /> : null}
+        {isAdmin ? (
+          <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
+        ) : null}
+      </div>
+
+      <Segmented
+        label="Tipo de ítem"
+        onChange={setTab}
+        options={[
+          { id: 'SUPPLY', label: 'Suministros' },
+          { id: 'PART', label: 'Repuestos' },
+        ]}
+        value={tab}
+      />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
           <Label>Buscar</Label>
-          <Input placeholder="Código o nombre" />
+          <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
 
-        <Switch
-          className="pb-2.5"
-          isSelected={soloBajoStock}
-          onChange={setSoloBajoStock}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">
+            Sucursal
+          </span>
+          {useSegmentedBranches ? (
+            <Segmented
+              label="Filtro de sucursal"
+              onChange={setSelectedBranchId}
+              options={branchOptions}
+              value={branchId}
+            />
+          ) : (
+            <Select
+              aria-label="Sucursal"
+              onChange={(value) => {
+                if (value) setSelectedBranchId(String(value));
+              }}
+              value={branchId}
+            >
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {branchOptions.map((option) => (
+                    <ListBox.Item
+                      id={option.id}
+                      key={option.id}
+                      textValue={option.label}
+                    >
+                      {option.label}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
+        </div>
+
+        <Select
+          onChange={(value) => {
+            if (value) setCategoryId(String(value));
+          }}
+          value={categoryId}
         >
-          Solo bajo mínimo
-        </Switch>
+          <Label>Categoría</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
+                Todas
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {(categories ?? []).map((category) => (
+                <ListBox.Item
+                  id={category.id}
+                  key={category.id}
+                  textValue={category.name}
+                >
+                  {category.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">
+            Estado
+          </span>
+          {/* El filtro junta ámbar y rojo: los dos piden una decisión de
+              compra, y separarlos obligaba a mirar dos listas. */}
+          <Segmented
+            label="Filtro de estado"
+            onChange={setStockFilter}
+            options={[
+              { id: 'todos', label: `Todos · ${all.length}` },
+              { id: 'atencion', label: `Requieren atención · ${alertCount}` },
+            ]}
+            value={stockFilter}
+          />
+        </div>
       </div>
+
+      {isError ? (
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
+          {error instanceof Error
+            ? error.message
+            : 'No se pudo obtener el inventario.'}
+        </div>
+      ) : null}
 
       {isPending ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
         </div>
+      ) : (
+        <ItemsList
+          branchId={branchId}
+          canWrite={canWrite}
+          isAdmin={isAdmin}
+          items={items}
+          onEdit={openEdit}
+          onOpen={(item, view) => setTarget({ item, view })}
+        />
+      )}
+
+      {isPicking ? (
+        <PickItemModal
+          isOpen
+          items={all}
+          onOpenChange={setIsPicking}
+          onPick={(item) => {
+            setIsPicking(false);
+            setTarget({ item, view: 'movement' });
+          }}
+        />
       ) : null}
 
-      {isError ? (
-        <div
-          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
-          {error instanceof Error ? error.message : 'No se pudo cargar el inventario.'}
-        </div>
+      {target ? (
+        <ItemActionsModal
+          branchId={branchId}
+          branches={branches ?? []}
+          canWrite={canWrite}
+          initialView={target.view}
+          isAdmin={isAdmin}
+          isOpen
+          item={target.item}
+          onEdit={() => openEdit(target.item)}
+          onOpenChange={(open) => !open && setTarget(null)}
+        />
       ) : null}
 
-      {!isPending && !isError && insumos.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">No hay insumos que coincidan</p>
-          <p className="text-sm text-(--muted)">Ajusta los filtros o crea el primero.</p>
-        </div>
+      {editItem ? (
+        <EditItemModal
+          branches={branches ?? []}
+          isOpen
+          item={editItem}
+          onOpenChange={(open) => !open && setEditItem(null)}
+        />
       ) : null}
 
-      {!isPending && !isError && insumos.length > 0 ? (
-        <Table variant="secondary">
-          <Table.ScrollContainer>
-            <Table.Content aria-label="Insumos" className="min-w-200">
-              <Table.Header>
-                <Table.Column isRowHeader>Código</Table.Column>
-                <Table.Column>Nombre</Table.Column>
-                <Table.Column>Unidad</Table.Column>
-                <Table.Column>Stock</Table.Column>
-                <Table.Column>Mínimo</Table.Column>
-                <Table.Column>Estado</Table.Column>
-                <Table.Column>Acciones</Table.Column>
-              </Table.Header>
-              <Table.Body>
-                <Table.Collection items={insumos}>
-                  {(insumo) => (
-                    <Table.Row>
-                      <Table.Cell>
-                        <Link
-                          className="font-mono text-sm font-medium text-(--accent) hover:underline"
-                          to={`/inventario/${insumo.id}`}
-                        >
-                          {insumo.codigo}
-                        </Link>
-                      </Table.Cell>
-                      <Table.Cell>{insumo.nombre}</Table.Cell>
-                      <Table.Cell className="text-sm text-(--muted)">
-                        {UNIDAD_LABELS[insumo.unidad]}
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm">
-                        {NUMERO.format(insumo.stock)} {unidadSimbolo(insumo.unidad)}
-                      </Table.Cell>
-                      <Table.Cell className="font-mono text-sm text-(--muted)">
-                        {NUMERO.format(insumo.stockMinimo)}
-                      </Table.Cell>
-                      <Table.Cell>
-                        {estaBajoMinimo(insumo) ? (
-                          <Chip color="danger" size="sm" variant="soft">
-                            Stock bajo
-                          </Chip>
-                        ) : (
-                          <Chip color="success" size="sm" variant="soft">
-                            OK
-                          </Chip>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <div className="flex justify-end">
-                          {esAdmin ? (
-                            <InsumoActionsMenu insumo={insumo} />
-                          ) : (
-                            <Link
-                              className="text-sm text-(--accent) hover:underline"
-                              to={`/inventario/${insumo.id}`}
-                            >
-                              Ver kardex
-                            </Link>
-                          )}
-                        </div>
-                      </Table.Cell>
-                    </Table.Row>
-                  )}
-                </Table.Collection>
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
+      {isCreating ? (
+        <NewItemModal
+          branchId={
+            branchId === ALL_BRANCHES ? (branches?.[0]?.id ?? '') : branchId
+          }
+          branchName={
+            branchId === ALL_BRANCHES ? (branches?.[0]?.name ?? '') : branchLabel
+          }
+          defaultType={tab}
+          isOpen
+          onOpenChange={setIsCreating}
+        />
       ) : null}
     </div>
   );
