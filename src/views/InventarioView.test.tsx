@@ -146,7 +146,8 @@ function renderView(
 
   const qc = new QueryClient();
   qc.setQueryData(['branches', { isActive: true }], BRANCHES);
-  qc.setQueryData(['inventory', 'categories'], CATEGORIES);
+  // La pantalla pide las categorías de la pestaña activa.
+  qc.setQueryData(['inventory', 'categories', { type: 'SUPPLY' }], CATEGORIES);
   qc.setQueryData(
     ['inventory', 'items', { type: 'SUPPLY', isActive: true }],
     items,
@@ -221,6 +222,17 @@ describe('InventarioView', () => {
       expect(screen.getByText('Bajo stock mínimo')).toBeTruthy();
       expect(screen.queryByText('OK')).toBeNull();
     });
+  });
+
+  it('al cambiar de pestaña limpia la categoría elegida', () => {
+    // Una categoría de repuestos no existe en suministros: dejarla puesta
+    // mostraría cero resultados sin explicar por qué.
+    renderView([OK], { size: 'desktop' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Repuestos' }));
+
+    // El selector vuelve a «Todas» — si no, el listado quedaría vacío.
+    expect(screen.getAllByText('Todas').length).toBeGreaterThan(0);
   });
 
   describe('estados de existencia', () => {

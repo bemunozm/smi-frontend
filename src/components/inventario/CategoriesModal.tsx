@@ -8,6 +8,7 @@ import {
   Spinner,
   TextField,
 } from '@heroui/react';
+import { Info } from 'lucide-react';
 
 import {
   useCategories,
@@ -24,48 +25,88 @@ import type { ItemCategory } from '../../types/category';
  */
 function CategoryRow({ category }: { category: ItemCategory }) {
   const [name, setName] = useState(category.name);
+  const [showBlocked, setShowBlocked] = useState(false);
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
 
   const trimmed = name.trim();
   const changed = trimmed !== category.name && trimmed.length >= 2;
-  const inUse = category._count.items > 0;
+  const count = category._count.items;
+  const inUse = count > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border py-2 last:border-b-0">
-      <TextField
-        aria-label={`Nombre de ${category.name}`}
-        className="min-w-44 flex-1"
-        value={name}
-        onChange={setName}
-      >
-        <Input />
-      </TextField>
+    <div className="flex flex-col gap-2 border-b border-border py-2 last:border-b-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <TextField
+          aria-label={`Nombre de ${category.name}`}
+          className="min-w-44 flex-1"
+          value={name}
+          onChange={setName}
+        >
+          <Input />
+        </TextField>
 
-      {/* El conteo no es decorativo: es la razón por la que el botón de
-          eliminar está apagado. */}
-      <Chip size="sm" variant="soft">
-        {category._count.items} ítem{category._count.items === 1 ? '' : 's'}
-      </Chip>
+        {/* El conteo no es decorativo: es la razón por la que no se puede
+            eliminar. */}
+        <Chip size="sm" variant="soft">
+          {count} ítem{count === 1 ? '' : 's'}
+        </Chip>
 
-      <Button
-        isDisabled={!changed || updateCategory.isPending}
-        size="sm"
-        variant="secondary"
-        onPress={() => updateCategory.mutate({ id: category.id, name: trimmed })}
-      >
-        Guardar
-      </Button>
+        <Button
+          isDisabled={!changed || updateCategory.isPending}
+          size="sm"
+          variant="secondary"
+          onPress={() => updateCategory.mutate({ id: category.id, name: trimmed })}
+        >
+          Guardar
+        </Button>
 
-      <Button
-        className="text-danger"
-        isDisabled={inUse || deleteCategory.isPending}
-        size="sm"
-        variant="secondary"
-        onPress={() => deleteCategory.mutate(category.id)}
-      >
-        Eliminar
-      </Button>
+        {/* Con ítems el botón NO se desactiva: un botón apagado no dice por qué
+            lo está, y el usuario se queda apretando sin entender. Se deja vivo
+            y al apretarlo explica qué hacer. */}
+        <Button
+          className="text-danger"
+          isDisabled={deleteCategory.isPending}
+          size="sm"
+          variant="secondary"
+          onPress={() => {
+            if (inUse) {
+              setShowBlocked(true);
+              return;
+            }
+            deleteCategory.mutate(category.id);
+          }}
+        >
+          Eliminar
+        </Button>
+      </div>
+
+      {showBlocked && inUse ? (
+        <div className="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+          <Info className="mt-0.5 shrink-0" size={16} />
+          <div className="flex flex-col gap-1">
+            <p>
+              <strong>{category.name}</strong> no se puede eliminar: la{' '}
+              {count === 1 ? 'usa 1 ítem' : `usan ${count} ítems`}. Si la
+              borráramos,{' '}
+              {count === 1 ? 'ese ítem quedaría' : 'esos ítems quedarían'} sin
+              categoría sin avisar.
+            </p>
+            <p>
+              Para eliminarla, abre cada uno de esos ítems y cambiale la
+              categoría (o elimina el ítem si ya no existe en bodega). Después
+              vuelve acá.
+            </p>
+            <button
+              className="w-fit text-xs font-semibold underline"
+              onClick={() => setShowBlocked(false)}
+              type="button"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -140,9 +181,9 @@ export function CategoriesModal() {
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                      Una categoría con ítems no se puede eliminar: primero hay
-                      que reasignarlos desde la ficha de cada uno. Renombrarla,
-                      en cambio, es seguro — los ítems la siguen apuntando.
+                      Renombrar una categoría es seguro: los ítems la siguen
+                      apuntando. Eliminarla solo se puede cuando no la usa
+                      ningún ítem.
                     </p>
                   </div>
                 </Modal.Body>
