@@ -23,7 +23,7 @@ const VACIA = category({ id: 'c2', name: 'Filttros' });
 
 function renderModal(categories: ItemCategory[]) {
   const qc = new QueryClient();
-  qc.setQueryData(['inventory', 'categories'], categories);
+  qc.setQueryData(['inventory', 'categories', {}], categories);
 
   render(
     <QueryClientProvider client={qc}>
@@ -35,16 +35,28 @@ function renderModal(categories: ItemCategory[]) {
 }
 
 describe('CategoriesModal', () => {
-  it('solo deja eliminar la categoría que nadie usa', () => {
-    // Borrar una categoría con ítems los dejaría sin clasificar en silencio
-    // (`onDelete: SetNull`). El botón apagado y el conteo al lado explican por
-    // qué, sin que haya que intentarlo para descubrirlo.
+  it('explica por qué no puede eliminar, en vez de apagar el botón', () => {
+    // Un botón apagado no dice por qué lo está: el usuario aprieta, no pasa
+    // nada, y se queda sin saber qué hacer. Se deja vivo y al apretarlo
+    // explica el paso que falta.
     renderModal([EN_USO, VACIA]);
 
-    const [enUso, vacia] = screen.getAllByRole('button', { name: 'Eliminar' });
-    expect(enUso.hasAttribute('disabled')).toBe(true);
-    expect(vacia.hasAttribute('disabled')).toBe(false);
+    const [enUso] = screen.getAllByRole('button', { name: 'Eliminar' });
+    expect(enUso.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(enUso);
+
+    expect(screen.getByText(/no se puede eliminar/)).toBeTruthy();
+    expect(screen.getByText(/cambiale la/)).toBeTruthy();
     expect(screen.getByText('12 ítems')).toBeTruthy();
+  });
+
+  it('elimina sin ceremonia la categoría que nadie usa', () => {
+    renderModal([VACIA]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }));
+
+    expect(screen.queryByText(/no se puede eliminar/)).toBeNull();
   });
 
   it('no deja guardar un renombrado que no cambia nada', () => {

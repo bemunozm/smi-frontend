@@ -394,7 +394,9 @@ export function InventarioView() {
   const [isPicking, setIsPicking] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
-  const { data: categories } = useCategories();
+  // Las categorías siguen a la pestaña: ofrecer «Neumáticos y llantas»
+  // mirando suministros lleva a un listado vacío y a creer que se perdió stock.
+  const { data: categories } = useCategories({ type: tab });
 
   /**
    * El inventario **general** es lo que se ve primero: con dos faenas, la
@@ -483,7 +485,12 @@ export function InventarioView() {
 
       <Segmented
         label="Tipo de ítem"
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next);
+          // La categoría elegida puede no existir en la otra pestaña; dejarla
+          // puesta mostraría cero resultados sin explicar por qué.
+          setCategoryId(ALL_CATEGORIES);
+        }}
         options={[
           { id: 'SUPPLY', label: 'Suministros' },
           { id: 'PART', label: 'Repuestos' },

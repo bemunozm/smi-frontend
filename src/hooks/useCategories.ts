@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { CategoryAPI } from '../api/CategoryAPI';
+import { CategoryAPI, type CategoryFilters } from '../api/CategoryAPI';
 
 const CATEGORIES_KEY = ['inventory', 'categories'] as const;
 
-export function useCategories() {
+/**
+ * Con `type`, solo las categorías que tienen ítems de esa clase — es lo que
+ * necesita el filtro de la pantalla, que mira una pestaña a la vez. Sin él,
+ * todas: así las ve la administración de la taxonomía, incluidas las vacías.
+ */
+export function useCategories(filters: CategoryFilters = {}) {
   return useQuery({
-    queryKey: CATEGORIES_KEY,
-    queryFn: () => CategoryAPI.list(),
+    queryKey: [...CATEGORIES_KEY, filters],
+    queryFn: () => CategoryAPI.list(filters),
     // La taxonomía cambia una vez cada mucho, pero la alimenta el selector del
     // formulario de ítems: se refresca al montar para que una categoría recién
     // creada aparezca sin recargar la página.
