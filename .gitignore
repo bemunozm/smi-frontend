@@ -40,3 +40,6 @@ SMI Terreno (standalone).html
 
 # CodeGraph index (local)
 .codegraph/
+
+# Salida del service worker en desarrollo (vite-plugin-pwa)
+dev-dist

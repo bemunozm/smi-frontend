@@ -259,7 +259,7 @@ function MovementHistory({
                 </span>
                 <span>{movement.branch?.name}</span>
                 <span>
-                  Saldo{' '}
+                  Stock{' '}
                   <span className="font-mono">
                     {NUMBER.format(movement.resultingBalance)}
                   </span>
@@ -285,7 +285,7 @@ function MovementHistory({
             <Table.Column>Motivo</Table.Column>
             <Table.Column>Sucursal</Table.Column>
             <Table.Column>Cantidad</Table.Column>
-            <Table.Column>Saldo</Table.Column>
+            <Table.Column>Stock</Table.Column>
             <Table.Column>Detalle</Table.Column>
           </Table.Header>
           <Table.Body>
@@ -480,7 +480,7 @@ export function FichaItemView() {
             </Select.Popover>
           </Select>
         }
-        subtitle="Entradas, salidas, traspasos y ajustes, de lo más reciente a lo más antiguo. Cada renglón deja el saldo de SU bodega."
+        subtitle="Entradas, salidas, traspasos y ajustes, de lo más reciente a lo más antiguo. Cada renglón deja el stock que quedó en SU bodega."
         title="Historial de movimientos"
       >
         <MovementHistory item={item} movements={movements} />

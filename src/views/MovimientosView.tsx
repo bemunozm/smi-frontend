@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Input,
+  DateField,
+  DateRangePicker,
   Label,
   ListBox,
+  RangeCalendar,
   Select,
   Spinner,
   Table,
-  TextField,
 } from '@heroui/react';
+import { Group } from 'react-aria-components/Group';
+import type { DateValue } from 'react-aria-components/Calendar';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
 import {
@@ -116,7 +119,7 @@ function MovementCard({ movement }: { movement: StockMovement }) {
         <span>{MOVEMENT_REASON_LABELS[movement.reason]}</span>
         <span>{DATE.format(new Date(movement.occurredAt))}</span>
         <span>
-          Saldo:{' '}
+          Stock:{' '}
           <span className="font-mono">
             {NUMBER.format(movement.resultingBalance)}
           </span>
@@ -135,16 +138,27 @@ export function MovimientosView() {
 
   const [branchId, setBranchId] = useState(ALL_BRANCHES);
   const [kind, setKind] = useState<Kind>(ALL_KINDS);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  /**
+   * El período como un valor único. react-aria entrega `CalendarDate` — día sin
+   * hora ni zona — que es justo lo que se quiere acá: el filtro es por jornada,
+   * no por instante, y así no hay que pelear con el huso al convertir.
+   */
+  const [range, setRange] = useState<{
+    start: DateValue;
+    end: DateValue;
+  } | null>(null);
 
   const { data, isPending, isError, error } = useMovements({
     ...(branchId === ALL_BRANCHES ? {} : { branchId }),
     ...KIND_FILTERS[kind],
-    // El backend espera ISO-8601; el input entrega `YYYY-MM-DD`. El "hasta"
-    // se estira al final del día o dejaría fuera lo de esa misma jornada.
-    ...(from ? { from: `${from}T00:00:00.000Z` } : {}),
-    ...(to ? { to: `${to}T23:59:59.999Z` } : {}),
+    // El backend espera ISO-8601. El "hasta" se estira al final del día, o
+    // dejaría fuera lo ocurrido esa misma jornada.
+    ...(range
+      ? {
+          from: `${range.start.toString()}T00:00:00.000Z`,
+          to: `${range.end.toString()}T23:59:59.999Z`,
+        }
+      : {}),
     limit: 200,
   });
 
@@ -161,7 +175,7 @@ export function MovimientosView() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
-          renglón deja el saldo que quedó en esa bodega.{' '}
+          renglón deja el stock que quedó en esa bodega.{' '}
           <Link className="text-(--accent) hover:underline" to="/inventario">
             Volver al inventario
           </Link>
@@ -200,15 +214,66 @@ export function MovimientosView() {
           </Select.Popover>
         </Select>
 
-        <TextField onChange={setFrom} type="date" value={from}>
-          <Label>Desde</Label>
-          <Input />
-        </TextField>
+        {/* Un solo calendario para el período, no dos campos sueltos: el rango
+            es una decisión («la semana pasada», «este mes»), y partirlo en dos
+            obligaba a abrir dos veces y a cuidar a mano que el desde no quedara
+            después del hasta. */}
+        <div className="sm:col-span-2">
+          <DateRangePicker
+            aria-label="Período"
+            onChange={setRange}
+            value={range}
+          >
+            <Label>Período</Label>
+            {/* El `Group` de react-aria es el ancla del popover: sin él el
+                calendario no tiene a qué pegarse y se dibuja en la esquina de
+                la pantalla, encima del menú lateral.
+                Va el de react-aria y no el `DateField` de HeroUI porque ese
+                reenvía sus props al contexto por slots del rango y revienta con
+                «A slot prop is required». */}
+            <Group className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3">
+              <DateField.Input slot="start">
+                {(segment) => <DateField.Segment segment={segment} />}
+              </DateField.Input>
+              <DateRangePicker.RangeSeparator>→</DateRangePicker.RangeSeparator>
+              <DateField.Input slot="end">
+                {(segment) => <DateField.Segment segment={segment} />}
+              </DateField.Input>
+              <DateRangePicker.Trigger className="ml-auto">
+                <DateRangePicker.TriggerIndicator />
+              </DateRangePicker.Trigger>
+            </Group>
+            <DateRangePicker.Popover>
+              <RangeCalendar>
+                <RangeCalendar.Header>
+                  <RangeCalendar.NavButton slot="previous" />
+                  <RangeCalendar.Heading />
+                  <RangeCalendar.NavButton slot="next" />
+                </RangeCalendar.Header>
+                <RangeCalendar.Grid>
+                  <RangeCalendar.GridHeader>
+                    {(day) => (
+                      <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>
+                    )}
+                  </RangeCalendar.GridHeader>
+                  <RangeCalendar.GridBody>
+                    {(date) => <RangeCalendar.Cell date={date} />}
+                  </RangeCalendar.GridBody>
+                </RangeCalendar.Grid>
+              </RangeCalendar>
+            </DateRangePicker.Popover>
+          </DateRangePicker>
+        </div>
 
-        <TextField onChange={setTo} type="date" value={to}>
-          <Label>Hasta</Label>
-          <Input />
-        </TextField>
+        {range ? (
+          <button
+            className="h-10 self-end text-sm font-semibold text-(--accent) hover:underline"
+            onClick={() => setRange(null)}
+            type="button"
+          >
+            Limpiar período
+          </button>
+        ) : null}
       </div>
 
       <Segmented
@@ -265,7 +330,7 @@ export function MovimientosView() {
                 <Table.Column>Sucursal</Table.Column>
                 <Table.Column>Motivo</Table.Column>
                 <Table.Column>Cantidad</Table.Column>
-                <Table.Column>Saldo</Table.Column>
+                <Table.Column>Stock</Table.Column>
                 <Table.Column>Documento</Table.Column>
               </Table.Header>
               <Table.Body>
