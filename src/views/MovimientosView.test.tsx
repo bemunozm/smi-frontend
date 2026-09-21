@@ -126,6 +126,38 @@ describe('MovimientosView', () => {
     expect(screen.getByText('FIL-001')).toBeTruthy();
   });
 
+  it('filtra el período con un solo calendario de rango', () => {
+    // El rango es UNA decisión («la semana pasada»), no dos. Con dos campos
+    // sueltos hay que abrir dos veces y cuidar a mano que el desde no quede
+    // después del hasta.
+    renderView([COMPRA]);
+
+    expect(screen.getByText('Período')).toBeTruthy();
+    expect(screen.queryByText('Desde')).toBeNull();
+    expect(screen.queryByText('Hasta')).toBeNull();
+  });
+
+  it('el calendario tiene un ancla a la que pegarse', () => {
+    // Regresión: sin el `Group` de react-aria el popover no tiene ancla y se
+    // dibuja en la esquina de la pantalla, encima del menú lateral, en vez de
+    // bajo el campo que se apretó.
+    renderView([COMPRA]);
+
+    const grupo = document.querySelector('[role="group"]');
+    expect(grupo).not.toBeNull();
+    expect(
+      grupo?.querySelector('[data-slot="date-range-picker-trigger"]'),
+    ).not.toBeNull();
+  });
+
+  it('renombra el saldo a stock, que es como lo llaman', () => {
+    renderView([COMPRA]);
+
+    const tabla = within(screen.getByLabelText('Historial de inventario'));
+    expect(tabla.getByText('Stock')).toBeTruthy();
+    expect(tabla.queryByText('Saldo')).toBeNull();
+  });
+
   it('dice qué hacer cuando el período no tiene movimientos', () => {
     renderView([]);
 
