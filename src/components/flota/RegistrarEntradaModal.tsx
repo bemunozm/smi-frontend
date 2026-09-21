@@ -1,29 +1,12 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-import {
-  Button,
-  Chip,
-  FieldError,
-  Input,
-  Label,
-  ListBox,
-  Modal,
-  NumberField,
-  Select,
-  Spinner,
-  TextField,
-  toast,
-} from '@heroui/react';
+import { Button, FieldError, Input, Label, ListBox, Modal, NumberField, Select, Spinner, TextField } from '@heroui/react';
 
 import { useCreateHorometro } from '../../hooks/useHorometro';
 import type { HorometroForm } from '../../types/horometro';
-import { uploadImage } from '../../api/UploadsAPI';
-import { fmtDate, fmtTime } from '../../lib/format';
-import { formatRelative, isFresh, readCaptureDate, recognizeReading, type OcrResult } from '../../lib/photo-reading';
-import { PhotoCaptureField } from './PhotoCaptureField';
+import type { ControlUnit } from '../../types/equipment';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from './modal-styles';
 
 const TURNO_OPTIONS = [
@@ -31,12 +14,19 @@ const TURNO_OPTIONS = [
   { value: 'NOCTURNO', label: 'Nocturno' },
 ] as const;
 
+/** Label del campo de lectura, dinámico según la unidad de control del
+ * equipo (`ControlUnit`) — HOURS usa horómetro, KM usa odómetro. */
+const VALOR_INICIAL_LABEL: Record<ControlUnit, string> = {
+  HOURS: 'Horómetro total al iniciar (h)',
+  KM: 'Odómetro total al iniciar (km)',
+};
+
 // Schema local de la UI (no el `horometroFormSchema` de Terreno): acá los
 // campos numéricos son controlados por `NumberField` (necesita `number`, no
 // el `number | undefined` de los helpers `optNumber`/`nonNegNumber` pensados
 // para inputs nativos registrados con `valueAsNumber`). El payload final que
 // se envía a `useCreateHorometro` sí respeta el tipo `HorometroForm` real.
-const LecturaSchema = z.object({
+const EntradaSchema = z.object({
   operador: z.string().min(1, 'Indicá el operador'),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: z.number().nonnegative('Valor inválido'),
@@ -46,134 +36,80 @@ const LecturaSchema = z.object({
   // nunca tocó el campo, así el payload no manda un 0% falso.
   nivelCombustible: z.number().min(0, 'Valor inválido').max(100, 'Máximo 100%').optional(),
 });
-type LecturaFormValues = z.infer<typeof LecturaSchema>;
+type EntradaFormValues = z.infer<typeof EntradaSchema>;
 
-const DEFAULT_VALUES: LecturaFormValues = {
+const DEFAULT_VALUES: EntradaFormValues = {
   operador: '',
   turno: 'DIURNO',
   valorInicial: 0,
   nivelCombustible: 0,
 };
 
-interface RegistrarLecturaModalProps {
+interface RegistrarEntradaModalProps {
   equipoId: string;
   /** Código interno del equipo, solo para el título del modal. */
   equipoLabel?: string;
+  controlUnit: ControlUnit;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }
 
 /**
- * Registro de lectura de horómetro con trazabilidad anti-falsificación: la
- * foto es obligatoria, de ella se autorrellena la lectura por OCR (editable),
- * se valida la fecha real de captura vía EXIF y la foto en sí se sube y queda
- * archivada en el registro (`fotoUrl` — ver `types/horometro.ts`), mismo
- * patrón que `RegistrarCargaCombustibleModal`.
+ * ENTRADA del flujo de horómetro en dos pasos (Flota): abre un turno con la
+ * lectura inicial cargada a mano. El cliente decidió que este flujo queda
+ * SIN foto ni OCR/EXIF — a diferencia de `RegistrarCargaCombustibleModal`,
+ * que sí los conserva. Antes "Registrar lectura" (un solo paso que nunca
+ * mandaba `valorFinal` y por eso no cuadraba el horómetro general del
+ * equipo — ver el plan de la Fase de dos pasos); ahora es explícitamente el
+ * paso de ENTRADA: el backend rechaza (400) abrir un segundo turno si el
+ * equipo ya tiene uno en curso (`equipo.openShift`), y ese mensaje llega tal
+ * cual vía el toast de error de `useCreateHorometro`.
  */
-export function RegistrarLecturaModal({ equipoId, equipoLabel, isOpen, onOpenChange }: RegistrarLecturaModalProps) {
+export function RegistrarEntradaModal({
+  equipoId,
+  equipoLabel,
+  controlUnit,
+  isOpen,
+  onOpenChange,
+}: RegistrarEntradaModalProps) {
   const crear = useCreateHorometro();
 
-  const [file, setFile] = useState<File | null>(null);
-  const [isReadingPhoto, setIsReadingPhoto] = useState(false);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [captureDate, setCaptureDate] = useState<Date | null>(null);
-  const [ocr, setOcr] = useState<OcrResult | null>(null);
   // El usuario tocó el stepper de nivel de combustible (distinto de "vale 0"
-  // por defecto) — ver el comentario en `LecturaSchema.nivelCombustible`.
+  // por defecto) — ver el comentario en `EntradaSchema.nivelCombustible`.
   const [nivelTouched, setNivelTouched] = useState(false);
-  // Se marca en `cerrar()` y se revisa después del `await uploadImage(...)`:
-  // la subida de la foto no es cancelable (es una promesa ya en vuelo), así
-  // que si el usuario cierra/cancela MIENTRAS sube, esto evita que igual se
-  // cree la lectura cuando la subida termine (mismo patrón que combustible).
-  const canceladoRef = useRef(false);
 
   const {
     control,
     handleSubmit,
     reset,
     watch,
-    setValue,
     formState: { errors },
-  } = useForm<LecturaFormValues>({
-    resolver: zodResolver(LecturaSchema),
+  } = useForm<EntradaFormValues>({
+    resolver: zodResolver(EntradaSchema),
     defaultValues: DEFAULT_VALUES,
   });
 
   const limpiarTodo = () => {
     reset(DEFAULT_VALUES);
-    setFile(null);
-    setCaptureDate(null);
-    setOcr(null);
-    setIsReadingPhoto(false);
-    setIsUploadingPhoto(false);
     setNivelTouched(false);
   };
 
   // Único punto de cierre: tanto "Cancelar" como el backdrop/ESC/botón X
   // pasan por acá. Si no se limpia el estado, el modal queda MONTADO y se
   // reutiliza para el próximo equipo que se abra (misma instancia en
-  // `EquipoDetalleView`) — sin este reset, la foto/OCR/lectura de un equipo
-  // se filtraría al abrir el modal para otro `equipoId`. También es el
-  // gatillo que aborta un `onSubmit` en vuelo (ver `canceladoRef`).
+  // `EquipoDetalleView`) — sin este reset, la lectura de un equipo se
+  // filtraría al abrir el modal para otro `equipoId`.
   const cerrar = () => {
-    canceladoRef.current = true;
     limpiarTodo();
     onOpenChange(false);
-  };
-
-  const handleSelectPhoto = async (selected: File) => {
-    setFile(selected);
-    setOcr(null);
-    setCaptureDate(null);
-    setIsReadingPhoto(true);
-    try {
-      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), recognizeReading(selected)]);
-      setCaptureDate(fecha);
-      if (lectura.value) {
-        setOcr(lectura);
-        setValue('valorInicial', Number(lectura.value), { shouldValidate: true });
-      }
-    } finally {
-      setIsReadingPhoto(false);
-    }
-  };
-
-  const handleClearPhoto = () => {
-    setFile(null);
-    setCaptureDate(null);
-    setOcr(null);
   };
 
   const operador = watch('operador');
   const valorInicial = watch('valorInicial');
   const puedeGuardar =
-    !!file &&
-    !isReadingPhoto &&
-    !isUploadingPhoto &&
-    !crear.isPending &&
-    operador.trim().length > 0 &&
-    Number.isFinite(valorInicial) &&
-    valorInicial >= 0;
+    !crear.isPending && operador.trim().length > 0 && Number.isFinite(valorInicial) && valorInicial >= 0;
 
-  const onSubmit = async (values: LecturaFormValues) => {
-    if (!file) return;
-    canceladoRef.current = false;
-    setIsUploadingPhoto(true);
-    let fotoUrl: string;
-    try {
-      fotoUrl = await uploadImage(file);
-    } catch {
-      setIsUploadingPhoto(false);
-      if (!canceladoRef.current) toast.danger('No se pudo subir la foto. Intentá de nuevo.');
-      return;
-    }
-    setIsUploadingPhoto(false);
-
-    // El usuario canceló/cerró MIENTRAS la foto subía: la subida no se pudo
-    // abortar (ya estaba en vuelo), pero al menos evitamos crear la lectura
-    // después de que cerró el modal.
-    if (canceladoRef.current) return;
-
+  const onSubmit = (values: EntradaFormValues) => {
     const payload: HorometroForm = {
       equipoId,
       operador: values.operador.trim(),
@@ -184,14 +120,13 @@ export function RegistrarLecturaModal({ equipoId, equipoLabel, isOpen, onOpenCha
       // contrario el 0 de pantalla se guardaría como un nivel real y
       // enmascararía el "último nivel" verdadero en la ficha.
       nivelCombustible: nivelTouched ? values.nivelCombustible : undefined,
-      fotoUrl,
     };
     crear.mutate(payload, { onSuccess: cerrar });
   };
 
   return (
     <Modal.Backdrop
-      isDismissable={!isUploadingPhoto && !crear.isPending}
+      isDismissable={!crear.isPending}
       isOpen={isOpen}
       onOpenChange={(open) => {
         if (!open) cerrar();
@@ -199,89 +134,34 @@ export function RegistrarLecturaModal({ equipoId, equipoLabel, isOpen, onOpenCha
     >
       <Modal.Container>
         <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_CLASS}>
-          <Modal.CloseTrigger isDisabled={isUploadingPhoto || crear.isPending} />
+          <Modal.CloseTrigger isDisabled={crear.isPending} />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              Registrar lectura{equipoLabel ? ` · ${equipoLabel}` : ''}
+              Registrar entrada{equipoLabel ? ` · ${equipoLabel}` : ''}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
             <form
               className="flex flex-col gap-4"
-              id="registrar-lectura-form"
+              id="registrar-entrada-form"
               noValidate
               onSubmit={(e) => void handleSubmit(onSubmit)(e)}
             >
-              <div>
-                <p className="mb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
-                  Foto de respaldo <span className="text-(--danger)">· requerida</span>
-                </p>
-                <PhotoCaptureField
-                  file={file}
-                  isBusy={isReadingPhoto || isUploadingPhoto}
-                  onClear={handleClearPhoto}
-                  onSelect={(f) => void handleSelectPhoto(f)}
-                  subtitle="Debe verse el marcador completo"
-                  title="Fotografiar el horómetro"
-                />
-                {isReadingPhoto && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-(--muted)">
-                    <Spinner size="sm" /> Analizando la foto…
-                  </p>
-                )}
-                {!isReadingPhoto && captureDate && (
-                  <div
-                    className={`mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
-                      isFresh(captureDate)
-                        ? 'bg-(--success-soft) text-(--success-soft-foreground)'
-                        : 'bg-(--warning-soft) text-(--warning-soft-foreground)'
-                    }`}
-                  >
-                    {isFresh(captureDate) ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
-                    )}
-                    <span>
-                      Foto tomada {formatRelative(captureDate)} ({fmtDate(captureDate.toISOString())}{' '}
-                      {fmtTime(captureDate.toISOString())})
-                      {isFresh(captureDate) ? ' · reciente' : ' · ¿es la lectura actual?'}
-                    </span>
-                  </div>
-                )}
-                {!isReadingPhoto && file && !captureDate && (
-                  <p className="mt-2 text-xs text-(--muted)">
-                    La foto no trae fecha de captura (EXIF) — no se pudo validar su antigüedad.
-                  </p>
-                )}
-              </div>
-
               <Controller
                 control={control}
                 name="valorInicial"
                 render={({ field }) => (
                   <NumberField
                     fullWidth
-                    isDisabled={!file}
                     isInvalid={!!errors.valorInicial}
                     minValue={0}
                     onChange={field.onChange}
                     value={field.value}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label>Lectura de horómetro (h)</Label>
-                      {ocr?.value && (
-                        <Chip color="accent" size="sm" variant="soft">
-                          Autorrellenado por OCR · {ocr.confidence}%
-                        </Chip>
-                      )}
-                    </div>
+                    <Label>{VALOR_INICIAL_LABEL[controlUnit]}</Label>
                     <NumberField.Group>
                       <NumberField.DecrementButton />
-                      <NumberField.Input
-                        onBlur={field.onBlur}
-                        placeholder={!file ? 'Requiere foto de respaldo' : undefined}
-                      />
+                      <NumberField.Input onBlur={field.onBlur} />
                       <NumberField.IncrementButton />
                     </NumberField.Group>
                     {errors.valorInicial ? <FieldError>{errors.valorInicial.message}</FieldError> : null}
@@ -369,16 +249,11 @@ export function RegistrarLecturaModal({ equipoId, equipoLabel, isOpen, onOpenCha
             </form>
           </Modal.Body>
           <Modal.Footer>
-            <Button isDisabled={isUploadingPhoto || crear.isPending} onPress={cerrar} variant="secondary">
+            <Button isDisabled={crear.isPending} onPress={cerrar} variant="secondary">
               Cancelar
             </Button>
-            <Button
-              form="registrar-lectura-form"
-              isDisabled={!puedeGuardar}
-              isPending={crear.isPending || isUploadingPhoto}
-              type="submit"
-            >
-              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar lectura')}
+            <Button form="registrar-entrada-form" isDisabled={!puedeGuardar} isPending={crear.isPending} type="submit">
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar entrada')}
             </Button>
           </Modal.Footer>
         </Modal.Dialog>

@@ -3,13 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { listMock, resumenMock, getByIdMock, createMock, updateStatusMock, removeMock } = vi.hoisted(() => ({
+const { listMock, resumenMock, getByIdMock, createMock, updateStatusMock, removeMock, assignMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   resumenMock: vi.fn(),
   getByIdMock: vi.fn(),
   createMock: vi.fn(),
   updateStatusMock: vi.fn(),
   removeMock: vi.fn(),
+  assignMock: vi.fn(),
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({
@@ -21,6 +22,7 @@ vi.mock('../api/EquipmentAPI', () => ({
     update: vi.fn(),
     updateStatus: updateStatusMock,
     remove: removeMock,
+    assign: assignMock,
   },
 }));
 
@@ -31,6 +33,7 @@ vi.mock('@heroui/react', () => ({
 }));
 
 import {
+  useAssignEquipment,
   useCreateEquipment,
   useDeleteEquipment,
   useEquipment,
@@ -58,6 +61,18 @@ const EQUIPMENT = {
   currentMileage: null,
   status: 'OPERATIONAL',
   homeBranchId: null,
+  photoUrl: null,
+  technicalInspectionExpiry: null,
+  insuranceExpiry: null,
+  operator: null,
+  supervisor: null,
+  inUse: false,
+  currentFuelLevel: null,
+  openShift: null,
+  documents: {
+    technicalInspection: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
+    insurance: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
+  },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -125,8 +140,8 @@ describe('useEquipmentDetail', () => {
     getByIdMock.mockResolvedValueOnce({
       ...EQUIPMENT,
       homeBranch: null,
-      _count: { combustibles: 0, horometros: 0, trabajosExtra: 0, hallazgos: 0, movimientos: 0 },
-      movimientos: [],
+      _count: { combustibles: 0, horometros: 0, trabajosExtra: 0, hallazgos: 0, stockMovements: 0 },
+      stockMovements: [],
     });
     const queryClient = new QueryClient();
 
@@ -171,6 +186,22 @@ describe('useUpdateEquipmentStatus', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(updateStatusMock).toHaveBeenCalledWith('eq_1', 'IN_WORKSHOP');
+  });
+});
+
+describe('useAssignEquipment', () => {
+  it('llama a EquipmentAPI.assign con el id y el body de asignación, e invalida el árbol ["equipment"]', async () => {
+    assignMock.mockResolvedValueOnce({ ...EQUIPMENT, operator: { id: 'u_op', name: 'Pedro Soto' } });
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useAssignEquipment(), { wrapper: withQueryClient(queryClient) });
+
+    result.current.mutate({ id: 'eq_1', input: { operatorId: 'u_op', supervisorId: null } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment'] });
   });
 });
 

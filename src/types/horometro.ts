@@ -24,5 +24,21 @@ export interface RegistroHorometro {
   nivelCombustible: number | null;
   fotoUrl: string | null;
   fecha: string;
+  /** Hora de SALIDA (flujo de dos pasos, Flota) — `null` mientras el turno
+   * sigue abierto (`valorFinal == null`). Ver `PATCH /horometro/:id/salida`. */
+  fechaSalida: string | null;
+  /** Foto de respaldo de la SALIDA — igual que `fotoUrl`, pero de la lectura
+   * final. `null` mientras el turno sigue abierto. */
+  fotoUrlSalida: string | null;
   equipo?: { internalCode: string };
+}
+
+/** Body de `PATCH /api/horometro/:id/salida` — cierra un turno abierto (ver
+ * `RegistroHorometro`). El backend valida que el registro esté abierto
+ * (404 si no existe, 409 si ya está cerrado) y que `valorFinal >=
+ * valorInicial` (400 en caso contrario). */
+export interface CerrarHorometroInput {
+  valorFinal: number;
+  fotoUrlSalida?: string;
+  nivelCombustible?: number;
 }
