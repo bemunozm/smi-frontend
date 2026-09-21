@@ -64,7 +64,7 @@ export function Topbar() {
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface-secondary px-4">
-      <Button isIconOnly aria-label="Abrir menú" className="md:hidden" onPress={toggleSidebar} variant="ghost">
+      <Button isIconOnly aria-label="Abrir menú" className="lg:hidden" onPress={toggleSidebar} variant="ghost">
         <svg
           aria-hidden="true"
           fill="none"

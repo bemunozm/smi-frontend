@@ -6,6 +6,7 @@ import {
   EquipmentListResponseSchema,
   EquipmentResponseSchema,
   ResumenFleetResponseSchema,
+  type AssignEquipmentInput,
   type CreateEquipmentInput,
   type Equipment,
   type EquipmentClass,
@@ -95,6 +96,17 @@ async function remove(id: string): Promise<void> {
   }
 }
 
+/** Asigna/libera operador y supervisor — endpoint aparte del PATCH general
+ * (ver `AssignEquipmentInput`). */
+async function assign(id: string, input: AssignEquipmentInput): Promise<Equipment> {
+  try {
+    const response = await axiosInstance.patch(`/api/equipment/${id}/assignment`, input);
+    return EquipmentResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo actualizar la asignación del equipo.');
+  }
+}
+
 export const EquipmentAPI = {
   list,
   resumen,
@@ -103,4 +115,5 @@ export const EquipmentAPI = {
   update,
   updateStatus,
   remove,
+  assign,
 };

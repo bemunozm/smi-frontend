@@ -3,6 +3,7 @@ import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
 import type {
+  AssignEquipmentInput,
   CreateEquipmentInput,
   EquipmentStatus,
   UpdateEquipmentInput,
@@ -99,6 +100,28 @@ export function useUpdateEquipmentStatus() {
     },
     onError: (error: unknown) => {
       toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar el estado.');
+    },
+  });
+}
+
+/**
+ * Asigna/libera operador y supervisor (`PATCH /equipment/:id/assignment`).
+ * Mutación aparte de `useUpdateEquipment` porque es un endpoint distinto en
+ * el backend (gate de rol propio) y porque `EquipoActionsMenu`/`CamposEquipo`
+ * la disparan de forma independiente al resto del formulario.
+ */
+export function useAssignEquipment() {
+  const invalidar = useInvalidarEquipment();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: AssignEquipmentInput }) =>
+      EquipmentAPI.assign(id, input),
+    onSuccess: (equipment) => {
+      invalidar();
+      toast.success('Asignación actualizada', { description: equipment.internalCode });
+    },
+    onError: (error: unknown) => {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar la asignación.');
     },
   });
 }

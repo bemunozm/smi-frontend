@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 
-import { EquipoDetalleView } from './EquipoDetalleView';
 import { EquiposView } from './EquiposView';
 
 // La sesión real la resuelve Better Auth contra el backend; acá solo importa
@@ -25,6 +24,14 @@ vi.mock('../hooks/useBranches', () => ({
 
 afterEach(cleanup);
 
+// Documentos sin dato cargado — el fixture base representa el caso más común
+// (equipo recién dado de alta, sin R1/R2 todavía); los tests de vigencia
+// (`EquiposView — indicador de vencimientos`) sobrescriben con `VIGENTE_DOCS`.
+const SIN_DATO_DOCS = {
+  technicalInspection: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
+  insurance: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
+};
+
 const EQUIPO = {
   id: 'eq_1',
   internalCode: 'EX-001',
@@ -39,6 +46,15 @@ const EQUIPO = {
   currentMileage: null,
   status: 'OPERATIONAL' as const,
   homeBranchId: null,
+  photoUrl: null,
+  technicalInspectionExpiry: null,
+  insuranceExpiry: null,
+  operator: { id: 'u_op', name: 'Pedro Soto' },
+  supervisor: { id: 'u_sup', name: 'Luis Vega' },
+  inUse: true,
+  currentFuelLevel: 72,
+  openShift: null,
+  documents: SIN_DATO_DOCS,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -80,10 +96,45 @@ describe('EquiposView', () => {
     // tarjeta equivalente (tablet/celular) — ambas vistas conviven en el DOM,
     // la que se ve depende del breakpoint (CSS, no de jsdom).
     expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
-    expect(screen.getByText('Excavadora')).toBeTruthy();
+    expect(screen.getAllByText(/Excavadora/).length).toBeGreaterThan(0);
     // El estado se muestra con la etiqueta en español, no con el valor del enum.
     expect(screen.getAllByText('Operativo').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.200 h').length).toBeGreaterThan(0);
+    // Columnas nuevas de fidelidad con el artefacto: combustible y "en uso por".
+    expect(screen.getAllByText('72%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pedro Soto').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Luis Vega/).length).toBeGreaterThan(0);
+  });
+
+  it('muestra "Disponible" cuando el equipo no tiene operador ni supervisor asignado', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, inUse: false, operator: null, supervisor: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByText('Disponible').length).toBeGreaterThan(0);
+  });
+
+  // Antes esto se decidía leyendo `inUse` (que el backend deriva de
+  // `!!operator`): un equipo con supervisor asignado pero SIN operador
+  // quedaba mostrando "Disponible" y el supervisor desaparecía de la fila,
+  // aunque la asignación sí existía (Fix 4, review QA de fidelidad).
+  it('muestra al supervisor aunque no haya operador asignado (no depende solo de "inUse")', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, inUse: false, operator: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByText(/Luis Vega/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Disponible')).toBeNull();
   });
 
   it('muestra el estado vacío cuando ningún equipo coincide', () => {
@@ -101,114 +152,196 @@ describe('EquiposView', () => {
 
 });
 
-describe('EquipoDetalleView', () => {
-  it('muestra la ficha técnica y los contadores por dominio', () => {
-    const qc = crearQueryClient();
-    qc.setQueryData(['equipment', 'eq_1'], {
-      ...EQUIPO,
-      homeBranch: null,
-      _count: { combustibles: 2, horometros: 3, trabajosExtra: 1, hallazgos: 4, movimientos: 5 },
-      movimientos: [
-        {
-          id: 'mov_1',
-          tipo: 'SALIDA',
-          origen: 'INTERVENCION',
-          cantidad: 60,
-          saldoResultante: 140,
-          observacion: 'Cambio de aceite',
-          fecha: '2026-08-01T12:00:00.000Z',
-          insumo: { codigo: 'ACE-001', nombre: 'Aceite motor 15W-40', unidad: 'LITRO' },
-        },
-      ],
+// Hoja de acciones móvil (`EquipoCardMobile`): el tile de horómetro ofrece
+// "Registrar entrada" o "Registrar salida" según `equipo.openShift` — misma
+// lógica de estado que el botón del header en `EquipoDetalleView` (ver
+// `EquipoDetalleView.test.tsx — flujo de horómetro`). La tarjeta en sí no
+// tiene un rol/aria-label propio (solo envuelve el contenido visual), así
+// que se ubica por clase — no hay otro selector estable disponible acá.
+describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
+  it('sin turno abierto, el tile de horómetro ofrece "Registrar entrada"', async () => {
+    const { container } = renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
     });
-    // `EquipoDetalleView` también consulta el historial de horómetro/combustible
-    // (sección "Combustible") — mismas queries globales que usa Terreno, sin
-    // filtro por equipo. Sin seedearlas acá, el `useQuery` real dispararía una
-    // request de axios de verdad contra un backend inexistente.
-    qc.setQueryData(
-      ['horometro'],
-      [
-        // Equipo distinto y más reciente: debe quedar afuera del "último nivel".
-        {
-          id: 'h_otro',
-          equipoId: 'eq_9',
-          operador: 'Pedro',
-          turno: 'NOCTURNO',
-          valorInicial: 10,
-          valorFinal: 20,
-          nivelCombustible: 10,
-          fecha: '2026-08-10T08:00:00.000Z',
-        },
-        {
-          id: 'h_viejo',
-          equipoId: 'eq_1',
-          operador: 'Juan',
-          turno: 'DIURNO',
-          valorInicial: 1150,
-          valorFinal: 1160,
-          nivelCombustible: 50,
-          fecha: '2026-08-01T08:00:00.000Z',
-        },
-        {
-          id: 'h_nuevo',
-          equipoId: 'eq_1',
-          operador: 'Ana',
-          turno: 'DIURNO',
-          valorInicial: 1180,
-          valorFinal: 1195,
-          nivelCombustible: 72,
-          fecha: '2026-08-05T08:00:00.000Z',
-        },
-      ],
-    );
-    qc.setQueryData(
-      ['combustible'],
-      [
-        {
-          id: 'c_1',
-          equipoId: 'eq_1',
-          litros: 80,
-          tipo: 'PETROLEO',
-          fotoUrl: null,
-          fecha: '2026-08-04T09:00:00.000Z',
-        },
-      ],
-    );
 
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/equipos/eq_1']}>
-          <Routes>
-            <Route element={<EquipoDetalleView />} path="/equipos/:id" />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    const trigger = container.querySelector('button.block.w-full') as HTMLButtonElement;
+    fireEvent.click(trigger);
 
-    // El código aparece dos veces: en el título y en la fila "Código interno".
-    expect(screen.getAllByText('EX-001').length).toBe(2);
-    expect(screen.getByText('Aceite motor 15W-40')).toBeTruthy();
-    // KPI hero: uso acumulado, ahora único (ya no se repite en la ficha técnica).
-    expect(screen.getByText('1.200 h')).toBeTruthy();
-    // El consumo se muestra con signo según el tipo de movimiento.
-    expect(screen.getByText('−60')).toBeTruthy();
-    // Los contadores por dominio vienen del `_count` que arma el backend.
-    expect(screen.getByText('Hallazgos')).toBeTruthy();
-    expect(screen.getByText('Lecturas horómetro')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Registrar entrada' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar salida' })).toBeNull();
+  });
 
-    // Sección Combustible: último nivel = la lectura MÁS RECIENTE de ESTE
-    // equipo que trae `nivelCombustible` (72%, no 50% ni el 10% de "eq_9").
-    expect(screen.getByText('72%')).toBeTruthy();
-    expect(screen.getByText('Petróleo')).toBeTruthy();
-    expect(screen.getByText('80 L')).toBeTruthy();
+  it('con turno abierto, el tile de horómetro ofrece "Registrar salida"', async () => {
+    const equipoConTurno = {
+      ...EQUIPO,
+      openShift: {
+        id: 'h_abierto',
+        valorInicial: 1200,
+        operador: 'Carlos Núñez',
+        turno: 'DIURNO',
+        fecha: '2026-08-06T08:00:00.000Z',
+      },
+    };
+    const { container } = renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [equipoConTurno]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
 
-    // Los botones de registro abren el flujo foto→OCR→EXIF (Fase B) — ya no
-    // están deshabilitados. La interacción completa (capturar foto, ver el
-    // autorrelleno OCR/EXIF, guardar) se prueba en los tests dedicados de
-    // `RegistrarLecturaModal`/`RegistrarCargaCombustibleModal`.
-    const botonLectura = screen.getByRole('button', { name: 'Registrar lectura' });
-    const botonCarga = screen.getByRole('button', { name: 'Registrar carga' });
-    expect(botonLectura.hasAttribute('disabled')).toBe(false);
-    expect(botonCarga.hasAttribute('disabled')).toBe(false);
+    const trigger = container.querySelector('button.block.w-full') as HTMLButtonElement;
+    fireEvent.click(trigger);
+
+    expect(await screen.findByRole('button', { name: 'Registrar salida' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' })).toBeNull();
   });
 });
+
+// R3 — vista diferenciada por clase (auditoría de fidelidad Flota/Equipos):
+// el listado no mostraba la patente en absoluto; ahora un equipo PESADO se
+// identifica de un vistazo por su patente, y uno LIVIANO por
+// patente+marca+modelo (`equipoIdentidad`, `flota-colors.ts`).
+describe('EquiposView — R3 identidad por clase', () => {
+  it('equipo PESADO con patente: la muestra destacada (aparte de marca/modelo)', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'HEAVY', licensePlate: 'AB-CD-12' }]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    // La patente aparece en la tabla (PC) y en la tarjeta (tablet/celular).
+    expect(screen.getAllByText('AB-CD-12').length).toBeGreaterThan(0);
+    // Marca/modelo se sigue mostrando aparte (la patente no los reemplaza).
+    expect(screen.getAllByText(/Caterpillar 336/).length).toBeGreaterThan(0);
+  });
+
+  it('equipo LIVIANO con patente: muestra patente + marca + modelo juntos', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [{ ...EQUIPO, equipmentClass: 'LIGHT' as const, licensePlate: 'XY-12-34', type: 'Camioneta' }],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByText('XY-12-34 · Caterpillar 336').length).toBeGreaterThan(0);
+  });
+
+  it('equipo PESADO sin patente: no deja un hueco vacío — cae al código interno ya visible', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'HEAVY', licensePlate: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    // El código interno sigue siendo el identificador — sin duplicarlo como
+    // "patente destacada" (esa línea extra no debe aparecer).
+    expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Caterpillar 336/).length).toBeGreaterThan(0);
+  });
+
+  it('equipo LIVIANO sin patente: muestra marca y modelo a secas (sin patente inventada)', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'LIGHT' as const, licensePlate: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByText('Caterpillar 336').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/· Caterpillar 336/)).toBeNull();
+  });
+});
+
+// R1/R2 — indicador discreto de vencimientos en el listado (punto 5, opcional
+// pero implementado): badge chico junto al chip de estado cuando algún
+// documento está POR_VENCER o VENCIDO (`equipoDocumentAlertTone`).
+describe('EquiposView — indicador de vencimientos (R1/R2)', () => {
+  it('no muestra el indicador cuando ambos documentos están vigentes o sin dato', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.queryByLabelText(/Revisión técnica o seguro/)).toBeNull();
+  });
+
+  it('muestra el indicador en tono ámbar cuando un documento está POR_VENCER', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            documents: {
+              ...SIN_DATO_DOCS,
+              technicalInspection: { expiry: '2026-10-10T00:00:00.000Z', status: 'POR_VENCER' as const, daysToExpiry: 12 },
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByLabelText('Revisión técnica o seguro por vencer').length).toBeGreaterThan(0);
+  });
+
+  it('muestra el indicador en tono rojo (prioridad sobre "por vencer") cuando un documento está VENCIDO', () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            documents: {
+              technicalInspection: { expiry: '2026-08-01T00:00:00.000Z', status: 'VENCIDO' as const, daysToExpiry: -20 },
+              insurance: { expiry: '2026-10-10T00:00:00.000Z', status: 'POR_VENCER' as const, daysToExpiry: 5 },
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+    });
+
+    expect(screen.getAllByLabelText('Revisión técnica o seguro vencidos').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Revisión técnica o seguro por vencer')).toBeNull();
+  });
+});
+
+// La ficha de detalle (`EquipoDetalleView`) tiene su propio archivo de tests
+// — `EquipoDetalleView.test.tsx` — desde la Fase 2 (fidelidad con el
+// artefacto): creció lo suficiente (KPIs, estado de uso, actividad reciente)
+// como para justificar separarla de este archivo, mismo criterio que el
+// resto de las vistas de Flota/Terreno (`CombustibleView.test.tsx`,
+// `HorometroView.test.tsx`, etc.).

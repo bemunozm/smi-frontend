@@ -1,14 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, type Control, type FieldErrors } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
+import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2, type LucideIcon } from 'lucide-react';
 import {
-  AlertDialog,
   Button,
   Card,
-  Chip,
+  Drawer,
   Dropdown,
-  FieldError,
   Input,
   Label,
   ListBox,
@@ -19,30 +18,46 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useBranch, useBranches } from '../hooks/useBranches';
 import {
+  CamposEquipo,
+  DeleteEquipoAlertDialog,
+  EditEquipoModal,
+  EquipoPhotoBanner,
+  idDesdeSentinel,
+  SIN_ASIGNAR,
+} from '../components/flota/EquipoEditDelete';
+import { EquipoThumb } from '../components/flota/EquipoThumb';
+import { FuelGauge } from '../components/flota/FuelGauge';
+import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
+import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
+import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
+import { StatusChip } from '../components/flota/StatusChip';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useBranches } from '../hooks/useBranches';
+import {
+  useAssignEquipment,
   useCreateEquipment,
-  useDeleteEquipment,
   useEquipment,
   useResumenFleet,
-  useUpdateEquipment,
   useUpdateEquipmentStatus,
 } from '../hooks/useEquipment';
 import {
-  CONTROL_UNIT_OPTIONS,
   EQUIPMENT_CLASS_OPTIONS,
   EQUIPMENT_STATUS_OPTIONS,
   equipmentClassLabel,
   equipmentStatusChipColor,
   equipmentStatusLabel,
+  equipmentStatusSelectedClasses,
+  equipoDocumentAlertTone,
+  equipoEstadoUsoLabel,
+  equipoIdentidad,
 } from '../config/flota-colors';
 import { ROLES } from '../types/roles';
 import {
   EquipmentFormSchema,
   EQUIPMENT_STATUS,
   toEquipmentPayload,
-  toUpdateEquipmentPayload,
+  type ControlUnit,
   type Equipment,
   type EquipmentClass,
   type EquipmentFormValues,
@@ -50,6 +65,13 @@ import {
 } from '../types/equipment';
 
 const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
+
+/** Segunda línea de la celda "Horómetro / KM" (tabla PC) — unidad descriptiva
+ * en minúsculas, calca `unit` de `FlotaClientePC.dc.html#uso`. */
+const USO_UNIDAD_LABEL: Record<ControlUnit, string> = {
+  HOURS: 'horómetro (h)',
+  KM: 'kilómetros (km)',
+};
 
 function KebabIcon() {
   return (
@@ -61,6 +83,33 @@ function KebabIcon() {
   );
 }
 
+/**
+ * Indicador discreto de R1/R2 (revisión técnica/seguro) para el LISTADO —
+ * badge chico con el tono más urgente entre ambos documentos
+ * (`equipoDocumentAlertTone`), sin recargar la fila: no se repite el detalle
+ * de cuál venció, eso ya vive en la ficha (bloque "Vencimientos"). No
+ * renderiza nada cuando ambos documentos están vigentes o sin dato.
+ */
+function DocumentAlertBadge({ equipo }: { equipo: Pick<Equipment, 'documents'> }) {
+  const tone = equipoDocumentAlertTone(equipo);
+  if (!tone) return null;
+
+  const label =
+    tone === 'danger' ? 'Revisión técnica o seguro vencidos' : 'Revisión técnica o seguro por vencer';
+
+  return (
+    <span
+      aria-label={label}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+        tone === 'danger' ? 'bg-danger-soft text-danger-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'
+      }`}
+      title={label}
+    >
+      <FileWarning className="h-3 w-3" />
+    </span>
+  );
+}
+
 /** Uso acumulado de la unidad — horómetro o kilometraje según `controlUnit`;
  * solo uno de los dos aplica (ver `types/equipment.ts`). */
 function formatearUso(equipo: Pick<Equipment, 'controlUnit' | 'currentHourmeter' | 'currentMileage'>): string {
@@ -68,6 +117,81 @@ function formatearUso(equipo: Pick<Equipment, 'controlUnit' | 'currentHourmeter'
     return equipo.currentHourmeter != null ? `${NUMERO.format(equipo.currentHourmeter)} h` : '—';
   }
   return equipo.currentMileage != null ? `${NUMERO.format(equipo.currentMileage)} km` : '—';
+}
+
+/** Segunda línea de la celda "Equipo": "Liviano · Camioneta · 2022" — calca
+ * `row.classType + row.yearSuffix` de `FlotaClientePC.dc.html`. */
+function claseTipoAnio(equipo: Pick<Equipment, 'equipmentClass' | 'type' | 'year'>): string {
+  const base = `${equipmentClassLabel(equipo.equipmentClass)} · ${equipo.type}`;
+  return equipo.year ? `${base} · ${equipo.year}` : base;
+}
+
+/**
+ * "En uso por" — chip "En uso" + operador/supervisor, o "Disponible"/
+ * "Detenido" cuando nadie lo tiene asignado (calca `row.enUso`/`row.libre` del
+ * artefacto). `stacked` = celda de tabla (PC); `inline` = tarjeta tablet/
+ * celular, dentro de una barra `surface-secondary`.
+ */
+function AsignacionCell({
+  equipo,
+  layout,
+}: {
+  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status'>;
+  layout: 'stacked' | 'inline';
+}) {
+  const { operator, supervisor } = equipo;
+  // Fuente única con `EstadoDeUso` de `EquipoDetalleView` — ver
+  // `equipoEstadoUsoLabel` (`flota-colors.ts`): antes esta rama decidía
+  // "Disponible"/"Detenido" con su propio branching inline, que había
+  // divergido del de la ficha (Fix F-ALTA, review adversarial).
+  const chipLabel = equipoEstadoUsoLabel(equipo);
+
+  // Antes esto se decidía leyendo `equipo.inUse` (que el backend deriva de
+  // `!!operator`): un equipo con supervisor asignado pero SIN operador
+  // quedaba mostrando "Disponible" y el supervisor desaparecía por completo
+  // de la fila, aunque la asignación sí existía (Fix 4, review QA). Ahora se
+  // decide por presencia real de cualquiera de los dos.
+  if (!operator && !supervisor) {
+    return <span className="text-sm text-(--muted)">{chipLabel}</span>;
+  }
+
+  if (layout === 'inline') {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5">
+        <StatusChip tone="success">{chipLabel}</StatusChip>
+        <span className="text-[13px] text-foreground">
+          {operator ? (
+            <>
+              Op. <strong className="font-semibold">{operator.name}</strong>
+            </>
+          ) : (
+            <>
+              Sup. <strong className="font-semibold">{supervisor?.name}</strong>
+            </>
+          )}
+          {operator && supervisor ? ` · Sup. ${supervisor.name}` : null}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <StatusChip tone="success">{chipLabel}</StatusChip>
+      <span className="text-[12.5px] text-foreground">
+        {operator ? (
+          <>
+            Op. <strong className="font-semibold">{operator.name}</strong>
+          </>
+        ) : (
+          <>
+            Sup. <strong className="font-semibold">{supervisor?.name}</strong>
+          </>
+        )}
+      </span>
+      {operator && supervisor ? <span className="text-xs text-(--muted)">Sup. {supervisor.name}</span> : null}
+    </div>
+  );
 }
 
 const DEFAULT_FORM_VALUES: EquipmentFormValues = {
@@ -81,312 +205,27 @@ const DEFAULT_FORM_VALUES: EquipmentFormValues = {
   controlUnit: 'HOURS',
   status: 'OPERATIONAL',
   homeBranchId: '',
+  photoUrl: null,
+  technicalInspectionExpiry: '',
+  insuranceExpiry: '',
 };
 
-/** `''` en el form significa "sin sucursal asignada" — el Select de HeroUI no
- * admite un `id` vacío, así que se usa este sentinel solo para el widget. */
-const SIN_SUCURSAL = '__sin_sucursal__';
-
-interface CamposProps {
-  control: Control<EquipmentFormValues>;
-  errors: FieldErrors<EquipmentFormValues>;
-  /** El código interno es la clave de negocio: se fija al crear y el backend
-   * no lo edita. */
-  internalCodeEditable: boolean;
-  /** Sucursal asignada HOY al equipo que se está editando (`undefined` en
-   * creación). Existe para el caso borde de la sucursal base: el selector
-   * solo ofrece sucursales activas, pero si el equipo quedó homed a una que
-   * mientras tanto pasó a inactiva, igual debe verse seleccionada — si no,
-   * el `Select` queda en blanco aunque el campo sí tenga valor. */
-  currentHomeBranchId?: string | null;
+interface CreateEquipoModalProps {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
 }
 
 /**
- * Campos del equipo, compartidos por el modal de creación y el de edición. Se
- * extraen en vez de duplicarse porque son varios y la única diferencia entre
- * ambos formularios es si `internalCode` se puede escribir.
+ * Controlado desde `EquiposView` (no dueño de su propio trigger): tanto el
+ * botón "Nuevo equipo" del header (PC) como el FAB (tablet/celular) deben
+ * abrir el MISMO modal, así que el trigger vive afuera — mismo criterio que
+ * `EditEquipoModal`/`DeleteEquipoAlertDialog`, que ya son controlados.
  */
-function CamposEquipo({ control, errors, internalCodeEditable, currentHomeBranchId }: CamposProps) {
-  // El selector de sucursal base solo debe ofrecer sucursales activas.
-  const { data: sucursalesActivas } = useBranches({ isActive: true });
-  // Solo se pide si estamos editando (ver `currentHomeBranchId`); `useBranch`
-  // ya trae `enabled: !!id`, así que en creación (`undefined`) no dispara nada.
-  const { data: sucursalActual } = useBranch(currentHomeBranchId ?? '');
-  const yaEstaEnActivas = (sucursalesActivas ?? []).some((sucursal) => sucursal.id === sucursalActual?.id);
-  const opcionesSucursal =
-    sucursalActual && !yaEstaEnActivas ? [...(sucursalesActivas ?? []), sucursalActual] : (sucursalesActivas ?? []);
-
-  return (
-    <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="internalCode"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isDisabled={!internalCodeEditable}
-              isInvalid={!!errors.internalCode}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Código interno</Label>
-              <Input autoFocus={internalCodeEditable} placeholder="EX-001" />
-              {errors.internalCode ? <FieldError>{errors.internalCode.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="licensePlate"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isInvalid={!!errors.licensePlate}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Patente (opcional)</Label>
-              <Input placeholder="AB-CD-12" />
-              {errors.licensePlate ? <FieldError>{errors.licensePlate.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="equipmentClass"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              isInvalid={!!errors.equipmentClass}
-              name={field.name}
-              value={field.value}
-              onChange={(value) => {
-                if (value) field.onChange(value as EquipmentClass);
-              }}
-            >
-              <Label>Clase</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {EQUIPMENT_CLASS_OPTIONS.map((option) => (
-                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                      {option.label}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-              {errors.equipmentClass ? <FieldError>{errors.equipmentClass.message}</FieldError> : null}
-            </Select>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="type"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isInvalid={!!errors.type}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Tipo</Label>
-              <Input placeholder="Excavadora, Camión, Cargador…" />
-              {errors.type ? <FieldError>{errors.type.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="brand"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isInvalid={!!errors.brand}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Marca</Label>
-              <Input placeholder="Caterpillar" />
-              {errors.brand ? <FieldError>{errors.brand.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="model"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isInvalid={!!errors.model}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Modelo</Label>
-              <Input placeholder="336" />
-              {errors.model ? <FieldError>{errors.model.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="year"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              isInvalid={!!errors.year}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Año (opcional)</Label>
-              <Input inputMode="numeric" placeholder="2019" />
-              {errors.year ? <FieldError>{errors.year.message}</FieldError> : null}
-            </TextField>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="controlUnit"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              isInvalid={!!errors.controlUnit}
-              name={field.name}
-              value={field.value}
-              onChange={(value) => {
-                if (value) field.onChange(value);
-              }}
-            >
-              <Label>Unidad de control</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {CONTROL_UNIT_OPTIONS.map((option) => (
-                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                      {option.label}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-              {errors.controlUnit ? <FieldError>{errors.controlUnit.message}</FieldError> : null}
-            </Select>
-          )}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="status"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              isInvalid={!!errors.status}
-              name={field.name}
-              value={field.value}
-              onChange={(value) => {
-                if (value) field.onChange(value as EquipmentStatus);
-              }}
-            >
-              <Label>Estado</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {EQUIPMENT_STATUS_OPTIONS.map((option) => (
-                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                      {option.label}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-              {errors.status ? <FieldError>{errors.status.message}</FieldError> : null}
-            </Select>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="homeBranchId"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              isInvalid={!!errors.homeBranchId}
-              name={field.name}
-              value={field.value || SIN_SUCURSAL}
-              onChange={(value) => {
-                if (value) field.onChange(value === SIN_SUCURSAL ? '' : value);
-              }}
-            >
-              <Label>Sucursal base (opcional)</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  <ListBox.Item id={SIN_SUCURSAL} textValue="Sin sucursal">
-                    Sin sucursal
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                  {opcionesSucursal.map((sucursal) => (
-                    <ListBox.Item key={sucursal.id} id={sucursal.id} textValue={sucursal.name}>
-                      {sucursal.name}
-                      {!sucursal.isActive ? (
-                        <span className="text-(--muted)"> (inactiva)</span>
-                      ) : null}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-              {errors.homeBranchId ? <FieldError>{errors.homeBranchId.message}</FieldError> : null}
-            </Select>
-          )}
-        />
-      </div>
-    </>
-  );
-}
-
-function CreateEquipoModal() {
+function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
   const createEquipment = useCreateEquipment();
+  const assignEquipment = useAssignEquipment();
+  const [operatorId, setOperatorId] = useState(SIN_ASIGNAR);
+  const [supervisorId, setSupervisorId] = useState(SIN_ASIGNAR);
   const {
     control,
     handleSubmit,
@@ -397,122 +236,69 @@ function CreateEquipoModal() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
 
-  return (
-    <Modal>
-      <Button>Nuevo equipo</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: EquipmentFormValues): void => {
-                createEquipment.mutate(toEquipmentPayload(values), {
-                  onSuccess: () => {
-                    reset();
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Nuevo equipo
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="create-equipo-form"
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <CamposEquipo control={control} errors={errors} internalCodeEditable />
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button form="create-equipo-form" isPending={createEquipment.isPending} type="submit">
-                      {({ isPending }) =>
-                        isPending ? <Spinner color="current" size="sm" /> : 'Crear equipo'
-                      }
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
-  );
-}
-
-interface EquipoModalProps {
-  equipo: Equipment;
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-}
-
-function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
-  const updateEquipment = useUpdateEquipment();
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<EquipmentFormValues>({
-    resolver: zodResolver(EquipmentFormSchema),
-    // `values` (no `defaultValues`): el modal vive montado en la fila, así que
-    // el form debe re-sincronizarse cuando la tabla se refresca.
-    values: {
-      internalCode: equipo.internalCode,
-      licensePlate: equipo.licensePlate ?? '',
-      equipmentClass: equipo.equipmentClass,
-      type: equipo.type,
-      brand: equipo.brand,
-      model: equipo.model,
-      year: equipo.year ? String(equipo.year) : '',
-      controlUnit: equipo.controlUnit,
-      status: equipo.status,
-      homeBranchId: equipo.homeBranchId ?? '',
-    },
-  });
+  // El modal es controlado y queda montado entre aperturas (mismo patrón que
+  // `EditEquipoModal`) — sin esto, cancelar (`Cancelar`, backdrop, Escape)
+  // dejaba el código/marca/modelo y el operador/supervisor elegidos, y
+  // reaparecían "viejos" la próxima vez que se abría (Fix 1, review QA).
+  useEffect(() => {
+    if (isOpen) {
+      reset(DEFAULT_FORM_VALUES);
+      setOperatorId(SIN_ASIGNAR);
+      setSupervisorId(SIN_ASIGNAR);
+    }
+  }, [isOpen, reset]);
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
-        <Modal.Dialog className="sm:max-w-lg">
+        <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_WIDE_CLASS}>
           {({ close }) => {
             const onSubmit = (values: EquipmentFormValues): void => {
-              updateEquipment.mutate(
-                { id: equipo.id, input: toUpdateEquipmentPayload(values) },
-                { onSuccess: () => close() },
-              );
+              createEquipment.mutate(toEquipmentPayload(values), {
+                onSuccess: (equipment) => {
+                  const operatorIdFinal = idDesdeSentinel(operatorId);
+                  const supervisorIdFinal = idDesdeSentinel(supervisorId);
+                  if (operatorIdFinal || supervisorIdFinal) {
+                    assignEquipment.mutate({
+                      id: equipment.id,
+                      input: { operatorId: operatorIdFinal, supervisorId: supervisorIdFinal },
+                    });
+                  }
+                  // El reset al reabrir (arriba) deja el form limpio para la
+                  // próxima vez — no hace falta duplicarlo acá.
+                  close();
+                },
+              });
             };
 
             return (
               <>
                 <Modal.CloseTrigger />
+                <Controller
+                  control={control}
+                  name="photoUrl"
+                  render={({ field }) => <EquipoPhotoBanner onChange={field.onChange} value={field.value} />}
+                />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                    Editar {equipo.internalCode}
+                    Nuevo equipo
                   </Modal.Heading>
                 </Modal.Header>
                 <Modal.Body>
                   <form
                     className="flex flex-col gap-4"
-                    id={`edit-equipo-form-${equipo.id}`}
+                    id="create-equipo-form"
                     noValidate
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
                     <CamposEquipo
                       control={control}
-                      currentHomeBranchId={equipo.homeBranchId}
                       errors={errors}
-                      internalCodeEditable={false}
+                      internalCodeEditable
+                      onOperatorIdChange={setOperatorId}
+                      onSupervisorIdChange={setSupervisorId}
+                      operatorId={operatorId}
+                      supervisorId={supervisorId}
                     />
                   </form>
                 </Modal.Body>
@@ -520,13 +306,9 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
                   <Button variant="secondary" onPress={close}>
                     Cancelar
                   </Button>
-                  <Button
-                    form={`edit-equipo-form-${equipo.id}`}
-                    isPending={updateEquipment.isPending}
-                    type="submit"
-                  >
+                  <Button form="create-equipo-form" isPending={createEquipment.isPending} type="submit">
                     {({ isPending }) =>
-                      isPending ? <Spinner color="current" size="sm" /> : 'Guardar cambios'
+                      isPending ? <Spinner color="current" size="sm" /> : 'Crear equipo'
                     }
                   </Button>
                 </Modal.Footer>
@@ -536,49 +318,6 @@ function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
-  );
-}
-
-function DeleteEquipoAlertDialog({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
-  const deleteEquipment = useDeleteEquipment();
-
-  return (
-    <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialog.Container>
-        <AlertDialog.Dialog className="sm:max-w-105">
-          {({ close }) => (
-            <>
-              <AlertDialog.CloseTrigger />
-              <AlertDialog.Header>
-                <AlertDialog.Icon status="danger" />
-                <AlertDialog.Heading>¿Eliminar {equipo.internalCode}?</AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                <p>
-                  Esta acción no se puede deshacer. Si la unidad ya tiene registros de terreno,
-                  mantenciones o consumos, el sistema la rechazará: en ese caso, cámbiala a{' '}
-                  <strong>Fuera de servicio</strong> para retirarla conservando su historial.
-                </p>
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button variant="tertiary" onPress={close}>
-                  Cancelar
-                </Button>
-                <Button
-                  isPending={deleteEquipment.isPending}
-                  variant="danger"
-                  onPress={() => {
-                    deleteEquipment.mutate(equipo.id, { onSuccess: () => close() });
-                  }}
-                >
-                  {deleteEquipment.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
-                </Button>
-              </AlertDialog.Footer>
-            </>
-          )}
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
   );
 }
 
@@ -662,15 +401,303 @@ function ResumenFlota() {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Chip size="sm" variant="secondary">
-        {resumen.total} equipos
-      </Chip>
+      <StatusChip tone="default">{resumen.total} equipos</StatusChip>
       {EQUIPMENT_STATUS.map((status) => (
-        <Chip color={equipmentStatusChipColor(status)} key={status} size="sm" variant="soft">
+        <StatusChip key={status} tone={equipmentStatusChipColor(status)}>
           {equipmentStatusLabel(status)}: {resumen.porEstado[status] ?? 0}
-        </Chip>
+        </StatusChip>
       ))}
     </div>
+  );
+}
+
+/**
+ * Tile de acción de la hoja de acciones móvil (`EquipoCardMobile`) — ícono en
+ * una insignia redondeada + etiqueta debajo, calca `.qa`/`.qa-ic` de
+ * `FlotaClienteTablet/Phone.dc.html`. `tone="danger"` solo tiñe la insignia
+ * (igual que el artefacto: el tile en sí queda neutro, no se pinta rojo
+ * entero) — se usa para "Eliminar equipo".
+ *
+ * `variant="outline"` (no `secondary`/`tertiary`) + `bg-surface` explícito:
+ * antes usaba `secondary`, que pinta `--button-bg: var(--default)` (gris) —
+ * el usuario lo veía "apagado" sobre el fondo blanco del sheet. `outline` ya
+ * fija su propio `--button-fg` (a diferencia de `tertiary`, que hereda
+ * `currentColor` y por eso NUNCA se usa acá — ver el fix de `.drawer__body`
+ * en `index.css`), así que se mantiene libre del mismo bug; la etiqueta igual
+ * queda en su propio `<span className="text-foreground">` a contraste pleno
+ * pase lo que pase con la variante (mismo criterio que ya usa el badge del
+ * ícono, que nunca dependió de `currentColor`).
+ *
+ * Ancho fijo a `calc(50% - gap/2)` (no `fullWidth`/grid): el padre es un
+ * `flex flex-wrap justify-center`, así que 2 tiles entran por fila y — como
+ * `justify-content` en flexbox se aplica POR LÍNEA — un tile impar al final
+ * (3 tiles para MANTENEDOR/no-ADMIN, 5 para ADMIN) queda centrado solo en su
+ * propia fila sin lógica condicional adicional en el llamador.
+ */
+function AccionTile({
+  icon: Icon,
+  label,
+  onPress,
+  isDisabled,
+  tone = 'accent',
+}: {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+  isDisabled?: boolean;
+  tone?: 'accent' | 'danger';
+}) {
+  return (
+    <Button
+      className="h-auto w-[calc(50%-0.375rem)] flex-col gap-2.5 rounded-2xl border border-border bg-surface py-4 text-center text-[13px] font-semibold whitespace-normal"
+      isDisabled={isDisabled}
+      onPress={onPress}
+      variant="outline"
+    >
+      <span
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${
+          tone === 'danger' ? 'bg-danger-soft text-danger-soft-foreground' : 'bg-accent-soft text-accent-soft-foreground'
+        }`}
+      >
+        <Icon aria-hidden className="h-5 w-5" />
+      </span>
+      <span className="text-foreground">{label}</span>
+    </Button>
+  );
+}
+
+/**
+ * Tarjeta de equipo para tablet/celular: ya no navega directo a la ficha
+ * (`Link`) — al tocarla abre una hoja de acciones inferior (`Drawer`
+ * `placement="bottom"`), calcando la hoja de `FlotaClienteTablet/Phone.dc.html`
+ * (foto+código+estado en el encabezado, acciones abajo). Antes de este fix,
+ * editar/eliminar/cambiar estado solo existían en el kebab de PC
+ * (`EquipoActionsMenu`) — acá viven las mismas mutaciones, gateadas igual.
+ *
+ * Cada tarjeta es dueña de sus propios overlays (mismo criterio que
+ * `EquipoActionsMenu` en PC): así abrir la hoja de un equipo nunca deja
+ * "colgado" el estado de otro, y no hace falta levantar un id seleccionado
+ * al padre.
+ */
+function EquipoCardMobile({
+  equipo,
+  sucursalPorId,
+  puedeEditarFicha,
+  puedeCambiarEstado,
+}: {
+  equipo: Equipment;
+  sucursalPorId: Map<string, string>;
+  puedeEditarFicha: boolean;
+  puedeCambiarEstado: boolean;
+}) {
+  const navigate = useNavigate();
+  const updateStatus = useUpdateEquipmentStatus();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  // Un solo estado para el tile de horómetro — `RegistrarHorometroModal`
+  // decide internamente entre `RegistrarEntradaModal`/`RegistrarSalidaModal`
+  // según `equipo.openShift`, así que acá solo se controla si está abierto.
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [isCargaOpen, setIsCargaOpen] = useState(false);
+  // R3 (vista diferenciada por clase): patente destacada en pesados, o
+  // integrada en `marcaModelo` en livianos — fuente única, ver `flota-colors.ts`.
+  const identidad = equipoIdentidad(equipo);
+
+  return (
+    <>
+      <button
+        className="block w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+        onClick={() => setIsSheetOpen(true)}
+        type="button"
+      >
+        <Card className="transition-colors active:bg-surface-secondary">
+          <Card.Content className="flex flex-col gap-3 p-4">
+            <div className="flex items-start gap-3">
+              <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-semibold text-(--accent)">
+                      {equipo.internalCode}
+                    </span>
+                    {identidad.patenteDestacada ? (
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {identidad.patenteDestacada}
+                      </span>
+                    ) : null}
+                    <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
+                      {equipmentStatusLabel(equipo.status)}
+                    </StatusChip>
+                    <DocumentAlertBadge equipo={equipo} />
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-(--muted)" />
+                </div>
+                <p className="mt-1 text-sm text-foreground">{identidad.marcaModelo}</p>
+                <p className="mt-0.5 text-xs text-(--muted)">
+                  {claseTipoAnio(equipo)} ·{' '}
+                  {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-4 border-t border-separator pt-3">
+              <div className="flex min-w-24 flex-col gap-0.5">
+                <span className="text-[11px] font-bold tracking-wide text-(--muted) uppercase">
+                  Horómetro / KM
+                </span>
+                <span className="font-mono text-base font-semibold text-foreground">
+                  {formatearUso(equipo)}
+                </span>
+              </div>
+              <div className="flex flex-1 flex-col gap-0.5">
+                <span className="text-[11px] font-bold tracking-wide text-(--muted) uppercase">
+                  Combustible
+                </span>
+                <FuelGauge pct={equipo.currentFuelLevel} />
+              </div>
+            </div>
+
+            <AsignacionCell equipo={equipo} layout="inline" />
+          </Card.Content>
+        </Card>
+      </button>
+
+      <Drawer.Backdrop isOpen={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <Drawer.Content placement="bottom">
+          <Drawer.Dialog className="max-h-[85vh]">
+            <Drawer.Handle />
+            <Drawer.CloseTrigger />
+            <Drawer.Header>
+              <div className="flex items-center gap-3">
+                <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="md" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Drawer.Heading className="font-mono text-lg font-semibold text-(--accent)">
+                      {equipo.internalCode}
+                    </Drawer.Heading>
+                    {identidad.patenteDestacada ? (
+                      <span className="font-mono text-base font-semibold text-foreground">
+                        {identidad.patenteDestacada}
+                      </span>
+                    ) : null}
+                    <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
+                      {equipmentStatusLabel(equipo.status)}
+                    </StatusChip>
+                  </div>
+                  <p className="mt-0.5 text-sm text-(--muted)">
+                    {identidad.marcaModelo}
+                    {equipo.year ? ` · ${equipo.year}` : ''}
+                  </p>
+                </div>
+              </div>
+            </Drawer.Header>
+            <Drawer.Body className="flex flex-col gap-5">
+              {puedeCambiarEstado ? (
+                <div>
+                  <p className="mb-2.5 text-[12px] font-bold tracking-[0.08em] text-(--muted) uppercase">
+                    Cambiar estado
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {EQUIPMENT_STATUS.map((opcionEstado) => {
+                      const esActual = opcionEstado === equipo.status;
+                      return (
+                        <Button
+                          className={
+                            esActual
+                              ? `border ${equipmentStatusSelectedClasses(opcionEstado)}`
+                              : 'border border-border bg-surface text-foreground'
+                          }
+                          fullWidth
+                          isDisabled={esActual || updateStatus.isPending}
+                          key={opcionEstado}
+                          size="sm"
+                          // Los NO seleccionados quedan "outline" + blanco
+                          // explícito (`bg-surface`) — claramente clickeables
+                          // (borde + texto a contraste pleno), no apagados.
+                          // El actual se resalta en su color semántico
+                          // (`equipmentStatusSelectedClasses`, tokens
+                          // --success/--warning/--danger + su "-soft" — el
+                          // mismo look que ya usa `StatusChip`) y queda
+                          // disabled: marca dónde estás, no un botón más.
+                          variant="outline"
+                          onPress={() =>
+                            updateStatus.mutate(
+                              { id: equipo.id, status: opcionEstado },
+                              { onSuccess: () => setIsSheetOpen(false) },
+                            )
+                          }
+                        >
+                          {equipmentStatusLabel(opcionEstado)}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap justify-center gap-3">
+                <AccionTile
+                  icon={Eye}
+                  label="Ver ficha completa"
+                  onPress={() => {
+                    setIsSheetOpen(false);
+                    navigate(`/equipos/${equipo.id}`);
+                  }}
+                />
+                <AccionTile
+                  icon={Gauge}
+                  label={registrarHorometroLabel(equipo)}
+                  onPress={() => {
+                    setIsSheetOpen(false);
+                    setIsShiftModalOpen(true);
+                  }}
+                />
+                <AccionTile
+                  icon={Droplet}
+                  label="Registrar combustible"
+                  onPress={() => {
+                    setIsSheetOpen(false);
+                    setIsCargaOpen(true);
+                  }}
+                />
+                {puedeEditarFicha ? (
+                  <AccionTile
+                    icon={Pencil}
+                    label="Editar equipo"
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsEditOpen(true);
+                    }}
+                  />
+                ) : null}
+                {puedeEditarFicha ? (
+                  <AccionTile
+                    icon={Trash2}
+                    label="Eliminar equipo"
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsDeleteOpen(true);
+                    }}
+                    tone="danger"
+                  />
+                ) : null}
+              </div>
+            </Drawer.Body>
+          </Drawer.Dialog>
+        </Drawer.Content>
+      </Drawer.Backdrop>
+
+      <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
+      <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
+      <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
+      <RegistrarCargaCombustibleModal
+        equipoId={equipo.id}
+        equipoLabel={equipo.internalCode}
+        isOpen={isCargaOpen}
+        onOpenChange={setIsCargaOpen}
+      />
+    </>
   );
 }
 
@@ -680,7 +707,11 @@ export function EquiposView() {
   const { user, role } = useCurrentUser();
   const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
   const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
+  const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
   const [busqueda, setBusqueda] = useState('');
+  // Un solo modal de creación, dos triggers: el botón del header (PC, `lg:`)
+  // y el FAB (tablet/celular, `lg:hidden`) — ver `CreateEquipoModal`.
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const puedeEditarFicha = user?.role === ROLES.ADMIN;
   // `PATCH /equipment/:id/status` solo lo autoriza el backend a ADMIN y
@@ -695,19 +726,16 @@ export function EquiposView() {
   } = useEquipment({
     ...(status === TODOS ? {} : { status }),
     ...(equipmentClass === TODOS ? {} : { equipmentClass }),
+    ...(homeBranchId === TODOS ? {} : { homeBranchId }),
     ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
   });
 
-  // Solo para resolver el nombre de la sucursal en la tarjeta mobile (la
-  // tabla PC no la muestra como columna). Reutiliza la MISMA query que ya usa
-  // el formulario de creación/edición (`CamposEquipo` → `useBranches({
-  // isActive: true })`) en vez de pedir la lista sin filtro: antes esto
-  // disparaba un segundo round-trip en TODA carga de la pantalla —incluso en
-  // PC, donde la tarjeta mobile está oculta con `md:hidden`— y encima
-  // duplicaba la query si un modal de equipo estaba abierto a la vez.
-  // Trade-off aceptado: un equipo homed a una sucursal ya INACTIVA no
-  // encuentra su nombre acá (no está en la lista filtrada) y cae al mismo
-  // fallback '—' que cualquier sucursal desconocida.
+  // Reusa la MISMA query que ya usa el formulario de creación/edición
+  // (`CamposEquipo` → `useBranches({ isActive: true })`): alimenta tanto el
+  // filtro "Sucursal" como la resolución de nombre en tabla/tarjetas, sin
+  // disparar un segundo round-trip.
+  // Trade-off aceptado: un equipo homed a una sucursal ya INACTIVA no aparece
+  // en el filtro ni encuentra su nombre acá — cae al fallback '—'.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
   const sucursalPorId = useMemo(
     () => new Map((sucursalesActivas ?? []).map((sucursal) => [sucursal.id, sucursal.name])),
@@ -725,10 +753,17 @@ export function EquiposView() {
             Equipos
           </h1>
           <p className="text-sm text-(--muted)">
-            Maquinaria y vehículos de la operación, con su estado y uso acumulado.
+            Maquinaria y vehículos de la operación: foto, horómetro, combustible, quién lo usa y su estado.
           </p>
         </div>
-        {puedeEditarFicha ? <CreateEquipoModal /> : null}
+        {/* PC: botón de texto en el header. En tablet/celular la creación es
+           por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
+           calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}
+        {puedeEditarFicha ? (
+          <Button className="hidden lg:block" onPress={() => setIsCreateOpen(true)}>
+            Nuevo equipo
+          </Button>
+        ) : null}
       </div>
 
       <ResumenFlota />
@@ -801,6 +836,35 @@ export function EquiposView() {
             </ListBox>
           </Select.Popover>
         </Select>
+
+        <Select
+          className="w-full md:w-56"
+          aria-label="Filtrar por sucursal"
+          value={homeBranchId}
+          onChange={(value) => {
+            if (value) setHomeBranchId(String(value));
+          }}
+        >
+          <Label>Sucursal</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={TODOS} textValue="Todas las sucursales">
+                Todas las sucursales
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {(sucursalesActivas ?? []).map((sucursal) => (
+                <ListBox.Item key={sucursal.id} id={sucursal.id} textValue={sucursal.name}>
+                  {sucursal.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </div>
 
       {isPending ? (
@@ -827,45 +891,73 @@ export function EquiposView() {
 
       {!isPending && !isError && equipos.length > 0 ? (
         <>
-          {/* PC: tabla completa (≥ md). */}
-          <div className="hidden md:block">
+          {/* PC: tabla completa (≥ md) — columnas calcan FlotaClientePC.dc.html:
+             Foto · Equipo · Sucursal · Horómetro/KM · Combustible · En uso
+             por · Estado · Acciones. */}
+          <div className="hidden lg:block">
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Equipos" className="min-w-200">
+                <Table.Content aria-label="Equipos" className="min-w-[1120px]">
                   <Table.Header>
-                    <Table.Column isRowHeader>Código</Table.Column>
-                    <Table.Column>Clase</Table.Column>
-                    <Table.Column>Tipo</Table.Column>
-                    <Table.Column>Marca / modelo</Table.Column>
+                    <Table.Column>Foto</Table.Column>
+                    <Table.Column isRowHeader>Equipo</Table.Column>
+                    <Table.Column>Sucursal</Table.Column>
+                    <Table.Column className="text-right">Horómetro / KM</Table.Column>
+                    <Table.Column>Combustible</Table.Column>
+                    <Table.Column>En uso por</Table.Column>
                     <Table.Column>Estado</Table.Column>
-                    <Table.Column>Uso</Table.Column>
                     <Table.Column>Acciones</Table.Column>
                   </Table.Header>
                   <Table.Body>
                     <Table.Collection items={equipos}>
-                      {(equipo) => (
-                        <Table.Row>
+                      {(equipo) => {
+                        // R3 (vista diferenciada por clase): patente
+                        // destacada en pesados, integrada en `marcaModelo`
+                        // en livianos — fuente única, ver `flota-colors.ts`.
+                        const identidad = equipoIdentidad(equipo);
+                        return (
+                          <Table.Row>
                           <Table.Cell>
-                            <Link
-                              className="font-mono text-sm font-semibold text-(--accent) hover:underline"
-                              to={`/equipos/${equipo.id}`}
-                            >
-                              {equipo.internalCode}
+                            <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="sm" />
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Link className="block" to={`/equipos/${equipo.id}`}>
+                              <span className="block font-mono text-sm font-semibold text-(--accent) hover:underline">
+                                {equipo.internalCode}
+                              </span>
+                              {identidad.patenteDestacada ? (
+                                <span className="mt-0.5 block font-mono text-sm font-semibold text-foreground">
+                                  {identidad.patenteDestacada}
+                                </span>
+                              ) : null}
+                              <span className="mt-0.5 block text-sm text-foreground">{identidad.marcaModelo}</span>
+                              <span className="mt-0.5 block text-xs text-(--muted)">{claseTipoAnio(equipo)}</span>
                             </Link>
                           </Table.Cell>
-                          <Table.Cell>{equipmentClassLabel(equipo.equipmentClass)}</Table.Cell>
-                          <Table.Cell>{equipo.type}</Table.Cell>
                           <Table.Cell>
-                            {equipo.brand} {equipo.model}
-                            {equipo.year ? <span className="text-(--muted)"> · {equipo.year}</span> : null}
+                            {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
+                          </Table.Cell>
+                          <Table.Cell className="text-right">
+                            <span className="block font-mono text-sm font-semibold text-foreground">
+                              {formatearUso(equipo)}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-(--muted)">
+                              {USO_UNIDAD_LABEL[equipo.controlUnit]}
+                            </span>
                           </Table.Cell>
                           <Table.Cell>
-                            <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
-                              {equipmentStatusLabel(equipo.status)}
-                            </Chip>
+                            <FuelGauge pct={equipo.currentFuelLevel} />
                           </Table.Cell>
-                          <Table.Cell className="font-mono text-sm font-semibold text-foreground">
-                            {formatearUso(equipo)}
+                          <Table.Cell>
+                            <AsignacionCell equipo={equipo} layout="stacked" />
+                          </Table.Cell>
+                          <Table.Cell>
+                            <div className="flex items-center gap-1.5">
+                              <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
+                                {equipmentStatusLabel(equipo.status)}
+                              </StatusChip>
+                              <DocumentAlertBadge equipo={equipo} />
+                            </div>
                           </Table.Cell>
                           <Table.Cell>
                             <div className="flex justify-end">
@@ -877,7 +969,8 @@ export function EquiposView() {
                             </div>
                           </Table.Cell>
                         </Table.Row>
-                      )}
+                        );
+                      }}
                     </Table.Collection>
                   </Table.Body>
                 </Table.Content>
@@ -885,45 +978,43 @@ export function EquiposView() {
             </Table>
           </div>
 
-          {/* Tablet/celular (< md): tarjetas apiladas — la ficha completa
-             (editar/eliminar/cambiar estado) sigue siendo solo PC, así que
-             acá no se repite `EquipoActionsMenu`: toda la tarjeta es un solo
-             link a la ficha. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
+          {/* Tablet/celular (< lg): tarjetas apiladas en una sola columna,
+             calcando FlotaClienteTablet/Phone.dc.html — foto, código+estado,
+             marca/modelo, horómetro+combustible y la barra "en uso por".
+             Tocar la tarjeta abre la hoja de acciones (`EquipoCardMobile`),
+             no navega directo a la ficha — ahí viven editar/eliminar/cambiar
+             estado, que antes solo existían en el kebab de PC. */}
+          <div className="flex flex-col gap-3 lg:hidden">
             {equipos.map((equipo) => (
-              <Link
-                className="block rounded-(--radius) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+              <EquipoCardMobile
+                equipo={equipo}
                 key={equipo.id}
-                to={`/equipos/${equipo.id}`}
-              >
-                <Card className="h-full transition-colors active:bg-surface-secondary">
-                  <Card.Content className="flex flex-col gap-3 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-mono text-sm font-semibold text-(--accent)">
-                        {equipo.internalCode}
-                      </span>
-                      <Chip color={equipmentStatusChipColor(equipo.status)} size="sm" variant="soft">
-                        {equipmentStatusLabel(equipo.status)}
-                      </Chip>
-                    </div>
-                    <p className="text-sm text-foreground">
-                      {equipo.type} · {equipo.brand} {equipo.model}
-                    </p>
-                    <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-                      <span className="font-mono text-base font-semibold text-foreground">
-                        {formatearUso(equipo)}
-                      </span>
-                      <span className="text-xs text-(--muted)">
-                        {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
-                      </span>
-                    </div>
-                  </Card.Content>
-                </Card>
-              </Link>
+                puedeCambiarEstado={puedeCambiarEstado}
+                puedeEditarFicha={puedeEditarFicha}
+                sucursalPorId={sucursalPorId}
+              />
             ))}
           </div>
         </>
       ) : null}
+
+      {/* FAB de creación — tablet/celular únicamente (el PC usa el botón de
+         texto del header). Fuera del bloque de arriba a propósito: debe
+         verse también con la lista vacía, para crear el primer equipo.
+         Mismo gate de rol y mismo modal (`CreateEquipoModal`, controlado)
+         que ese botón. */}
+      {puedeEditarFicha ? (
+        <Button
+          aria-label="Crear equipo"
+          className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg shadow-black/25 lg:hidden"
+          isIconOnly
+          onPress={() => setIsCreateOpen(true)}
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
+      ) : null}
+
+      <CreateEquipoModal isOpen={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </div>
   );
 }

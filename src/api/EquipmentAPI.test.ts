@@ -39,6 +39,18 @@ const EQUIPMENT = {
   currentMileage: null,
   status: 'OPERATIONAL',
   homeBranchId: null,
+  photoUrl: null,
+  technicalInspectionExpiry: null,
+  insuranceExpiry: null,
+  operator: null,
+  supervisor: null,
+  inUse: false,
+  currentFuelLevel: null,
+  openShift: null,
+  documents: {
+    technicalInspection: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
+    insurance: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
+  },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -91,6 +103,46 @@ describe('EquipmentAPI.list', () => {
 
     await expect(EquipmentAPI.list()).rejects.toThrow('No se pudo obtener la lista de equipos.');
   });
+
+  it('parsea un equipo con turno de horómetro abierto (`openShift`, flujo de dos pasos)', async () => {
+    const conTurnoAbierto = {
+      ...EQUIPMENT,
+      openShift: {
+        id: 'h_abierto',
+        valorInicial: 1200,
+        operador: 'Carlos Núñez',
+        turno: 'NOCTURNO',
+        fecha: '2026-08-06T20:00:00.000Z',
+      },
+    };
+    getMock.mockResolvedValueOnce({ data: { data: [conTurnoAbierto], message: 'ok' } });
+
+    const result = await EquipmentAPI.list();
+
+    expect(result).toEqual([conTurnoAbierto]);
+  });
+
+  // R1/R2: `documents` es el shape derivado on-read que arma
+  // `equipment.service.ts#buildDocumentExpiryInfo` — confirmado contra el
+  // código del backend (no inventado), mismo criterio que el test de
+  // `openShift` de arriba: prueba que el zod real acepta el contrato tal
+  // cual lo entrega `equipment.service.ts`.
+  it('parsea un equipo con vencimientos de revisión técnica y seguro cargados (R1/R2)', async () => {
+    const conDocumentos = {
+      ...EQUIPMENT,
+      technicalInspectionExpiry: '2026-12-01T00:00:00.000Z',
+      insuranceExpiry: '2027-01-15T00:00:00.000Z',
+      documents: {
+        technicalInspection: { expiry: '2026-12-01T00:00:00.000Z', status: 'VIGENTE', daysToExpiry: 71 },
+        insurance: { expiry: '2027-01-15T00:00:00.000Z', status: 'VIGENTE', daysToExpiry: 116 },
+      },
+    };
+    getMock.mockResolvedValueOnce({ data: { data: [conDocumentos], message: 'ok' } });
+
+    const result = await EquipmentAPI.list();
+
+    expect(result).toEqual([conDocumentos]);
+  });
 });
 
 describe('EquipmentAPI.resumen', () => {
@@ -110,8 +162,8 @@ describe('EquipmentAPI.getById', () => {
     const detalle = {
       ...EQUIPMENT,
       homeBranch: null,
-      _count: { combustibles: 0, horometros: 0, trabajosExtra: 0, hallazgos: 0, movimientos: 0 },
-      movimientos: [],
+      _count: { combustibles: 0, horometros: 0, trabajosExtra: 0, hallazgos: 0, stockMovements: 0 },
+      stockMovements: [],
     };
     getMock.mockResolvedValueOnce({ data: { data: detalle, message: 'ok' } });
 
@@ -119,6 +171,46 @@ describe('EquipmentAPI.getById', () => {
 
     expect(getMock).toHaveBeenCalledWith('/api/equipment/eq_1');
     expect(result).toEqual(detalle);
+  });
+
+  it('parsea el shape REAL de un stockMovement (Inventario en inglés, sin item.id) sin lanzar', async () => {
+    // Fixture tomada tal cual de `GET /api/equipment/:id` contra el backend
+    // en vivo (2026-09-14) — no inventada. Esta prueba existe para que un
+    // futuro cambio de shape en `equipment.service.ts#findOne` (o un drift
+    // silencioso como el que rompió la ficha) truene ACÁ, contra el zod real,
+    // en vez de pasar inadvertido porque los tests de componentes seedean el
+    // query cache directo (bypasean `EquipmentDetailResponseSchema.parse`).
+    const detalle = {
+      ...EQUIPMENT,
+      homeBranch: null,
+      _count: { combustibles: 1, horometros: 1, trabajosExtra: 0, hallazgos: 0, stockMovements: 2 },
+      stockMovements: [
+        {
+          id: 'cmu1l371q0029gc9oh1w155qu',
+          itemId: 'cmu1l371h0023gc9o88v9u3t9',
+          branchId: 'cmu1l36yf0000gc9or4flnzrp',
+          direction: 'OUT',
+          reason: 'INTERVENTION',
+          quantity: 4,
+          resultingBalance: 2,
+          reference: null,
+          documentNumber: null,
+          sourceBranchId: null,
+          destinationBranchId: null,
+          performedById: 'uOWvhyBv6Ir39b949hWib447vHqAjXqG',
+          equipmentId: 'cmu1l36yz000fgc9oy8pl31vo',
+          notes: 'Consumo en mantención de CG-002',
+          occurredAt: '2026-09-14T18:36:07.406Z',
+          item: { sku: 'NEU-001', name: 'Neumático 29.5R25', unit: 'UNIT' },
+        },
+      ],
+    };
+    getMock.mockResolvedValueOnce({ data: { data: detalle, message: 'ok' } });
+
+    const result = await EquipmentAPI.getById('eq_1');
+
+    expect(result.stockMovements[0]?.item).toEqual({ sku: 'NEU-001', name: 'Neumático 29.5R25', unit: 'UNIT' });
+    expect(result._count.stockMovements).toBe(2);
   });
 });
 
@@ -187,6 +279,21 @@ describe('EquipmentAPI.updateStatus', () => {
 
     expect(patchMock).toHaveBeenCalledWith('/api/equipment/eq_1/status', { status: 'IN_WORKSHOP' });
     expect(result.status).toBe('IN_WORKSHOP');
+  });
+});
+
+describe('EquipmentAPI.assign', () => {
+  it('patchea /api/equipment/:id/assignment con el body de asignación', async () => {
+    const asignado = { ...EQUIPMENT, operator: { id: 'u_op', name: 'Pedro Soto' } };
+    patchMock.mockResolvedValueOnce({ data: { data: asignado, message: 'Asignación actualizada' } });
+
+    const result = await EquipmentAPI.assign('eq_1', { operatorId: 'u_op', supervisorId: null });
+
+    expect(patchMock).toHaveBeenCalledWith('/api/equipment/eq_1/assignment', {
+      operatorId: 'u_op',
+      supervisorId: null,
+    });
+    expect(result.operator).toEqual({ id: 'u_op', name: 'Pedro Soto' });
   });
 });
 

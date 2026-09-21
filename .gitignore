@@ -35,6 +35,12 @@ dist-ssr
 # Playwright CLI artifacts
 .playwright-cli/
 
+# PWA dev service worker output (vite-plugin-pwa en modo dev)
+dev-dist/
+
+# Scratchpad de trabajo (capturas/QA, no va al repo)
+scratchpad/
+
 # Mockup de diseño (referencia, no va al repo)
 SMI Terreno (standalone).html
 

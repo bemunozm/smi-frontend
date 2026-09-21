@@ -1,3 +1,5 @@
+import { Activity, AlertTriangle, ClipboardList, Clock, Droplet, Timer, Wrench, type LucideIcon } from 'lucide-react';
+
 import { CRITICIDADES, HALLAZGO_ESTADOS } from '../types/dashboard';
 import { criticidadChipColor, hallazgoEstadoLabel } from './dashboard-colors';
 import { ESTADOS_ACTIVIDAD, ESTADOS_OT } from '../types/mantenimiento';
@@ -61,6 +63,30 @@ export function eventoTipoColor(evento: EventoFicha): FichaChipColor {
     return estadoActividadChipColor(evento.meta.estado);
   }
   return EVENTO_TIPO_COLOR[evento.tipo];
+}
+
+/**
+ * Ícono por tipo de evento — calca el mapeo `isClock`/`isDroplet`/`isAlert`/
+ * `isClipboard` de la fila de KPIs y el timeline de `FichaEquipoClientePC.dc.html`
+ * (reloj=horómetro, gota=combustible, alerta=hallazgo, clipboard=orden de
+ * trabajo). El artefacto no cubre `TRABAJO_EXTRA`/`INTERVENCION`/`ACTIVIDAD`
+ * (esos tres son de la bitácora consolidada real de Núcleo, más amplia que el
+ * timeline simplificado del mock) — se completan con íconos de `lucide-react`
+ * consistentes con el resto del dominio (mismo criterio que `Wrench` ya usado
+ * para "Trabajos extra" en `EquipoDetalleView`).
+ */
+const EVENTO_TIPO_ICON: Record<EventoFichaTipo, LucideIcon> = {
+  COMBUSTIBLE: Droplet,
+  HOROMETRO: Clock,
+  TRABAJO_EXTRA: Timer,
+  HALLAZGO: AlertTriangle,
+  ORDEN_TRABAJO: ClipboardList,
+  INTERVENCION: Wrench,
+  ACTIVIDAD: Activity,
+};
+
+export function eventoTipoIcon(tipo: EventoFichaTipo): LucideIcon {
+  return EVENTO_TIPO_ICON[tipo];
 }
 
 /** Reexport para que los consumidores de la ficha (vista + item de timeline)

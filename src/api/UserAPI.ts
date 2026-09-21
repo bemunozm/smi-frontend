@@ -1,5 +1,6 @@
 import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
+import type { Role } from '../types/roles';
 import {
   DeleteUserResponseSchema,
   UserListResponseSchema,
@@ -9,15 +10,26 @@ import {
   type User,
 } from '../types/user';
 
+export interface UserFiltros {
+  /** Puebla los pickers de operador/supervisor de Flota (`GET
+   * /api/users?role=OPERADOR|SUPERVISOR`). */
+  role?: Role;
+}
+
 /**
  * Módulo de dominio de referencia para el resto del equipo: instancia axios
  * (`lib/axios.ts`) + try/catch + validación Zod de la respuesta completa
  * (`types/user.ts`) + retorno del `.data` ya tipado. Estas funciones son las
  * `queryFn` de TanStack Query (ver `hooks/useUsers.ts`).
  */
-async function list(): Promise<User[]> {
+async function list(filtros: UserFiltros = {}): Promise<User[]> {
   try {
-    const response = await axiosInstance.get('/api/users');
+    // Mismo criterio que `EquipmentAPI`/`BranchAPI`: con `forbidNonWhitelisted`
+    // activo, solo se mandan las claves con valor.
+    const params = Object.fromEntries(
+      Object.entries(filtros).filter(([, value]) => value !== undefined && value !== ''),
+    );
+    const response = await axiosInstance.get('/api/users', { params });
     return UserListResponseSchema.parse(response.data).data;
   } catch (error: unknown) {
     throw toDomainError(error, 'No se pudo obtener la lista de usuarios.');

@@ -1,15 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { UserAPI } from '../api/UserAPI';
+import { UserAPI, type UserFiltros } from '../api/UserAPI';
 import type { CreateUserInput, UpdateUserInput } from '../types/user';
 
 const USERS_QUERY_KEY = ['users'] as const;
 
-export function useUsers() {
+/**
+ * Lista de usuarios. Retrocompatible a propósito — mismo criterio que
+ * `useEquipment`/`useBranches`: sin filtros usa `['users']` (la key que ya
+ * consume `UsersView`); con `{ role }` agrega el objeto aparte, así los
+ * pickers de operador/supervisor de Flota (`CamposEquipo` →
+ * `useUsers({ role: 'OPERADOR' })` / `useUsers({ role: 'SUPERVISOR' })`)
+ * cachean cada rol por separado sin pisar la lista general.
+ */
+export function useUsers(filtros: UserFiltros = {}) {
+  const tieneFiltros = Object.keys(filtros).length > 0;
   return useQuery({
-    queryKey: USERS_QUERY_KEY,
-    queryFn: UserAPI.list,
+    queryKey: tieneFiltros ? [...USERS_QUERY_KEY, filtros] : USERS_QUERY_KEY,
+    queryFn: () => UserAPI.list(filtros),
   });
 }
 

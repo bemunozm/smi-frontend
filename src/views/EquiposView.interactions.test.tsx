@@ -24,13 +24,14 @@ vi.mock('../hooks/useCurrentUser', () => ({
 // y `useEquipment.test.tsx`: el `mutate` real termina llamando a estas
 // funciones, así que verificar sus argumentos prueba el flujo completo
 // vista → hook → API.
-const { listMock, resumenMock, createMock, updateMock, updateStatusMock, removeMock } = vi.hoisted(() => ({
+const { listMock, resumenMock, createMock, updateMock, updateStatusMock, removeMock, assignMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   resumenMock: vi.fn(),
   createMock: vi.fn(),
   updateMock: vi.fn(),
   updateStatusMock: vi.fn(),
   removeMock: vi.fn(),
+  assignMock: vi.fn(),
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({
@@ -42,6 +43,7 @@ vi.mock('../api/EquipmentAPI', () => ({
     update: updateMock,
     updateStatus: updateStatusMock,
     remove: removeMock,
+    assign: assignMock,
   },
 }));
 
@@ -63,6 +65,33 @@ vi.mock('../api/BranchAPI', () => ({
   },
 }));
 
+// `CamposEquipo` también puebla los pickers de operador/supervisor
+// (`useUsers({ role })`) — se mockea `UserAPI` para no pegarle a axios.
+const { userListMock } = vi.hoisted(() => ({
+  userListMock: vi.fn(),
+}));
+
+vi.mock('../api/UserAPI', () => ({
+  UserAPI: {
+    list: userListMock,
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+}));
+
+// Y la subida de foto (`EquipoPhotoField` → `uploadImage`) — `assetUrl` se
+// deja real porque es una función pura (no pega a la red).
+const { uploadImageMock } = vi.hoisted(() => ({
+  uploadImageMock: vi.fn(),
+}));
+
+vi.mock('../api/UploadsAPI', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
+  return { ...actual, uploadImage: uploadImageMock };
+});
+
 const ADMIN = {
   user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
   role: 'ADMIN',
@@ -72,6 +101,9 @@ const ADMIN = {
 
 beforeEach(() => {
   currentUserResult = ADMIN;
+  // Default sin operadores/supervisores — los tests que abren el picker de
+  // asignación lo sobrescriben con `userListMock.mockResolvedValue(...)`.
+  userListMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -93,6 +125,18 @@ const EQUIPO = {
   currentMileage: null,
   status: 'OPERATIONAL' as const,
   homeBranchId: 'br_1',
+  photoUrl: null,
+  technicalInspectionExpiry: null,
+  insuranceExpiry: null,
+  operator: null,
+  supervisor: null,
+  inUse: false,
+  currentFuelLevel: null,
+  openShift: null,
+  documents: {
+    technicalInspection: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
+    insurance: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
+  },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -278,6 +322,54 @@ describe('EquiposView — editar equipo', () => {
     );
   });
 
+  it('al elegir un operador y guardar, llama a EquipmentAPI.assign con su id', async () => {
+    const OPERADOR = { id: 'u_op', name: 'Pedro Soto' };
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO);
+    assignMock.mockResolvedValue({ ...EQUIPO, operator: OPERADOR });
+    userListMock.mockImplementation((filtros?: { role?: string }) =>
+      Promise.resolve(filtros?.role === 'OPERADOR' ? [OPERADOR] : []),
+    );
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    // El botón del Select acumula valor + label en su nombre accesible
+    // ("Sin operador asignado Operador") — por eso el regex, no exact match.
+    fireEvent.click(screen.getByRole('button', { name: /Operador/ }));
+    // `useUsers({ role: 'OPERADOR' })` resuelve async — la opción recién
+    // aparece cuando esa query settlea, así que hay que esperarla.
+    await screen.findByRole('option', { name: 'Pedro Soto' });
+    elegirOpcion('Pedro Soto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() =>
+      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null }),
+    );
+  });
+
+  it('sin cambiar la asignación, guardar la edición NO llama a EquipmentAPI.assign', async () => {
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO);
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
   it('un submit de creación sin patente no manda la clave (sigue omitiéndola, no manda null)', async () => {
     listMock.mockResolvedValue([]);
     resumenMock.mockResolvedValue({ total: 0, disponibles: 0, porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 } });
@@ -300,6 +392,98 @@ describe('EquiposView — editar equipo', () => {
     const payloadEnviado = createMock.mock.calls[0][0] as Record<string, unknown>;
     expect('licensePlate' in payloadEnviado).toBe(false);
     expect('homeBranchId' in payloadEnviado).toBe(false);
+  });
+
+  // El modal de editar es controlado y queda montado en la fila (no se
+  // desmonta al cerrar) — antes, cancelar sin guardar no descartaba los
+  // cambios de texto: `values` del `useForm` solo re-sincroniza cuando el
+  // `equipo` en sí cambia, no cuando el usuario descarta su propia edición
+  // (Fix 1, review QA, mismo criterio que `CreateEquipoModal`).
+  it('EditEquipoModal descarta los cambios de texto no guardados al cancelar y reabrir', async () => {
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    fireEvent.change(screen.getByLabelText('Marca'), { target: { value: 'Marca temporal sin guardar' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    expect((screen.getByLabelText('Marca') as HTMLInputElement).value).toBe(EQUIPO.brand);
+  });
+
+  // Antes la asignación se disparaba con `assignEquipment.mutate(...)` SIN
+  // esperar su resultado, y el modal cerraba de inmediato (con el toast de
+  // éxito de `updateEquipment` ya mostrado) — si la asignación fallaba (p.
+  // ej. el operador perdió el rol → 400 de `assertUserWithRole`), el modal
+  // ya había cerrado y el cambio se perdía en silencio (Fix 2, review QA).
+  it('si la asignación falla al guardar la edición, el modal permanece abierto (no enmascara el error)', async () => {
+    const OPERADOR = { id: 'u_op', name: 'Pedro Soto' };
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO);
+    assignMock.mockRejectedValue(new Error('El operador ya no tiene ese rol.'));
+    userListMock.mockImplementation((filtros?: { role?: string }) =>
+      Promise.resolve(filtros?.role === 'OPERADOR' ? [OPERADOR] : []),
+    );
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    fireEvent.click(screen.getByRole('button', { name: /Operador/ }));
+    await screen.findByRole('option', { name: 'Pedro Soto' });
+    elegirOpcion('Pedro Soto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() =>
+      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null }),
+    );
+
+    // El update sí se guardó, pero el modal no debe cerrarse: si se cerrara
+    // acá, el cambio de asignación fallido quedaría enmascarado detrás del
+    // toast de éxito del update.
+    expect(screen.getByText(`Editar ${EQUIPO.internalCode}`)).toBeTruthy();
+  });
+
+  // El modal de crear es controlado y queda montado (no se desmonta al
+  // cerrar) — antes, el `reset()` del form y de los pickers vivía SOLO en el
+  // `onSuccess` de crear: cancelar sin crear dejaba código/marca/modelo y el
+  // operador elegido, y reaparecían "viejos" la próxima vez que se abría
+  // (Fix 1, review QA).
+  it('CreateEquipoModal se resetea al cancelar y reabrir (no arrastra datos de un intento anterior)', async () => {
+    listMock.mockResolvedValue([]);
+    resumenMock.mockResolvedValue({
+      total: 0,
+      disponibles: 0,
+      porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+    });
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    renderView();
+    await screen.findByText('No hay equipos que coincidan');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo equipo' }));
+    fireEvent.change(await screen.findByLabelText('Código interno'), { target: { value: 'TEMP-001' } });
+    fireEvent.change(screen.getByLabelText('Marca'), { target: { value: 'Marca temporal' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo equipo' }));
+
+    expect((await screen.findByLabelText('Código interno') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Marca') as HTMLInputElement).value).toBe('');
   });
 
   it('en edición, si la sucursal asignada quedó inactiva, igual aparece en el selector (marcada)', async () => {
