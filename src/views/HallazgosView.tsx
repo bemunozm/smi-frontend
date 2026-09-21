@@ -12,12 +12,13 @@ import {
   ListCard,
   PhotoButtons,
   PrimaryButton,
-  SectionHeader,
   Segmented,
   SelectField,
   TextareaField,
   type ChipTone,
 } from '../components/terreno/mobile';
+import { COLUMNA, Historial, Tabla, VistaTerreno } from '../components/terreno/historial';
+import { Table } from '@heroui/react';
 
 const PRIORIDAD_ITEMS = [
   { value: 'BAJA' as const, label: 'BAJA' },
@@ -76,62 +77,110 @@ export function HallazgosView() {
       onSuccess: () => reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA', fotoUrl: undefined }),
     });
 
+  const formulario = (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Card className="space-y-4">
+        <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
+          <option value="">Seleccioná…</option>
+          {equipos.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.internalCode} — {e.type}
+            </option>
+          ))}
+        </SelectField>
+
+        <div>
+          <FieldLabel>Nivel de prioridad</FieldLabel>
+          <Segmented value={prioridad} onChange={(v) => setValue('prioridad', v)} options={PRIORIDAD_ITEMS} />
+        </div>
+
+        <TextareaField
+          label="Descripción"
+          rows={3}
+          placeholder="Qué se detectó, dónde y en qué condición"
+          error={errors.descripcion?.message}
+          {...register('descripcion')}
+        />
+
+        <div>
+          <FieldLabel hint={<span className="text-muted-foreground">Opcional</span>}>Foto</FieldLabel>
+          <PhotoButtons value={fotoUrl} onChange={(u) => setValue('fotoUrl', u)} />
+        </div>
+
+        <PrimaryButton type="submit" disabled={crear.isPending}>
+          {crear.isPending ? 'Guardando…' : 'Registrar hallazgo'}
+          <ArrowRight className="h-4 w-4" />
+        </PrimaryButton>
+      </Card>
+    </form>
+  );
+
   return (
-    <div>
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Card className="space-y-4">
-          <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
-            <option value="">Seleccioná…</option>
-            {equipos.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.internalCode} — {e.type}
-              </option>
-            ))}
-          </SelectField>
-
-          <div>
-            <FieldLabel>Nivel de prioridad</FieldLabel>
-            <Segmented value={prioridad} onChange={(v) => setValue('prioridad', v)} options={PRIORIDAD_ITEMS} />
-          </div>
-
-          <TextareaField
-            label="Descripción"
-            rows={3}
-            placeholder="Qué se detectó, dónde y en qué condición"
-            error={errors.descripcion?.message}
-            {...register('descripcion')}
-          />
-
-          <div>
-            <FieldLabel hint={<span className="text-muted-foreground">Opcional</span>}>Foto</FieldLabel>
-            <PhotoButtons value={fotoUrl} onChange={(u) => setValue('fotoUrl', u)} />
-          </div>
-
-          <PrimaryButton type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar hallazgo'}
-            <ArrowRight className="h-4 w-4" />
-          </PrimaryButton>
-        </Card>
-      </form>
-
-      <SectionHeader action="Ver todos">Hallazgos del turno</SectionHeader>
-      <div className="space-y-2.5">
-        {hallazgos.map((h) => (
-          <ListCard key={h.id} accent={prioridadAccent[h.prioridad]}>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">{h.equipo?.internalCode ?? h.equipoId}</span>
-              <Chip tone={prioridadTone[h.prioridad] ?? 'neutral'}>{prioridadLabel[h.prioridad] ?? h.prioridad}</Chip>
-              <span className="tabular ml-auto text-xs text-muted-foreground">{fmtTime(h.fecha)}</span>
-            </div>
-            <p className="mt-1.5 text-sm text-foreground">{h.descripcion}</p>
-            <div className="mt-2 flex items-center gap-2">
-              <Chip tone={estadoTone[h.estado] ?? 'neutral'}>{estadoLabel[h.estado] ?? h.estado}</Chip>
-              <span className="tabular text-xs text-muted-foreground">{fmtDate(h.fecha)}</span>
-            </div>
-          </ListCard>
-        ))}
-        {hallazgos.length === 0 && <p className="px-1 text-sm text-muted-foreground">Sin hallazgos del turno.</p>}
-      </div>
-    </div>
+    <VistaTerreno
+      formulario={formulario}
+      historial={
+        <Historial
+          titulo="Hallazgos del turno"
+          vacio="Sin hallazgos del turno."
+          hayRegistros={hallazgos.length > 0}
+          tarjetas={() =>
+            hallazgos.map((h) => (
+              <ListCard key={h.id} accent={prioridadAccent[h.prioridad]}>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">{h.equipo?.internalCode ?? h.equipoId}</span>
+                  <Chip tone={prioridadTone[h.prioridad] ?? 'neutral'}>
+                    {prioridadLabel[h.prioridad] ?? h.prioridad}
+                  </Chip>
+                  <span className="tabular ml-auto text-xs text-muted-foreground">{fmtTime(h.fecha)}</span>
+                </div>
+                <p className="mt-1.5 text-sm text-foreground">{h.descripcion}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Chip tone={estadoTone[h.estado] ?? 'neutral'}>{estadoLabel[h.estado] ?? h.estado}</Chip>
+                  <span className="tabular text-xs text-muted-foreground">{fmtDate(h.fecha)}</span>
+                </div>
+              </ListCard>
+            ))
+          }
+          tabla={() => (
+            <Tabla label="Hallazgos del turno">
+              <Table.Header>
+                <Table.Column className={COLUMNA} isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column className={COLUMNA}>Prioridad</Table.Column>
+                <Table.Column className={COLUMNA}>Descripción</Table.Column>
+                <Table.Column className={COLUMNA}>Estado</Table.Column>
+                <Table.Column className={COLUMNA}>Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body>
+                {hallazgos.map((h) => (
+                  <Table.Row key={h.id}>
+                    <Table.Cell className="font-semibold text-foreground">
+                      {h.equipo?.internalCode ?? h.equipoId}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip tone={prioridadTone[h.prioridad] ?? 'neutral'}>
+                        {prioridadLabel[h.prioridad] ?? h.prioridad}
+                      </Chip>
+                    </Table.Cell>
+                    {/* La descripción es el texto largo de la fila: se lleva el
+                        ancho sobrante y el resto de las columnas no se deforma. */}
+                    <Table.Cell className="w-full max-w-0 truncate text-sm text-foreground">
+                      {h.descripcion}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip tone={estadoTone[h.estado] ?? 'neutral'}>{estadoLabel[h.estado] ?? h.estado}</Chip>
+                    </Table.Cell>
+                    <Table.Cell className="tabular text-sm whitespace-nowrap text-muted-foreground">
+                      {fmtDate(h.fecha)} · {fmtTime(h.fecha)}
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Tabla>
+          )}
+        />
+      }
+    />
   );
 }

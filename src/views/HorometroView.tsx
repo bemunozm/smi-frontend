@@ -13,10 +13,11 @@ import {
   ListCard,
   PrimaryButton,
   ScreenTitle,
-  SectionHeader,
   Segmented,
   SelectField,
 } from '../components/terreno/mobile';
+import { COLUMNA, Historial, Tabla, VistaTerreno } from '../components/terreno/historial';
+import { Table } from '@heroui/react';
 
 const TURNOS = [
   { value: 'DIURNO' as const, label: 'DIURNO', sub: '08-20' },
@@ -48,117 +49,175 @@ export function HorometroView() {
   const onSubmit = (values: HorometroForm) =>
     crear.mutate(values, { onSuccess: () => reset({ equipoId: '', operador: '', turno: 'DIURNO' }) });
 
-  return (
-    <div>
-      <ScreenTitle
-        title="Lectura de turno"
-        subtitle="Al ingresar el valor final se cierra el turno y se actualiza el horómetro del equipo."
-      />
+  const formulario = (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Card className="space-y-4">
+        <SelectField
+          label="Equipo"
+          error={errors.equipoId?.message}
+          right={<ScanLine className="h-4 w-4 text-muted-foreground" />}
+          {...register('equipoId')}
+        >
+          <option value="">Buscar o escanear equipo</option>
+          {equipos.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.internalCode} — {e.type}
+            </option>
+          ))}
+        </SelectField>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Card className="space-y-4">
-          <SelectField
-            label="Equipo"
-            error={errors.equipoId?.message}
-            right={<ScanLine className="h-4 w-4 text-muted-foreground" />}
-            {...register('equipoId')}
-          >
-            <option value="">Buscar o escanear equipo</option>
-            {equipos.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.internalCode} — {e.type}
-              </option>
-            ))}
-          </SelectField>
+        <div>
+          <FieldLabel>Turno</FieldLabel>
+          <Segmented value={turno} onChange={(v) => setValue('turno', v)} options={TURNOS} />
+        </div>
 
-          <div>
-            <FieldLabel>Turno</FieldLabel>
-            <Segmented value={turno} onChange={(v) => setValue('turno', v)} options={TURNOS} />
-          </div>
+        <Field
+          label="Operador"
+          placeholder="Nombre y apellido"
+          right={<User className="h-4 w-4 text-muted-foreground" />}
+          error={errors.operador?.message}
+          {...register('operador')}
+        />
 
+        <div className="grid grid-cols-2 gap-3">
           <Field
-            label="Operador"
-            placeholder="Nombre y apellido"
-            right={<User className="h-4 w-4 text-muted-foreground" />}
-            error={errors.operador?.message}
-            {...register('operador')}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Horómetro inicial"
-              unit="h"
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              placeholder="0"
-              error={errors.valorInicial?.message}
-              {...register('valorInicial', { valueAsNumber: true })}
-            />
-            <Field
-              label="Horómetro final"
-              unit="h"
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              placeholder="—"
-              {...register('valorFinal', { valueAsNumber: true })}
-            />
-          </div>
-
-          <Field
-            label="Nivel de combustible"
-            unit="%"
+            label="Horómetro inicial"
+            unit="h"
             type="number"
-            step="1"
-            inputMode="numeric"
+            step="0.1"
+            inputMode="decimal"
             placeholder="0"
-            {...register('nivelCombustible', { valueAsNumber: true })}
+            error={errors.valorInicial?.message}
+            {...register('valorInicial', { valueAsNumber: true })}
           />
+          <Field
+            label="Horómetro final"
+            unit="h"
+            type="number"
+            step="0.1"
+            inputMode="decimal"
+            placeholder="—"
+            {...register('valorFinal', { valueAsNumber: true })}
+          />
+        </div>
 
-          <div className="flex items-center justify-between rounded-2xl bg-[var(--surface-tertiary)] px-3.5 py-3">
-            <div>
-              <div className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Horas del turno</div>
-              <div className="tabular mt-0.5 text-xl font-semibold text-foreground">
-                {horasTurno != null ? `${fmtNum(horasTurno)} h` : '—'}
-              </div>
+        <Field
+          label="Nivel de combustible"
+          unit="%"
+          type="number"
+          step="1"
+          inputMode="numeric"
+          placeholder="0"
+          {...register('nivelCombustible', { valueAsNumber: true })}
+        />
+
+        <div className="flex items-center justify-between rounded-2xl bg-[var(--surface-tertiary)] px-3.5 py-3">
+          <div>
+            <div className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Horas del turno</div>
+            <div className="tabular mt-0.5 text-xl font-semibold text-foreground">
+              {horasTurno != null ? `${fmtNum(horasTurno)} h` : '—'}
             </div>
-            {horasTurno == null && (
-              <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                + Valor final cierra turno
-              </span>
-            )}
           </div>
+          {horasTurno == null && (
+            <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+              + Valor final cierra turno
+            </span>
+          )}
+        </div>
 
-          <PrimaryButton type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar lectura'}
-            <ArrowRight className="h-4 w-4" />
-          </PrimaryButton>
-        </Card>
-      </form>
+        <PrimaryButton type="submit" disabled={crear.isPending}>
+          {crear.isPending ? 'Guardando…' : 'Registrar lectura'}
+          <ArrowRight className="h-4 w-4" />
+        </PrimaryButton>
+      </Card>
+    </form>
+  );
 
-      <SectionHeader action="Ver todas">Lecturas recientes</SectionHeader>
-      <div className="space-y-2.5">
-        {registros.map((r) => (
-          <ListCard key={r.id}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground">{r.equipo?.internalCode ?? r.equipoId}</span>
-                <Chip tone="info">{r.turno}</Chip>
-              </div>
-              <Chip tone={r.valorFinal != null ? 'success' : 'neutral'}>
-                {r.valorFinal != null ? 'Cerrado' : 'Abierto'}
-              </Chip>
-            </div>
-            <div className="mt-1 text-sm text-foreground">{r.operador}</div>
-            <div className="tabular mt-0.5 text-xs text-muted-foreground">
-              {fmtNum(r.valorInicial)} h → {r.valorFinal != null ? `${fmtNum(r.valorFinal)} h` : '—'}
-              {r.nivelCombustible != null ? ` · ${fmtNum(r.nivelCombustible)}% comb.` : ''} · {fmtDate(r.fecha)}
-            </div>
-          </ListCard>
-        ))}
-        {registros.length === 0 && <p className="px-1 text-sm text-muted-foreground">Sin lecturas registradas.</p>}
-      </div>
-    </div>
+  return (
+    <VistaTerreno
+      titulo={
+        <ScreenTitle
+          title="Lectura de turno"
+          subtitle="Al ingresar el valor final se cierra el turno y se actualiza el horómetro del equipo."
+        />
+      }
+      formulario={formulario}
+      historial={
+        <Historial
+          titulo="Lecturas recientes"
+          accion="Ver todas"
+          vacio="Sin lecturas registradas."
+          hayRegistros={registros.length > 0}
+          tarjetas={() =>
+            registros.map((r) => (
+              <ListCard key={r.id}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground">{r.equipo?.internalCode ?? r.equipoId}</span>
+                    <Chip tone="info">{r.turno}</Chip>
+                  </div>
+                  <Chip tone={r.valorFinal != null ? 'success' : 'neutral'}>
+                    {r.valorFinal != null ? 'Cerrado' : 'Abierto'}
+                  </Chip>
+                </div>
+                <div className="mt-1 text-sm text-foreground">{r.operador}</div>
+                <div className="tabular mt-0.5 text-xs text-muted-foreground">
+                  {fmtNum(r.valorInicial)} h → {r.valorFinal != null ? `${fmtNum(r.valorFinal)} h` : '—'}
+                  {r.nivelCombustible != null ? ` · ${fmtNum(r.nivelCombustible)}% comb.` : ''} · {fmtDate(r.fecha)}
+                </div>
+              </ListCard>
+            ))
+          }
+          tabla={() => (
+            <Tabla label="Lecturas de horómetro recientes" anchoMinimo="min-w-180">
+              <Table.Header>
+                <Table.Column className={COLUMNA} isRowHeader>
+                  Equipo
+                </Table.Column>
+                <Table.Column className={COLUMNA}>Operador</Table.Column>
+                <Table.Column className={COLUMNA}>Turno</Table.Column>
+                <Table.Column className={COLUMNA}>Inicial</Table.Column>
+                <Table.Column className={COLUMNA}>Final</Table.Column>
+                <Table.Column className={COLUMNA}>Combustible</Table.Column>
+                <Table.Column className={COLUMNA}>Estado</Table.Column>
+                <Table.Column className={COLUMNA}>Fecha</Table.Column>
+              </Table.Header>
+              <Table.Body>
+                {registros.map((r) => (
+                  <Table.Row key={r.id}>
+                    <Table.Cell className="font-semibold whitespace-nowrap text-foreground">
+                      {r.equipo?.internalCode ?? r.equipoId}
+                    </Table.Cell>
+                    <Table.Cell className="w-full max-w-0 truncate text-sm text-foreground">{r.operador}</Table.Cell>
+                    <Table.Cell>
+                      <Chip tone="info">{r.turno}</Chip>
+                    </Table.Cell>
+                    <Table.Cell className="tabular whitespace-nowrap text-foreground">
+                      {fmtNum(r.valorInicial)} h
+                    </Table.Cell>
+                    {/* El turno abierto no tiene valor final: se marca, no se
+                        deja la celda en blanco como si faltara el dato. */}
+                    <Table.Cell className="tabular whitespace-nowrap text-foreground">
+                      {r.valorFinal != null ? `${fmtNum(r.valorFinal)} h` : '—'}
+                    </Table.Cell>
+                    <Table.Cell className="tabular whitespace-nowrap text-muted-foreground">
+                      {r.nivelCombustible != null ? `${fmtNum(r.nivelCombustible)}%` : '—'}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip tone={r.valorFinal != null ? 'success' : 'neutral'}>
+                        {r.valorFinal != null ? 'Cerrado' : 'Abierto'}
+                      </Chip>
+                    </Table.Cell>
+                    <Table.Cell className="tabular text-sm whitespace-nowrap text-muted-foreground">
+                      {fmtDate(r.fecha)}
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Tabla>
+          )}
+        />
+      }
+    />
   );
 }
