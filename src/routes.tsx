@@ -18,7 +18,7 @@ import { NotificacionesView } from './views/NotificacionesView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
-import { TerrenoMobileLayout } from './layout/TerrenoLayout';
+import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
 import { HorometroView } from './views/HorometroView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
@@ -76,14 +76,15 @@ export const router = createBrowserRouter([
           },
         ],
       },
-      // Operación en Terreno — UI mobile propia (fuera del layout desktop),
-      // restringida a ADMIN + SUPERVISOR. Se integra con la auth/rutas del
-      // equipo; el shell mobile (header + tab bar) reemplaza al Sidebar/Topbar.
+      // Operación en Terreno — shell propio (fuera del layout de escritorio),
+      // restringido a ADMIN + SUPERVISOR. Se integra con la auth/rutas del
+      // equipo; su header + navegación reemplazan al Sidebar/Topbar. Nació
+      // solo para teléfono; desde T46 también se usa en tablet y PC.
       {
         element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
         children: [
           {
-            element: <TerrenoMobileLayout />,
+            element: <TerrenoLayout />,
             children: [
               { path: '/terreno', element: <Navigate replace to="/terreno/hallazgos" /> },
               { path: '/terreno/combustible', element: <CombustibleView /> },

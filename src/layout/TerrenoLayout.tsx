@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router';
 import { Briefcase, Clock, Fuel, LayoutDashboard, LogOut, Menu, TriangleAlert, X } from 'lucide-react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { signOut } from '../lib/auth-client';
 
 const tabs = [
@@ -11,6 +12,17 @@ const tabs = [
   { to: '/terreno/horometro', label: 'Horómetro', icon: Clock },
   { to: '/terreno/trabajos-extra', label: 'Trabajos', icon: Briefcase },
 ];
+
+/**
+ * Ancho del contenido. Lo comparten el header, el `main` y la barra inferior
+ * para que el título, el formulario y las pestañas queden en la misma columna.
+ *
+ * En teléfono son los mismos 448 px de siempre: es la pantalla donde se opera
+ * en faena y no se toca. Desde `sm` el módulo deja de estar encajonado, pero el
+ * contenido sigue teniendo un techo — un formulario de punta a punta en un
+ * monitor es tan malo como la columna angosta, solo que al revés.
+ */
+const CONTAINER = 'mx-auto w-full max-w-md sm:max-w-2xl lg:max-w-3xl';
 
 function StatusPill() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -32,10 +44,22 @@ function StatusPill() {
   );
 }
 
-export function TerrenoMobileLayout() {
+export function TerrenoLayout() {
   const { user, role } = useCurrentUser();
   const [menu, setMenu] = useState(false);
   const navigate = useNavigate();
+
+  /**
+   * Los cuatro destinos viven en UN solo lugar según el tamaño: barra inferior
+   * en teléfono y tablet —donde llega el pulgar— y header desde `lg`, porque
+   * una barra de cuatro pestañas estirada a lo ancho de un monitor se ve rota.
+   *
+   * Se monta una de las dos, no las dos con una tapada por CSS: son los mismos
+   * cuatro enlaces, y duplicarlos en el DOM haría que un lector de pantalla
+   * leyera la navegación dos veces. Es el caso que `useMediaQuery` documenta;
+   * todo lo demás de esta pantalla es estilo y va con clases `sm:`/`lg:`.
+   */
+  const navEnHeader = useMediaQuery(DESKTOP_QUERY);
 
   const handleSignOut = async () => {
     await signOut();
@@ -43,54 +67,92 @@ export function TerrenoMobileLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#e9e7e2]">
-      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col bg-background shadow-[0_0_60px_rgba(13,12,10,0.08)]">
+    <div className="min-h-screen bg-[#e9e7e2] sm:bg-background">
+      {/* El marco de "teléfono sobre fondo gris" (ancho fijo + sombra + esquinas
+          redondeadas) solo tiene sentido mientras el shell es más angosto que la
+          pantalla. Desde `sm` el shell ocupa el ancho y el marco sobra. */}
+      <div className="relative mx-auto flex min-h-screen w-full max-w-md flex-col bg-background shadow-[0_0_60px_rgba(13,12,10,0.08)] sm:max-w-none sm:shadow-none">
         {/* Header oscuro */}
-        <header className="sticky top-0 z-20 flex items-center gap-3 rounded-b-3xl bg-[#0d0c0a] px-4 py-3.5 text-white">
-          <button
-            type="button"
-            aria-label="Menú"
-            onClick={() => setMenu(true)}
-            className="-ml-1 rounded-lg p-1.5 text-white/90 hover:bg-white/10"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <div className="flex-1 leading-none">
-            <div className="font-display text-lg font-bold tracking-tight">SMI</div>
-            <div className="mt-0.5 text-[10px] font-semibold tracking-wider text-white/50 uppercase">
-              Operación en Terreno
+        <header className="sticky top-0 z-20 rounded-b-3xl bg-[#0d0c0a] text-white sm:rounded-none">
+          <div className={`${CONTAINER} flex items-center gap-3 px-4 py-3.5`}>
+            <button
+              type="button"
+              aria-label="Menú"
+              onClick={() => setMenu(true)}
+              className="-ml-1 rounded-lg p-1.5 text-white/90 hover:bg-white/10"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="flex-1 leading-none">
+              <div className="font-display text-lg font-bold tracking-tight">SMI</div>
+              <div className="mt-0.5 text-[10px] font-semibold tracking-wider text-white/50 uppercase">
+                Operación en Terreno
+              </div>
             </div>
+
+            {navEnHeader && (
+              <nav aria-label="Secciones de Terreno" className="flex items-center gap-1">
+                {tabs.map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <NavLink
+                      key={t.to}
+                      to={t.to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                          isActive ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                        }`
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {t.label}
+                    </NavLink>
+                  );
+                })}
+              </nav>
+            )}
+
+            <StatusPill />
           </div>
-          <StatusPill />
         </header>
 
         {/* Contenido */}
-        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto">
+          <div className={`${CONTAINER} px-4 pt-4 pb-6`}>
+            <Outlet />
+          </div>
         </main>
 
         {/* Tab bar inferior */}
-        <nav className="sticky bottom-0 z-20 grid grid-cols-4 border-t border-border bg-card/95 pb-1 backdrop-blur">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            return (
-              <NavLink
-                key={t.to}
-                to={t.to}
-                className={({ isActive }) =>
-                  `flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
-                    isActive ? 'text-primary' : 'text-muted-foreground'
-                  }`
-                }
-              >
-                <Icon className="h-5 w-5" />
-                {t.label}
-              </NavLink>
-            );
-          })}
-        </nav>
+        {!navEnHeader && (
+          <nav
+            aria-label="Secciones de Terreno"
+            className="sticky bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur"
+          >
+            <div className={`${CONTAINER} grid grid-cols-4 pb-1`}>
+              {tabs.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <NavLink
+                    key={t.to}
+                    to={t.to}
+                    className={({ isActive }) =>
+                      `flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
+                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      }`
+                    }
+                  >
+                    <Icon className="h-5 w-5" />
+                    {t.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </nav>
+        )}
 
-        {/* Drawer */}
+        {/* Drawer. Sigue existiendo en todos los tamaños porque guarda lo que no
+            está en las pestañas: quién está conectado, "Ir al panel" y "Salir". */}
         {menu && (
           <>
             <button
@@ -114,26 +176,31 @@ export function TerrenoMobileLayout() {
                 </div>
               )}
 
-              <nav className="flex flex-col gap-1">
-                {tabs.map((t) => {
-                  const Icon = t.icon;
-                  return (
-                    <NavLink
-                      key={t.to}
-                      to={t.to}
-                      onClick={() => setMenu(false)}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
-                          isActive ? 'bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)]' : 'hover:bg-muted'
-                        }`
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      {t.label}
-                    </NavLink>
-                  );
-                })}
-              </nav>
+              {/* En teléfono el drawer repite las secciones porque es el menú
+                  completo. Desde `lg` ya están en el header: repetirlas acá las
+                  dejaría dos veces en el DOM. */}
+              {!navEnHeader && (
+                <nav className="flex flex-col gap-1">
+                  {tabs.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <NavLink
+                        key={t.to}
+                        to={t.to}
+                        onClick={() => setMenu(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                            isActive ? 'bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)]' : 'hover:bg-muted'
+                          }`
+                        }
+                      >
+                        <Icon className="h-4 w-4" />
+                        {t.label}
+                      </NavLink>
+                    );
+                  })}
+                </nav>
+              )}
 
               <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
                 <NavLink
