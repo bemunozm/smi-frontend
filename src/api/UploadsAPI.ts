@@ -4,7 +4,13 @@ import type { ApiResponse } from '../types/api';
 export async function uploadImage(file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file);
-  const res = await api.post<ApiResponse<{ url: string }>>('/api/uploads', form);
+  // `Content-Type: multipart/form-data` explícito: la instancia axios fuerza
+  // `application/json`, y axios v1 con ese header serializa el FormData a JSON
+  // (el archivo no llega al backend → "No se recibió archivo"). Con este
+  // override el navegador arma el multipart con boundary correctamente.
+  const res = await api.post<ApiResponse<{ url: string }>>('/api/uploads', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return res.data.data.url;
 }
 

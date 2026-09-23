@@ -24,14 +24,6 @@ vi.mock('../hooks/useBranches', () => ({
 
 afterEach(cleanup);
 
-// Documentos sin dato cargado — el fixture base representa el caso más común
-// (equipo recién dado de alta, sin R1/R2 todavía); los tests de vigencia
-// (`EquiposView — indicador de vencimientos`) sobrescriben con `VIGENTE_DOCS`.
-const SIN_DATO_DOCS = {
-  technicalInspection: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
-  insurance: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
-};
-
 const EQUIPO = {
   id: 'eq_1',
   internalCode: 'EX-001',
@@ -47,14 +39,16 @@ const EQUIPO = {
   status: 'OPERATIONAL' as const,
   homeBranchId: null,
   photoUrl: null,
-  technicalInspectionExpiry: null,
-  insuranceExpiry: null,
   operator: { id: 'u_op', name: 'Pedro Soto' },
   supervisor: { id: 'u_sup', name: 'Luis Vega' },
   inUse: true,
   currentFuelLevel: 72,
   openShift: null,
-  documents: SIN_DATO_DOCS,
+  // Sin alerta de documentos — el fixture base representa el caso más común
+  // (equipo recién dado de alta, sin documentos vencidos/por vencer todavía);
+  // los tests de `EquiposView — indicador de vencimientos` sobrescriben con
+  // `'VENCIDO'`/`'POR_VENCER'`.
+  documentsAlert: null as 'VENCIDO' | 'POR_VENCER' | null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -272,11 +266,12 @@ describe('EquiposView — R3 identidad por clase', () => {
   });
 });
 
-// R1/R2 — indicador discreto de vencimientos en el listado (punto 5, opcional
-// pero implementado): badge chico junto al chip de estado cuando algún
-// documento está POR_VENCER o VENCIDO (`equipoDocumentAlertTone`).
-describe('EquiposView — indicador de vencimientos (R1/R2)', () => {
-  it('no muestra el indicador cuando ambos documentos están vigentes o sin dato', () => {
+// Indicador discreto de documentos en el listado: badge chico junto al chip
+// de estado cuando `equipo.documentsAlert` viene informado (derivado on-read
+// por el backend a partir de los documentos de la unidad — dominio
+// "Documentos de equipo", ver `types/equipment-document.ts`).
+describe('EquiposView — indicador de documentos', () => {
+  it('no muestra el indicador cuando documentsAlert es null', () => {
     renderConDatos(<EquiposView />, (qc) => {
       qc.setQueryData(['equipment'], [EQUIPO]);
       qc.setQueryData(['equipment', 'resumen'], {
@@ -289,20 +284,9 @@ describe('EquiposView — indicador de vencimientos (R1/R2)', () => {
     expect(screen.queryByLabelText(/Revisión técnica o seguro/)).toBeNull();
   });
 
-  it('muestra el indicador en tono ámbar cuando un documento está POR_VENCER', () => {
+  it('muestra el indicador en tono ámbar cuando documentsAlert es POR_VENCER', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ['equipment'],
-        [
-          {
-            ...EQUIPO,
-            documents: {
-              ...SIN_DATO_DOCS,
-              technicalInspection: { expiry: '2026-10-10T00:00:00.000Z', status: 'POR_VENCER' as const, daysToExpiry: 12 },
-            },
-          },
-        ],
-      );
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, documentsAlert: 'POR_VENCER' as const }]);
       qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
@@ -313,20 +297,9 @@ describe('EquiposView — indicador de vencimientos (R1/R2)', () => {
     expect(screen.getAllByLabelText('Revisión técnica o seguro por vencer').length).toBeGreaterThan(0);
   });
 
-  it('muestra el indicador en tono rojo (prioridad sobre "por vencer") cuando un documento está VENCIDO', () => {
+  it('muestra el indicador en tono rojo cuando documentsAlert es VENCIDO', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ['equipment'],
-        [
-          {
-            ...EQUIPO,
-            documents: {
-              technicalInspection: { expiry: '2026-08-01T00:00:00.000Z', status: 'VENCIDO' as const, daysToExpiry: -20 },
-              insurance: { expiry: '2026-10-10T00:00:00.000Z', status: 'POR_VENCER' as const, daysToExpiry: 5 },
-            },
-          },
-        ],
-      );
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, documentsAlert: 'VENCIDO' as const }]);
       qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,

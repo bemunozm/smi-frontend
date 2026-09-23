@@ -48,7 +48,6 @@ import {
   equipmentStatusChipColor,
   equipmentStatusLabel,
   equipmentStatusSelectedClasses,
-  equipoDocumentAlertTone,
   equipoEstadoUsoLabel,
   equipoIdentidad,
 } from '../config/flota-colors';
@@ -84,24 +83,29 @@ function KebabIcon() {
 }
 
 /**
- * Indicador discreto de R1/R2 (revisión técnica/seguro) para el LISTADO —
- * badge chico con el tono más urgente entre ambos documentos
- * (`equipoDocumentAlertTone`), sin recargar la fila: no se repite el detalle
- * de cuál venció, eso ya vive en la ficha (bloque "Vencimientos"). No
- * renderiza nada cuando ambos documentos están vigentes o sin dato.
+ * Indicador discreto de documentos para el LISTADO — badge chico con el tono
+ * más urgente entre TODOS los documentos de la unidad (dominio "Documentos de
+ * equipo", ver `types/equipment-document.ts`), sin recargar la fila: no se
+ * repite el detalle de cuál venció, eso ya vive en la ficha (sección
+ * "Documentos"). El tono lo deriva el backend on-read (`equipo.documentsAlert`
+ * — reemplaza al viejo `equipoDocumentAlertTone`, que leía el shape anidado
+ * fijo R1/R2 que ya no existe). No renderiza nada cuando `documentsAlert` es
+ * `null` (ningún documento POR_VENCER/VENCIDO).
  */
-function DocumentAlertBadge({ equipo }: { equipo: Pick<Equipment, 'documents'> }) {
-  const tone = equipoDocumentAlertTone(equipo);
-  if (!tone) return null;
+function DocumentAlertBadge({ equipo }: { equipo: Pick<Equipment, 'documentsAlert'> }) {
+  const { documentsAlert } = equipo;
+  if (!documentsAlert) return null;
 
   const label =
-    tone === 'danger' ? 'Revisión técnica o seguro vencidos' : 'Revisión técnica o seguro por vencer';
+    documentsAlert === 'VENCIDO' ? 'Revisión técnica o seguro vencidos' : 'Revisión técnica o seguro por vencer';
 
   return (
     <span
       aria-label={label}
       className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-        tone === 'danger' ? 'bg-danger-soft text-danger-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'
+        documentsAlert === 'VENCIDO'
+          ? 'bg-danger-soft text-danger-soft-foreground'
+          : 'bg-warning-soft text-warning-soft-foreground'
       }`}
       title={label}
     >
@@ -206,8 +210,6 @@ const DEFAULT_FORM_VALUES: EquipmentFormValues = {
   status: 'OPERATIONAL',
   homeBranchId: '',
   photoUrl: null,
-  technicalInspectionExpiry: '',
-  insuranceExpiry: '',
 };
 
 interface CreateEquipoModalProps {

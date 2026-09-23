@@ -27,24 +27,6 @@ export type EquipmentStatus = (typeof EQUIPMENT_STATUS)[number];
 export const DOCUMENT_STATUS = ['VIGENTE', 'POR_VENCER', 'VENCIDO', 'SIN_DATO'] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUS)[number];
 
-/** Vigencia de UN documento (revisión técnica o seguro) — ver `EquipmentDocumentsSchema`. */
-const DocumentExpiryInfoSchema = z.object({
-  expiry: z.string().datetime().nullable(),
-  status: z.enum(DOCUMENT_STATUS),
-  /** Días de calendario hasta el vencimiento (negativo si ya venció), `null` sin dato. */
-  daysToExpiry: z.number().int().nullable(),
-});
-export type DocumentExpiryInfo = z.infer<typeof DocumentExpiryInfoSchema>;
-
-/** Campo `documents` de la respuesta de Flota (R1/R2) — solo lectura, NO usar
- * para precargar el form de edición (ver las columnas crudas
- * `technicalInspectionExpiry`/`insuranceExpiry` en `EquipmentSchema`). */
-const EquipmentDocumentsSchema = z.object({
-  technicalInspection: DocumentExpiryInfoSchema,
-  insurance: DocumentExpiryInfoSchema,
-});
-export type EquipmentDocuments = z.infer<typeof EquipmentDocumentsSchema>;
-
 /** Operador/supervisor asignado HOY a la unidad — subset de `User` (id+name),
  * tal como lo devuelve `GET /api/equipment` (ver `operator`/`supervisor` más
  * abajo). Se declara acá en vez de importar `UserSchema` completo porque el
@@ -89,13 +71,6 @@ export const EquipmentSchema = z.object({
   /** Foto del equipo (`/uploads/...`, subida vía `uploadImage`) — `null` si
    * nunca se subió una. */
   photoUrl: z.string().nullable(),
-  /** Vencimiento de la revisión técnica (R1), ISO 8601 — columna CRUDA, para
-   * precargar el form de edición (ver `EquipmentFormSchema`). Para UI de
-   * estado/alerta (chip de vigencia) usar `documents.technicalInspection`,
-   * no esta — esta no trae `status`/`daysToExpiry`, solo la fecha. */
-  technicalInspectionExpiry: z.string().datetime().nullable(),
-  /** Vencimiento del seguro (R2), ISO 8601 — mismo criterio que arriba. */
-  insuranceExpiry: z.string().datetime().nullable(),
   /** Operador/supervisor asignados HOY — asignación ACTUAL, no historial de
    * sesiones (ver `useAssignEquipment`). */
   operator: EquipmentAssigneeSchema.nullable(),
@@ -107,9 +82,13 @@ export const EquipmentSchema = z.object({
   /** Turno de horómetro abierto de esta unidad, o `null` si no tiene uno en
    * curso — ver `OpenShiftSchema`. */
   openShift: OpenShiftSchema.nullable(),
-  /** Estado de vigencia de R1/R2, derivado on-read por el backend a partir de
-   * las columnas crudas de arriba — ver `EquipmentDocumentsSchema`. */
-  documents: EquipmentDocumentsSchema,
+  /** Alerta discreta para el LISTADO/ficha, derivada on-read por el backend a
+   * partir de los documentos de la unidad (dominio "Documentos de equipo",
+   * ver `types/equipment-document.ts`): el tono más urgente entre todos sus
+   * documentos, o `null` si ninguno está POR_VENCER/VENCIDO. Reemplaza al
+   * viejo campo anidado `documents` (R1/R2 fijos) — el detalle completo (qué
+   * documento, de qué tipo) vive en `GET /equipment/:id/documents`, no acá. */
+  documentsAlert: z.enum(['VENCIDO', 'POR_VENCER']).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -229,15 +208,6 @@ const yearField = z
   })
   .or(z.literal(''));
 
-/** `<Input type="date">` entrega/espera `"YYYY-MM-DD"` (o `""` vacío) — mismo
- * criterio "string + `.or(literal(''))`" que `yearField`: un date input mal
- * escrito no puede pasar la validación en silencio, y "vacío" (opcional,
- * R1/R2 se pueden guardar sin fecha) queda como caso explícito aparte. */
-const dateOnlyField = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida')
-  .or(z.literal(''));
-
 export const EquipmentFormSchema = z.object({
   internalCode: z
     .string()
@@ -256,10 +226,6 @@ export const EquipmentFormSchema = z.object({
   /** Sube al elegir el archivo (`uploadImage`, ver `EquipoPhotoField`) — el
    * form solo guarda la URL resultante, no el `File`. */
   photoUrl: z.string().nullable(),
-  /** Vencimiento de revisión técnica/seguro (R1/R2) — ambos opcionales, se
-   * puede guardar el equipo sin fecha cargada. */
-  technicalInspectionExpiry: dateOnlyField,
-  insuranceExpiry: dateOnlyField,
 });
 export type EquipmentFormValues = z.infer<typeof EquipmentFormSchema>;
 
@@ -276,34 +242,22 @@ export interface CreateEquipmentInput {
   status: EquipmentStatus;
   homeBranchId?: string;
   photoUrl?: string;
-  /** Vencimiento de revisión técnica (R1), ISO 8601 — opcional. */
-  technicalInspectionExpiry?: string;
-  /** Vencimiento de seguro (R2), ISO 8601 — opcional. */
-  insuranceExpiry?: string;
 }
 
 /** Body de `PATCH /api/equipment/:id` — el código interno no es editable en
  * el backend (es la clave de negocio que usan Terreno/Mantenimiento/Inventario).
- * A diferencia de `CreateEquipmentInput`, estos seis campos aceptan `null`
+ * A diferencia de `CreateEquipmentInput`, estos cuatro campos aceptan `null`
  * explícito (ver `toUpdateEquipmentPayload`): en UPDATE es la única forma de
  * limpiar un valor ya guardado, y el backend los marca `@IsOptional()` sin
  * `forbidNonWhitelisted` bloquear un `null`. */
 export type UpdateEquipmentInput = Omit<
   CreateEquipmentInput,
-  | 'internalCode'
-  | 'licensePlate'
-  | 'year'
-  | 'homeBranchId'
-  | 'photoUrl'
-  | 'technicalInspectionExpiry'
-  | 'insuranceExpiry'
+  'internalCode' | 'licensePlate' | 'year' | 'homeBranchId' | 'photoUrl'
 > & {
   licensePlate?: string | null;
   year?: number | null;
   homeBranchId?: string | null;
   photoUrl?: string | null;
-  technicalInspectionExpiry?: string | null;
-  insuranceExpiry?: string | null;
 };
 
 /** Body de `PATCH /api/equipment/:id/assignment` — asigna/libera operador y/o
@@ -331,8 +285,6 @@ export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipment
     status: values.status,
     ...(values.homeBranchId ? { homeBranchId: values.homeBranchId } : {}),
     ...(values.photoUrl ? { photoUrl: values.photoUrl } : {}),
-    ...(values.technicalInspectionExpiry ? { technicalInspectionExpiry: values.technicalInspectionExpiry } : {}),
-    ...(values.insuranceExpiry ? { insuranceExpiry: values.insuranceExpiry } : {}),
   };
 }
 
@@ -355,7 +307,5 @@ export function toUpdateEquipmentPayload(values: EquipmentFormValues): UpdateEqu
     status: values.status,
     homeBranchId: values.homeBranchId ? values.homeBranchId : null,
     photoUrl: values.photoUrl,
-    technicalInspectionExpiry: values.technicalInspectionExpiry ? values.technicalInspectionExpiry : null,
-    insuranceExpiry: values.insuranceExpiry ? values.insuranceExpiry : null,
   };
 }
