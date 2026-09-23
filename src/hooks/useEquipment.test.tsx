@@ -62,17 +62,12 @@ const EQUIPMENT = {
   status: 'OPERATIONAL',
   homeBranchId: null,
   photoUrl: null,
-  technicalInspectionExpiry: null,
-  insuranceExpiry: null,
   operator: null,
   supervisor: null,
   inUse: false,
   currentFuelLevel: null,
   openShift: null,
-  documents: {
-    technicalInspection: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
-    insurance: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
-  },
+  documentsAlert: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };

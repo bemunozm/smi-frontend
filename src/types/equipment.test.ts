@@ -16,8 +16,6 @@ describe('EquipmentFormSchema', () => {
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
     photoUrl: null,
-    technicalInspectionExpiry: '',
-    insuranceExpiry: '',
   };
 
   it('acepta el año vacío (es opcional)', () => {
@@ -35,30 +33,6 @@ describe('EquipmentFormSchema', () => {
   it('rechaza el código vacío', () => {
     expect(EquipmentFormSchema.safeParse({ ...valido, internalCode: '' }).success).toBe(false);
   });
-
-  // R1/R2: vencimiento de revisión técnica/seguro — opcionales (se puede
-  // guardar el equipo sin fecha cargada, mismo criterio que `licensePlate`).
-  it('acepta los vencimientos de revisión técnica y seguro vacíos (son opcionales)', () => {
-    expect(
-      EquipmentFormSchema.safeParse({ ...valido, technicalInspectionExpiry: '', insuranceExpiry: '' }).success,
-    ).toBe(true);
-  });
-
-  it('acepta una fecha de vencimiento bien formada (`YYYY-MM-DD`, formato de `<Input type="date">`)', () => {
-    expect(
-      EquipmentFormSchema.safeParse({
-        ...valido,
-        technicalInspectionExpiry: '2026-12-01',
-        insuranceExpiry: '2027-01-15',
-      }).success,
-    ).toBe(true);
-  });
-
-  it('rechaza una fecha de vencimiento mal formada', () => {
-    expect(EquipmentFormSchema.safeParse({ ...valido, technicalInspectionExpiry: '01/12/2026' }).success).toBe(
-      false,
-    );
-  });
 });
 
 describe('toEquipmentPayload', () => {
@@ -75,8 +49,6 @@ describe('toEquipmentPayload', () => {
       status: 'OPERATIONAL',
       homeBranchId: '',
       photoUrl: null,
-      technicalInspectionExpiry: '',
-      insuranceExpiry: '',
     });
 
     expect(payload.internalCode).toBe('EX-001');
@@ -99,39 +71,12 @@ describe('toEquipmentPayload', () => {
       status: 'IN_WORKSHOP',
       homeBranchId: '',
       photoUrl: null,
-      technicalInspectionExpiry: '',
-      insuranceExpiry: '',
     });
 
     expect('year' in payload).toBe(false);
     expect('licensePlate' in payload).toBe(false);
     expect('homeBranchId' in payload).toBe(false);
     expect('photoUrl' in payload).toBe(false);
-    expect('technicalInspectionExpiry' in payload).toBe(false);
-    expect('insuranceExpiry' in payload).toBe(false);
-  });
-
-  // R1/R2: mismo criterio que el resto de los campos opcionales de crear —
-  // solo se manda la clave cuando el usuario cargó una fecha.
-  it('manda los vencimientos de revisión técnica y seguro cuando vienen informados', () => {
-    const payload = toEquipmentPayload({
-      internalCode: 'CM-003',
-      licensePlate: '',
-      equipmentClass: 'HEAVY',
-      type: 'Camión',
-      brand: 'Volvo',
-      model: 'FMX',
-      year: '',
-      controlUnit: 'KM',
-      status: 'OPERATIONAL',
-      homeBranchId: '',
-      photoUrl: null,
-      technicalInspectionExpiry: '2026-12-01',
-      insuranceExpiry: '2027-01-15',
-    });
-
-    expect(payload.technicalInspectionExpiry).toBe('2026-12-01');
-    expect(payload.insuranceExpiry).toBe('2027-01-15');
   });
 });
 
@@ -148,8 +93,6 @@ describe('toUpdateEquipmentPayload', () => {
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
     photoUrl: null,
-    technicalInspectionExpiry: '',
-    insuranceExpiry: '',
   };
 
   it('manda `null` explícito en patente, año y sucursal cuando vienen vacíos (a diferencia de crear)', () => {
@@ -178,26 +121,5 @@ describe('toUpdateEquipmentPayload', () => {
     expect(payload.year).toBe(2019);
     expect(payload.homeBranchId).toBe('branch_1');
     expect(payload.photoUrl).toBe('/uploads/foto.jpg');
-  });
-
-  // R1/R2: mismo contrato "vacío → null explícito" que patente/año/sucursal —
-  // es la única forma de LIMPIAR una fecha ya guardada (§ requerimiento "permite
-  // limpiarlas").
-  it('manda `null` explícito en los vencimientos de revisión técnica y seguro cuando vienen vacíos', () => {
-    const payload = toUpdateEquipmentPayload(valido);
-
-    expect(payload.technicalInspectionExpiry).toBeNull();
-    expect(payload.insuranceExpiry).toBeNull();
-  });
-
-  it('manda el vencimiento informado tal cual (ya viene en formato `YYYY-MM-DD`)', () => {
-    const payload = toUpdateEquipmentPayload({
-      ...valido,
-      technicalInspectionExpiry: '2026-12-01',
-      insuranceExpiry: '2027-01-15',
-    });
-
-    expect(payload.technicalInspectionExpiry).toBe('2026-12-01');
-    expect(payload.insuranceExpiry).toBe('2027-01-15');
   });
 });

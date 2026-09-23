@@ -40,17 +40,12 @@ const EQUIPMENT = {
   status: 'OPERATIONAL',
   homeBranchId: null,
   photoUrl: null,
-  technicalInspectionExpiry: null,
-  insuranceExpiry: null,
   operator: null,
   supervisor: null,
   inUse: false,
   currentFuelLevel: null,
   openShift: null,
-  documents: {
-    technicalInspection: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
-    insurance: { expiry: null, status: 'SIN_DATO', daysToExpiry: null },
-  },
+  documentsAlert: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -122,26 +117,18 @@ describe('EquipmentAPI.list', () => {
     expect(result).toEqual([conTurnoAbierto]);
   });
 
-  // R1/R2: `documents` es el shape derivado on-read que arma
-  // `equipment.service.ts#buildDocumentExpiryInfo` — confirmado contra el
-  // código del backend (no inventado), mismo criterio que el test de
-  // `openShift` de arriba: prueba que el zod real acepta el contrato tal
-  // cual lo entrega `equipment.service.ts`.
-  it('parsea un equipo con vencimientos de revisión técnica y seguro cargados (R1/R2)', async () => {
-    const conDocumentos = {
-      ...EQUIPMENT,
-      technicalInspectionExpiry: '2026-12-01T00:00:00.000Z',
-      insuranceExpiry: '2027-01-15T00:00:00.000Z',
-      documents: {
-        technicalInspection: { expiry: '2026-12-01T00:00:00.000Z', status: 'VIGENTE', daysToExpiry: 71 },
-        insurance: { expiry: '2027-01-15T00:00:00.000Z', status: 'VIGENTE', daysToExpiry: 116 },
-      },
-    };
-    getMock.mockResolvedValueOnce({ data: { data: [conDocumentos], message: 'ok' } });
+  // `documentsAlert` es el campo derivado on-read que resume el estado de los
+  // documentos del equipo (dominio "Documentos de equipo", ver
+  // `types/equipment-document.ts`) — reemplaza al viejo `documents` anidado
+  // R1/R2. Confirma que el zod real acepta ambos valores no nulos, no solo el
+  // `null` del fixture base.
+  it.each(['VENCIDO', 'POR_VENCER'] as const)('parsea un equipo con documentsAlert = %s', async (alerta) => {
+    const conAlerta = { ...EQUIPMENT, documentsAlert: alerta };
+    getMock.mockResolvedValueOnce({ data: { data: [conAlerta], message: 'ok' } });
 
     const result = await EquipmentAPI.list();
 
-    expect(result).toEqual([conDocumentos]);
+    expect(result).toEqual([conAlerta]);
   });
 });
 

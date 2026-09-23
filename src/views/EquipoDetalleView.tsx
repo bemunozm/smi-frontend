@@ -7,17 +7,20 @@ import {
   Clock,
   Droplet,
   Pencil,
+  Plus,
   Trash2,
   User,
   UserCheck,
   Users,
   Wrench,
 } from 'lucide-react';
-import { Button, Card, Dropdown, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Dropdown, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
 
+import { assetUrl } from '../api/UploadsAPI';
 import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
 import { useCombustibleList } from '../hooks/useCombustible';
+import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
 import { useUsers } from '../hooks/useUsers';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -28,6 +31,7 @@ import {
   documentStatusChipColor,
   documentStatusLabel,
   equipmentClassLabel,
+  equipmentDocumentTypeLabel,
   equipmentStatusChipColor,
   equipmentStatusLabel,
   equipoEstadoUsoLabel,
@@ -38,15 +42,12 @@ import {
 } from '../config/flota-colors';
 import { eventoTipoColor, eventoTipoIcon, eventoTipoLabel } from '../config/ficha-colors';
 import { ROLES } from '../types/roles';
-import {
-  EQUIPMENT_STATUS,
-  type DocumentExpiryInfo,
-  type EquipmentDetail,
-  type EquipmentStatus,
-} from '../types/equipment';
+import { EQUIPMENT_STATUS, type EquipmentDetail, type EquipmentStatus } from '../types/equipment';
+import type { EquipmentDocument } from '../types/equipment-document';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { StatusChip } from '../components/flota/StatusChip';
 import { EditEquipoModal, DeleteEquipoAlertDialog, idDesdeSentinel, SIN_ASIGNAR } from '../components/flota/EquipoEditDelete';
+import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
 
@@ -252,47 +253,188 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   );
 }
 
-/** Fila de un documento (revisión técnica o seguro) dentro de `VencimientosCard`
- * — fecha + caption de vigencia a la izquierda, chip de estado a la derecha.
- * Lee `documents.*` (derivado on-read por el backend), NUNCA las columnas
- * crudas `technicalInspectionExpiry`/`insuranceExpiry` — esas solo existen
- * para precargar el form de edición (ver `EquipoEditDelete.tsx`). */
-function DocumentoRow({ label, info }: { label: string; info: DocumentExpiryInfo }) {
+/** Fila de UN documento del equipo dentro de `DocumentsCard` — tipo + título a
+ * la izquierda (con chip de vigencia y caption), link "Ver / descargar" si
+ * tiene archivo adjunto, acciones editar/borrar a la derecha (gateadas a
+ * SUPERVISOR/ADMIN, mismo criterio que crear). Reemplaza a `DocumentoRow`
+ * (R1/R2 fijos) — ahora la unidad puede tener cualquier cantidad de
+ * documentos, de cualquiera de los 5 tipos (`EquipmentDocumentType`). */
+function DocumentoItemRow({
+  documento,
+  puedeGestionar,
+  onEdit,
+  onDelete,
+}: {
+  documento: EquipmentDocument;
+  puedeGestionar: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const href = assetUrl(documento.fileUrl);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-separator py-2.5 first:border-t-0 first:pt-0">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">{label}</span>
-        <span className="text-sm text-foreground">
-          {info.expiry ? formatFechaCorta(info.expiry) : 'Sin registro'}
+    <div className="flex flex-wrap items-start justify-between gap-3 border-t border-separator py-3 first:border-t-0 first:pt-0">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
+            {equipmentDocumentTypeLabel(documento.type)}
+          </span>
+          <StatusChip tone={documentStatusChipColor(documento.status)}>
+            {documentStatusLabel(documento.status)}
+          </StatusChip>
+        </div>
+        {documento.title ? <span className="text-sm font-semibold text-foreground">{documento.title}</span> : null}
+        <span className="text-xs text-(--muted)">
+          {documento.expiryDate ? formatFechaCorta(documento.expiryDate) : 'Sin vencimiento'}
+          {documento.daysToExpiry != null ? ` · ${documentExpiryCaption(documento)}` : ''}
         </span>
-        {/* Sin dato, la fecha de arriba YA dice "Sin registro" — repetir la
-           misma leyenda en la caption sería ruido, no información nueva. */}
-        {info.daysToExpiry != null ? (
-          <span className="text-xs text-(--muted)">{documentExpiryCaption(info)}</span>
+        {href ? (
+          <a
+            className="w-fit text-xs font-semibold text-(--accent) hover:underline"
+            href={href}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Ver / descargar
+          </a>
         ) : null}
       </div>
-      <StatusChip tone={documentStatusChipColor(info.status)}>{documentStatusLabel(info.status)}</StatusChip>
+
+      {puedeGestionar ? (
+        <div className="flex shrink-0 gap-1.5">
+          <Button aria-label="Editar documento" isIconOnly onPress={onEdit} size="sm" variant="secondary">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button aria-label="Eliminar documento" isIconOnly onPress={onDelete} size="sm" variant="danger">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /**
- * R1/R2 — "Vencimientos": vigencia de revisión técnica y seguro, cerca de
- * "Datos de la unidad" (misma jerarquía de `Card`, sin anidar otra card
- * adentro). Solo lectura — la fecha se edita desde "Editar equipo" (sección
- * "Documentos" de `CamposEquipo`).
+ * "Documentos" — lista libre de documentos del equipo (revisión técnica,
+ * seguro, permiso de circulación, certificaciones, otros), cerca de "Datos de
+ * la unidad" (misma jerarquía de `Card`, sin anidar otra card adentro).
+ * Reemplaza a `VencimientosCard` (R1/R2 fijos, solo lectura): ahora
+ * SUPERVISOR/ADMIN pueden agregar/editar/borrar documentos directamente desde
+ * acá — ya no se editan desde "Editar equipo" (ver `EquipoEditDelete.tsx`,
+ * que perdió esos 2 campos).
  */
-function VencimientosCard({ equipo }: { equipo: EquipmentDetail }) {
+function DocumentsCard({ equipoId, puedeGestionar }: { equipoId: string; puedeGestionar: boolean }) {
+  const { data: documentos, isPending, isError } = useEquipmentDocuments(equipoId);
+  const deleteDocument = useDeleteEquipmentDocument(equipoId);
+  const [modalDoc, setModalDoc] = useState<EquipmentDocument | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<EquipmentDocument | null>(null);
+
+  const abrirCrear = () => {
+    setModalDoc(null);
+    setIsModalOpen(true);
+  };
+  const abrirEditar = (documento: EquipmentDocument) => {
+    setModalDoc(documento);
+    setIsModalOpen(true);
+  };
+
   return (
     <Card>
       <Card.Header>
-        <Card.Title>Vencimientos</Card.Title>
-        <Card.Description>Vigencia de la revisión técnica y el seguro de la unidad.</Card.Description>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <Card.Title>Documentos</Card.Title>
+            <Card.Description>Revisión técnica, seguro, permisos y otros documentos de la unidad.</Card.Description>
+          </div>
+          {puedeGestionar ? (
+            <Button onPress={abrirCrear} size="sm" variant="secondary">
+              <Plus className="h-3.5 w-3.5" />
+              Agregar documento
+            </Button>
+          ) : null}
+        </div>
       </Card.Header>
       <Card.Content className="mt-1">
-        <DocumentoRow info={equipo.documents.technicalInspection} label="Revisión técnica" />
-        <DocumentoRow info={equipo.documents.insurance} label="Seguro" />
+        {isPending ? (
+          <div className="flex justify-center py-6">
+            <Spinner color="accent" size="sm" />
+          </div>
+        ) : null}
+
+        {isError ? <p className="text-sm text-(--muted)">No se pudieron cargar los documentos.</p> : null}
+
+        {!isPending && !isError && (documentos ?? []).length === 0 ? (
+          <p className="text-sm text-(--muted)">Esta unidad todavía no tiene documentos registrados.</p>
+        ) : null}
+
+        {!isPending && !isError
+          ? (documentos ?? []).map((documento) => (
+              <DocumentoItemRow
+                documento={documento}
+                key={documento.id}
+                onDelete={() => setDeletingDoc(documento)}
+                onEdit={() => abrirEditar(documento)}
+                puedeGestionar={puedeGestionar}
+              />
+            ))
+          : null}
       </Card.Content>
+
+      <EquipmentDocumentModal
+        document={modalDoc}
+        equipmentId={equipoId}
+        isOpen={isModalOpen}
+        onOpenChange={setIsModalOpen}
+      />
+
+      <AlertDialog.Backdrop
+        isOpen={!!deletingDoc}
+        onOpenChange={(open) => {
+          if (!open) setDeletingDoc(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar documento?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    {deletingDoc ? equipmentDocumentTypeLabel(deletingDoc.type) : ''}
+                    {deletingDoc?.title ? ` · ${deletingDoc.title}` : ''} se eliminará de esta unidad. Esta acción no
+                    se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button variant="tertiary" onPress={close}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={deleteDocument.isPending}
+                    variant="danger"
+                    onPress={() => {
+                      if (!deletingDoc) return;
+                      deleteDocument.mutate(deletingDoc.id, {
+                        onSuccess: () => {
+                          close();
+                          setDeletingDoc(null);
+                        },
+                      });
+                    }}
+                  >
+                    {deleteDocument.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </Card>
   );
 }
@@ -817,7 +959,7 @@ export function EquipoDetalleView() {
             </Card.Content>
           </Card>
 
-          <VencimientosCard equipo={equipo} />
+          <DocumentsCard equipoId={equipo.id} puedeGestionar={puedeAsignar} />
 
           {/* Combustible: nivel actual (barra, mismo umbral de color que
              `FuelGauge`) + historial de cargas. El botón abre el flujo

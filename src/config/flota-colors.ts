@@ -4,12 +4,12 @@ import {
   EQUIPMENT_CLASS,
   EQUIPMENT_STATUS,
   type ControlUnit,
-  type DocumentExpiryInfo,
   type DocumentStatus,
   type Equipment,
   type EquipmentClass,
   type EquipmentStatus,
 } from '../types/equipment';
+import { EQUIPMENT_DOCUMENT_TYPES, type EquipmentDocumentType } from '../types/equipment-document';
 
 /** Colores semánticos de HeroUI (Chip) — mismo criterio que `role-colors.ts`. */
 export type FlotaChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
@@ -176,10 +176,12 @@ export const DOCUMENT_STATUS_OPTIONS: ReadonlyArray<{ value: DocumentStatus; lab
   DOCUMENT_STATUS.map((value) => ({ value, label: DOCUMENT_STATUS_LABEL[value] }));
 
 /** "Vence en 12 días" / "Vencido hace 5 días" / "Vence hoy" / "Sin registro"
- * — caption bajo el chip de vigencia en la ficha (`EquipoDetalleView`),
- * derivada de `daysToExpiry` (ya calculado on-read por el backend, no se
- * recalcula acá para no desincronizarse del reloj que usó el server). */
-export function documentExpiryCaption(info: DocumentExpiryInfo): string {
+ * — caption bajo el chip de vigencia de un documento (`EquipoDetalleView` —
+ * dominio "Documentos de equipo", `types/equipment-document.ts`), derivada de
+ * `daysToExpiry` (ya calculado on-read por el backend, no se recalcula acá
+ * para no desincronizarse del reloj que usó el server). Tipado estructural
+ * (no `EquipmentDocument` completo) para que un `Pick` baste en el call site. */
+export function documentExpiryCaption(info: { daysToExpiry: number | null }): string {
   if (info.daysToExpiry == null) return 'Sin registro';
   if (info.daysToExpiry === 0) return 'Vence hoy';
   if (info.daysToExpiry > 0) {
@@ -189,20 +191,22 @@ export function documentExpiryCaption(info: DocumentExpiryInfo): string {
   return `Vencido hace ${dias} día${dias === 1 ? '' : 's'}`;
 }
 
-/**
- * Alerta discreta para el LISTADO (tabla PC / cards, §R1-R2 punto 5): tono
- * más urgente entre revisión técnica y seguro, o `null` si ambos están
- * vigentes/sin dato (no hay nada que destacar). `VENCIDO` siempre gana sobre
- * `POR_VENCER` si ambos documentos tienen problemas distintos.
- */
-export function equipoDocumentAlertTone(
-  equipo: Pick<Equipment, 'documents'>,
-): 'danger' | 'warning' | null {
-  const estados = [equipo.documents.technicalInspection.status, equipo.documents.insurance.status];
-  if (estados.includes('VENCIDO')) return 'danger';
-  if (estados.includes('POR_VENCER')) return 'warning';
-  return null;
+const EQUIPMENT_DOCUMENT_TYPE_LABEL: Record<EquipmentDocumentType, string> = {
+  TECHNICAL_INSPECTION: 'Revisión técnica',
+  INSURANCE: 'Seguro',
+  CIRCULATION_PERMIT: 'Permiso de circulación',
+  CERTIFICATION: 'Certificación',
+  OTHER: 'Otro',
+};
+
+export function equipmentDocumentTypeLabel(type: EquipmentDocumentType): string {
+  return EQUIPMENT_DOCUMENT_TYPE_LABEL[type];
 }
+
+/** Opciones `{value,label}` para el selector de tipo del modal de crear/
+ * editar documento (`EquipmentDocumentModal`). */
+export const EQUIPMENT_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{ value: EquipmentDocumentType; label: string }> =
+  EQUIPMENT_DOCUMENT_TYPES.map((value) => ({ value, label: EQUIPMENT_DOCUMENT_TYPE_LABEL[value] }));
 
 /**
  * "Estado de uso" de un equipo — fuente ÚNICA para `AsignacionCell`

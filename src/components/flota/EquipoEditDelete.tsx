@@ -523,56 +523,6 @@ export function CamposEquipo({
         </div>
       </section>
 
-      {/* R1/R2 (revisión técnica/seguro): ambos opcionales, se puede guardar
-         el equipo sin fecha cargada. `type="date"` calca el patrón que ya
-         usa el filtro "Desde"/"Hasta" de `MovimientosView.tsx` — consistencia
-         de input de fecha en todo el proyecto. */}
-      <section className="flex flex-col gap-3 border-t border-separator pt-4">
-        <p className="label">Documentos</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <Controller
-            control={control}
-            name="technicalInspectionExpiry"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                isInvalid={!!errors.technicalInspectionExpiry}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                type="date"
-                value={field.value}
-              >
-                <Label>Vencimiento revisión técnica (opcional)</Label>
-                <Input />
-                {errors.technicalInspectionExpiry ? (
-                  <FieldError>{errors.technicalInspectionExpiry.message}</FieldError>
-                ) : null}
-              </TextField>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="insuranceExpiry"
-            render={({ field }) => (
-              <TextField
-                fullWidth
-                isInvalid={!!errors.insuranceExpiry}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                type="date"
-                value={field.value}
-              >
-                <Label>Vencimiento seguro (opcional)</Label>
-                <Input />
-                {errors.insuranceExpiry ? <FieldError>{errors.insuranceExpiry.message}</FieldError> : null}
-              </TextField>
-            )}
-          />
-        </div>
-      </section>
     </div>
   );
 }
@@ -581,15 +531,6 @@ export interface EquipoModalProps {
   equipo: Equipment;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-}
-
-/** Convierte un ISO datetime (`equipo.technicalInspectionExpiry`/
- * `insuranceExpiry`, ej. `"2026-12-01T00:00:00.000Z"`) al formato que espera
- * `<Input type="date">` (`"2026-12-01"`), o `''` (sentinel de "vacío" que ya
- * usa el resto del form — `licensePlate`/`homeBranchId`) cuando no hay fecha
- * cargada. */
-function toDateInputValue(iso: string | null): string {
-  return iso ? iso.slice(0, 10) : '';
 }
 
 /** Deriva los `EquipmentFormValues` desde el equipo — la misma forma la usa
@@ -611,8 +552,6 @@ function buildEquipoFormValues(equipo: Equipment): EquipmentFormValues {
     status: equipo.status,
     homeBranchId: equipo.homeBranchId ?? '',
     photoUrl: equipo.photoUrl,
-    technicalInspectionExpiry: toDateInputValue(equipo.technicalInspectionExpiry),
-    insuranceExpiry: toDateInputValue(equipo.insuranceExpiry),
   };
 }
 

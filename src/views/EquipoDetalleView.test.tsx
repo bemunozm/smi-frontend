@@ -45,18 +45,49 @@ vi.mock('../api/EquipmentAPI', () => ({
   },
 }));
 
+// Sección "Documentos" (reemplaza al viejo bloque "Vencimientos" R1/R2) —
+// misma estrategia de mockear la API (no el hook), así `useEquipmentDocuments`
+// y las mutaciones de `useEquipmentDocuments.ts` corren de verdad.
+const { docListMock, docCreateMock, docUpdateMock, docRemoveMock } = vi.hoisted(() => ({
+  docListMock: vi.fn(),
+  docCreateMock: vi.fn(),
+  docUpdateMock: vi.fn(),
+  docRemoveMock: vi.fn(),
+}));
+
+vi.mock('../api/EquipmentDocumentAPI', () => ({
+  EquipmentDocumentAPI: {
+    list: docListMock,
+    create: docCreateMock,
+    update: docUpdateMock,
+    remove: docRemoveMock,
+  },
+}));
+
+// Y la subida del adjunto (`DocumentFileField` → `uploadImage`) — `assetUrl`
+// se deja real porque es una función pura (no pega a la red), mismo criterio
+// que `EquiposView.interactions.test.tsx` con `EquipoPhotoBanner`.
+const { uploadImageMock } = vi.hoisted(() => ({
+  uploadImageMock: vi.fn(),
+}));
+
+vi.mock('../api/UploadsAPI', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
+  return { ...actual, uploadImage: uploadImageMock };
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-// Documentos sin dato — el fixture base representa el caso más común (equipo
-// sin R1/R2 cargado todavía); los tests de vigencia
-// (`EquipoDetalleView — Vencimientos`) sobrescriben con otros estados.
-const SIN_DATO_DOCS = {
-  technicalInspection: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
-  insurance: { expiry: null, status: 'SIN_DATO' as const, daysToExpiry: null },
-};
+// Default sin documentos — los tests del describe "Documentos" lo
+// sobrescriben. `vi.clearAllMocks()` (arriba) borra la implementación entre
+// tests, así que se reaplica acá para que el resto de los describes (que no
+// les importa esta sección) no se queden esperando una promesa nunca resuelta.
+beforeEach(() => {
+  docListMock.mockResolvedValue([]);
+});
 
 const EQUIPO_DETALLE: EquipmentDetail = {
   id: 'eq_1',
@@ -74,14 +105,12 @@ const EQUIPO_DETALLE: EquipmentDetail = {
   homeBranchId: null,
   homeBranch: null,
   photoUrl: null,
-  technicalInspectionExpiry: null,
-  insuranceExpiry: null,
   operator: { id: 'u_op', name: 'Pedro Soto' },
   supervisor: { id: 'u_sup', name: 'Luis Vega' },
   inUse: true,
   currentFuelLevel: 72,
   openShift: null,
-  documents: SIN_DATO_DOCS,
+  documentsAlert: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   _count: { combustibles: 2, horometros: 3, trabajosExtra: 1, hallazgos: 4, stockMovements: 2 },
@@ -692,14 +721,31 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
   });
 });
 
-// R1/R2 — bloque "Vencimientos": chip de vigencia con el tono/label correcto
-// por cada `status` que puede devolver el backend, y la caption con
-// `daysToExpiry`.
-describe('EquipoDetalleView — Vencimientos (R1/R2)', () => {
-  // `beforeEach` (no una asignación directa en el cuerpo del `describe`,
-  // que corre en la fase de COLECCIÓN de Vitest, antes de que cualquier test
-  // se ejecute): así cada `it` de este bloque arranca con el rol correcto
-  // sin importar el orden en que Vitest recolecte los `describe` del archivo.
+// Sección "Documentos" — reemplaza al viejo bloque "Vencimientos" (R1/R2
+// fijos, solo lectura): ahora la unidad puede tener cualquier cantidad de
+// documentos, de cualquiera de los 5 tipos (`EquipmentDocumentType`), y
+// SUPERVISOR/ADMIN pueden agregar/editar/borrar directamente desde acá. Se
+// mockea `EquipmentDocumentAPI` (no el hook), mismo criterio que
+// `EquipmentAPI` arriba.
+describe('EquipoDetalleView — Documentos', () => {
+  const DOCUMENTO_VIGENTE = {
+    id: 'doc_1',
+    equipmentId: 'eq_1',
+    type: 'TECHNICAL_INSPECTION' as const,
+    title: 'Revisión anual',
+    expiryDate: '2026-12-01T00:00:00.000Z',
+    fileUrl: '/uploads/rt.pdf',
+    notes: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    status: 'VIGENTE' as const,
+    daysToExpiry: 71,
+  };
+
+  // `beforeEach` (no una asignación directa en el cuerpo del `describe`, que
+  // corre en la fase de COLECCIÓN de Vitest, antes de que cualquier test se
+  // ejecute): así cada `it` de este bloque arranca con el rol correcto sin
+  // importar el orden en que Vitest recolecte los `describe` del archivo.
   beforeEach(() => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -709,65 +755,149 @@ describe('EquipoDetalleView — Vencimientos (R1/R2)', () => {
     };
   });
 
-  it('VIGENTE: chip verde con "Vigente" y la caption "Vence en N días"', () => {
-    renderFicha(() => {}, {
-      ...EQUIPO_DETALLE,
-      documents: {
-        ...SIN_DATO_DOCS,
-        technicalInspection: {
-          expiry: '2026-12-01T00:00:00.000Z',
-          status: 'VIGENTE' as const,
-          daysToExpiry: 71,
-        },
-      },
-    });
+  // Elige una opción de un `Select` (HeroUI/React Aria) ya abierto — mismo
+  // helper que `EquiposView.interactions.test.tsx#elegirOpcion`: no se puede
+  // usar `getByText`/`findByText` acá porque React Aria mantiene montada una
+  // copia oculta de la colección de items.
+  function elegirOpcion(texto: string): void {
+    const opcion = screen.getAllByRole('option').find((item) => item.textContent === texto);
+    if (!opcion) {
+      throw new Error(`No se encontró la opción "${texto}" entre las visibles del Select abierto.`);
+    }
+    fireEvent.click(opcion);
+  }
 
+  it('muestra el estado vacío cuando el equipo no tiene documentos', async () => {
+    docListMock.mockResolvedValue([]);
+
+    renderFicha();
+
+    expect(await screen.findByText('Esta unidad todavía no tiene documentos registrados.')).toBeTruthy();
+  });
+
+  it('lista un documento con tipo, título, chip de vigencia, caption y link "Ver / descargar"', async () => {
+    docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
+
+    renderFicha();
+
+    expect(await screen.findByText('Revisión técnica')).toBeTruthy();
+    expect(screen.getByText('Revisión anual')).toBeTruthy();
     expect(screen.getByText('Vigente')).toBeTruthy();
-    expect(screen.getByText('Vence en 71 días')).toBeTruthy();
+    expect(screen.getByText(/Vence en 71 días/)).toBeTruthy();
+
+    const link = screen.getByRole('link', { name: 'Ver / descargar' });
+    expect(link.getAttribute('href')).toContain('/uploads/rt.pdf');
+    expect(link.getAttribute('target')).toBe('_blank');
   });
 
-  it('POR_VENCER: chip ámbar con "Por vencer"', () => {
-    renderFicha(() => {}, {
-      ...EQUIPO_DETALLE,
-      documents: {
-        ...SIN_DATO_DOCS,
-        insurance: { expiry: '2026-10-05T00:00:00.000Z', status: 'POR_VENCER' as const, daysToExpiry: 12 },
-      },
-    });
+  it('VENCIDO: chip rojo con "Vencido" y la caption "Vencido hace N días"', async () => {
+    docListMock.mockResolvedValue([
+      { ...DOCUMENTO_VIGENTE, status: 'VENCIDO' as const, daysToExpiry: -5, expiryDate: '2026-08-01T00:00:00.000Z' },
+    ]);
 
-    expect(screen.getByText('Por vencer')).toBeTruthy();
-    expect(screen.getByText('Vence en 12 días')).toBeTruthy();
-  });
-
-  it('VENCIDO: chip rojo con "Vencido" y la caption "Vencido hace N días"', () => {
-    renderFicha(() => {}, {
-      ...EQUIPO_DETALLE,
-      documents: {
-        ...SIN_DATO_DOCS,
-        technicalInspection: { expiry: '2026-08-01T00:00:00.000Z', status: 'VENCIDO' as const, daysToExpiry: -5 },
-      },
-    });
-
-    expect(screen.getByText('Vencido')).toBeTruthy();
-    expect(screen.getByText('Vencido hace 5 días')).toBeTruthy();
-  });
-
-  it('SIN_DATO: chip neutro con "Sin dato" y "Sin registro" en vez de una fecha', () => {
     renderFicha();
 
-    // El fixture base (`EQUIPO_DETALLE`) ya trae ambos documentos SIN_DATO.
-    // "Sin registro" aparece una sola vez por documento (en el lugar de la
-    // fecha) — sin caption redundante debajo cuando no hay dato cargado.
-    expect(screen.getAllByText('Sin dato').length).toBe(2);
-    expect(screen.getAllByText('Sin registro').length).toBe(2);
+    expect(await screen.findByText('Vencido')).toBeTruthy();
+    expect(screen.getByText(/Vencido hace 5 días/)).toBeTruthy();
   });
 
-  it('muestra las dos filas con sus labels ("Revisión técnica" y "Seguro")', () => {
+  it('oculta "Agregar documento" y las acciones editar/borrar para roles sin permiso (MANTENEDOR)', async () => {
+    currentUserResult = {
+      user: { id: 'u2', name: 'Mantenedor SMI', email: 'mantenedor@smi.local', role: 'MANTENEDOR' },
+      role: 'MANTENEDOR',
+      isPending: false,
+      isAuthenticated: true,
+    };
+    docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
+
     renderFicha();
 
-    expect(screen.getByText('Revisión técnica')).toBeTruthy();
-    expect(screen.getByText('Seguro')).toBeTruthy();
-    expect(screen.getByText('Vencimientos')).toBeTruthy();
+    await screen.findByText('Revisión anual');
+    expect(screen.queryByRole('button', { name: 'Agregar documento' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Editar documento' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Eliminar documento' })).toBeNull();
+  });
+
+  it('agrega un documento con archivo adjunto — sube el archivo y crea con la URL resultante', async () => {
+    docListMock.mockResolvedValueOnce([]);
+    uploadImageMock.mockResolvedValue('/uploads/seguro.pdf');
+    docCreateMock.mockResolvedValue(DOCUMENTO_VIGENTE);
+
+    renderFicha();
+    await screen.findByText('Esta unidad todavía no tiene documentos registrados.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar documento' }));
+    await screen.findByRole('heading', { name: 'Agregar documento' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Tipo de documento/ }));
+    elegirOpcion('Seguro');
+
+    fireEvent.change(screen.getByLabelText('Título (opcional)'), { target: { value: 'Póliza 2026' } });
+
+    // El modal de HeroUI portea su contenido fuera del `container` que
+    // devuelve `render()` (mismo motivo que `within(dialogo)` usa `screen`,
+    // no `container`, para el `AlertDialog`) — se busca el input en
+    // `document`, calificado por su `accept` para no matchear el de
+    // `EquipoPhotoBanner` si estuviera montado.
+    const archivo = new File(['contenido'], 'poliza.pdf', { type: 'application/pdf' });
+    const input = document.querySelector(
+      'input[type="file"][accept="application/pdf,image/*"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await waitFor(() => expect(uploadImageMock).toHaveBeenCalledWith(archivo));
+    await screen.findByText('Ver archivo actual');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() =>
+      expect(docCreateMock).toHaveBeenCalledWith('eq_1', {
+        type: 'INSURANCE',
+        title: 'Póliza 2026',
+        fileUrl: '/uploads/seguro.pdf',
+      }),
+    );
+  });
+
+  it('edita un documento existente — precarga sus datos y guarda con PATCH usando el id', async () => {
+    docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
+    docUpdateMock.mockResolvedValue({ ...DOCUMENTO_VIGENTE, title: 'Revisión anual (renovada)' });
+
+    renderFicha();
+    await screen.findByText('Revisión anual');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar documento' }));
+    await screen.findByRole('heading', { name: 'Editar documento' });
+
+    expect((screen.getByLabelText('Título (opcional)') as HTMLInputElement).value).toBe('Revisión anual');
+    expect((screen.getByLabelText('Vencimiento (opcional)') as HTMLInputElement).value).toBe('2026-12-01');
+
+    fireEvent.change(screen.getByLabelText('Título (opcional)'), {
+      target: { value: 'Revisión anual (renovada)' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() =>
+      expect(docUpdateMock).toHaveBeenCalledWith(
+        'doc_1',
+        expect.objectContaining({ title: 'Revisión anual (renovada)' }),
+      ),
+    );
+  });
+
+  it('elimina un documento al confirmar el AlertDialog', async () => {
+    docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
+    docRemoveMock.mockResolvedValue({ id: 'doc_1' });
+
+    renderFicha();
+    await screen.findByText('Revisión anual');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar documento' }));
+
+    const dialogo = await screen.findByRole('alertdialog');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Eliminar' }));
+
+    await waitFor(() => expect(docRemoveMock).toHaveBeenCalledWith('doc_1'));
   });
 });
 
@@ -807,80 +937,3 @@ describe('EquipoDetalleView — R3 identidad por clase', () => {
   });
 });
 
-// R1/R2 — el form de editar (`EditEquipoModal` → `CamposEquipo`) precarga y
-// envía los 2 vencimientos, y permite limpiarlos.
-describe('EquipoDetalleView — form de documentos (R1/R2)', () => {
-  beforeEach(() => {
-    currentUserResult = {
-      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
-      role: 'ADMIN',
-      isPending: false,
-      isAuthenticated: true,
-    };
-  });
-
-  it('precarga los 2 vencimientos en el form de editar, convertidos a `YYYY-MM-DD`', async () => {
-    renderFicha(() => {}, {
-      ...EQUIPO_DETALLE,
-      technicalInspectionExpiry: '2026-12-01T00:00:00.000Z',
-      insuranceExpiry: '2027-01-15T00:00:00.000Z',
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Editar equipo' }));
-    await screen.findByText('Editar EX-001');
-
-    expect((screen.getByLabelText('Vencimiento revisión técnica (opcional)') as HTMLInputElement).value).toBe(
-      '2026-12-01',
-    );
-    expect((screen.getByLabelText('Vencimiento seguro (opcional)') as HTMLInputElement).value).toBe('2027-01-15');
-  });
-
-  it('precarga el form vacío cuando el equipo no tiene vencimientos cargados', async () => {
-    renderFicha();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Editar equipo' }));
-    await screen.findByText('Editar EX-001');
-
-    expect((screen.getByLabelText('Vencimiento revisión técnica (opcional)') as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText('Vencimiento seguro (opcional)') as HTMLInputElement).value).toBe('');
-  });
-
-  it('al cargar una fecha y guardar, el PATCH manda el vencimiento informado', async () => {
-    updateMock.mockResolvedValue(EQUIPO_DETALLE);
-
-    renderFicha();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Editar equipo' }));
-    await screen.findByText('Editar EX-001');
-
-    fireEvent.change(screen.getByLabelText('Vencimiento revisión técnica (opcional)'), {
-      target: { value: '2026-12-01' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-
-    await waitFor(() =>
-      expect(updateMock).toHaveBeenCalledWith(
-        'eq_1',
-        expect.objectContaining({ technicalInspectionExpiry: '2026-12-01' }),
-      ),
-    );
-  });
-
-  it('al limpiar una fecha ya cargada y guardar, el PATCH manda `null` explícito (no omite la clave)', async () => {
-    updateMock.mockResolvedValue(EQUIPO_DETALLE);
-
-    renderFicha(() => {}, { ...EQUIPO_DETALLE, insuranceExpiry: '2027-01-15T00:00:00.000Z' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Editar equipo' }));
-    await screen.findByText('Editar EX-001');
-
-    expect((screen.getByLabelText('Vencimiento seguro (opcional)') as HTMLInputElement).value).toBe('2027-01-15');
-
-    fireEvent.change(screen.getByLabelText('Vencimiento seguro (opcional)'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-
-    await waitFor(() =>
-      expect(updateMock).toHaveBeenCalledWith('eq_1', expect.objectContaining({ insuranceExpiry: null })),
-    );
-  });
-});
