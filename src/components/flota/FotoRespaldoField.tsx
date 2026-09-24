@@ -29,6 +29,11 @@ interface FotoRespaldoFieldProps {
  * presenta ese estado, para que el DOM que produce (y los textos que buscan
  * los tests: "Analizando la foto…", "· reciente", etc.) quede idéntico al de
  * antes de la extracción.
+ *
+ * Incluye una guía de captura fija (texto, sin overlay de cámara — alcanza
+ * para el MVP) para mejorar la tasa de acierto del OCR server-side: pedirle
+ * al usuario que encuadre de frente, sin sombras/reflejos, reduce fotos
+ * ilegibles antes de que lleguen al backend.
  */
 export function FotoRespaldoField({
   file,
@@ -45,6 +50,9 @@ export function FotoRespaldoField({
     <div>
       <p className="mb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
         Foto de respaldo <span className="text-(--danger)">· requerida</span>
+      </p>
+      <p className="mb-2 text-xs text-(--muted)">
+        Sacá la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.
       </p>
       <PhotoCaptureField
         file={file}
