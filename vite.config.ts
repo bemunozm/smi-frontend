@@ -59,6 +59,47 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
           runtimeCaching: [
             {
+              // Archivos firmados de Flota (foto de equipo, documento, foto de
+              // carga de combustible — R2/MinIO, ver Diseño del RFC
+              // R2-storage, sección "PWA"). Va ANTES de la regla genérica de
+              // imágenes cross-origin de abajo: objetos firmados son
+              // inmutables (key = uuid), así que se cachean con la key SIN el
+              // query — la firma cambia cada `TTL/2` pero el contenido no.
+              //
+              // Fuente única para tests: `src/pwa/signed-url-cache.ts`
+              // (`isSignedFileUrl`/`stripSignedUrlQuery`). Esta copia queda
+              // INLINE y AUTOCONTENIDA a propósito — ver el comentario de
+              // `escapedOrigin` más arriba sobre por qué `urlPattern`/
+              // `cacheKeyWillBeUsed` no pueden depender de imports ni de
+              // scope externo (workbox-build los serializa con
+              // `Function.prototype.toString()`). Replicá a mano cualquier
+              // cambio de lógica en ambos lugares.
+              urlPattern: ({ url }) => url.searchParams.has('X-Amz-Signature'),
+              method: 'GET',
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'smi-signed-files',
+                cacheableResponse: { statuses: [200] },
+                // 7 días (no 30): son archivos PRIVADOS de Flota (foto de
+                // equipo, documento, foto de carga) — un logout ya los borra
+                // de Cache Storage a propósito (ver `lib/logout.ts`,
+                // SEGURIDAD M1 del review QA), pero esta ventana más corta
+                // acota la exposición residual para el caso en que el
+                // navegador nunca llegue a correr ese logout (cierre
+                // abrupto, storage no evictado, etc.).
+                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
+                plugins: [
+                  {
+                    cacheKeyWillBeUsed: async ({ request }) => {
+                      const url = new URL(request.url)
+                      url.search = ''
+                      return url.toString()
+                    },
+                  },
+                ],
+              },
+            },
+            {
               // Fotos/adjuntos servidos por el backend: lectura offline de lo
               // ya visto, prioridad a lo cacheado (cambian poco una vez subidos).
               urlPattern: apiUploadsPattern,
