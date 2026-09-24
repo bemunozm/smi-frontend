@@ -2,14 +2,15 @@ import { useRef, useState } from 'react';
 import { toast } from '@heroui/react';
 
 import { uploadImage } from '../api/UploadsAPI';
-import { readCaptureDate, recognizeReading, type OcrResult } from './photo-reading';
+import { fuelReadingOcr, type FuelReadingOcrResult } from '../api/OcrAPI';
+import { readCaptureDate } from './photo-reading';
 
 export interface UsePhotoCaptureFlowResult {
   file: File | null;
   isReadingPhoto: boolean;
   isUploadingPhoto: boolean;
   captureDate: Date | null;
-  ocr: OcrResult | null;
+  ocr: FuelReadingOcrResult | null;
   handleSelectPhoto: (file: File) => Promise<void>;
   handleClearPhoto: () => void;
   /** Resetea todo el estado de la foto (file/OCR/EXIF/subida) — el llamador
@@ -39,21 +40,30 @@ export interface UsePhotoCaptureFlowResult {
  * antes triplicada casi verbatim entre `RegistrarEntradaModal`,
  * `RegistrarSalidaModal` y `RegistrarCargaCombustibleModal` (Fix F-MEDIA #1,
  * review adversarial): al seleccionar la foto corre EXIF (fecha real de
- * captura, `readCaptureDate`) y OCR (sugerencia numérica, `recognizeReading`)
- * EN PARALELO, y expone una subida con cancelación para el `onSubmit` de
- * cada modal.
+ * captura, `readCaptureDate`) y OCR (sugerencia numérica) EN PARALELO, y
+ * expone una subida con cancelación para el `onSubmit` de cada modal.
  *
- * `onReadingDetected` es el único punto que varía entre los 3 llamadores —
- * qué campo del form recibe la lectura sugerida (`valorInicial`/`valorFinal`/
- * `litros`), vía el `setValue(..., { shouldValidate: true })` propio de cada
- * modal. El resto del estado (file/OCR/EXIF/subida) es idéntico en los tres.
+ * `RegistrarEntradaModal`/`RegistrarSalidaModal` ya no usan foto (se sacó
+ * del horómetro), así que hoy `RegistrarCargaCombustibleModal` es el único
+ * consumidor — el OCR está hardcodeado a `fuelReadingOcr` (server-side, ver
+ * `api/OcrAPI.ts`; reemplazó al `recognizeReading` client-side de
+ * `tesseract.js`, que no servía para el display de 7 segmentos del
+ * surtidor) en vez de inyectarse, para no sumar una abstracción sin un
+ * segundo consumidor real que la necesite. Si en el futuro otro modal vuelve
+ * a necesitar foto+OCR con OTRO reconocedor, ese es el momento de convertir
+ * `fuelReadingOcr` en un parámetro.
+ *
+ * `onReadingDetected` es el único punto que variaba entre los 3 llamadores
+ * originales — qué campo del form recibe la lectura sugerida
+ * (`valorInicial`/`valorFinal`/`litros`), vía el
+ * `setValue(..., { shouldValidate: true })` propio de cada modal.
  */
 export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void): UsePhotoCaptureFlowResult {
   const [file, setFile] = useState<File | null>(null);
   const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [captureDate, setCaptureDate] = useState<Date | null>(null);
-  const [ocr, setOcr] = useState<OcrResult | null>(null);
+  const [ocr, setOcr] = useState<FuelReadingOcrResult | null>(null);
   // Se marca en `cancelar()` y se revisa después del `await uploadImage(...)`
   // en `upload`: la subida de la foto no es cancelable (es una promesa ya en
   // vuelo), así que si el usuario cierra/cancela MIENTRAS sube, esto evita
@@ -66,11 +76,21 @@ export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void):
     setCaptureDate(null);
     setIsReadingPhoto(true);
     try {
-      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), recognizeReading(selected)]);
+      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), fuelReadingOcr(selected)]);
       setCaptureDate(fecha);
-      if (lectura.value) {
-        setOcr(lectura);
-        onReadingDetected(Number(lectura.value));
+      // Se guarda el resultado completo aunque `value` sea `null` — el modal
+      // lo necesita para distinguir "sin sugerencia" (muestra aviso de baja
+      // confianza) de "todavía no se leyó" (mientras `isReadingPhoto`).
+      setOcr(lectura);
+      if (lectura.value != null) {
+        // El backend ya entrega `value` con el punto decimal puesto (ej.
+        // "183.089"), pero igual se guarda el guard de NaN por si alguna vez
+        // llega un string no numérico — no autorrellenamos con NaN: se deja
+        // el campo como estaba y el usuario corrige a mano.
+        const parsedValue = Number(lectura.value);
+        if (Number.isFinite(parsedValue)) {
+          onReadingDetected(parsedValue);
+        }
       }
     } finally {
       setIsReadingPhoto(false);

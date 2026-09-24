@@ -1,20 +1,11 @@
-// Utilidades de navegador para el flujo de trazabilidad foto→OCR→EXIF
-// (registro de lectura de horómetro / carga de combustible, dominio Flota).
-// Todo corre 100% en el cliente — no hay endpoint de backend involucrado acá.
+// Utilidades de navegador para el flujo de trazabilidad foto→EXIF (registro
+// de carga de combustible, dominio Flota). El OCR de la lectura se mudó al
+// backend (`api/OcrAPI.ts#fuelReadingOcr`) — acá solo queda la validación de
+// frescura vía metadata EXIF, que sí sigue siendo 100% client-side.
 //
-// `tesseract.js` (OCR) y `exifr` (EXIF) se cargan por IMPORT DINÁMICO: ambos
-// solo se necesitan cuando el usuario efectivamente toma/sube una foto, así
-// que no deben inflar el bundle principal (`tesseract.js` en particular pesa
-// varios MB con su motor wasm).
-
-export interface OcrResult {
-  /** Dígitos reconocidos como la lectura más probable. `''` si no se detectó
-   * ningún número o si el OCR falló — el llamador debe tratarlo como "no se
-   * pudo sugerir nada", nunca como un valor a autocompletar. */
-  value: string;
-  /** Confianza de Tesseract (0-100) para el texto reconocido en general. */
-  confidence: number;
-}
+// `exifr` se carga por IMPORT DINÁMICO: solo se necesita cuando el usuario
+// efectivamente toma/sube una foto, así que no debe inflar el bundle
+// principal.
 
 const DEFAULT_FRESH_THRESHOLD_HOURS = 24;
 
@@ -85,72 +76,4 @@ export function formatRelative(date: Date): string {
 
   const diffDias = Math.round(diffHoras / 24);
   return `hace ${diffDias} día${diffDias === 1 ? '' : 's'}`;
-}
-
-/** Forma mínima de `tesseract.js` que usamos — mismo motivo que `ExifrLike`. */
-interface TesseractLike {
-  recognize: (image: File, langs?: string) => Promise<{ data: { text: string; confidence: number } }>;
-}
-
-// Grupos de 1+ dígitos, con puntos/comas de miles/decimales opcionales en
-// medio ("1.234", "1,234", "1234.5", "1234" son todos candidatos válidos).
-const NUMBER_PATTERN = /\d[\d.,]*\d|\d/g;
-
-/** Cantidad de dígitos de un candidato, ignorando separadores — se usa solo
- * para elegir el candidato "más largo", nunca para construir el valor final
- * (eso lo hace `normalizeNumber`, que sí distingue miles de decimales). */
-function digitCount(value: string): number {
-  return value.replace(/[.,]/g, '').length;
-}
-
-/**
- * Normaliza un candidato numérico crudo del OCR a un string parseable por
- * `Number()`. El único separador relevante es el ÚLTIMO: si va seguido de
- * exactamente 1-2 dígitos y nada más, es el separador DECIMAL (ej. "1234.5",
- * "80,5", o el formato europeo "1.234,50"); cualquier otro punto/coma antes
- * de ese es separador de miles y se descarta. Sin un separador así al final,
- * se asume que todos son de miles (ej. "1,234" → "1234").
- *
- * Antes esto se resolvía sacando TODOS los separadores sin distinguir, lo
- * que multiplicaba por 10 cualquier lectura con decimales ("1234.5" → "12345").
- */
-function normalizeNumber(raw: string): string {
-  const decimalMatch = raw.match(/[.,](\d{1,2})$/);
-  if (decimalMatch) {
-    const decimales = decimalMatch[1];
-    const parteEntera = raw.slice(0, raw.length - decimales.length - 1).replace(/[.,]/g, '');
-    return `${parteEntera}.${decimales}`;
-  }
-  return raw.replace(/[.,]/g, '');
-}
-
-/** De todo el texto reconocido por el OCR, elige el número más largo (más
- * dígitos) como la lectura más probable: en la foto de un marcador o
- * totalizador, ese número casi siempre es la lectura en sí — el ruido
- * alrededor (fechas parciales, códigos, letras mal leídas como dígitos)
- * produce números más cortos. */
-function extractBestNumber(text: string): string {
-  const matches = text.match(NUMBER_PATTERN);
-  if (!matches || matches.length === 0) return '';
-
-  const best = matches.reduce((acc, candidate) => (digitCount(candidate) > digitCount(acc) ? candidate : acc));
-  return normalizeNumber(best);
-}
-
-/**
- * OCR best-effort sobre la foto para sugerir la lectura numérica (horómetro,
- * odómetro o litros según el contexto). El usuario SIEMPRE puede editar el
- * resultado — esto es una sugerencia, no una fuente de verdad. Nunca lanza:
- * cualquier falla (carga del motor, imagen ilegible, etc.) se resuelve como
- * "sin sugerencia" para no bloquear el registro manual.
- */
-export async function recognizeReading(file: File): Promise<OcrResult> {
-  try {
-    const mod = (await import('tesseract.js')) as unknown as { default?: TesseractLike } & TesseractLike;
-    const tesseract = mod.default ?? mod;
-    const { data } = await tesseract.recognize(file, 'eng');
-    return { value: extractBestNumber(data.text), confidence: Math.round(data.confidence) || 0 };
-  } catch {
-    return { value: '', confidence: 0 };
-  }
 }

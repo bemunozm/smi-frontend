@@ -1,7 +1,8 @@
+import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Chip, FieldError, Label, ListBox, Modal, NumberField, Select, Spinner } from '@heroui/react';
+import { Button, Chip, FieldError, Input, Label, ListBox, Modal, NumberField, Select, Spinner, TextField } from '@heroui/react';
 
 import { useCreateCombustible } from '../../hooks/useCombustible';
 import type { CombustibleForm } from '../../types/combustible';
@@ -20,10 +21,20 @@ const TIPO_OPTIONS = [
 const CargaSchema = z.object({
   litros: z.number().positive('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
+  fecha: z.string().min(1, 'Requerido'),
 });
 type CargaFormValues = z.infer<typeof CargaSchema>;
 
-const DEFAULT_VALUES: CargaFormValues = { litros: 0, tipo: 'PETROLEO' };
+const DEFAULT_VALUES: CargaFormValues = { litros: 0, tipo: 'PETROLEO', fecha: '' };
+
+/** Convierte un `Date` al formato LOCAL que espera `<input type="datetime-local">`
+ * (`"YYYY-MM-DDTHH:mm"`, en la zona horaria del dispositivo — no UTC). Se usa
+ * solo para precargar el campo; al enviar, ese string local se reconvierte a
+ * ISO (`new Date(local).toISOString()`) en el payload. */
+function toLocalDateTimeInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 interface RegistrarCargaCombustibleModalProps {
   equipoId: string;
@@ -38,7 +49,10 @@ interface RegistrarCargaCombustibleModalProps {
  * foto es obligatoria, de ella se autorrellena los litros por OCR (editable)
  * y se valida la fecha real de captura vía EXIF. A diferencia de la lectura
  * de horómetro, acá la foto SÍ se sube y queda archivada (`fotoUrl` existe en
- * `RegistroCombustible` — ver `types/combustible.ts`).
+ * `RegistroCombustible` — ver `types/combustible.ts`). "Fecha de carga"
+ * (`fecha`) se autorrellena del mismo EXIF (o "ahora" si la foto no lo trae)
+ * y queda editable — es lo que el backend persiste como `RegistroCombustible.fecha`
+ * en vez de su `@default(now())`.
  */
 export function RegistrarCargaCombustibleModal({
   equipoId,
@@ -65,6 +79,17 @@ export function RegistrarCargaCombustibleModal({
   // por OCR autorrellena `litros`.
   const photoFlow = usePhotoCaptureFlow((value) => setValue('litros', value, { shouldValidate: true }));
 
+  // Pre-relleno automático de "Fecha de carga": se dispara cuando termina la
+  // lectura EXIF+OCR de la foto recién elegida (`isReadingPhoto` pasa a
+  // `false`). Con EXIF, usa la fecha real de captura; sin EXIF (`captureDate
+  // === null`), usa "ahora". Solo fija el valor inicial — el campo queda
+  // editable a mano después.
+  useEffect(() => {
+    if (!photoFlow.file || photoFlow.isReadingPhoto) return;
+    const capturada = photoFlow.captureDate ?? new Date();
+    setValue('fecha', toLocalDateTimeInputValue(capturada), { shouldValidate: true });
+  }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue]);
+
   const limpiarTodo = () => {
     reset(DEFAULT_VALUES);
     photoFlow.resetPhoto();
@@ -79,6 +104,13 @@ export function RegistrarCargaCombustibleModal({
     limpiarTodo();
     onOpenChange(false);
   };
+
+  // El OCR queda "leído" recién cuando terminó de analizar la foto elegida —
+  // antes de eso (`isReadingPhoto`) no corresponde mostrar ni chip ni aviso.
+  // `photoFlow.ocr` se guarda completo aunque `value` sea `null` (ver
+  // `usePhotoCaptureFlow`), así que acá se decide qué chip mostrar según el
+  // `status` del ensemble (CONFIRMED/REVIEW/UNREADABLE) de ese resultado.
+  const ocrLeido = photoFlow.file && !photoFlow.isReadingPhoto ? photoFlow.ocr : null;
 
   const litros = watch('litros');
   const puedeGuardar =
@@ -102,6 +134,7 @@ export function RegistrarCargaCombustibleModal({
       litros: values.litros,
       tipo: values.tipo,
       fotoUrl,
+      fecha: new Date(values.fecha).toISOString(),
     };
     crear.mutate(payload, { onSuccess: cerrar });
   };
@@ -155,11 +188,20 @@ export function RegistrarCargaCombustibleModal({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Label>Litros</Label>
-                      {photoFlow.ocr?.value && (
-                        <Chip color="accent" size="sm" variant="soft">
-                          Autorrellenado por OCR · {photoFlow.ocr.confidence}%
-                        </Chip>
-                      )}
+                      {ocrLeido &&
+                        (ocrLeido.status === 'CONFIRMED' ? (
+                          <Chip color="success" size="sm" variant="soft">
+                            Leído de la foto
+                          </Chip>
+                        ) : ocrLeido.status === 'REVIEW' ? (
+                          <Chip color="warning" size="sm" variant="soft">
+                            ⚠️ Verificá el valor leído
+                          </Chip>
+                        ) : (
+                          <Chip color="default" size="sm" variant="soft">
+                            No se pudo leer la foto, ingresá los litros a mano
+                          </Chip>
+                        ))}
                     </div>
                     <NumberField.Group>
                       <NumberField.DecrementButton />
@@ -202,6 +244,26 @@ export function RegistrarCargaCombustibleModal({
                       </ListBox>
                     </Select.Popover>
                   </Select>
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="fecha"
+                render={({ field }) => (
+                  <TextField
+                    fullWidth
+                    isInvalid={!!errors.fecha}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                    type="datetime-local"
+                    value={field.value}
+                  >
+                    <Label>Fecha de carga</Label>
+                    <Input />
+                    {errors.fecha ? <FieldError>{errors.fecha.message}</FieldError> : null}
+                  </TextField>
                 )}
               />
             </form>

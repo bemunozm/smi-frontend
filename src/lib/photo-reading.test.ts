@@ -1,15 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isFresh, formatRelative, readCaptureDate, recognizeReading } from './photo-reading';
+import { isFresh, formatRelative, readCaptureDate } from './photo-reading';
 
 const parseMock = vi.fn();
-const recognizeMock = vi.fn();
 
 vi.mock('exifr', () => ({
   default: { parse: (...args: unknown[]) => parseMock(...args) },
-}));
-
-vi.mock('tesseract.js', () => ({
-  default: { recognize: (...args: unknown[]) => recognizeMock(...args) },
 }));
 
 const FILE = new File(['x'], 'foto.jpg', { type: 'image/jpeg' });
@@ -89,46 +84,5 @@ describe('readCaptureDate', () => {
   it('devuelve null (no lanza) si exifr falla', async () => {
     parseMock.mockRejectedValue(new Error('archivo inválido'));
     await expect(readCaptureDate(FILE)).resolves.toBeNull();
-  });
-});
-
-describe('recognizeReading', () => {
-  beforeEach(() => {
-    recognizeMock.mockReset();
-  });
-
-  it('extrae el número más largo del texto reconocido como la lectura', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: 'ODO km 12345 h 42', confidence: 87.4 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '12345', confidence: 87 });
-  });
-
-  it('preserva el separador decimal en vez de multiplicar la lectura por 10', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: 'Horómetro 1234.5 h', confidence: 90 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '1234.5', confidence: 90 });
-  });
-
-  it('interpreta la coma como separador de miles cuando no va al final con 1-2 dígitos', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: 'Odómetro 1,234 km', confidence: 85 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '1234', confidence: 85 });
-  });
-
-  it('interpreta la coma como decimal cuando va al final con 1-2 dígitos (formato litros)', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: '80,5 L', confidence: 92 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '80.5', confidence: 92 });
-  });
-
-  it('formato europeo miles+decimal ("1.234,50") conserva ambos separadores correctamente', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: '1.234,50', confidence: 88 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '1234.50', confidence: 88 });
-  });
-
-  it('sin números en el texto reconocido, no sugiere ningún valor (aunque haya confianza general)', async () => {
-    recognizeMock.mockResolvedValue({ data: { text: 'sin datos legibles', confidence: 40 } });
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '', confidence: 40 });
-  });
-
-  it('si tesseract falla, no rompe: resuelve sin sugerencia', async () => {
-    recognizeMock.mockRejectedValue(new Error('el motor OCR no cargó'));
-    await expect(recognizeReading(FILE)).resolves.toEqual({ value: '', confidence: 0 });
   });
 });
