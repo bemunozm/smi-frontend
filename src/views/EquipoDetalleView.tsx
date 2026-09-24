@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   Clock,
+  Download,
   Droplet,
   Pencil,
   Plus,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 import { AlertDialog, Button, Card, Dropdown, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
 
-import { assetUrl } from '../api/UploadsAPI';
+import { env } from '../config/env';
 import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
 import { useCombustibleList } from '../hooks/useCombustible';
@@ -270,7 +271,12 @@ function DocumentoItemRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const href = assetUrl(documento.fileUrl);
+  // `fileUrl` (firmada, del listado) solo dice SI hay archivo adjunto — el
+  // link usa el endpoint de redirect 302 (`GET .../documents/:id/file`), que
+  // firma una URL RECIÉN generada en cada click: a diferencia de `fileUrl`,
+  // sirve aunque la pestaña lleve horas abierta (ver Diseño del RFC
+  // R2-storage, "Contrato de la API — Documentos").
+  const href = documento.fileUrl ? `${env.apiUrl}/api/equipment/documents/${documento.id}/file` : null;
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-t border-separator py-3 first:border-t-0 first:pt-0">
@@ -290,12 +296,20 @@ function DocumentoItemRow({
         </span>
         {href ? (
           <a
-            className="w-fit text-xs font-semibold text-(--accent) hover:underline"
+            className="flex min-w-0 items-center gap-1 text-xs font-semibold text-(--accent) hover:underline"
             href={href}
-            rel="noreferrer"
+            rel="noopener noreferrer"
             target="_blank"
           >
-            Ver / descargar
+            <Download aria-hidden className="h-3 w-3 shrink-0" />
+            {/* Nombre "humano" del archivo (`fileName`, ej. "Póliza Seguro.pdf")
+               en vez de la URL firmada, que ahora lleva query de firma — mismo
+               criterio que `DocumentFileField` en `EquipmentDocumentModal.tsx`.
+               `title` muestra el nombre completo al pasar el mouse cuando
+               `truncate` lo corta (anchos de tablet). */}
+            <span className="min-w-0 truncate" title={documento.fileName ?? undefined}>
+              {documento.fileName ?? 'Ver / descargar'}
+            </span>
           </a>
         ) : null}
       </div>

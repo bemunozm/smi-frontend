@@ -16,7 +16,7 @@ import {
   toast,
 } from '@heroui/react';
 
-import { assetUrl, uploadImage } from '../../api/UploadsAPI';
+import { uploadFile } from '../../api/UploadsAPI';
 import { useBranch, useBranches } from '../../hooks/useBranches';
 import { useAssignEquipment, useDeleteEquipment, useUpdateEquipment } from '../../hooks/useEquipment';
 import { useUsers } from '../../hooks/useUsers';
@@ -62,65 +62,118 @@ export function idDesdeSentinel(value: string): string | null {
  * (`-mx-6 -mt-6`, cancela el `p-6` de `Modal.Dialog`) hasta sus bordes —
  * mismo truco que un cover de perfil. Vive FUERA de `CamposEquipo` (se
  * renderiza antes de `Modal.Header`, no dentro de `Modal.Body`) para poder
- * sangrar hasta arriba de todo el diálogo; sigue sin subir nada hasta que el
- * usuario elige un archivo (`uploadImage`), mismo patrón de subida inmediata
- * que `PhotoDropzone` (`components/terreno/mobile.tsx`).
+ * sangrar hasta arriba de todo el diálogo.
+ *
+ * Sigue sin subir nada hasta que el usuario elige un archivo (`uploadFile`,
+ * Flota vía R2/MinIO — ver Diseño del RFC R2-storage), mismo patrón de
+ * subida inmediata que `PhotoDropzone` (`components/terreno/mobile.tsx`). A
+ * diferencia de la versión legacy (`uploadImage`, que devolvía una URL que se
+ * guardaba directo en el form), acá `onKeyChange` reporta la KEY `tmp/…` al
+ * padre — la foto ya NO vive en `EquipmentFormValues` (ver el comentario de
+ * `toEquipmentPayload`): el padre la guarda en un estado aparte ("dirty key")
+ * y la manda como `photoKey` SOLO si el usuario la tocó, así un refetch de la
+ * ficha mientras el modal está abierto no pisa una subida pendiente.
+ *
+ * El preview usa `URL.createObjectURL` apenas se elige el archivo (feedback
+ * inmediato mientras sube) y lo reemplaza por la URL firmada que devuelve
+ * `uploadFile` al terminar, revocando el object URL local en cada paso — ver
+ * `revokeObjectUrl`.
  */
 export function EquipoPhotoBanner({
-  value,
-  onChange,
+  savedPhotoUrl,
+  onKeyChange,
 }: {
-  value: string | null;
-  onChange: (url: string | null) => void;
+  /** Foto ya guardada del equipo (URL firmada, absoluta) — `null` sin foto. */
+  savedPhotoUrl: string | null;
+  /** `undefined` = sin cambios (se sigue mostrando `savedPhotoUrl`), `null` =
+   * el usuario quitó la foto, string = key `tmp/…` de una subida nueva. */
+  onKeyChange: (key: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const src = assetUrl(value);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removed, setRemoved] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const revokeObjectUrl = () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  };
+  useEffect(() => () => revokeObjectUrl(), []);
 
   const handleFile = async (file: File | undefined): Promise<void> => {
     if (!file) return;
+    revokeObjectUrl();
+    const objectUrl = URL.createObjectURL(file);
+    objectUrlRef.current = objectUrl;
+    setPreviewUrl(objectUrl);
+    setRemoved(false);
     setIsUploading(true);
     try {
-      onChange(await uploadImage(file));
-    } catch {
-      toast.danger('No se pudo subir la foto. Intenta de nuevo.');
+      const { key, url } = await uploadFile(file);
+      revokeObjectUrl();
+      setPreviewUrl(url);
+      onKeyChange(key);
+    } catch (error) {
+      revokeObjectUrl();
+      setPreviewUrl(null);
+      toast.danger(error instanceof Error ? error.message : 'No se pudo subir la foto. Intenta de nuevo.');
     } finally {
       setIsUploading(false);
     }
   };
 
+  const handleRemove = () => {
+    revokeObjectUrl();
+    setPreviewUrl(null);
+    setRemoved(true);
+    onKeyChange(null);
+  };
+
+  const src = removed ? null : (previewUrl ?? savedPhotoUrl);
+  const hasPhoto = src != null;
+
   return (
     <div className="-mx-6 -mt-6 mb-5 flex flex-col overflow-hidden">
       <div className="flex h-36 w-full items-center justify-center bg-surface-tertiary sm:h-44">
         {src ? (
-          <img alt="Foto del equipo" className="h-full w-full object-cover" src={src} />
+          <img alt="Foto del equipo" className="h-full w-full object-cover" crossOrigin="anonymous" src={src} />
         ) : (
           <ImageIcon aria-hidden className="h-10 w-10 text-(--muted)" />
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 bg-surface-secondary px-6 py-3">
-        <span className="text-xs text-(--muted)">JPG o PNG · sirve para identificar el equipo de un vistazo.</span>
-        <Button
-          isPending={isUploading}
-          size="sm"
-          type="button"
-          variant="secondary"
-          onPress={() => inputRef.current?.click()}
-        >
-          {({ isPending }) =>
-            isPending ? (
-              <Spinner color="current" size="sm" />
-            ) : (
-              <>
-                <Camera className="h-4 w-4" />
-                {value ? 'Cambiar foto' : 'Subir foto'}
-              </>
-            )
-          }
-        </Button>
+        <span className="text-xs text-(--muted)">JPG, PNG o WebP · máx. 8 MB.</span>
+        <div className="flex items-center gap-2">
+          {hasPhoto ? (
+            <Button isDisabled={isUploading} size="sm" type="button" variant="tertiary" onPress={handleRemove}>
+              Quitar foto
+            </Button>
+          ) : null}
+          <Button
+            isPending={isUploading}
+            size="sm"
+            type="button"
+            variant="secondary"
+            onPress={() => inputRef.current?.click()}
+          >
+            {({ isPending }) =>
+              isPending ? (
+                <Spinner color="current" size="sm" />
+              ) : (
+                <>
+                  <Camera className="h-4 w-4" />
+                  {hasPhoto ? 'Cambiar foto' : 'Subir foto'}
+                </>
+              )
+            }
+          </Button>
+        </div>
       </div>
       <input
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => {
           void handleFile(e.target.files?.[0]);
@@ -535,10 +588,11 @@ export interface EquipoModalProps {
 
 /** Deriva los `EquipmentFormValues` desde el equipo — la misma forma la usa
  * `values` del `useForm` (re-sync mientras el modal está abierto, p. ej. si
- * la tabla se refresca) y el `reset` explícito al abrir (ver más abajo, Fix 1
- * del review QA: sin ese `reset` imperativo, cancelar sin guardar y reabrir
- * dejaba los campos editados a medias, porque `values` solo re-sincroniza
- * cuando el `equipo` en sí cambia, no cuando el usuario descarta su edición). */
+ * la tabla se refresca, protegido por `keepDirtyValues` — ver el `useForm` de
+ * abajo) y el `reset` explícito al ABRIR el modal (ver el `useEffect` de
+ * abajo: sin ese `reset` imperativo, cancelar sin guardar y reabrir dejaba
+ * los campos editados a medias, porque `values` solo re-sincroniza cuando el
+ * `equipo` en sí cambia, no cuando el usuario descarta su edición). */
 function buildEquipoFormValues(equipo: Equipment): EquipmentFormValues {
   return {
     internalCode: equipo.internalCode,
@@ -551,7 +605,6 @@ function buildEquipoFormValues(equipo: Equipment): EquipmentFormValues {
     controlUnit: equipo.controlUnit,
     status: equipo.status,
     homeBranchId: equipo.homeBranchId ?? '',
-    photoUrl: equipo.photoUrl,
   };
 }
 
@@ -560,6 +613,15 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
   const assignEquipment = useAssignEquipment();
   const [operatorId, setOperatorId] = useState(equipo.operator?.id ?? SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(equipo.supervisor?.id ?? SIN_ASIGNAR);
+  // "Dirty key" de la foto — vive FUERA del form de RHF (ver
+  // `EquipoPhotoBanner`): `undefined` = sin cambios, `null` = se quitó,
+  // string = key nueva. `photoResetKey` fuerza el remount del banner al
+  // reabrir el modal (limpia su preview/isUploading internos) — el propio
+  // `Modal.Backdrop` de HeroUI mantiene el diálogo montado entre aperturas
+  // (ver el `useEffect` de abajo), así que sin este remount una foto recién
+  // elegida y cancelada seguiría en pantalla la próxima vez que se abre.
+  const [photoKey, setPhotoKey] = useState<string | null | undefined>(undefined);
+  const [photoResetKey, setPhotoResetKey] = useState(0);
 
   const {
     control,
@@ -569,23 +631,46 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
   } = useForm<EquipmentFormValues>({
     resolver: zodResolver(EquipmentFormSchema),
     // `values` (no `defaultValues`): el modal vive montado en la fila, así que
-    // el form debe re-sincronizarse cuando la tabla se refresca.
+    // el form debe re-sincronizarse cuando la tabla se refresca — p. ej. un
+    // refetch de `['equipment']` disparado por `useEquipmentDocuments`/
+    // `useCombustible`/`useHorometro` al invalidar esa key, `EquipoThumb.
+    // onError`, o la URL firmada de la foto rotando cada ~30 min.
+    // `keepDirtyValues` evita que ese re-sync EN SEGUNDO PLANO pise campos
+    // que el usuario ya tocó y no ha guardado (review QA: antes cualquiera de
+    // esos refetches mientras el modal seguía abierto borraba en silencio el
+    // texto que se estaba escribiendo).
     values: buildEquipoFormValues(equipo),
+    resetOptions: { keepDirtyValues: true },
   });
 
-  // El modal vive montado en la fila (solo `Modal.Backdrop isOpen` controla
-  // su visibilidad) — re-sincroniza pickers Y campos del form con el equipo
-  // real cada vez que se abre. El `reset` explícito es necesario porque
-  // `values` (arriba) solo dispara un re-sync cuando el `equipo` cambia de
-  // verdad: si el usuario edita texto y cancela sin guardar, `equipo` sigue
-  // igual, así que sin este efecto los campos editados quedarían "pegados"
-  // la próxima vez que se abre el modal (Fix 1, review QA).
+  // Reset imperativo SOLO en la transición false→true (abrir el modal de
+  // verdad, con un `useRef` que guarda el `isOpen` anterior) — antes este
+  // efecto corría con CUALQUIER cambio de referencia de `equipo` mientras el
+  // modal seguía abierto (el mismo refetch de arriba), lo que además pisaba
+  // en silencio la foto recién subida (`photoKey`, tri-state fuera del form
+  // de RHF — `keepDirtyValues` no lo protege) y los pickers de asignación
+  // (review QA). El re-sync de los CAMPOS del form mientras el modal sigue
+  // abierto ahora lo cubre `keepDirtyValues` de arriba; acá solo queda el
+  // caso "abrir de verdad", que sigue necesitando el `reset` imperativo: sin
+  // él, cancelar sin guardar y reabrir dejaría los campos editados a medias,
+  // porque `values` (arriba) solo re-sincroniza cuando `equipo` cambia de
+  // verdad, no cuando el usuario descarta su edición.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setOperatorId(equipo.operator?.id ?? SIN_ASIGNAR);
       setSupervisorId(equipo.supervisor?.id ?? SIN_ASIGNAR);
-      reset(buildEquipoFormValues(equipo));
+      // `keepDirtyValues: false` explícito: `reset()` (`Me` en el bundle de
+      // RHF) mezcla `resetOptions` del `useForm` (arriba, `keepDirtyValues:
+      // true`) como DEFAULT de cualquier llamada, incluida esta — sin este
+      // override, este reset "de apertura" heredaría el mismo
+      // `keepDirtyValues` y dejaría de limpiar los campos editados y
+      // cancelados (rompería el `useEffect` original que este reemplaza).
+      reset(buildEquipoFormValues(equipo), { keepDirtyValues: false });
+      setPhotoKey(undefined);
+      setPhotoResetKey((n) => n + 1);
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, equipo, reset]);
 
   return (
@@ -604,7 +689,10 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
             // vea el error y pueda reintentar.
             const onSubmit = async (values: EquipmentFormValues): Promise<void> => {
               try {
-                await updateEquipment.mutateAsync({ id: equipo.id, input: toUpdateEquipmentPayload(values) });
+                await updateEquipment.mutateAsync({
+                  id: equipo.id,
+                  input: toUpdateEquipmentPayload(values, photoKey),
+                });
 
                 const operatorIdFinal = idDesdeSentinel(operatorId);
                 const supervisorIdFinal = idDesdeSentinel(supervisorId);
@@ -629,11 +717,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
             return (
               <>
                 <Modal.CloseTrigger />
-                <Controller
-                  control={control}
-                  name="photoUrl"
-                  render={({ field }) => <EquipoPhotoBanner onChange={field.onChange} value={field.value} />}
-                />
+                <EquipoPhotoBanner key={photoResetKey} onKeyChange={setPhotoKey} savedPhotoUrl={equipo.photoUrl} />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
                     Editar {equipo.internalCode}

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { toast } from '@heroui/react';
 
-import { uploadImage } from '../api/UploadsAPI';
+import { uploadFile } from '../api/UploadsAPI';
 import { fuelReadingOcr, type FuelReadingOcrResult } from '../api/OcrAPI';
 import { readCaptureDate } from './photo-reading';
 
@@ -25,12 +25,15 @@ export interface UsePhotoCaptureFlowResult {
    * registro cuando esa subida (no cancelable) termine. */
   cancelar: () => void;
   /**
-   * Sube la foto (`uploadImage`) con el mismo patrón anti-doble-submit que
-   * ya tenían los 3 modales: resetea el flag de cancelación al empezar,
-   * togglea `isUploadingPhoto`, y devuelve `null` (sin lanzar) tanto si la
-   * subida falló (ya toasteó el error) como si el flujo se canceló mientras
-   * subía — en ambos casos el llamador simplemente no debe crear el
-   * registro/turno.
+   * Sube la foto (`uploadFile`, Flota vía R2/MinIO — ver Diseño del RFC
+   * R2-storage) con el mismo patrón anti-doble-submit que ya tenían los 3
+   * modales: resetea el flag de cancelación al empezar, togglea
+   * `isUploadingPhoto`, y devuelve `null` (sin lanzar) tanto si la subida
+   * falló (ya toasteó el error, con el mensaje claro de `uploadFile`) como si
+   * el flujo se canceló mientras subía — en ambos casos el llamador
+   * simplemente no debe crear el registro/turno. En éxito devuelve la KEY
+   * `tmp/<userId>/<uuid>.<ext>` (no la URL): el caller la manda como
+   * `fotoKey` al guardar.
    */
   upload: (file: File) => Promise<string | null>;
 }
@@ -118,12 +121,14 @@ export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void):
   const upload = async (fileToUpload: File): Promise<string | null> => {
     canceladoRef.current = false;
     setIsUploadingPhoto(true);
-    let url: string;
+    let key: string;
     try {
-      url = await uploadImage(fileToUpload);
-    } catch {
+      ({ key } = await uploadFile(fileToUpload));
+    } catch (error) {
       setIsUploadingPhoto(false);
-      if (!canceladoRef.current) toast.danger('No se pudo subir la foto. Intentá de nuevo.');
+      if (!canceladoRef.current) {
+        toast.danger(error instanceof Error ? error.message : 'No se pudo subir la foto. Intentá de nuevo.');
+      }
       return null;
     }
     setIsUploadingPhoto(false);
@@ -133,7 +138,7 @@ export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void):
     // registro/turno después de que cerró el modal.
     if (canceladoRef.current) return null;
 
-    return url;
+    return key;
   };
 
   return {

@@ -3,7 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField, toast } from '@heroui/react';
 
-import { assetUrl, uploadImage } from '../../api/UploadsAPI';
+import { uploadFile } from '../../api/UploadsAPI';
+import { env } from '../../config/env';
 import { useCreateEquipmentDocument, useUpdateEquipmentDocument } from '../../hooks/useEquipmentDocuments';
 import { EQUIPMENT_DOCUMENT_TYPE_OPTIONS } from '../../config/flota-colors';
 import {
@@ -11,6 +12,7 @@ import {
   toCreateEquipmentDocumentPayload,
   toUpdateEquipmentDocumentPayload,
   type EquipmentDocument,
+  type EquipmentDocumentFileChange,
   type EquipmentDocumentFormValues,
   type EquipmentDocumentType,
 } from '../../types/equipment-document';
@@ -28,56 +30,73 @@ function buildFormValues(documento: EquipmentDocument | null): EquipmentDocument
     type: documento?.type ?? 'TECHNICAL_INSPECTION',
     title: documento?.title ?? '',
     expiryDate: toDateInputValue(documento?.expiryDate ?? null),
-    fileUrl: documento?.fileUrl ?? null,
     notes: documento?.notes ?? '',
   };
 }
 
-/** Nombre a mostrar junto al adjunto — el nombre real del `File` recién
- * elegido, o (al editar un documento ya guardado, donde no hay `File` a
- * mano) el último segmento de la URL servida por `/api/uploads`. */
-function fileDisplayName(fileName: string | null, url: string | null): string | null {
-  if (fileName) return fileName;
-  if (!url) return null;
-  const segments = url.split('/');
-  return segments[segments.length - 1] || 'Archivo adjunto';
-}
+/** Tri-state del adjunto, igual criterio que `photoKey` en
+ * `EquipoEditDelete.tsx` pero con nombre incluido (los dos siempre viajan
+ * juntos — ver `EquipmentDocumentFileChange`): `undefined` = sin cambios (se
+ * sigue mostrando el archivo ya guardado), `{key: null, name: null}` = el
+ * usuario lo quitó, `{key, name}` = subió uno nuevo. */
+type FileState = EquipmentDocumentFileChange | { key: null; name: null } | undefined;
 
 /**
- * Campo de adjunto simple — mismo criterio de subida inmediata que
- * `EquipoPhotoBanner` (`EquipoEditDelete.tsx`), pero SIN el flujo foto→OCR→
- * EXIF de `FotoRespaldoField`: acá el archivo puede ser un PDF o una imagen
- * (`POST /api/uploads` ya admite ambos, ver `UploadsAPI.ts`), no hay lectura
- * automática de ningún valor a partir de él.
+ * Campo de adjunto simple — mismo criterio de subida inmediata y de "dirty
+ * key" fuera del form de RHF que `EquipoPhotoBanner` (`EquipoEditDelete.tsx`),
+ * pero SIN el flujo foto→OCR→EXIF de `FotoRespaldoField`: acá el archivo
+ * puede ser un PDF o una imagen (`POST /api/files` ya admite ambos, ver
+ * `UploadsAPI.ts#uploadFile`), no hay lectura automática de ningún valor a
+ * partir de él.
+ *
+ * El nombre a mostrar SIEMPRE sale de `fileName` (propio o del `File` recién
+ * elegido) — nunca se parsea de la URL: ahora es una URL firmada con query,
+ * no un nombre de archivo legible.
  */
 function DocumentFileField({
-  fileName,
-  value,
-  onChange,
-  onFileNameChange,
+  savedFileHref,
+  savedFileName,
+  fileState,
+  onFileStateChange,
 }: {
-  fileName: string | null;
-  value: string | null;
-  onChange: (url: string | null) => void;
-  onFileNameChange: (name: string | null) => void;
+  /** Link al archivo ya guardado — el endpoint de redirect 302
+   * (`GET /api/equipment/documents/:id/file`, mismo patrón que
+   * `EquipoDetalleView.tsx`), NO la URL firmada cruda de la respuesta del
+   * listado: firma una URL RECIÉN generada en cada click, así que sirve
+   * aunque la pestaña lleve horas abierta (QA menor: la firma del listado
+   * podía haber expirado; ver Diseño del RFC R2-storage, "Contrato de la API
+   * — Documentos"). `null` si el documento no tiene adjunto. */
+  savedFileHref: string | null;
+  savedFileName: string | null;
+  fileState: FileState;
+  onFileStateChange: (state: FileState) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const href = assetUrl(value);
-  const nombre = fileDisplayName(fileName, value);
+  const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
+
+  const removed = fileState !== undefined && fileState.key === null;
+  const href = fileState !== undefined ? (removed ? null : pendingPreviewUrl) : savedFileHref;
+  const nombre = fileState !== undefined ? fileState.name : savedFileName;
+  const hasFile = href != null;
 
   const handleFile = async (file: File | undefined): Promise<void> => {
     if (!file) return;
     setIsUploading(true);
     try {
-      const url = await uploadImage(file);
-      onFileNameChange(file.name);
-      onChange(url);
-    } catch {
-      toast.danger('No se pudo subir el archivo. Intenta de nuevo.');
+      const { key, url } = await uploadFile(file);
+      setPendingPreviewUrl(url);
+      onFileStateChange({ key, name: file.name });
+    } catch (error) {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo subir el archivo. Intenta de nuevo.');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleRemove = () => {
+    setPendingPreviewUrl(null);
+    onFileStateChange({ key: null, name: null });
   };
 
   return (
@@ -85,14 +104,14 @@ function DocumentFileField({
       <Label>Archivo adjunto (opcional)</Label>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-separator bg-surface-secondary px-3.5 py-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          {value ? (
+          {hasFile ? (
             <>
               <span className="truncate text-sm font-medium text-foreground">{nombre}</span>
               {href ? (
                 <a
                   className="w-fit text-xs font-semibold text-(--accent) hover:underline"
                   href={href}
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   target="_blank"
                 >
                   Ver archivo actual
@@ -100,23 +119,30 @@ function DocumentFileField({
               ) : null}
             </>
           ) : (
-            <span className="text-xs text-(--muted)">PDF o imagen · máx. 5MB</span>
+            <span className="text-xs text-(--muted)">PDF, JPG, PNG o WebP · máx. 8 MB</span>
           )}
         </div>
-        <Button
-          isPending={isUploading}
-          size="sm"
-          type="button"
-          variant="secondary"
-          onPress={() => inputRef.current?.click()}
-        >
-          {({ isPending }) =>
-            isPending ? <Spinner color="current" size="sm" /> : value ? 'Reemplazar' : 'Adjuntar archivo'
-          }
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {hasFile ? (
+            <Button isDisabled={isUploading} size="sm" type="button" variant="tertiary" onPress={handleRemove}>
+              Quitar
+            </Button>
+          ) : null}
+          <Button
+            isPending={isUploading}
+            size="sm"
+            type="button"
+            variant="secondary"
+            onPress={() => inputRef.current?.click()}
+          >
+            {({ isPending }) =>
+              isPending ? <Spinner color="current" size="sm" /> : hasFile ? 'Reemplazar' : 'Adjuntar archivo'
+            }
+          </Button>
+        </div>
       </div>
       <input
-        accept="application/pdf,image/*"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         className="hidden"
         onChange={(e) => {
           void handleFile(e.target.files?.[0]);
@@ -150,7 +176,21 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   const createDocument = useCreateEquipmentDocument(equipmentId);
   const updateDocument = useUpdateEquipmentDocument(equipmentId);
   const isPending = createDocument.isPending || updateDocument.isPending;
-  const [fileName, setFileName] = useState<string | null>(null);
+  // `fileUrl` (firmada, de la respuesta del listado) solo dice SI hay archivo
+  // adjunto — el link real usa el endpoint de redirect 302, mismo criterio
+  // que `EquipoDetalleView.tsx` (ver `DocumentFileField`, prop `savedFileHref`).
+  const savedFileHref = document?.fileUrl
+    ? `${env.apiUrl}/api/equipment/documents/${document.id}/file`
+    : null;
+  // Tri-state del adjunto — vive FUERA del form de RHF (ver `DocumentFileField`
+  // y `FileState`): `undefined` = sin cambios, `{key: null, name: null}` =
+  // se quitó, `{key, name}` = archivo nuevo. `fileResetKey` fuerza el
+  // remount de `DocumentFileField` al reabrir el modal (mismo patrón que
+  // `photoResetKey` en `EquipoEditDelete.tsx`).
+  const [fileState, setFileState] = useState<EquipmentDocumentFileChange | { key: null; name: null } | undefined>(
+    undefined,
+  );
+  const [fileResetKey, setFileResetKey] = useState(0);
 
   const {
     control,
@@ -160,19 +200,40 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   } = useForm<EquipmentDocumentFormValues>({
     resolver: zodResolver(EquipmentDocumentFormSchema),
     // `values` (no `defaultValues`): el modal vive montado siempre, así que
-    // el form debe re-sincronizarse cuando cambia el documento a editar.
+    // el form debe re-sincronizarse cuando cambia el documento a editar — o
+    // cuando un refetch de `['equipment']` (otro dominio invalidando esa key,
+    // p. ej. `useCombustible`/`useHorometro`) trae el MISMO documento con una
+    // referencia nueva. `keepDirtyValues` evita que ese re-sync en segundo
+    // plano pise texto que el usuario ya escribió y no ha guardado (review
+    // QA: mismo bug de refetch que `EditEquipoModal`).
     values: buildFormValues(document),
+    resetOptions: { keepDirtyValues: true },
   });
 
-  // Reset explícito al abrir — mismo motivo que `EditEquipoModal`: sin esto,
-  // cancelar sin guardar y reabrir (para el mismo documento u otro) dejaría
-  // campos editados a medias, porque `values` (arriba) solo re-sincroniza
-  // cuando `document` cambia de verdad.
+  // Reset imperativo SOLO en la transición false→true (abrir el modal de
+  // verdad) — mismo criterio que `EditEquipoModal`. Antes corría con
+  // CUALQUIER cambio de referencia de `document` mientras el modal seguía
+  // abierto (el refetch de arriba), lo que pisaba en silencio un archivo
+  // recién subido (`fileState`, tri-state fuera del form de RHF —
+  // `keepDirtyValues` no lo protege) y su preview (review QA). El re-sync de
+  // los CAMPOS del form mientras el modal sigue abierto ahora lo cubre
+  // `keepDirtyValues` de arriba; acá solo queda "abrir de verdad", que sigue
+  // necesitando el `reset` imperativo: sin él, cancelar sin guardar y reabrir
+  // (para el mismo documento u otro) dejaría campos editados a medias, porque
+  // `values` solo re-sincroniza cuando `document` cambia de verdad.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
-      reset(buildFormValues(document));
-      setFileName(null);
+    if (isOpen && !wasOpenRef.current) {
+      // `keepDirtyValues: false` explícito — mismo motivo que
+      // `EditEquipoModal`: `reset()` mezcla el `resetOptions` del `useForm`
+      // (arriba, `keepDirtyValues: true`) como DEFAULT de cualquier llamada,
+      // así que sin este override este reset "de apertura" NO limpiaría los
+      // campos editados y cancelados.
+      reset(buildFormValues(document), { keepDirtyValues: false });
+      setFileState(undefined);
+      setFileResetKey((n) => n + 1);
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, document, reset]);
 
   const cerrar = () => onOpenChange(false);
@@ -180,11 +241,12 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   const onSubmit = (values: EquipmentDocumentFormValues): void => {
     if (isEditing && document) {
       updateDocument.mutate(
-        { id: document.id, input: toUpdateEquipmentDocumentPayload(values) },
+        { id: document.id, input: toUpdateEquipmentDocumentPayload(values, fileState) },
         { onSuccess: cerrar },
       );
     } else {
-      createDocument.mutate(toCreateEquipmentDocumentPayload(values), { onSuccess: cerrar });
+      const file = fileState && fileState.key !== null ? { key: fileState.key, name: fileState.name } : undefined;
+      createDocument.mutate(toCreateEquipmentDocumentPayload(values, file), { onSuccess: cerrar });
     }
   };
 
@@ -283,17 +345,12 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
                 )}
               />
 
-              <Controller
-                control={control}
-                name="fileUrl"
-                render={({ field }) => (
-                  <DocumentFileField
-                    fileName={fileName}
-                    value={field.value}
-                    onChange={field.onChange}
-                    onFileNameChange={setFileName}
-                  />
-                )}
+              <DocumentFileField
+                fileState={fileState}
+                key={fileResetKey}
+                onFileStateChange={setFileState}
+                savedFileHref={savedFileHref}
+                savedFileName={document?.fileName ?? null}
               />
 
               <Controller

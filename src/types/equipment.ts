@@ -223,9 +223,6 @@ export const EquipmentFormSchema = z.object({
   status: z.enum(EQUIPMENT_STATUS),
   /** `''` = sin sucursal asignada. */
   homeBranchId: z.string(),
-  /** Sube al elegir el archivo (`uploadImage`, ver `EquipoPhotoField`) — el
-   * form solo guarda la URL resultante, no el `File`. */
-  photoUrl: z.string().nullable(),
 });
 export type EquipmentFormValues = z.infer<typeof EquipmentFormSchema>;
 
@@ -241,7 +238,10 @@ export interface CreateEquipmentInput {
   controlUnit: ControlUnit;
   status: EquipmentStatus;
   homeBranchId?: string;
-  photoUrl?: string;
+  /** Key `tmp/<userId>/<uuid>.<ext>` de una foto recién subida vía
+   * `uploadFile` (ver Diseño del RFC R2-storage, "Contrato de la API"). El
+   * backend rechaza `photoUrl` con 400 — solo se acepta la key. */
+  photoKey?: string;
 }
 
 /** Body de `PATCH /api/equipment/:id` — el código interno no es editable en
@@ -249,15 +249,19 @@ export interface CreateEquipmentInput {
  * A diferencia de `CreateEquipmentInput`, estos cuatro campos aceptan `null`
  * explícito (ver `toUpdateEquipmentPayload`): en UPDATE es la única forma de
  * limpiar un valor ya guardado, y el backend los marca `@IsOptional()` sin
- * `forbidNonWhitelisted` bloquear un `null`. */
+ * `forbidNonWhitelisted` bloquear un `null`.
+ *
+ * `photoKey` es TRI-STATE (a diferencia de los otros tres): `undefined` =
+ * sin cambio, `null` = quitar la foto, string = key nueva — chequeado con
+ * `=== undefined`, nunca con `in` (ver Diseño del RFC R2-storage). */
 export type UpdateEquipmentInput = Omit<
   CreateEquipmentInput,
-  'internalCode' | 'licensePlate' | 'year' | 'homeBranchId' | 'photoUrl'
+  'internalCode' | 'licensePlate' | 'year' | 'homeBranchId' | 'photoKey'
 > & {
   licensePlate?: string | null;
   year?: number | null;
   homeBranchId?: string | null;
-  photoUrl?: string | null;
+  photoKey?: string | null;
 };
 
 /** Body de `PATCH /api/equipment/:id/assignment` — asigna/libera operador y/o
@@ -269,10 +273,16 @@ export interface AssignEquipmentInput {
   supervisorId?: string | null;
 }
 
-/** Convierte los valores del formulario al body de CREAR (`POST`). Omite la
+/**
+ * Convierte los valores del formulario al body de CREAR (`POST`). Omite la
  * clave cuando el campo viene vacío — con `forbidNonWhitelisted` activo, un
- * `null`/`''` explícito en un campo `@IsOptional()` haría fallar la validación. */
-export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipmentInput {
+ * `null`/`''` explícito en un campo `@IsOptional()` haría fallar la validación.
+ *
+ * `photoKey` vive FUERA del form de RHF (estado aparte en el modal — ver
+ * `EquipoPhotoBanner`/`CreateEquipoModal`), así que se recibe como parámetro:
+ * solo se manda cuando el usuario subió una foto nueva (string).
+ */
+export function toEquipmentPayload(values: EquipmentFormValues, photoKey?: string): CreateEquipmentInput {
   return {
     internalCode: values.internalCode.trim().toUpperCase(),
     ...(values.licensePlate.trim() ? { licensePlate: values.licensePlate.trim().toUpperCase() } : {}),
@@ -284,7 +294,7 @@ export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipment
     controlUnit: values.controlUnit,
     status: values.status,
     ...(values.homeBranchId ? { homeBranchId: values.homeBranchId } : {}),
-    ...(values.photoUrl ? { photoUrl: values.photoUrl } : {}),
+    ...(photoKey ? { photoKey } : {}),
   };
 }
 
@@ -294,8 +304,15 @@ export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipment
  * en vez de omitir la clave — es el único contrato que le permite al usuario
  * limpiar la patente, el año o la sucursal base ya guardados (contrato
  * acordado con backend: los tres son `@IsOptional()` y aceptan `null`).
+ *
+ * `photoKey` es tri-state y vive fuera del form (mismo motivo que en
+ * `toEquipmentPayload`): `undefined` (default) OMITE la clave — sin cambio de
+ * foto—, `null` la manda para quitarla, un string manda la key nueva.
  */
-export function toUpdateEquipmentPayload(values: EquipmentFormValues): UpdateEquipmentInput {
+export function toUpdateEquipmentPayload(
+  values: EquipmentFormValues,
+  photoKey?: string | null,
+): UpdateEquipmentInput {
   return {
     licensePlate: values.licensePlate.trim() ? values.licensePlate.trim().toUpperCase() : null,
     equipmentClass: values.equipmentClass,
@@ -306,6 +323,6 @@ export function toUpdateEquipmentPayload(values: EquipmentFormValues): UpdateEqu
     controlUnit: values.controlUnit,
     status: values.status,
     homeBranchId: values.homeBranchId ? values.homeBranchId : null,
-    photoUrl: values.photoUrl,
+    ...(photoKey !== undefined ? { photoKey } : {}),
   };
 }

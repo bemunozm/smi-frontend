@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
 import type { Key } from '@heroui/react';
 
-import { signOut } from '../lib/auth-client';
+import { logout } from '../lib/logout';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
@@ -58,7 +58,10 @@ export function Topbar() {
       return;
     }
     if (key === 'logout') {
-      void signOut().then(() => navigate('/login', { replace: true }));
+      // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
+      // Cache Storage privado + navega — ver ese archivo para el porqué
+      // (SEGURIDAD M1, review QA del RFC R2-storage).
+      void logout(navigate);
     }
   };
 

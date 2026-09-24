@@ -81,15 +81,15 @@ vi.mock('../api/UserAPI', () => ({
   },
 }));
 
-// Y la subida de foto (`EquipoPhotoField` → `uploadImage`) — `assetUrl` se
+// Y la subida de foto (`EquipoPhotoBanner` → `uploadFile`) — `assetUrl` se
 // deja real porque es una función pura (no pega a la red).
-const { uploadImageMock } = vi.hoisted(() => ({
-  uploadImageMock: vi.fn(),
+const { uploadFileMock } = vi.hoisted(() => ({
+  uploadFileMock: vi.fn(),
 }));
 
 vi.mock('../api/UploadsAPI', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
-  return { ...actual, uploadImage: uploadImageMock };
+  return { ...actual, uploadFile: uploadFileMock };
 });
 
 const ADMIN = {
@@ -387,6 +387,47 @@ describe('EquiposView — editar equipo', () => {
     const payloadEnviado = createMock.mock.calls[0][0] as Record<string, unknown>;
     expect('licensePlate' in payloadEnviado).toBe(false);
     expect('homeBranchId' in payloadEnviado).toBe(false);
+    // Sin foto elegida, `photoKey` se omite igual que patente/sucursal.
+    expect('photoKey' in payloadEnviado).toBe(false);
+  });
+
+  // `EquipoPhotoBanner` sube la foto apenas se elige (`uploadFile`) y reporta
+  // la KEY al padre por fuera del form de RHF (ver Diseño del RFC
+  // R2-storage) — el submit de creación tiene que mandarla como `photoKey`.
+  it('un submit de creación con foto elegida manda photoKey (no photoUrl)', async () => {
+    listMock.mockResolvedValue([]);
+    resumenMock.mockResolvedValue({
+      total: 0,
+      disponibles: 0,
+      porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+    });
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    createMock.mockResolvedValue(EQUIPO);
+    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/nueva.jpg', url: 'https://minio.local/nueva.jpg' });
+
+    renderView();
+    await screen.findByText('No hay equipos que coincidan');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo equipo' }));
+
+    fireEvent.change(await screen.findByLabelText('Código interno'), { target: { value: 'CM-005' } });
+    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'Camión' } });
+    fireEvent.change(screen.getByLabelText('Marca'), { target: { value: 'Volvo' } });
+    fireEvent.change(screen.getByLabelText('Modelo'), { target: { value: 'FMX' } });
+
+    const archivo = new File(['foto'], 'equipo.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector('input[type="file"][accept="image/jpeg,image/png,image/webp"]');
+    fireEvent.change(input as HTMLInputElement, { target: { files: [archivo] } });
+
+    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(archivo));
+    await screen.findByRole('button', { name: 'Quitar foto' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear equipo' }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    const payloadEnviado = createMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payloadEnviado.photoKey).toBe('tmp/u1/nueva.jpg');
+    expect('photoUrl' in payloadEnviado).toBe(false);
   });
 
   // El modal de editar es controlado y queda montado en la fila (no se
