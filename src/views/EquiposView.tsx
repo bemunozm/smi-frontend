@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2, type LucideIcon } from 'lucide-react';
 import {
   Button,
@@ -209,7 +209,6 @@ const DEFAULT_FORM_VALUES: EquipmentFormValues = {
   controlUnit: 'HOURS',
   status: 'OPERATIONAL',
   homeBranchId: '',
-  photoUrl: null,
 };
 
 interface CreateEquipoModalProps {
@@ -228,6 +227,14 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
   const assignEquipment = useAssignEquipment();
   const [operatorId, setOperatorId] = useState(SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(SIN_ASIGNAR);
+  // "Dirty key" de la foto — mismo patrón que `EditEquipoModal`
+  // (`EquipoEditDelete.tsx`): vive fuera del form de RHF, `null` cuando el
+  // usuario adjunta y después quita la foto antes de crear (el builder de
+  // creación lo trata igual que "sin foto", ver `toEquipmentPayload`).
+  // `photoResetKey` fuerza el remount del banner al reabrir (el modal queda
+  // montado entre aperturas, ver el `useEffect` de abajo).
+  const [photoKey, setPhotoKey] = useState<string | null | undefined>(undefined);
+  const [photoResetKey, setPhotoResetKey] = useState(0);
   const {
     control,
     handleSubmit,
@@ -247,6 +254,8 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
       reset(DEFAULT_FORM_VALUES);
       setOperatorId(SIN_ASIGNAR);
       setSupervisorId(SIN_ASIGNAR);
+      setPhotoKey(undefined);
+      setPhotoResetKey((n) => n + 1);
     }
   }, [isOpen, reset]);
 
@@ -256,7 +265,7 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
         <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_WIDE_CLASS}>
           {({ close }) => {
             const onSubmit = (values: EquipmentFormValues): void => {
-              createEquipment.mutate(toEquipmentPayload(values), {
+              createEquipment.mutate(toEquipmentPayload(values, photoKey ?? undefined), {
                 onSuccess: (equipment) => {
                   const operatorIdFinal = idDesdeSentinel(operatorId);
                   const supervisorIdFinal = idDesdeSentinel(supervisorId);
@@ -276,11 +285,7 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
             return (
               <>
                 <Modal.CloseTrigger />
-                <Controller
-                  control={control}
-                  name="photoUrl"
-                  render={({ field }) => <EquipoPhotoBanner onChange={field.onChange} value={field.value} />}
-                />
+                <EquipoPhotoBanner key={photoResetKey} onKeyChange={setPhotoKey} savedPhotoUrl={null} />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
                     Nuevo equipo

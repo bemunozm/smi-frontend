@@ -15,7 +15,6 @@ describe('EquipmentFormSchema', () => {
     controlUnit: 'HOURS' as const,
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
-    photoUrl: null,
   };
 
   it('acepta el año vacío (es opcional)', () => {
@@ -48,7 +47,6 @@ describe('toEquipmentPayload', () => {
       controlUnit: 'HOURS',
       status: 'OPERATIONAL',
       homeBranchId: '',
-      photoUrl: null,
     });
 
     expect(payload.internalCode).toBe('EX-001');
@@ -70,13 +68,49 @@ describe('toEquipmentPayload', () => {
       controlUnit: 'KM',
       status: 'IN_WORKSHOP',
       homeBranchId: '',
-      photoUrl: null,
     });
 
     expect('year' in payload).toBe(false);
     expect('licensePlate' in payload).toBe(false);
     expect('homeBranchId' in payload).toBe(false);
-    expect('photoUrl' in payload).toBe(false);
+    expect('photoKey' in payload).toBe(false);
+  });
+
+  it('omite photoKey cuando no se subió ninguna foto (undefined)', () => {
+    const payload = toEquipmentPayload({
+      internalCode: 'CM-003',
+      licensePlate: '',
+      equipmentClass: 'HEAVY',
+      type: 'Camión',
+      brand: 'Volvo',
+      model: 'FMX',
+      year: '',
+      controlUnit: 'KM',
+      status: 'IN_WORKSHOP',
+      homeBranchId: '',
+    });
+
+    expect('photoKey' in payload).toBe(false);
+  });
+
+  it('manda photoKey cuando el usuario subió una foto nueva', () => {
+    const payload = toEquipmentPayload(
+      {
+        internalCode: 'CM-004',
+        licensePlate: '',
+        equipmentClass: 'HEAVY',
+        type: 'Camión',
+        brand: 'Volvo',
+        model: 'FMX',
+        year: '',
+        controlUnit: 'KM',
+        status: 'IN_WORKSHOP',
+        homeBranchId: '',
+      },
+      'tmp/u1/abc.jpg',
+    );
+
+    expect(payload.photoKey).toBe('tmp/u1/abc.jpg');
   });
 });
 
@@ -92,7 +126,6 @@ describe('toUpdateEquipmentPayload', () => {
     controlUnit: 'HOURS' as const,
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
-    photoUrl: null,
   };
 
   it('manda `null` explícito en patente, año y sucursal cuando vienen vacíos (a diferencia de crear)', () => {
@@ -103,7 +136,6 @@ describe('toUpdateEquipmentPayload', () => {
     expect(payload.licensePlate).toBeNull();
     expect(payload.year).toBeNull();
     expect(payload.homeBranchId).toBeNull();
-    expect(payload.photoUrl).toBeNull();
     // El código interno no es editable — el builder de update ni lo recibe.
     expect('internalCode' in payload).toBe(false);
   });
@@ -114,12 +146,41 @@ describe('toUpdateEquipmentPayload', () => {
       licensePlate: ' ab-cd-12 ',
       year: '2019',
       homeBranchId: 'branch_1',
-      photoUrl: '/uploads/foto.jpg',
     });
 
     expect(payload.licensePlate).toBe('AB-CD-12');
     expect(payload.year).toBe(2019);
     expect(payload.homeBranchId).toBe('branch_1');
-    expect(payload.photoUrl).toBe('/uploads/foto.jpg');
+  });
+
+  // `photoKey` es el único campo TRI-STATE del builder (ver Diseño del RFC
+  // R2-storage): a diferencia de patente/año/sucursal (que SIEMPRE se
+  // mandan, `null` si vienen vacíos), acá "sin cambios" tiene que OMITIR la
+  // clave — nunca mandar `null` por default — para no pisar la foto ya
+  // guardada en cada PATCH que no la toca.
+  describe('photoKey (tri-state)', () => {
+    it('sin segundo argumento, omite photoKey por completo (sin cambios)', () => {
+      const payload = toUpdateEquipmentPayload(valido);
+
+      expect('photoKey' in payload).toBe(false);
+    });
+
+    it('con undefined explícito, sigue omitiendo photoKey', () => {
+      const payload = toUpdateEquipmentPayload(valido, undefined);
+
+      expect('photoKey' in payload).toBe(false);
+    });
+
+    it('con null, manda photoKey: null (quitar la foto)', () => {
+      const payload = toUpdateEquipmentPayload(valido, null);
+
+      expect(payload.photoKey).toBeNull();
+    });
+
+    it('con una key, manda photoKey con esa key (foto nueva)', () => {
+      const payload = toUpdateEquipmentPayload(valido, 'tmp/u1/nueva.jpg');
+
+      expect(payload.photoKey).toBe('tmp/u1/nueva.jpg');
+    });
   });
 });

@@ -123,17 +123,17 @@ export function RegistrarCargaCombustibleModal({
 
   const onSubmit = async (values: CargaFormValues) => {
     if (!photoFlow.file) return;
-    const fotoUrl = await photoFlow.upload(photoFlow.file);
+    const fotoKey = await photoFlow.upload(photoFlow.file);
     // `upload` devuelve `null` tanto si la subida falló (ya toasteó el
     // error) como si el flujo se canceló mientras subía — en ambos casos no
     // corresponde crear el registro de combustible.
-    if (fotoUrl == null) return;
+    if (fotoKey == null) return;
 
     const payload: CombustibleForm = {
       equipoId,
       litros: values.litros,
       tipo: values.tipo,
-      fotoUrl,
+      fotoKey,
       fecha: new Date(values.fecha).toISOString(),
     };
     crear.mutate(payload, { onSuccess: cerrar });

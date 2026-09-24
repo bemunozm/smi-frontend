@@ -10,9 +10,9 @@ vi.mock('../../hooks/useCombustible', () => ({
   useCreateCombustible: () => ({ mutate: mutateMock, isPending }),
 }));
 
-const uploadImageMock = vi.fn();
+const uploadFileMock = vi.fn();
 vi.mock('../../api/UploadsAPI', () => ({
-  uploadImage: (...args: unknown[]) => uploadImageMock(...args),
+  uploadFile: (...args: unknown[]) => uploadFileMock(...args),
 }));
 
 const readCaptureDateMock = vi.fn();
@@ -53,12 +53,12 @@ describe('RegistrarCargaCombustibleModal', () => {
   beforeEach(() => {
     mutateMock.mockReset();
     isPending = false;
-    uploadImageMock.mockReset();
+    uploadFileMock.mockReset();
     readCaptureDateMock.mockReset();
     fuelReadingOcrMock.mockReset();
     readCaptureDateMock.mockResolvedValue(null);
     fuelReadingOcrMock.mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 });
-    uploadImageMock.mockResolvedValue('/uploads/surtidor.jpg');
+    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/surtidor.jpg', url: 'https://minio.local/surtidor.jpg' });
   });
 
   it('el botón guardar está deshabilitado mientras no haya foto', () => {
@@ -147,7 +147,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     expect(guardar.hasAttribute('disabled')).toBe(true);
   });
 
-  it('sube la foto y guarda con el payload esperado (incluye fotoUrl)', async () => {
+  it('sube la foto y guarda con el payload esperado (incluye fotoKey, no fotoUrl)', async () => {
     fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
     readCaptureDateMock.mockResolvedValue(null);
 
@@ -161,7 +161,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
     fireEvent.click(guardar);
 
-    await waitFor(() => expect(uploadImageMock).toHaveBeenCalledWith(FILE));
+    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
 
     const [payload, options] = mutateMock.mock.calls[0];
@@ -169,8 +169,9 @@ describe('RegistrarCargaCombustibleModal', () => {
       equipoId: 'eq_1',
       litros: 80,
       tipo: 'PETROLEO',
-      fotoUrl: '/uploads/surtidor.jpg',
+      fotoKey: 'tmp/u1/surtidor.jpg',
     });
+    expect('fotoUrl' in payload).toBe(false);
 
     options.onSuccess();
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -236,7 +237,7 @@ describe('RegistrarCargaCombustibleModal', () => {
   it('si la subida de la foto falla, no llama al hook de creación', async () => {
     fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
     readCaptureDateMock.mockResolvedValue(null);
-    uploadImageMock.mockRejectedValue(new Error('network error'));
+    uploadFileMock.mockRejectedValue(new Error('network error'));
 
     renderModal();
     subirFoto();
@@ -246,7 +247,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
     fireEvent.click(guardar);
 
-    await waitFor(() => expect(uploadImageMock).toHaveBeenCalled());
+    await waitFor(() => expect(uploadFileMock).toHaveBeenCalled());
     expect(mutateMock).not.toHaveBeenCalled();
   });
 
@@ -255,7 +256,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     readCaptureDateMock.mockResolvedValue(null);
     // Sube "para siempre" dentro del test — lo que importa es el estado
     // mientras la promesa sigue pendiente, no su resolución.
-    uploadImageMock.mockImplementation(() => new Promise(() => {}));
+    uploadFileMock.mockImplementation(() => new Promise(() => {}));
 
     renderModal();
     subirFoto();
@@ -265,7 +266,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
     fireEvent.click(guardar);
 
-    await waitFor(() => expect(uploadImageMock).toHaveBeenCalled());
+    await waitFor(() => expect(uploadFileMock).toHaveBeenCalled());
     const cancelar = screen.getByRole('button', { name: 'Cancelar' });
     await waitFor(() => expect(cancelar.hasAttribute('disabled')).toBe(true));
     // El botón Guardar también queda bloqueado (evita doble submit mientras sube).

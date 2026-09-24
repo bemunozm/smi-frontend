@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { EquipoDetalleView } from './EquipoDetalleView';
+import { env } from '../config/env';
 import type { EquipmentDetail } from '../types/equipment';
 
 // Rol controlable por test — decide si se monta `AsignacionForm` (acción
@@ -64,16 +65,15 @@ vi.mock('../api/EquipmentDocumentAPI', () => ({
   },
 }));
 
-// Y la subida del adjunto (`DocumentFileField` → `uploadImage`) — `assetUrl`
-// se deja real porque es una función pura (no pega a la red), mismo criterio
-// que `EquiposView.interactions.test.tsx` con `EquipoPhotoBanner`.
-const { uploadImageMock } = vi.hoisted(() => ({
-  uploadImageMock: vi.fn(),
+// Y la subida del adjunto (`DocumentFileField` → `uploadFile`) — mismo
+// criterio que `EquiposView.interactions.test.tsx` con `EquipoPhotoBanner`.
+const { uploadFileMock } = vi.hoisted(() => ({
+  uploadFileMock: vi.fn(),
 }));
 
 vi.mock('../api/UploadsAPI', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
-  return { ...actual, uploadImage: uploadImageMock };
+  return { ...actual, uploadFile: uploadFileMock };
 });
 
 afterEach(() => {
@@ -734,7 +734,8 @@ describe('EquipoDetalleView — Documentos', () => {
     type: 'TECHNICAL_INSPECTION' as const,
     title: 'Revisión anual',
     expiryDate: '2026-12-01T00:00:00.000Z',
-    fileUrl: '/uploads/rt.pdf',
+    fileUrl: 'https://minio.local/signed/rt.pdf?X-Amz-Signature=deadbeef',
+    fileName: 'revision-tecnica.pdf',
     notes: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -775,7 +776,7 @@ describe('EquipoDetalleView — Documentos', () => {
     expect(await screen.findByText('Esta unidad todavía no tiene documentos registrados.')).toBeTruthy();
   });
 
-  it('lista un documento con tipo, título, chip de vigencia, caption y link "Ver / descargar"', async () => {
+  it('lista un documento con tipo, título, chip de vigencia, caption y link con el nombre del archivo', async () => {
     docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
 
     renderFicha();
@@ -785,9 +786,35 @@ describe('EquipoDetalleView — Documentos', () => {
     expect(screen.getByText('Vigente')).toBeTruthy();
     expect(screen.getByText(/Vence en 71 días/)).toBeTruthy();
 
-    const link = screen.getByRole('link', { name: 'Ver / descargar' });
-    expect(link.getAttribute('href')).toContain('/uploads/rt.pdf');
+    // El link NO usa `fileUrl` directo (puede quedar vieja si la pestaña
+    // lleva horas abierta) — apunta al endpoint de redirect 302, que firma
+    // una URL recién generada en cada click (ver Diseño del RFC R2-storage).
+    // El texto del link es `fileName` (el nombre "humano" que subió el
+    // usuario), no la URL firmada ni un genérico "Ver / descargar".
+    const link = screen.getByRole('link', { name: DOCUMENTO_VIGENTE.fileName });
+    expect(link.getAttribute('href')).toBe(`${env.apiUrl}/api/equipment/documents/doc_1/file`);
     expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('usa "Ver / descargar" como texto del link cuando hay archivo pero sin fileName', async () => {
+    docListMock.mockResolvedValue([{ ...DOCUMENTO_VIGENTE, fileName: null }]);
+
+    renderFicha();
+
+    await screen.findByText('Revisión anual');
+    const link = screen.getByRole('link', { name: 'Ver / descargar' });
+    expect(link.getAttribute('href')).toBe(`${env.apiUrl}/api/equipment/documents/doc_1/file`);
+  });
+
+  it('no muestra el link cuando el documento no tiene archivo adjunto', async () => {
+    docListMock.mockResolvedValue([{ ...DOCUMENTO_VIGENTE, fileUrl: null, fileName: null }]);
+
+    renderFicha();
+
+    await screen.findByText('Revisión anual');
+    expect(screen.queryByRole('link', { name: DOCUMENTO_VIGENTE.fileName })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ver / descargar' })).toBeNull();
   });
 
   it('VENCIDO: chip rojo con "Vencido" y la caption "Vencido hace N días"', async () => {
@@ -818,9 +845,9 @@ describe('EquipoDetalleView — Documentos', () => {
     expect(screen.queryByRole('button', { name: 'Eliminar documento' })).toBeNull();
   });
 
-  it('agrega un documento con archivo adjunto — sube el archivo y crea con la URL resultante', async () => {
+  it('agrega un documento con archivo adjunto — sube el archivo y crea con fileKey/fileName', async () => {
     docListMock.mockResolvedValueOnce([]);
-    uploadImageMock.mockResolvedValue('/uploads/seguro.pdf');
+    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/seguro.pdf', url: 'https://minio.local/seguro.pdf' });
     docCreateMock.mockResolvedValue(DOCUMENTO_VIGENTE);
 
     renderFicha();
@@ -841,11 +868,11 @@ describe('EquipoDetalleView — Documentos', () => {
     // `EquipoPhotoBanner` si estuviera montado.
     const archivo = new File(['contenido'], 'poliza.pdf', { type: 'application/pdf' });
     const input = document.querySelector(
-      'input[type="file"][accept="application/pdf,image/*"]',
+      'input[type="file"][accept="image/jpeg,image/png,image/webp,application/pdf"]',
     ) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [archivo] } });
 
-    await waitFor(() => expect(uploadImageMock).toHaveBeenCalledWith(archivo));
+    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(archivo));
     await screen.findByText('Ver archivo actual');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
@@ -854,8 +881,30 @@ describe('EquipoDetalleView — Documentos', () => {
       expect(docCreateMock).toHaveBeenCalledWith('eq_1', {
         type: 'INSURANCE',
         title: 'Póliza 2026',
-        fileUrl: '/uploads/seguro.pdf',
+        fileKey: 'tmp/u1/seguro.pdf',
+        fileName: 'poliza.pdf',
       }),
+    );
+  });
+
+  it('quita el archivo adjunto de un documento existente — PATCH manda fileKey/fileName en null', async () => {
+    docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
+    docUpdateMock.mockResolvedValue({ ...DOCUMENTO_VIGENTE, fileUrl: null, fileName: null });
+
+    renderFicha();
+    await screen.findByText('Revisión anual');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar documento' }));
+    await screen.findByRole('heading', { name: 'Editar documento' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() =>
+      expect(docUpdateMock).toHaveBeenCalledWith(
+        'doc_1',
+        expect.objectContaining({ fileKey: null, fileName: null }),
+      ),
     );
   });
 

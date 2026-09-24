@@ -5,7 +5,12 @@ export const combustibleFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
   litros: posNumber('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
-  fotoUrl: z.string().optional(), // ruta servida por el backend (/uploads/...)
+  fotoUrl: z.string().optional(), // legacy Terreno: ruta servida por el backend (/uploads/...)
+  /** Flota (`RegistrarCargaCombustibleModal`): key `tmp/<userId>/<uuid>.<ext>`
+   * de una foto recién subida vía `uploadFile` (ver Diseño del RFC
+   * R2-storage). Aditivo a `fotoUrl` — nunca se mandan los dos juntos
+   * (`CombustibleAPI.createCombustible` los deja mutuamente excluyentes). */
+  fotoKey: z.string().optional(),
   // ISO datetime — auto-rellenada en el modal desde la EXIF de la foto (o
   // "ahora" sin EXIF), editable. Opcional en el schema porque el backend cae
   // a `@default(now())` sin ella, pero el modal siempre la manda con valor.
