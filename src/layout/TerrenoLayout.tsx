@@ -4,7 +4,7 @@ import { Briefcase, Clock, Fuel, LayoutDashboard, LogOut, Menu, TriangleAlert, X
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { signOut } from '../lib/auth-client';
+import { logout } from '../lib/logout';
 
 const tabs = [
   { to: '/terreno/hallazgos', label: 'Hallazgos', icon: TriangleAlert },
@@ -65,8 +65,10 @@ export function TerrenoLayout() {
   const navEnHeader = useMediaQuery(DESKTOP_QUERY);
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login', { replace: true });
+    // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
+    // Cache Storage privado + navega — ver ese archivo para el porqué
+    // (SEGURIDAD M1, review QA del RFC R2-storage).
+    await logout(navigate);
   };
 
   return (
