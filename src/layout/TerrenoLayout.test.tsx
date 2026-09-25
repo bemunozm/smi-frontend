@@ -29,17 +29,26 @@ function setViewport(size: 'phone' | 'desktop'): void {
 function renderLayout(size: 'phone' | 'desktop') {
   setViewport(size);
   return render(
-    <MemoryRouter initialEntries={['/terreno/hallazgos']}>
+    <MemoryRouter initialEntries={['/terreno/registro']}>
       <Routes>
         <Route element={<TerrenoLayout />}>
-          <Route path="/terreno/hallazgos" element={<p>contenido</p>} />
+          <Route path="/terreno/registro" element={<p>contenido</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
   );
 }
 
-const SECCIONES = ['Hallazgos', 'Combustible', 'Horómetro', 'Trabajos'];
+/**
+ * Cada destino tiene dos etiquetas: la larga para el header y el drawer, y la
+ * corta para la barra inferior, donde hay un cuarto de pantalla por pestaña.
+ * Solo se monta una de las dos barras, así que en cada tamaño el destino tiene
+ * un único nombre accesible — el que corresponde a la barra que está en uso.
+ */
+const SECCIONES = {
+  phone: ['Registro', 'Reporte', 'Trabajos', 'Hallazgos'],
+  desktop: ['Registro de equipo', 'Reporte diario', 'Trabajos extra', 'Hallazgos'],
+} as const;
 
 afterEach(cleanup);
 
@@ -48,7 +57,7 @@ describe('TerrenoLayout', () => {
     renderLayout('phone');
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Terreno' });
-    for (const seccion of SECCIONES) {
+    for (const seccion of SECCIONES.phone) {
       expect(within(nav).getByRole('link', { name: seccion })).toBeTruthy();
     }
   });
@@ -73,7 +82,7 @@ describe('TerrenoLayout', () => {
     renderLayout(size);
 
     expect(screen.getAllByRole('navigation', { name: 'Secciones de Terreno' })).toHaveLength(1);
-    for (const seccion of SECCIONES) {
+    for (const seccion of SECCIONES[size]) {
       expect(screen.getAllByRole('link', { name: seccion })).toHaveLength(1);
     }
   });
@@ -84,7 +93,7 @@ describe('TerrenoLayout', () => {
 
     expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy();
-    for (const seccion of SECCIONES) {
+    for (const seccion of SECCIONES.desktop) {
       expect(screen.getAllByRole('link', { name: seccion })).toHaveLength(1);
     }
   });
