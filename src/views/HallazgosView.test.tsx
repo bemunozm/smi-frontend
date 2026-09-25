@@ -54,9 +54,8 @@ describe('HallazgosView', () => {
   it('en escritorio muestra el historial como tabla, sin perder el formulario', () => {
     renderView('desktop');
 
-    const tabla = screen.getByRole('grid', { name: 'Hallazgos del turno' });
-    expect(tabla).toBeTruthy();
-    for (const columna of ['Equipo', 'Prioridad', 'Descripción', 'Estado', 'Fecha']) {
+    expect(screen.getByRole('table', { name: /Hallazgos recientes/ })).toBeTruthy();
+    for (const columna of ['Fecha', 'Equipo', 'Prioridad', 'Descripción', 'Foto', 'Estado']) {
       expect(screen.getByRole('columnheader', { name: columna })).toBeTruthy();
     }
 
