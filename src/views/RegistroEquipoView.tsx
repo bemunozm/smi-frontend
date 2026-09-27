@@ -441,10 +441,13 @@ export function RegistroEquipoView() {
   const encabezados = (
     <thead>
       <tr>
+        {/* «Horóm. inicial / final» eran los títulos más anchos de la tabla y
+            forzaban el scroll. La sección ya habla de horómetros: el contexto
+            lo da el encabezado del grupo, no cada columna. */}
         <th className={TH}>Equipo</th>
         <th className={TH}>Operador</th>
-        <th className={`${TH} text-right`}>Horóm. inicial</th>
-        <th className={`${TH} text-right`}>Horóm. final</th>
+        <th className={`${TH} text-right`}>Inicial</th>
+        <th className={`${TH} text-right`}>Final</th>
         <th className={`${TH} text-right`}>Horas</th>
         <th className={`${TH} text-right`}>Litros</th>
         <th className={TH}>Foto</th>

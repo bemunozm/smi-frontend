@@ -450,7 +450,15 @@ export function Tabla({ titulo, detalle, children }: { titulo: string; detalle?:
   );
 }
 
-export const TH = 'border-b border-border bg-[#fafbfc] px-3 py-2.5 text-left text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase whitespace-nowrap';
+/**
+ * Encabezado de columna. **Sin `whitespace-nowrap` a propósito**: un título
+ * largo que no puede cortarse le fija a su columna un ancho mínimo enorme, y
+ * entre ocho o nueve columnas eso es lo que empujaba la tabla fuera de la
+ * pantalla y obligaba a la barra horizontal. Dejarlo envolver en dos líneas
+ * cuesta unos píxeles de alto y devuelve el ancho a los datos.
+ */
+export const TH =
+  'border-b border-border bg-[#fafbfc] px-3 py-2.5 text-left text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase';
 export const TD = 'border-b border-[#eceef1] px-3 py-3 align-middle';
 
 /**
@@ -520,7 +528,7 @@ export function Hoja({
  */
 export function VistaSplit({ formulario, historial }: { formulario: ReactNode; historial: ReactNode }) {
   return (
-    <div className="lg:grid lg:grid-cols-[416px_minmax(0,1fr)] lg:items-start lg:gap-6">
+    <div className="lg:grid lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-6 xl:grid-cols-[416px_minmax(0,1fr)]">
       <section className="flex flex-col gap-3.5">{formulario}</section>
       <section className="mt-5 flex min-w-0 flex-col gap-3.5 lg:mt-0">{historial}</section>
     </div>

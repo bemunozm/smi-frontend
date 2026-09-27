@@ -45,7 +45,8 @@ const tabs = [
  * El techo igual existe: sin él, en un monitor de 1920 el formulario quedaría
  * de punta a punta, que es tan malo como la columna angosta pero al revés.
  */
-const CONTAINER = 'mx-auto w-full max-w-md px-4 sm:max-w-2xl lg:max-w-6xl';
+const CONTAINER =
+  'mx-auto w-full max-w-md px-4 sm:max-w-2xl lg:max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1680px]';
 
 /** ¿Hay señal? Es un dato de la sesión entera, no de una vista. */
 function useEnLinea(): boolean {
