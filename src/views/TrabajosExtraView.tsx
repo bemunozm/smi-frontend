@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Lock } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
 } from '../types/trabajosExtra';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
+import { useHorometroList } from '../hooks/useHorometro';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
@@ -20,6 +22,7 @@ import {
   Card,
   CardHead,
   Chip,
+  ChipSeleccion,
   ChipContexto,
   Form,
   GrupoHead,
@@ -51,6 +54,16 @@ const TURNOS = [
  * que cuando exista `branchId` esta lista sale del servidor y deja de estar
  * escrita acá.
  */
+/**
+ * Cómo se lee un trabajo en el historial. «Otro» se muestra con su texto y no
+ * con la etiqueta genérica, que no le diría nada a quien revisa para cobrar.
+ */
+function etiquetaActividades(r: { actividades: string[]; otraActividad: string | null }): string {
+  return r.actividades
+    .map((a) => (a === 'OTRO' && r.otraActividad ? r.otraActividad : (actividadLabel[a] ?? a)))
+    .join(', ');
+}
+
 const FAENAS = [
   { valor: 'Patillo', label: 'Patillo' },
   { valor: 'Kainita', label: 'Kainita' },
@@ -60,7 +73,26 @@ export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
+  const { data: lecturas = [] } = useHorometroList();
   const crear = useCreateTrabajoExtra();
+
+  /**
+   * Un equipo con **turno en curso** está ocupado y no admite un trabajo
+   * extraordinario hasta que se cierre la tarjeta.
+   *
+   * El motivo es el cobro: las horas del trabajo y las del turno se facturan
+   * por separado, y mientras el turno sigue abierto no se sabe cuáles serán
+   * sus horas, así que las del trabajo podrían quedar contadas dos veces.
+   *
+   * «Turno en curso» es la misma definición que usa el backend —una lectura
+   * de horómetro sin `valorFinal`— y ahí está la regla de verdad, porque la
+   * especificación pide registrar sin señal y sincronizar después (R4). Acá
+   * solo se evita ofrecer una opción que el servidor va a rechazar.
+   */
+  const ocupados = useMemo(
+    () => new Set(lecturas.filter((l) => l.valorFinal == null).map((l) => l.equipoId)),
+    [lecturas],
+  );
 
   const {
     register,
@@ -71,11 +103,12 @@ export function TrabajosExtraView() {
     formState: { errors },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
     resolver: zodResolver(trabajoExtraFormSchema),
-    defaultValues: { equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividad: 'REGULACION_CARGA' },
+    defaultValues: { equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividades: [], otraActividad: '' },
   });
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
   const faena = watch('faena') || 'Patillo';
+  const actividades = watch('actividades') ?? [];
   const ini = Number(watch('horometroInicial')) || 0;
   const fin = Number(watch('horometroFinal')) || 0;
   const totalHoras = fin > ini ? fin - ini : null;
@@ -83,7 +116,7 @@ export function TrabajosExtraView() {
   const onSubmit = (values: TrabajoExtraForm) =>
     crear.mutate(values, {
       onSuccess: () =>
-        reset({ equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividad: 'REGULACION_CARGA' }),
+        reset({ equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividades: [], otraActividad: '' }),
     });
 
   const formulario = (
@@ -95,14 +128,33 @@ export function TrabajosExtraView() {
         />
         <Form>
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Equipo" hint={errors.equipoId?.message}>
+            {/*
+              Los ocupados se muestran **deshabilitados**, no escondidos. Si un
+              equipo desaparece de la lista el supervisor no sabe si está
+              ocupado, si lo dieron de baja o si se equivocó de pantalla;
+              verlo en gris y con el motivo al lado responde la pregunta sin
+              que tenga que ir a buscarla a otro lado.
+            */}
+            <Campo
+              label="Equipo"
+              hint={
+                errors.equipoId?.message ??
+                (ocupados.size > 0
+                  ? `${ocupados.size} ${ocupados.size === 1 ? 'equipo está' : 'equipos están'} en turno. Cerrá su tarjeta para poder cargarle un trabajo.`
+                  : undefined)
+              }
+            >
               <Select {...register('equipoId')}>
                 <option value="">Seleccioná…</option>
-                {equipos.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.internalCode}
-                  </option>
-                ))}
+                {equipos.map((e) => {
+                  const ocupado = ocupados.has(e.id);
+                  return (
+                    <option key={e.id} value={e.id} disabled={ocupado}>
+                      {e.internalCode}
+                      {ocupado ? ' · ocupado, en turno' : ''}
+                    </option>
+                  );
+                })}
               </Select>
             </Campo>
             <Campo label="Operador" hint={errors.operador?.message}>
@@ -151,21 +203,43 @@ export function TrabajosExtraView() {
             valor={totalHoras != null ? `${fmtNum(totalHoras)} h` : '—'}
           />
 
-          <Campo
-            label="Actividad"
-            hint={
-              errors.actividad?.message ??
-              'Por ahora una sola. La especificación pide multi-selección con una opción «Otro» de texto libre: falta el backend.'
-            }
-          >
-            <Select {...register('actividad')}>
+          {/*
+            Multi-selección con chips grandes y no un `select` múltiple: una
+            salida suele mezclar tareas, y el `select` múltiple obliga a saber
+            que hay que mantener Ctrl apretado — impensable con guantes.
+          */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Actividades</Label>
+            <div className="flex flex-wrap gap-2">
               {ACTIVIDADES.map((a) => (
-                <option key={a.value} value={a.value}>
+                <ChipSeleccion
+                  key={a.value}
+                  activo={actividades.includes(a.value)}
+                  onToggle={() =>
+                    setValue(
+                      'actividades',
+                      actividades.includes(a.value)
+                        ? actividades.filter((v) => v !== a.value)
+                        : [...actividades, a.value],
+                      { shouldValidate: true },
+                    )
+                  }
+                >
                   {a.label}
-                </option>
+                </ChipSeleccion>
               ))}
-            </Select>
-          </Campo>
+            </div>
+            {errors.actividades?.message && <Hint>{errors.actividades.message}</Hint>}
+          </div>
+
+          {/* El texto aparece solo si se eligió «Otro», y es obligatorio: sin
+              él la actividad quedaría como «otro» a secas y el trabajo no se
+              podría justificar ni cobrar. */}
+          {actividades.includes('OTRO') && (
+            <Campo label="¿Cuál fue la otra actividad?" requerido hint={errors.otraActividad?.message}>
+              <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
+            </Campo>
+          )}
 
           <Campo label="Descripción de la tarea" hint={errors.descripcion?.message}>
             <Textarea rows={3} placeholder="Qué se hizo y dónde" {...register('descripcion')} />
@@ -213,7 +287,7 @@ export function TrabajosExtraView() {
                 <b className="tabular block text-[15px] font-semibold">{r.equipo?.internalCode ?? r.equipoId}</b>
               </td>
               <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
-              <td className={`${TD} w-full max-w-0 truncate`}>{actividadLabel[r.actividad] ?? r.actividad}</td>
+              <td className={`${TD} w-full max-w-0 truncate`}>{etiquetaActividades(r)}</td>
               <td className={`${TD} tabular text-right font-semibold`}>{fmtNum(r.totalHoras)} h</td>
             </tr>
           ))}
@@ -234,7 +308,7 @@ export function TrabajosExtraView() {
                 </div>
                 <Chip tono="neutral">{r.faena}</Chip>
               </div>
-              <Chip tono="info">{actividadLabel[r.actividad] ?? r.actividad}</Chip>
+              <Chip tono="info">{etiquetaActividades(r)}</Chip>
               <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
                 <span>
                   {fmtDate(r.fecha)} · {r.turno}

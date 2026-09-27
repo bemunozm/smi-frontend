@@ -17,7 +17,7 @@ import {
   Hint,
   Input,
   Label,
-  Pick,
+  ChipSeleccion,
   Tabla,
   Tarjeta,
   TD,
@@ -257,9 +257,9 @@ export function ReporteDiarioView() {
         <CardHead titulo="Empresas externas del turno" bajada="Marca las contratistas que trabajaron hoy." />
         <div className="flex flex-wrap gap-2">
           {[...EMPRESAS, ...EMPRESAS_EN_DUDA].map((e) => (
-            <Pick key={e} activo={!!empresas[e]} onToggle={() => setEmpresas((v) => ({ ...v, [e]: !v[e] }))}>
+            <ChipSeleccion key={e} activo={!!empresas[e]} onToggle={() => setEmpresas((v) => ({ ...v, [e]: !v[e] }))}>
               {e}
-            </Pick>
+            </ChipSeleccion>
           ))}
         </div>
         <Hint>
