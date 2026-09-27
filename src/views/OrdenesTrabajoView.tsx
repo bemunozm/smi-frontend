@@ -14,8 +14,6 @@ import {
   Select,
   Spinner,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -318,7 +316,26 @@ function CreateOrdenModal() {
   );
 }
 
-/** Tarjeta de una OT: chips de prioridad/estado, metadata, cambio de estado y checklist. */
+/** KPI card — mismo patrón que `Contador`/`KpiCard` (Dashboard, Flota). */
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <Card>
+      <Card.Header>
+        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+          {label}
+        </Card.Description>
+        <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+          {value}
+        </Card.Title>
+      </Card.Header>
+    </Card>
+  );
+}
+
+/**
+ * Tarjeta de una OT dentro de la grilla web: chips de prioridad/estado,
+ * metadata compacta en 2 columnas, cambio de estado y checklist de tareas.
+ */
 function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
   const actualizarOrden = useActualizarOrden();
   const toggleTarea = useToggleTarea();
@@ -328,10 +345,10 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
   return (
     <Card>
       <Card.Header>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex flex-col gap-1">
-            <Card.Description className="font-mono text-xs text-muted">{orden.equipoId}</Card.Description>
-            <Card.Title className="font-display text-lg font-semibold text-foreground">
+            <Card.Description className="font-mono text-xs text-muted-foreground">{orden.equipoId}</Card.Description>
+            <Card.Title className="font-display text-base font-semibold text-foreground">
               {orden.titulo}
             </Card.Title>
           </div>
@@ -345,8 +362,8 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
           </div>
         </div>
       </Card.Header>
-      <Card.Content className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-3 text-sm text-foreground sm:grid-cols-2 lg:grid-cols-4">
+      <Card.Content className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-foreground">
           <div className="flex flex-col gap-0.5">
             <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
               Tipo
@@ -375,7 +392,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
         </div>
 
         <Select
-          className="max-w-64"
+          fullWidth
           isDisabled={actualizarOrden.isPending}
           value={orden.estado}
           onChange={(value) => {
@@ -419,7 +436,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
                     <Checkbox.Control>
                       <Checkbox.Indicator />
                     </Checkbox.Control>
-                    <span className={tarea.hecha ? 'text-sm text-muted line-through' : 'text-sm text-foreground'}>
+                    <span className={tarea.hecha ? 'text-sm text-muted-foreground line-through' : 'text-sm text-foreground'}>
                       {tarea.texto}
                     </span>
                   </Checkbox.Content>
@@ -450,6 +467,7 @@ export function OrdenesTrabajoView() {
       abiertas: lista.filter((orden) => orden.estado === 'PENDIENTE' || orden.estado === 'ASIGNADA').length,
       enProceso: lista.filter((orden) => orden.estado === 'EN_PROCESO').length,
       cerradas: lista.filter((orden) => orden.estado === 'COMPLETADA' || orden.estado === 'CANCELADA').length,
+      total: lista.length,
     };
   }, [ordenes]);
 
@@ -462,60 +480,48 @@ export function OrdenesTrabajoView() {
           <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
             Órdenes de trabajo
           </h2>
-          <p className="text-sm text-muted">Bandeja de OT correctivas y preventivas.</p>
+          <p className="text-sm text-muted-foreground">Bandeja de OT correctivas y preventivas.</p>
         </div>
         {puedeCrear ? <CreateOrdenModal /> : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
-          <Card.Header>
-            <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Abiertas
-            </Card.Description>
-            <Card.Title className="font-display text-2xl font-semibold text-foreground">
-              {stats.abiertas}
-            </Card.Title>
-          </Card.Header>
-        </Card>
-        <Card>
-          <Card.Header>
-            <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              En proceso
-            </Card.Description>
-            <Card.Title className="font-display text-2xl font-semibold text-foreground">
-              {stats.enProceso}
-            </Card.Title>
-          </Card.Header>
-        </Card>
-        <Card>
-          <Card.Header>
-            <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Cerradas
-            </Card.Description>
-            <Card.Title className="font-display text-2xl font-semibold text-foreground">
-              {stats.cerradas}
-            </Card.Title>
-          </Card.Header>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard label="Abiertas" value={stats.abiertas} />
+        <StatCard label="En proceso" value={stats.enProceso} />
+        <StatCard label="Cerradas" value={stats.cerradas} />
+        <StatCard label="Total" value={stats.total} />
       </div>
 
-      <ToggleButtonGroup
-        aria-label="Filtrar por estado"
-        disallowEmptySelection
-        selectedKeys={new Set([filtro])}
-        onSelectionChange={(keys) => {
-          const key = [...keys][0];
-          if (typeof key === 'string') setFiltro(key as FiltroEstado);
-        }}
-      >
-        <ToggleButton id="TODAS">Todas</ToggleButton>
-        {ESTADO_OT_OPTIONS.map((option) => (
-          <ToggleButton key={option.value} id={option.value}>
-            {option.label}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
+      <div className="flex flex-wrap items-end gap-3">
+        <Select
+          className="w-full sm:w-56"
+          aria-label="Filtrar por estado"
+          value={filtro}
+          onChange={(value) => {
+            if (value) setFiltro(value as FiltroEstado);
+          }}
+        >
+          <Label>Estado</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id="TODAS" textValue="Todas">
+                Todas
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {ESTADO_OT_OPTIONS.map((option) => (
+                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                  {option.label}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+      </div>
 
       {isPending ? (
         <div className="flex justify-center py-16">
@@ -532,12 +538,12 @@ export function OrdenesTrabajoView() {
       {!isPending && !isError && ordenes && ordenes.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">No hay órdenes de trabajo para este filtro</p>
-          <p className="text-sm text-muted">Crea una nueva con el botón "Crear orden".</p>
+          <p className="text-sm text-muted-foreground">Crea una nueva con el botón "Crear orden".</p>
         </div>
       ) : null}
 
       {!isPending && !isError && ordenes && ordenes.length > 0 ? (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {ordenes.map((orden) => (
             <OrdenCard key={orden.id} orden={orden} />
           ))}

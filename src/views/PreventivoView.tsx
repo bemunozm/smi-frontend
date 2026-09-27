@@ -3,17 +3,18 @@ import { Controller, useForm } from 'react-hook-form';
 import {
   Button,
   Card,
+  Chip,
   FieldError,
   Input,
   Label,
   Modal,
   NumberField,
   Spinner,
-  Table,
   TextField,
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useMantencionesProximas } from '../hooks/useDashboard';
 import { useCrearUmbral, useUmbrales } from '../hooks/useUmbrales';
 import { ROLES } from '../types/roles';
 import { CreateUmbralSchema, type CreateUmbralInput } from '../types/mantenimiento';
@@ -138,11 +139,74 @@ function CreateUmbralModal() {
 }
 
 /**
- * Sub-vista "Preventivo" del dominio Mantenimiento: lista los umbrales reales
- * (horas por tipo de equipo/mantención) desde `useUmbrales`. El avance real
- * por equipo (horómetro actual vs. umbral) depende del dominio Flota, que
- * todavía no expone un endpoint — se muestra una nota explícita en vez de
- * inventar porcentajes u horas.
+ * Equipos cerca de su umbral de horómetro (horómetro actual vs. umbral). Es un
+ * dato del dominio Mantenimiento: se reutiliza `useMantencionesProximas` (mismo
+ * hook/tipo/estilo que el Dashboard de Benjamín) — hoy mockeado hasta que Flota
+ * exponga el horómetro real. `horometroRestante === 0` ⇒ umbral alcanzado (rojo).
+ */
+function EquiposCercaUmbralSection() {
+  const { data: mantenciones, isPending, isError, error } = useMantencionesProximas();
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <Card.Header>
+        <Card.Title>Equipos cerca de su umbral</Card.Title>
+        <Card.Description className="text-muted-foreground">
+          Horómetro restante hasta la próxima mantención. En rojo, los que ya alcanzaron el umbral.
+        </Card.Description>
+      </Card.Header>
+
+      {isPending ? (
+        <div className="flex justify-center py-8">
+          <Spinner color="accent" size="sm" />
+        </div>
+      ) : null}
+
+      {isError ? (
+        <p className="px-1 text-sm text-danger-soft-foreground" role="alert">
+          {error instanceof Error ? error.message : 'No se pudo cargar los equipos cerca del umbral.'}
+        </p>
+      ) : null}
+
+      {!isPending && !isError && mantenciones.length > 0 ? (
+        <ul className="flex flex-col">
+          {mantenciones.map((mantencion) => (
+            <li
+              key={mantencion.id}
+              className="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0"
+            >
+              <div className="flex min-w-0 flex-col">
+                <span className="font-mono text-sm font-semibold text-foreground">{mantencion.equipo}</span>
+                <span className="text-xs text-muted-foreground">
+                  {mantencion.tipo === 'PREVENTIVA' ? 'Preventiva' : 'Correctiva'}
+                </span>
+              </div>
+              {mantencion.horometroRestante > 0 ? (
+                <span className="font-mono text-sm font-semibold text-foreground">
+                  {mantencion.horometroRestante} h
+                </span>
+              ) : (
+                <Chip color="danger" size="sm" variant="soft">
+                  Umbral alcanzado
+                </Chip>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {!isPending && !isError && mantenciones.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">No hay equipos cerca de su umbral.</p>
+      ) : null}
+    </Card>
+  );
+}
+
+/**
+ * Sub-vista "Preventivo" del dominio Mantenimiento. Dos bloques:
+ *  1. Equipos cerca de su umbral (horómetro restante, rojo si ya lo alcanzaron).
+ *  2. Umbrales configurados (horas por tipo de equipo/mantención) — CRUD real
+ *     vía `useUmbrales` / `useCrearUmbral`, renderizados como grid de cards.
  */
 export function PreventivoView() {
   const { role } = useCurrentUser();
@@ -151,73 +215,67 @@ export function PreventivoView() {
   const puedeCrear = role === ROLES.ADMIN;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
             Umbrales por horómetro
           </h2>
-          <p className="text-sm text-muted">Motor preventivo: define cada cuántas horas corresponde una mantención.</p>
+          <p className="text-sm text-muted-foreground">
+            Motor preventivo: define cada cuántas horas corresponde una mantención.
+          </p>
         </div>
         {puedeCrear ? <CreateUmbralModal /> : null}
       </div>
 
-      <Card>
-        <Card.Content>
-          <p className="text-sm text-foreground">
-            El avance por equipo (horómetro actual vs. umbral configurado) depende del dominio
-            Flota, que todavía no expone un endpoint de horómetros —{' '}
-            <span className="font-semibold">pendiente de integración con Flota</span>. Por ahora
-            esta pestaña solo administra los umbrales configurados.
-          </p>
-        </Card.Content>
-      </Card>
+      <EquiposCercaUmbralSection />
 
-      {isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner color="accent" size="lg" />
-        </div>
-      ) : null}
+      <div className="flex flex-col gap-3">
+        <h3 className="font-display text-base font-semibold text-foreground">Umbrales configurados</h3>
 
-      {isError ? (
-        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
-          {error instanceof Error ? error.message : 'No se pudo cargar la lista de umbrales.'}
-        </div>
-      ) : null}
+        {isPending ? (
+          <div className="flex justify-center py-16">
+            <Spinner color="accent" size="lg" />
+          </div>
+        ) : null}
 
-      {!isPending && !isError && umbrales && umbrales.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">Todavía no hay umbrales configurados</p>
-          <p className="text-sm text-muted">Crea el primero con el botón "Crear umbral".</p>
-        </div>
-      ) : null}
+        {isError ? (
+          <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar la lista de umbrales.'}
+          </div>
+        ) : null}
 
-      {!isPending && !isError && umbrales && umbrales.length > 0 ? (
-        <Table variant="secondary">
-          <Table.ScrollContainer>
-            <Table.Content aria-label="Umbrales preventivos" className="min-w-140">
-              <Table.Header>
-                <Table.Column isRowHeader>Tipo de equipo</Table.Column>
-                <Table.Column>Tipo de mantención</Table.Column>
-                <Table.Column>Umbral (horas)</Table.Column>
-                <Table.Column>Avance por equipo</Table.Column>
-              </Table.Header>
-              <Table.Body>
-                <Table.Collection items={umbrales}>
-                  {(umbral) => (
-                    <Table.Row>
-                      <Table.Cell>{umbral.tipoEquipo}</Table.Cell>
-                      <Table.Cell>{umbral.tipoMantencion}</Table.Cell>
-                      <Table.Cell className="font-mono">{umbral.umbralHoras} h</Table.Cell>
-                      <Table.Cell className="text-muted">Pendiente de integración con Flota</Table.Cell>
-                    </Table.Row>
-                  )}
-                </Table.Collection>
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
-      ) : null}
+        {!isPending && !isError && umbrales && umbrales.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+            <p className="text-sm font-medium text-foreground">Todavía no hay umbrales configurados</p>
+            <p className="text-sm text-muted-foreground">Crea el primero con el botón "Crear umbral".</p>
+          </div>
+        ) : null}
+
+        {!isPending && !isError && umbrales && umbrales.length > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {umbrales.map((umbral) => (
+              <Card key={umbral.id}>
+                <Card.Header>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <Card.Title className="font-display text-base font-semibold text-foreground">
+                        {umbral.tipoEquipo}
+                      </Card.Title>
+                      <Card.Description className="text-sm text-muted-foreground">
+                        {umbral.tipoMantencion}
+                      </Card.Description>
+                    </div>
+                    <Chip color="accent" size="sm" variant="soft">
+                      {umbral.umbralHoras} h
+                    </Chip>
+                  </div>
+                </Card.Header>
+              </Card>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
