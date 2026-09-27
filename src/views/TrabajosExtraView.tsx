@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Lock } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
 } from '../types/trabajosExtra';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
+import { useHorometroList } from '../hooks/useHorometro';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
@@ -71,7 +73,26 @@ export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
+  const { data: lecturas = [] } = useHorometroList();
   const crear = useCreateTrabajoExtra();
+
+  /**
+   * Un equipo con **turno en curso** está ocupado y no admite un trabajo
+   * extraordinario hasta que se cierre la tarjeta.
+   *
+   * El motivo es el cobro: las horas del trabajo y las del turno se facturan
+   * por separado, y mientras el turno sigue abierto no se sabe cuáles serán
+   * sus horas, así que las del trabajo podrían quedar contadas dos veces.
+   *
+   * «Turno en curso» es la misma definición que usa el backend —una lectura
+   * de horómetro sin `valorFinal`— y ahí está la regla de verdad, porque la
+   * especificación pide registrar sin señal y sincronizar después (R4). Acá
+   * solo se evita ofrecer una opción que el servidor va a rechazar.
+   */
+  const ocupados = useMemo(
+    () => new Set(lecturas.filter((l) => l.valorFinal == null).map((l) => l.equipoId)),
+    [lecturas],
+  );
 
   const {
     register,
@@ -107,14 +128,33 @@ export function TrabajosExtraView() {
         />
         <Form>
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Equipo" hint={errors.equipoId?.message}>
+            {/*
+              Los ocupados se muestran **deshabilitados**, no escondidos. Si un
+              equipo desaparece de la lista el supervisor no sabe si está
+              ocupado, si lo dieron de baja o si se equivocó de pantalla;
+              verlo en gris y con el motivo al lado responde la pregunta sin
+              que tenga que ir a buscarla a otro lado.
+            */}
+            <Campo
+              label="Equipo"
+              hint={
+                errors.equipoId?.message ??
+                (ocupados.size > 0
+                  ? `${ocupados.size} ${ocupados.size === 1 ? 'equipo está' : 'equipos están'} en turno. Cerrá su tarjeta para poder cargarle un trabajo.`
+                  : undefined)
+              }
+            >
               <Select {...register('equipoId')}>
                 <option value="">Seleccioná…</option>
-                {equipos.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.internalCode}
-                  </option>
-                ))}
+                {equipos.map((e) => {
+                  const ocupado = ocupados.has(e.id);
+                  return (
+                    <option key={e.id} value={e.id} disabled={ocupado}>
+                      {e.internalCode}
+                      {ocupado ? ' · ocupado, en turno' : ''}
+                    </option>
+                  );
+                })}
               </Select>
             </Campo>
             <Campo label="Operador" hint={errors.operador?.message}>
