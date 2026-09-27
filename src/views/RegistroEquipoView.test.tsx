@@ -74,9 +74,21 @@ describe('RegistroEquipoView', () => {
     const cerrar = screen.getByRole('button', { name: /Cerrar tarjeta/ });
     expect(cerrar.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Falta la foto del surtidor para cerrar.')).toBeTruthy();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /Tomar foto del surtidor/ }));
-    expect(screen.queryByText('Falta la foto del surtidor para cerrar.')).toBeNull();
+  /**
+   * La captura en sí —cámara, OCR de los litros, frescura por EXIF y subida a
+   * R2— es el flujo compartido de Flota (`usePhotoCaptureFlow` +
+   * `FotoRespaldoField`), y tiene sus propios tests ahí. Acá solo se verifica
+   * que esta vista lo está usando y no una versión propia.
+   */
+  it('usa el campo de foto compartido de Flota, no uno propio', () => {
+    renderView('desktop');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^Cerrar$/ })[0]);
+
+    expect(screen.getByText(/Foto de respaldo/)).toBeTruthy();
+    expect(screen.getByText(/sin la mano sobre el vidrio/)).toBeTruthy();
   });
 
   /** El horómetro final no puede ser menor que el inicial. */

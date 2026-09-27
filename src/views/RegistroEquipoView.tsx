@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { ArrowRight, Camera, Check, Clock, Lock, Mail, User } from 'lucide-react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
+import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import {
   Automatico,
@@ -62,6 +64,8 @@ interface TarjetaTurno {
   turno: 'D' | 'N';
   estado: Estado;
   cerradaA?: string;
+  /** Clave de la foto del surtidor en R2 (no una URL pública). */
+  fotoKey?: string;
   /** Registrada sin señal: está en el equipo, todavía no en el servidor. */
   sinSincronizar?: boolean;
   /** Quedó abierta al terminar el turno anterior — ver la nota de Q5. */
@@ -136,7 +140,27 @@ export function RegistroEquipoView() {
   const [apertura, setApertura] = useState({ equipoId: '', operador: OPERADORES[5], horometro: '' });
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
 
-  const [cierre, setCierre] = useState({ final: '', litros: '', foto: false, observaciones: '' });
+  const [cierre, setCierre] = useState({ final: '', litros: '', observaciones: '' });
+
+  /**
+   * Foto del surtidor, OCR y subida: se toma entero del flujo que ya construyó
+   * Flota (`usePhotoCaptureFlow` + `FotoRespaldoField`, PRs #21 a #23). No se
+   * rehace nada acá.
+   *
+   * Lo que ese flujo aporta y esta maqueta antes simulaba:
+   * - la foto se sube a **R2 privado** y devuelve una clave de almacenamiento,
+   *   no una URL pública inventada;
+   * - un OCR local lee los litros del display y **prellena el campo**, que
+   *   sigue siendo editable — el supervisor confirma en vez de tipear;
+   * - la fecha de captura sale del EXIF, así que la pantalla puede avisar si
+   *   la foto no es de ahora.
+   *
+   * La foto sigue siendo obligatoria para cerrar: es el respaldo de la carga
+   * y el cliente la pidió explícitamente.
+   */
+  const foto = usePhotoCaptureFlow((litros) =>
+    setCierre((c) => ({ ...c, litros: fmt(litros) })),
+  );
 
   const cerrando = tarjetas.find((t) => t.id === cerrandoId) ?? null;
   const finalNum = aNumero(cierre.final);
@@ -162,11 +186,20 @@ export function RegistroEquipoView() {
 
   const abrirCierre = (id: number) => {
     setCerrandoId(id);
-    setCierre({ final: '', litros: '', foto: false, observaciones: '' });
+    setCierre({ final: '', litros: '', observaciones: '' });
+    // La foto es de ESTA tarjeta: arrastrar la anterior mezclaría el respaldo
+    // de un equipo con el de otro.
+    foto.resetPhoto();
   };
 
-  const confirmarCierre = () => {
-    if (!cerrando || finalNum == null || finalInvalido || !cierre.foto) return;
+  const confirmarCierre = async () => {
+    if (!cerrando || finalNum == null || finalInvalido || !foto.file) return;
+
+    // La foto se sube a R2 y lo que queda guardado es su clave, no un enlace
+    // público. Si la subida falla, `upload` avisa y no se cierra la tarjeta.
+    const storageKey = await foto.upload(foto.file);
+    if (!storageKey) return;
+
     setTarjetas((ts) =>
       ts.map((t) =>
         t.id === cerrando.id
@@ -175,6 +208,7 @@ export function RegistroEquipoView() {
               estado: 'cerrada',
               final: finalNum,
               litros: aNumero(cierre.litros) ?? 0,
+              fotoKey: storageKey,
               cerradaA: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
             }
           : t,
@@ -514,35 +548,24 @@ export function RegistroEquipoView() {
         <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
       </Campo>
 
-      {/* La foto del totalizador es el respaldo de la carga y el cliente la puso
-          como obligatoria. Sin ella el botón no se habilita — y la pantalla
-          dice por qué, en vez de dejar un botón apagado sin explicación. */}
-      <div className="flex flex-col gap-1.5">
-        <Label requerido>Foto del surtidor</Label>
-        {cierre.foto ? (
-          <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#6a747e] to-[#2d3338]">
-            <div className="rounded-lg border-[3px] border-[#1f2a22] bg-[#0e1a12] px-3.5 py-2 text-[26px] tracking-wider text-[#9be7a8]" style={{ fontFamily: 'var(--font-mono)' }}>
-              <small className="block text-[10px] tracking-[0.14em] text-[#6fae7b]">LITROS</small>
-              {cierre.litros || '0'}
-            </div>
-            <span className="tabular absolute bottom-2 left-2 rounded-md bg-[#0d0c0a]/70 px-1.5 py-0.5 text-[11px] text-white">
-              surtidor_{cerrando.equipo}.jpg · ahora
-            </span>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setCierre((c) => ({ ...c, foto: true }))}
-            className="flex min-h-28 w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[18px] border-2 border-dashed border-[#e7a3a3] bg-[#fff8f8] p-3 text-[15px] font-semibold"
-          >
-            <Camera className="h-7 w-7" />
-            Tomar foto del surtidor
-            <small className="text-[12.5px] font-normal text-muted-foreground">
-              Funciona sin señal: sube al sincronizar
-            </small>
-          </button>
-        )}
-      </div>
+      {/*
+        Foto, OCR y subida vienen enteros de Flota: el mismo bloque que usan
+        la entrada, la salida y la carga de combustible. La foto del
+        totalizador es el respaldo de la carga y el cliente la puso como
+        obligatoria; sin ella el botón no se habilita, y la pantalla dice por
+        qué en vez de dejar un botón apagado sin explicación.
+      */}
+      <FotoRespaldoField
+        file={foto.file}
+        isReadingPhoto={foto.isReadingPhoto}
+        isUploadingPhoto={foto.isUploadingPhoto}
+        captureDate={foto.captureDate}
+        onSelect={foto.handleSelectPhoto}
+        onClear={foto.handleClearPhoto}
+        title="Foto del surtidor"
+        subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+        staleQuestion="¿Es la carga de este turno?"
+      />
 
       <Campo label="Observaciones">
         <Textarea
@@ -553,10 +576,17 @@ export function RegistroEquipoView() {
         />
       </Campo>
 
-      <Boton ancho onClick={confirmarCierre} disabled={!cierre.foto || finalNum == null || finalInvalido}>
-        Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
+      <Boton
+        ancho
+        onClick={confirmarCierre}
+        disabled={
+          !foto.file || foto.isReadingPhoto || foto.isUploadingPhoto || finalNum == null || finalInvalido
+        }
+      >
+        {foto.isUploadingPhoto ? 'Subiendo la foto…' : 'Cerrar tarjeta'}
+        <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
-      {!cierre.foto && (
+      {!foto.file && (
         <p className="m-0 text-center text-[12.5px] text-muted-foreground">
           Falta la foto del surtidor para cerrar.
         </p>
