@@ -54,7 +54,7 @@ describe('TrabajosExtraView', () => {
    * contadas dos veces. El servidor lo rechaza; la vista además no lo ofrece,
    * para no mostrar una opción que va a fallar.
    */
-  it('no ofrece equipos con un turno en curso', () => {
+  it('muestra los equipos en turno como ocupados y no deja elegirlos', () => {
     const qc = new QueryClient();
     qc.setQueryData(
       ['equipment'],
@@ -80,8 +80,16 @@ describe('TrabajosExtraView', () => {
     );
 
     const selector = screen.getByLabelText('Equipo');
-    expect(within(selector).getByRole('option', { name: 'CM-003' })).toBeTruthy();
-    expect(within(selector).queryByRole('option', { name: 'CA-011' })).toBeNull();
-    expect(screen.getByText(/1 equipo está con turno en curso/)).toBeTruthy();
+
+    // El libre se puede elegir.
+    const libre = within(selector).getByRole('option', { name: 'CM-003' });
+    expect(libre.hasAttribute('disabled')).toBe(false);
+
+    // El ocupado sigue a la vista —para que se sepa que existe— pero
+    // deshabilitado y diciendo por qué.
+    const ocupado = within(selector).getByRole('option', { name: /CA-011 · ocupado, en turno/ });
+    expect(ocupado.hasAttribute('disabled')).toBe(true);
+
+    expect(screen.getByText(/1 equipo está en turno/)).toBeTruthy();
   });
 });

@@ -82,7 +82,6 @@ export function TrabajosExtraView() {
     () => new Set(lecturas.filter((l) => l.valorFinal == null).map((l) => l.equipoId)),
     [lecturas],
   );
-  const disponibles = equipos.filter((e) => !ocupados.has(e.id));
 
   const {
     register,
@@ -117,22 +116,33 @@ export function TrabajosExtraView() {
         />
         <Form>
           <div className="grid grid-cols-2 gap-3">
+            {/*
+              Los ocupados se muestran **deshabilitados**, no escondidos. Si un
+              equipo desaparece de la lista el supervisor no sabe si está
+              ocupado, si lo dieron de baja o si se equivocó de pantalla;
+              verlo en gris y con el motivo al lado responde la pregunta sin
+              que tenga que ir a buscarla a otro lado.
+            */}
             <Campo
               label="Equipo"
               hint={
                 errors.equipoId?.message ??
                 (ocupados.size > 0
-                  ? `${ocupados.size} ${ocupados.size === 1 ? 'equipo está' : 'equipos están'} con turno en curso y no aparecen.`
+                  ? `${ocupados.size} ${ocupados.size === 1 ? 'equipo está' : 'equipos están'} en turno. Cerrá su tarjeta para poder cargarle un trabajo.`
                   : undefined)
               }
             >
               <Select {...register('equipoId')}>
                 <option value="">Seleccioná…</option>
-                {disponibles.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.internalCode}
-                  </option>
-                ))}
+                {equipos.map((e) => {
+                  const ocupado = ocupados.has(e.id);
+                  return (
+                    <option key={e.id} value={e.id} disabled={ocupado}>
+                      {e.internalCode}
+                      {ocupado ? ' · ocupado, en turno' : ''}
+                    </option>
+                  );
+                })}
               </Select>
             </Campo>
             <Campo label="Operador" hint={errors.operador?.message}>
