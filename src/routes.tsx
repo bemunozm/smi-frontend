@@ -23,6 +23,8 @@ import { CombustibleView } from './views/CombustibleView';
 import { HorometroView } from './views/HorometroView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
+import { ReporteDiarioView } from './views/ReporteDiarioView';
+import { RegistroEquipoView } from './views/RegistroEquipoView';
 
 export const router = createBrowserRouter([
   {
@@ -86,11 +88,22 @@ export const router = createBrowserRouter([
           {
             element: <TerrenoLayout />,
             children: [
-              { path: '/terreno', element: <Navigate replace to="/terreno/hallazgos" /> },
-              { path: '/terreno/combustible', element: <CombustibleView /> },
-              { path: '/terreno/horometro', element: <HorometroView /> },
+              { path: '/terreno', element: <Navigate replace to="/terreno/registro" /> },
+              // Los cuatro destinos del módulo, en el orden de la maqueta.
+              // `registro` y `reporte-diario` son los módulos A y B de la espec
+              // del 21/09: maquetas sin backend todavía — ver la cabecera de
+              // cada vista.
+              { path: '/terreno/registro', element: <RegistroEquipoView /> },
+              { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
               { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
               { path: '/terreno/hallazgos', element: <HallazgosView /> },
+              // Combustible y Horómetro salieron de la navegación: la espec las
+              // fusiona en «Registro de equipo». Las rutas siguen vivas porque
+              // son las únicas dos con backend real, y de ahí hay que sacar los
+              // endpoints cuando el Módulo A deje de ser maqueta. Se borran
+              // recién entonces.
+              { path: '/terreno/combustible', element: <CombustibleView /> },
+              { path: '/terreno/horometro', element: <HorometroView /> },
             ],
           },
         ],

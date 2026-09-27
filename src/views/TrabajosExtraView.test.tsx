@@ -39,8 +39,10 @@ describe('TrabajosExtraView', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText('Trabajo extraordinario')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Trabajos extraordinarios' })).toBeTruthy();
     expect(screen.getByText('Registrar trabajo')).toBeTruthy();
+    // La faena del registro histórico se muestra tal como quedó guardada,
+    // aunque el formulario ya solo ofrezca Patillo y Kainita.
     expect(screen.getByText(/Rajo Norte/)).toBeTruthy();
     // 'Regulación y carga' aparece en el select y en la tarjeta de la lista
     expect(screen.getAllByText('Regulación y carga').length).toBeGreaterThan(0);

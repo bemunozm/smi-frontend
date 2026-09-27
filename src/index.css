@@ -114,6 +114,22 @@
   --label-color: #454c56;
   /* Color de "eyebrow" de sección/página (11px uppercase tracking amplio). */
   --eyebrow-color: #5b6470;
+
+  /* --- Terreno (maqueta aprobada 23/09/2026) ---------------------------
+     El módulo de Terreno tiene su propia paleta: negro CÁLIDO en el header
+     y en los botones oscuros, contra el resto de la app que es fría. No es
+     un descuido — es un módulo que se usa a pleno sol, y el cálido levanta
+     el contraste percibido contra el polvo y el reflejo.
+
+     Viven acá y no sueltos en las clases para que el día que haya que
+     ajustarlos se toque un lugar y no veinte. */
+  --terreno-head: #0d0c0a;
+  /* Fondo del marco tipo teléfono. Solo se ve mientras el shell es más
+     angosto que la pantalla. */
+  --terreno-warm: #e9e7e2;
+  --terreno-shell: #f5f4f1;
+  --terreno-online: #38d17a;
+  --terreno-offline: #e0a11a;
 }
 
 /* ==========================================================================
