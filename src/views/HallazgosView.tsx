@@ -7,7 +7,8 @@ import { useHallazgosList, useCreateHallazgo } from '../hooks/useHallazgos';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtTime } from '../lib/format';
-import { PhotoButtons } from '../components/terreno/mobile';
+import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
   Automatico,
   Automaticos,
@@ -89,12 +90,33 @@ export function HallazgosView() {
   });
 
   const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
-  const fotoUrl = watch('fotoUrl');
+  /**
+   * El OCR de litros no aplica acá —un hallazgo no tiene un display que leer—
+   * así que el callback de lectura no hace nada. Del flujo se usa el resto:
+   * EXIF para avisar si la foto es vieja, y la subida a storage privado.
+   */
+  const foto = usePhotoCaptureFlow(() => {});
 
-  const onSubmit = (values: HallazgoForm) =>
-    crear.mutate(values, {
-      onSuccess: () => reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA', fotoUrl: undefined }),
-    });
+  const onSubmit = async (values: HallazgoForm) => {
+    // La foto es opcional. Si hay, se sube antes: si la subida falla, el
+    // hallazgo no se crea a medias sin su respaldo.
+    let fotoKey: string | undefined;
+    if (foto.file) {
+      const key = await foto.upload(foto.file);
+      if (!key) return;
+      fotoKey = key;
+    }
+
+    crear.mutate(
+      { ...values, fotoKey },
+      {
+        onSuccess: () => {
+          reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
+          foto.resetPhoto();
+        },
+      },
+    );
+  };
 
   const sinCerrar = hallazgos.filter((h) => h.estado !== 'CERRADO').length;
 
@@ -144,15 +166,22 @@ export function HallazgosView() {
             <Textarea rows={3} placeholder="Qué se detectó, dónde y en qué condición" {...register('descripcion')} />
           </Campo>
 
-          <div className="flex flex-col gap-1.5">
-            <Label>
-              Foto
-              <span className="text-[11px] font-medium tracking-normal text-muted-foreground normal-case">
-                (opcional)
-              </span>
-            </Label>
-            <PhotoButtons value={fotoUrl} onChange={(u) => setValue('fotoUrl', u)} />
-          </div>
+          {/* El mismo campo que usan la entrada, la salida y la carga de
+              combustible: sube a storage privado y devuelve una key, en vez
+              de la URL pública de `/api/uploads`. */}
+          <FotoRespaldoField
+            file={foto.file}
+            isReadingPhoto={foto.isReadingPhoto}
+            isUploadingPhoto={foto.isUploadingPhoto}
+            captureDate={foto.captureDate}
+            onSelect={foto.handleSelectPhoto}
+            onClear={foto.handleClearPhoto}
+            requerida={false}
+            guia="Encuadrá la pieza o la zona afectada, de cerca y con luz — es lo que va a ver quien tome el hallazgo."
+            title="Foto del hallazgo"
+            subtitle="Ayuda a que quien lo revise entienda qué se detectó."
+            staleQuestion="¿Es del hallazgo de este turno?"
+          />
 
           {/* Un hallazgo nace abierto: el estado no se elige, se informa. */}
           <Automaticos>

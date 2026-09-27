@@ -18,6 +18,18 @@ interface FotoRespaldoFieldProps {
    * "¿es la lectura actual?" (horómetro, entrada/salida) de "¿es la carga
    * actual?" (combustible). */
   staleQuestion: string;
+  /**
+   * Por defecto la foto es requerida (los tres usos de Flota la exigen). En
+   * Hallazgos es opcional, y el encabezado tiene que decirlo: si dice
+   * "requerida" en rojo sobre un campo que no lo es, el supervisor saca una
+   * foto de más o abandona el formulario creyendo que le falta algo.
+   */
+  requerida?: boolean;
+  /**
+   * Guía de encuadre. La de Flota habla del display porque lo que se fotografía
+   * es un contador; un hallazgo no tiene display.
+   */
+  guia?: string;
 }
 
 /**
@@ -45,15 +57,20 @@ export function FotoRespaldoField({
   title,
   subtitle,
   staleQuestion,
+  requerida = true,
+  guia = 'Sacá la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
 }: FotoRespaldoFieldProps) {
   return (
     <div>
       <p className="mb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
-        Foto de respaldo <span className="text-(--danger)">· requerida</span>
+        Foto de respaldo{' '}
+        {requerida ? (
+          <span className="text-(--danger)">· requerida</span>
+        ) : (
+          <span className="text-(--muted)">· opcional</span>
+        )}
       </p>
-      <p className="mb-2 text-xs text-(--muted)">
-        Sacá la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.
-      </p>
+      <p className="mb-2 text-xs text-(--muted)">{guia}</p>
       <PhotoCaptureField
         file={file}
         isBusy={isReadingPhoto || isUploadingPhoto}

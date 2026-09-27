@@ -62,4 +62,17 @@ describe('HallazgosView', () => {
     expect(screen.getByText('Registrar hallazgo')).toBeTruthy();
     expect(screen.getByText('Nivel de prioridad')).toBeTruthy();
   });
+
+  /**
+   * La foto de un hallazgo se sube al storage privado (el mismo campo que usa
+   * Flota), no por `/api/uploads`. Y es opcional: el encabezado tiene que
+   * decirlo, porque ese componente por defecto dice "requerida" en rojo.
+   */
+  it('ofrece la foto de respaldo como opcional', () => {
+    renderView();
+
+    expect(screen.getByText('· opcional')).toBeTruthy();
+    expect(screen.queryByText('· requerida')).toBeNull();
+    expect(screen.getByText('Foto del hallazgo')).toBeTruthy();
+  });
 });
