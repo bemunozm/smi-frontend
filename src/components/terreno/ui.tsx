@@ -304,7 +304,12 @@ export function Segmentado<T extends string>({
 }
 
 /** Chip con casilla: multi-selección que se puede tocar con guantes. */
-export function Pick({
+/**
+ * No se llama `Pick` porque ese es el nombre de un tipo utilitario de
+ * TypeScript: la colisión hace que un import faltante falle con un error que
+ * no menciona el import, y cuesta media hora encontrarlo.
+ */
+export function ChipSeleccion({
   activo,
   onToggle,
   children,
