@@ -17,6 +17,7 @@ import {
 } from '@heroui/react';
 
 import { uploadFile } from '../../api/UploadsAPI';
+import { OperatorPicker, type OperatorOption } from '../operators/OperatorPicker';
 import { useBranch, useBranches } from '../../hooks/useBranches';
 import { useAssignEquipment, useDeleteEquipment, useUpdateEquipment } from '../../hooks/useEquipment';
 import { useUsers } from '../../hooks/useUsers';
@@ -25,7 +26,9 @@ import { ROLES } from '../../types/roles';
 import {
   EquipmentFormSchema,
   toUpdateEquipmentPayload,
+  type AssignEquipmentInput,
   type Equipment,
+  type EquipmentAssignee,
   type EquipmentClass,
   type EquipmentFormValues,
   type EquipmentStatus,
@@ -52,6 +55,40 @@ export const SIN_ASIGNAR = '__sin_asignar__';
  * `AssignEquipmentInput`. */
 export function idDesdeSentinel(value: string): string | null {
   return value === SIN_ASIGNAR ? null : value;
+}
+
+/**
+ * Compara lo elegido en los pickers de operador/supervisor (sentinels de
+ * `idDesdeSentinel`) contra la asignación ACTUAL del equipo y arma el body
+ * PARCIAL que espera `PATCH /equipment/:id/assignment` — cada clave se manda
+ * SOLO si de verdad cambió.
+ *
+ * Antes `EditEquipoModal`/`AsignacionForm` mandaban SIEMPRE las dos claves
+ * (para evitar la ambigüedad "sin cambios" vs. "liberar" del contrato, que
+ * distingue `undefined` de `null`). Eso hacía que el backend revalidara con
+ * `OperatorsService.assertActive`/`assertSupervisor` un campo que el usuario
+ * nunca tocó: si el operador ya asignado se había desactivado mientras
+ * tanto, guardar un cambio de SOLO el supervisor fallaba con 409
+ * `OPERATOR_INACTIVE` sobre un campo intacto (bug reportado por QA). Ahora
+ * cada clave se omite (`undefined`, "sin cambios") salvo que el id elegido
+ * difiera del actual — `null` explícito (liberar) SIGUE viajando siempre que
+ * el usuario lo eligió, porque ahí sí cambió respecto de lo que había.
+ */
+export function buildAssignmentDiff(
+  equipoActual: { operator: EquipmentAssignee | null; supervisor: EquipmentAssignee | null },
+  operatorId: string,
+  supervisorId: string,
+): AssignEquipmentInput {
+  const operatorIdFinal = idDesdeSentinel(operatorId);
+  const supervisorIdFinal = idDesdeSentinel(supervisorId);
+  const diff: AssignEquipmentInput = {};
+  if (operatorIdFinal !== (equipoActual.operator?.id ?? null)) {
+    diff.operatorId = operatorIdFinal;
+  }
+  if (supervisorIdFinal !== (equipoActual.supervisor?.id ?? null)) {
+    diff.supervisorId = supervisorIdFinal;
+  }
+  return diff;
 }
 
 /**
@@ -205,6 +242,10 @@ interface CamposProps {
   onOperatorIdChange: (id: string) => void;
   supervisorId: string;
   onSupervisorIdChange: (id: string) => void;
+  /** Operador HOY asignado al equipo que se está editando (`undefined` en
+   * creación) — se lo pasa tal cual a `OperatorPicker#currentAssignee` para
+   * que siga viéndose aunque ya esté inactivo (ver ese componente). */
+  currentOperator?: OperatorOption | null;
 }
 
 /**
@@ -222,6 +263,7 @@ export function CamposEquipo({
   onOperatorIdChange,
   supervisorId,
   onSupervisorIdChange,
+  currentOperator = null,
 }: CamposProps) {
   // El selector de sucursal base solo debe ofrecer sucursales activas.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
@@ -232,9 +274,9 @@ export function CamposEquipo({
   const opcionesSucursal =
     sucursalActual && !yaEstaEnActivas ? [...(sucursalesActivas ?? []), sucursalActual] : (sucursalesActivas ?? []);
 
-  // Pickers de asignación — operador (rol OPERADOR) y supervisor (rol
-  // SUPERVISOR); cada uno cachea aparte gracias al filtro de `useUsers`.
-  const { data: operadores } = useUsers({ role: ROLES.OPERADOR });
+  // Picker de supervisor (rol SUPERVISOR, `useUsers`) — el de operador sale
+  // del catálogo propio (`OperatorPicker`, ver anexo "el operador deja de
+  // ser usuario de la plataforma": el operador ya no es un rol de usuario).
   const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
 
   return (
@@ -530,27 +572,12 @@ export function CamposEquipo({
       <section className="flex flex-col gap-3 border-t border-separator pt-4">
         <p className="label">Asignación</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <Select fullWidth value={operatorId} onChange={(value) => value && onOperatorIdChange(String(value))}>
-            <Label>Operador</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id={SIN_ASIGNAR} textValue="Sin operador asignado">
-                  Sin operador asignado
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                {(operadores ?? []).map((operador) => (
-                  <ListBox.Item key={operador.id} id={operador.id} textValue={operador.name}>
-                    {operador.name}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+          <OperatorPicker
+            allowsUnassign
+            currentAssignee={currentOperator}
+            value={operatorId === SIN_ASIGNAR ? null : operatorId}
+            onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
+          />
 
           <Select fullWidth value={supervisorId} onChange={(value) => value && onSupervisorIdChange(String(value))}>
             <Label>Supervisor a cargo</Label>
@@ -694,15 +721,16 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                   input: toUpdateEquipmentPayload(values, photoKey),
                 });
 
-                const operatorIdFinal = idDesdeSentinel(operatorId);
-                const supervisorIdFinal = idDesdeSentinel(supervisorId);
-                const cambioAsignacion =
-                  operatorIdFinal !== (equipo.operator?.id ?? null) ||
-                  supervisorIdFinal !== (equipo.supervisor?.id ?? null);
-                if (cambioAsignacion) {
+                // Solo manda la(s) clave(s) que de verdad cambiaron respecto
+                // de la asignación actual del equipo — ver `buildAssignmentDiff`
+                // (evita revalidar contra el catálogo un campo que el usuario
+                // nunca tocó, p. ej. un operador ya inactivo cuando solo se
+                // cambió el supervisor).
+                const assignmentDiff = buildAssignmentDiff(equipo, operatorId, supervisorId);
+                if (Object.keys(assignmentDiff).length > 0) {
                   await assignEquipment.mutateAsync({
                     id: equipo.id,
-                    input: { operatorId: operatorIdFinal, supervisorId: supervisorIdFinal },
+                    input: assignmentDiff,
                   });
                 }
 
@@ -733,6 +761,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                     <CamposEquipo
                       control={control}
                       currentHomeBranchId={equipo.homeBranchId}
+                      currentOperator={equipo.operator}
                       errors={errors}
                       internalCodeEditable={false}
                       onOperatorIdChange={setOperatorId}

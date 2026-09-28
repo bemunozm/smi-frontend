@@ -90,4 +90,69 @@ describe('OperatorPicker', () => {
     const input = screen.getByPlaceholderText('Buscar operador…');
     expect(input.hasAttribute('disabled')).toBe(true);
   });
+
+  describe('currentAssignee', () => {
+    const INACTIVO = { id: 'op_inactivo', name: 'Ana Ruiz' };
+
+    it('si no está entre los activos, lo agrega igual y lo muestra seleccionado', () => {
+      render(<OperatorPicker currentAssignee={INACTIVO} value={INACTIVO.id} onChange={() => {}} />);
+      const input = screen.getByPlaceholderText('Buscar operador…') as HTMLInputElement;
+      expect(input.value).toBe('Ana Ruiz');
+    });
+
+    it('lo marca "(inactivo)" en la lista', async () => {
+      const { container } = render(
+        <OperatorPicker currentAssignee={INACTIVO} value={INACTIVO.id} onChange={() => {}} />,
+      );
+      const trigger = container.querySelector('.combo-box__trigger') as HTMLButtonElement;
+      fireEvent.click(trigger);
+
+      const opcion = await waitFor(() => screen.getByRole('option', { name: /Ana Ruiz/ }));
+      expect(opcion.textContent).toContain('(inactivo)');
+    });
+
+    it('si SÍ está entre los activos, no lo duplica ni lo marca inactivo', async () => {
+      const ACTIVO = OPERATORS[0];
+      const { container } = render(
+        <OperatorPicker currentAssignee={{ id: ACTIVO.id, name: ACTIVO.name }} value={ACTIVO.id} onChange={() => {}} />,
+      );
+      const trigger = container.querySelector('.combo-box__trigger') as HTMLButtonElement;
+      fireEvent.click(trigger);
+
+      const opciones = await waitFor(() => screen.getAllByRole('option', { name: new RegExp(ACTIVO.name) }));
+      expect(opciones).toHaveLength(1);
+      expect(opciones[0].textContent).not.toContain('(inactivo)');
+    });
+
+    it('sin `currentAssignee`, un `value` que no calza con ningún activo no agrega nada extra', () => {
+      render(<OperatorPicker value="op_que_no_existe" onChange={() => {}} />);
+      // Ningún operador de `OPERATORS` tiene ese id — el input queda vacío
+      // (no hay ítem que resolver), sin reventar.
+      const input = screen.getByPlaceholderText('Buscar operador…') as HTMLInputElement;
+      expect(input.value).toBe('');
+    });
+  });
+
+  describe('allowsUnassign', () => {
+    it('sin el prop (default), no ofrece "Sin operador asignado"', async () => {
+      const { container } = render(<OperatorPicker value={null} onChange={() => {}} />);
+      const trigger = container.querySelector('.combo-box__trigger') as HTMLButtonElement;
+      fireEvent.click(trigger);
+
+      await waitFor(() => screen.getByRole('option', { name: /Juan Rojas/ }));
+      expect(screen.queryByRole('option', { name: 'Sin operador asignado' })).toBeNull();
+    });
+
+    it('con el prop, agrega "Sin operador asignado" y elegirlo llama a onChange(null)', async () => {
+      const onChange = vi.fn();
+      const { container } = render(<OperatorPicker allowsUnassign value="op_1" onChange={onChange} />);
+      const trigger = container.querySelector('.combo-box__trigger') as HTMLButtonElement;
+      fireEvent.click(trigger);
+
+      const opcion = await waitFor(() => screen.getByRole('option', { name: 'Sin operador asignado' }));
+      fireEvent.click(opcion);
+
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
+    });
+  });
 });

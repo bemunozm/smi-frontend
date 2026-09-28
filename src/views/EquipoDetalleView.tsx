@@ -25,6 +25,7 @@ import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useE
 import { useFicha } from '../hooks/useFicha';
 import { useUsers } from '../hooks/useUsers';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { OperatorPicker } from '../components/operators/OperatorPicker';
 import {
   controlUnitLabel,
   controlUnitSuffix,
@@ -47,7 +48,12 @@ import { EQUIPMENT_STATUS, type EquipmentDetail, type EquipmentStatus } from '..
 import type { EquipmentDocument } from '../types/equipment-document';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { StatusChip } from '../components/flota/StatusChip';
-import { EditEquipoModal, DeleteEquipoAlertDialog, idDesdeSentinel, SIN_ASIGNAR } from '../components/flota/EquipoEditDelete';
+import {
+  buildAssignmentDiff,
+  DeleteEquipoAlertDialog,
+  EditEquipoModal,
+  SIN_ASIGNAR,
+} from '../components/flota/EquipoEditDelete';
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
@@ -152,7 +158,9 @@ function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps)
  */
 function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   const assignEquipment = useAssignEquipment();
-  const { data: operadores } = useUsers({ role: ROLES.OPERADOR });
+  // El picker de operador sale del catálogo propio (`OperatorPicker`, ver
+  // anexo "el operador deja de ser usuario de la plataforma"); el de
+  // supervisor sigue con `useUsers` (rol SUPERVISOR).
   const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
   const [operatorId, setOperatorId] = useState(equipo.operator?.id ?? SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(equipo.supervisor?.id ?? SIN_ASIGNAR);
@@ -165,16 +173,15 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
     setSupervisorId(equipo.supervisor?.id ?? SIN_ASIGNAR);
   }, [equipo.operator?.id, equipo.supervisor?.id]);
 
-  const operatorIdFinal = idDesdeSentinel(operatorId);
-  const supervisorIdFinal = idDesdeSentinel(supervisorId);
-  const huboCambio =
-    operatorIdFinal !== (equipo.operator?.id ?? null) || supervisorIdFinal !== (equipo.supervisor?.id ?? null);
+  // Solo manda la(s) clave(s) que de verdad cambiaron respecto de la
+  // asignación actual — ver `buildAssignmentDiff` (evita revalidar contra el
+  // catálogo un campo que el usuario nunca tocó, p. ej. un operador ya
+  // inactivo cuando solo se cambió el supervisor).
+  const assignmentDiff = buildAssignmentDiff(equipo, operatorId, supervisorId);
+  const huboCambio = Object.keys(assignmentDiff).length > 0;
 
   const guardar = () => {
-    assignEquipment.mutate({
-      id: equipo.id,
-      input: { operatorId: operatorIdFinal, supervisorId: supervisorIdFinal },
-    });
+    assignEquipment.mutate({ id: equipo.id, input: assignmentDiff });
   };
 
   const liberar = () => {
@@ -192,27 +199,12 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   return (
     <div className="flex flex-col gap-3 border-t border-separator pt-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-        <Select fullWidth value={operatorId} onChange={(value) => value && setOperatorId(String(value))}>
-          <Label>Operador</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id={SIN_ASIGNAR} textValue="Sin operador asignado">
-                Sin operador asignado
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {(operadores ?? []).map((operador) => (
-                <ListBox.Item key={operador.id} id={operador.id} textValue={operador.name}>
-                  {operador.name}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
+        <OperatorPicker
+          allowsUnassign
+          currentAssignee={equipo.operator}
+          value={operatorId === SIN_ASIGNAR ? null : operatorId}
+          onChange={(operator) => setOperatorId(operator?.id ?? SIN_ASIGNAR)}
+        />
 
         <Select fullWidth value={supervisorId} onChange={(value) => value && setSupervisorId(String(value))}>
           <Label>Supervisor a cargo</Label>

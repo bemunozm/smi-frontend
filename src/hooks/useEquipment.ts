@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
+import { DomainError } from '../lib/api-error';
 import type {
   AssignEquipmentInput,
   CreateEquipmentInput,
@@ -108,6 +109,29 @@ export function useUpdateEquipmentStatus() {
 }
 
 /**
+ * Mensaje amigable para un error de `EquipmentAPI.assign` — el operador es
+ * ahora un id del catálogo propio (`OperatorsService.assertActive`, ver
+ * anexo "el operador deja de ser usuario de la plataforma"), así que guardar
+ * puede fallar con 409 `OPERATOR_INACTIVE` (el operador elegido se desactivó
+ * entre que se abrió el form y se guardó) o 404 (dejó de existir en el
+ * catálogo). Mismo texto que ya usa `useShiftCards.ts#CODE_MESSAGES` para el
+ * mismo código, para no mostrar dos redacciones distintas del mismo caso en
+ * la app. El 404 no trae un `code` propio del backend — se distingue por
+ * `status`, no por texto (que podría no ser ni claro ni estar en español).
+ */
+function mensajeErrorAsignacion(error: unknown): string {
+  if (error instanceof DomainError) {
+    if (error.code === 'OPERATOR_INACTIVE') {
+      return 'Ese operador ya no está activo. Elegí otro del catálogo.';
+    }
+    if (error.status === 404) {
+      return 'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.';
+    }
+  }
+  return error instanceof Error ? error.message : 'No se pudo actualizar la asignación.';
+}
+
+/**
  * Asigna/libera operador y supervisor (`PATCH /equipment/:id/assignment`).
  * Mutación aparte de `useUpdateEquipment` porque es un endpoint distinto en
  * el backend (gate de rol propio) y porque `EquipoActionsMenu`/`CamposEquipo`
@@ -124,7 +148,7 @@ export function useAssignEquipment() {
       toast.success('Asignación actualizada', { description: equipment.internalCode });
     },
     onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar la asignación.');
+      toast.danger(mensajeErrorAsignacion(error));
     },
   });
 }

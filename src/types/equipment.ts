@@ -271,8 +271,12 @@ export type UpdateEquipmentInput = Omit<
 
 /** Body de `PATCH /api/equipment/:id/assignment` — asigna/libera operador y/o
  * supervisor. `null` explícito libera esa asignación; omitir la clave la deja
- * igual (ver `useAssignEquipment`, que siempre manda ambas para evitar esa
- * ambigüedad — "sin cambios" y "liberar" quedan siempre explícitos). */
+ * igual — `EditEquipoModal`/`AsignacionForm` arman este body con
+ * `buildAssignmentDiff` (`EquipoEditDelete.tsx`), que omite cada clave salvo
+ * que el id elegido difiera del actual: mandar SIEMPRE ambas (como se hacía
+ * antes) hacía que el backend revalidara con `OperatorsService.assertActive`/
+ * `assertSupervisor` un campo que el usuario nunca tocó (p. ej. un operador
+ * ya inactivo bloqueaba guardar un cambio de solo el supervisor). */
 export interface AssignEquipmentInput {
   operatorId?: string | null;
   supervisorId?: string | null;
