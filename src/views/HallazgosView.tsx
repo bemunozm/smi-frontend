@@ -22,7 +22,7 @@ import {
   Form,
   GrupoHead,
   Label,
-  Select,
+  Selector,
   Tabla,
   Tarjeta,
   Textarea,
@@ -126,14 +126,13 @@ export function HallazgosView() {
         <CardHead titulo="Nuevo hallazgo" bajada="Una falla o condición que alguien tiene que revisar." />
         <Form>
           <Campo label="Equipo" hint={errors.equipoId?.message}>
-            <Select {...register('equipoId')}>
-              <option value="">Seleccioná…</option>
-              {equipos.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.internalCode} · {e.type}
-                </option>
-              ))}
-            </Select>
+            <Selector
+              etiqueta="Equipo"
+              tituloTabular
+              valor={watch('equipoId') ?? ''}
+              onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
+              opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+            />
           </Campo>
 
           {/* Segmentado y no desplegable: son cuatro opciones y la elegida es

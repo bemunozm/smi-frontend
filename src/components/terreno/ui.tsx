@@ -1,7 +1,18 @@
 import { cloneElement, useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
-import { Moon, Sun, X } from 'lucide-react';
+import {
+  Button as AriaButton,
+  Dialog,
+  Heading,
+  ListBox,
+  ListBoxItem,
+  Modal,
+  ModalOverlay,
+  Popover,
+  Select as AriaSelect,
+  SelectValue,
+} from 'react-aria-components';
+import { Check, ChevronDown, Moon, Sun, X } from 'lucide-react';
 
 import type { Turno } from '../../lib/turno';
 
@@ -127,32 +138,41 @@ export function CabeceraTurno({
 }
 
 /**
- * Separador de turno dentro de una lista de tarjetas. `sticky`: mientras se
- * baja por veinte tarjetas, la barra del turno en el que se está sigue a la
- * vista. En teléfono y tablet no hay dos columnas que den contexto, así que
- * sin esto las tarjetas del diurno y del nocturno se leen como una sola lista.
+ * Bloque de un turno en teléfono y tablet: la versión en tarjetas de `Tabla`.
+ * Mismo marco redondeado y misma cabecera de color que en escritorio, así el
+ * turno se ve como UN panel en cualquier tamaño y no como una franja recta de
+ * borde a borde con tarjetas sueltas debajo.
+ *
+ * El fondo del cuerpo lleva el tono suave del turno: es lo que mantiene el
+ * contexto al bajar por veinte tarjetas, sin la franja `sticky` de antes, que
+ * quedaba escondida detrás del header del módulo (también `sticky top-0`).
  */
-export function SeparadorTurno({
+export function BloqueTurno({
   turno,
   fecha,
   detalle,
+  children,
 }: {
   turno: Turno;
   fecha: string;
   detalle?: ReactNode;
+  children: ReactNode;
 }) {
-  const { fondo, texto, Icono } = TURNO_ESTILO[turno];
+  const { fondo, texto, suave, Icono } = TURNO_ESTILO[turno];
   return (
-    <div
-      className="sticky top-0 z-[5] -mx-4 mt-5 flex items-center gap-2.5 px-4 py-2.5 first:mt-0"
-      style={{ background: fondo, color: texto }}
+    <section
+      className="overflow-hidden rounded-3xl border border-border shadow-[0_1px_2px_rgba(20,23,28,.04),0_6px_18px_rgba(20,23,28,.04)]"
+      style={{ background: suave }}
     >
-      <Icono className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} aria-hidden />
-      <h3 className="text-[13.5px] font-bold tracking-[0.06em] uppercase">
-        {turno} · {fecha}
-      </h3>
-      {detalle && <span className="ml-auto text-[12.5px] font-semibold opacity-85">{detalle}</span>}
-    </div>
+      <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: fondo, color: texto }}>
+        <Icono className="h-[17px] w-[17px] shrink-0" strokeWidth={2.4} aria-hidden />
+        <h3 className="text-sm font-bold">
+          TURNO {turno} · {fecha}
+        </h3>
+        {detalle && <span className="ml-auto text-[13px] font-semibold opacity-85">{detalle}</span>}
+      </div>
+      <div className="flex flex-col gap-3 p-3 sm:p-3.5">{children}</div>
+    </section>
   );
 }
 
@@ -328,16 +348,126 @@ export function Input({
   );
 }
 
-export function Select({ className = '', children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+/** Una opción de `Selector`. */
+export interface OpcionSelector {
+  valor: string;
+  /** Lo que identifica la opción: `BD-005`, `Sebastián Tapia`. */
+  titulo: string;
+  /** Lo que la acompaña en gris: `Bulldozer`. */
+  detalle?: string;
+  /** Visible pero no elegible, con el motivo debajo: `Ocupado, en turno`. */
+  motivo?: string;
+}
+
+/**
+ * Desplegable del kit de Terreno.
+ *
+ * Reemplaza al `<select>` nativo, cuya lista abierta la dibuja el sistema
+ * operativo: en Windows salía con la letra y el azul de Windows, a 20 px por
+ * fila, sin nada del kit. Acá la lista es del módulo — mismos radios, mismo
+ * foco, filas de 48 px para acertarle con guantes, el código del equipo en
+ * cifra tabular y su tipo en gris, y las opciones que no se pueden elegir
+ * a la vista pero apagadas y diciendo por qué.
+ *
+ * Se arma sobre `react-aria-components`, igual que `ModalTerreno`: de ahí
+ * vienen el teclado (flechas, Enter, Escape, buscar tecleando), el foco y los
+ * roles `listbox`/`option` para lectores de pantalla.
+ *
+ * Recibe `id` y `aria-describedby` de `Campo`, que así sigue asociando la
+ * etiqueta y el hint igual que con un campo nativo.
+ */
+export function Selector({
+  id,
+  valor,
+  onChange,
+  opciones,
+  etiqueta,
+  placeholder = 'Seleccioná…',
+  tituloTabular,
+  'aria-describedby': describedBy,
+}: {
+  id?: string;
+  valor: string;
+  onChange: (valor: string) => void;
+  opciones: OpcionSelector[];
+  /** Nombre accesible del campo; normalmente el mismo texto de la etiqueta. */
+  etiqueta: string;
+  placeholder?: string;
+  /** Títulos en cifra tabular — para códigos de equipo, no para nombres. */
+  tituloTabular?: boolean;
+  'aria-describedby'?: string;
+}) {
+  const elegida = opciones.find((o) => o.valor === valor);
+  const tab = tituloTabular ? 'tabular' : '';
   return (
-    <select {...props} className={`${INPUT} appearance-none bg-[right_0.875rem_center] bg-no-repeat pr-10 font-medium ${className}`}
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2314171c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-      }}
+    <AriaSelect
+      id={id}
+      aria-label={etiqueta}
+      aria-describedby={describedBy}
+      placeholder={placeholder}
+      selectedKey={elegida ? elegida.valor : null}
+      onSelectionChange={(clave) => clave != null && onChange(String(clave))}
+      disabledKeys={opciones.filter((o) => o.motivo).map((o) => o.valor)}
+      className="group min-w-0"
     >
-      {children}
-    </select>
+      <AriaButton
+        className={`${INPUT} flex cursor-pointer items-center gap-2 pr-3 text-left outline-none data-[focus-visible]:border-[var(--accent)] data-[focus-visible]:outline-3 data-[focus-visible]:outline-[rgba(29,78,216,.18)] group-data-[open]:border-[var(--accent)]`}
+      >
+        <SelectValue className="min-w-0 flex-1 truncate">
+          {() =>
+            elegida ? (
+              <>
+                <span className={`font-semibold ${tab}`}>{elegida.titulo}</span>
+                {elegida.detalle && <span className="text-muted-foreground"> · {elegida.detalle}</span>}
+              </>
+            ) : (
+              <span className="text-muted-foreground">{placeholder}</span>
+            )
+          }
+        </SelectValue>
+        <ChevronDown
+          className="h-5 w-5 shrink-0 text-foreground transition-transform group-data-[open]:rotate-180"
+          strokeWidth={2.2}
+          aria-hidden
+        />
+      </AriaButton>
+      <Popover
+        offset={6}
+        className="w-[var(--trigger-width)] min-w-[220px] overflow-y-auto rounded-2xl border border-border bg-card p-1.5 shadow-[0_18px_44px_rgba(20,23,28,.18)] outline-none"
+        style={{ maxHeight: 'min(360px, var(--popover-max-height, 360px))' }}
+      >
+        <ListBox className="flex flex-col gap-0.5 outline-none">
+          {opciones.map((o) => (
+            <ListBoxItem
+              key={o.valor}
+              id={o.valor}
+              textValue={o.detalle ? `${o.titulo} · ${o.detalle}` : o.titulo}
+              className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[focused]:bg-[#f1f3f5] data-[selected]:bg-[var(--accent-soft)] data-[selected]:text-[var(--accent-soft-foreground)]"
+            >
+              {({ isSelected }) => (
+                <>
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className={`text-[15.5px] font-semibold ${tab}`}>{o.titulo}</span>
+                    {o.detalle && (
+                      <span className={`text-[14.5px] ${isSelected ? '' : 'text-muted-foreground'}`}>
+                        {' '}
+                        · {o.detalle}
+                      </span>
+                    )}
+                    {o.motivo && (
+                      <span className="mt-0.5 block text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
+                        {o.motivo}
+                      </span>
+                    )}
+                  </span>
+                  {isSelected && <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={2.6} aria-hidden />}
+                </>
+              )}
+            </ListBoxItem>
+          ))}
+        </ListBox>
+      </Popover>
+    </AriaSelect>
   );
 }
 
@@ -756,5 +886,29 @@ export function ModalTerreno({
         </Dialog>
       </Modal>
     </ModalOverlay>
+  );
+}
+
+/**
+ * Pares etiqueta → valor para leer un registro ya cerrado dentro del detalle
+ * de un historial. El detalle se lee, no se edita: usar los campos del
+ * formulario acá invitaría a escribir sobre algo que ya se mandó.
+ *
+ * Vive en el kit y no en una vista porque los tres historiales de Terreno
+ * —reportes, tarjetas cerradas y trabajos extra— muestran su detalle igual.
+ */
+export function Filas({ filas }: { filas: [string, ReactNode][] }) {
+  return (
+    <dl className="m-0 overflow-hidden rounded-2xl border border-border">
+      {filas.map(([label, valor]) => (
+        <div
+          key={label}
+          className="flex items-baseline justify-between gap-3 bg-[#fafbfc] px-3 py-2.5 not-first:border-t not-first:border-border"
+        >
+          <dt className="text-[12.5px] text-muted-foreground">{label}</dt>
+          <dd className="m-0 text-right text-[14.5px] font-medium">{valor}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

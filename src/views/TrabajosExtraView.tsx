@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, History, Lock } from 'lucide-react';
 
 import {
   trabajoExtraFormSchema,
@@ -9,7 +9,9 @@ import {
   actividadLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
+  type TrabajoExtraordinario,
 } from '../types/trabajosExtra';
+import { turnoDe } from '../lib/turno';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
@@ -24,20 +26,23 @@ import {
   Chip,
   ChipSeleccion,
   ChipContexto,
+  Cifras,
+  Filas,
   Form,
   GrupoHead,
   Hint,
   Input,
   Label,
+  ModalTerreno,
   Segmentado,
-  Select,
+  Selector,
   Tabla,
   Tarjeta,
   Textarea,
   TD,
   TH,
   VistaHead,
-  VistaSplit,
+  VistaUnica,
 } from '../components/terreno/ui';
 
 const TURNOS = [
@@ -75,6 +80,23 @@ export function TrabajosExtraView() {
   const { data: registros = [] } = useTrabajosExtraList();
   const { data: lecturas = [] } = useHorometroList();
   const crear = useCreateTrabajoExtra();
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
+
+  /**
+   * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
+   * regla que Registro de equipo), no siempre en DIURNO: de noche el valor
+   * por defecto quedaba mal y había que acordarse de cambiarlo. Sigue siendo
+   * editable, porque un trabajo se puede cargar después de terminado.
+   */
+  const vacio = (): Partial<TrabajoExtraFormInput> => ({
+    equipoId: '',
+    operador: '',
+    faena: 'Patillo',
+    turno: turnoDe(new Date()),
+    actividades: [],
+    otraActividad: '',
+  });
 
   /**
    * Un equipo con **turno en curso** está ocupado y no admite un trabajo
@@ -103,7 +125,7 @@ export function TrabajosExtraView() {
     formState: { errors },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
     resolver: zodResolver(trabajoExtraFormSchema),
-    defaultValues: { equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividades: [], otraActividad: '' },
+    defaultValues: vacio(),
   });
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
@@ -115,8 +137,7 @@ export function TrabajosExtraView() {
 
   const onSubmit = (values: TrabajoExtraForm) =>
     crear.mutate(values, {
-      onSuccess: () =>
-        reset({ equipoId: '', operador: '', faena: 'Patillo', turno: 'DIURNO', actividades: [], otraActividad: '' }),
+      onSuccess: () => reset(vacio()),
     });
 
   const formulario = (
@@ -144,18 +165,18 @@ export function TrabajosExtraView() {
                   : undefined)
               }
             >
-              <Select {...register('equipoId')}>
-                <option value="">Seleccioná…</option>
-                {equipos.map((e) => {
-                  const ocupado = ocupados.has(e.id);
-                  return (
-                    <option key={e.id} value={e.id} disabled={ocupado}>
-                      {e.internalCode}
-                      {ocupado ? ' · ocupado, en turno' : ''}
-                    </option>
-                  );
-                })}
-              </Select>
+              <Selector
+                etiqueta="Equipo"
+                tituloTabular
+                valor={watch('equipoId') ?? ''}
+                onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
+                opciones={equipos.map((e) => ({
+                  valor: e.id,
+                  titulo: e.internalCode,
+                  detalle: e.type,
+                  motivo: ocupados.has(e.id) ? 'Ocupado, en turno' : undefined,
+                }))}
+              />
             </Campo>
             <Campo label="Operador" hint={errors.operador?.message}>
               <Input placeholder="Nombre y apellido" {...register('operador')} />
@@ -258,10 +279,12 @@ export function TrabajosExtraView() {
     </form>
   );
 
-  const historial =
+  const codigo = (r: TrabajoExtraordinario) => r.equipo?.internalCode ?? r.equipoId;
+
+  const lista =
     registros.length === 0 ? (
-      <p className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-        Sin trabajos registrados hoy.
+      <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        Todavía no hay trabajos registrados.
       </p>
     ) : esEscritorio ? (
       <Tabla titulo="Trabajos registrados" detalle={`Patillo y Kainita · ${registros.length} registros`}>
@@ -271,8 +294,10 @@ export function TrabajosExtraView() {
             <th className={TH}>Faena</th>
             <th className={TH}>Equipo</th>
             <th className={TH}>Operador</th>
-            <th className={TH}>Actividad</th>
             <th className={`${TH} text-right`}>Horas</th>
+            <th className={TH}>
+              <span className="sr-only">Detalle</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -284,42 +309,102 @@ export function TrabajosExtraView() {
               </td>
               <td className={`${TD} whitespace-nowrap`}>{r.faena}</td>
               <td className={TD}>
-                <b className="tabular block text-[15px] font-semibold">{r.equipo?.internalCode ?? r.equipoId}</b>
+                <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
               <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
-              <td className={`${TD} w-full max-w-0 truncate`}>{etiquetaActividades(r)}</td>
               <td className={`${TD} tabular text-right font-semibold`}>{fmtNum(r.totalHoras)} h</td>
+              <td className={`${TD} text-right`}>
+                <button
+                  type="button"
+                  onClick={() => setDetalle(r)}
+                  className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
+                >
+                  Ver detalle <ChevronRight className="h-4 w-4" />
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </Tabla>
     ) : (
-      <>
-        <GrupoHead titulo="Trabajos registrados" detalle={`${registros.length} registros`} />
-        <div className="flex flex-col gap-3">
-          {registros.map((r) => (
-            <Tarjeta key={r.id}>
-              <div className="flex items-start justify-between gap-2.5">
-                <div className="min-w-0">
-                  <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">
-                    {r.equipo?.internalCode ?? r.equipoId}
-                  </div>
-                  <div className="truncate text-[13px] text-muted-foreground">{r.operador}</div>
-                </div>
-                <Chip tono="neutral">{r.faena}</Chip>
+      <div className="flex flex-col gap-3">
+        {registros.map((r) => (
+          <Tarjeta key={r.id}>
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="min-w-0">
+                <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{codigo(r)}</div>
+                <div className="truncate text-[13px] text-muted-foreground">{r.operador}</div>
               </div>
-              <Chip tono="info">{etiquetaActividades(r)}</Chip>
-              <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
-                <span>
-                  {fmtDate(r.fecha)} · {r.turno}
-                </span>
-                <span className="font-semibold text-foreground">{fmtNum(r.totalHoras)} h</span>
-              </div>
-            </Tarjeta>
-          ))}
-        </div>
-      </>
+              <Chip tono="neutral">{r.faena}</Chip>
+            </div>
+            <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
+              <span>
+                {fmtDate(r.fecha)} · {r.turno}
+              </span>
+              <span className="font-semibold text-foreground">{fmtNum(r.totalHoras)} h</span>
+            </div>
+            <Boton variante="contorno" ancho onClick={() => setDetalle(r)}>
+              Ver detalle <ChevronRight className="h-[18px] w-[18px]" />
+            </Boton>
+          </Tarjeta>
+        ))}
+      </div>
     );
+
+  const vistaDetalle = detalle && (
+    <div className="flex flex-col gap-4">
+      <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
+        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+      </Boton>
+
+      <Cifras
+        items={[
+          { label: 'Horóm. inicial', valor: fmtNum(detalle.horometroInicial) },
+          { label: 'Horóm. final', valor: fmtNum(detalle.horometroFinal) },
+          { label: 'Horas', valor: `${fmtNum(detalle.totalHoras)} h`, destacado: true },
+        ]}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Trabajo" />
+        <Filas
+          filas={[
+            ['Fecha', fmtDate(detalle.fecha)],
+            ['Turno', detalle.turno],
+            ['Faena', detalle.faena],
+            ['Equipo', codigo(detalle)],
+            ['Operador', detalle.operador],
+          ]}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Actividades" />
+        <div className="flex flex-wrap gap-1.5">
+          {etiquetaActividades(detalle)
+            .split(', ')
+            .map((a) => (
+              <ChipContexto key={a}>{a}</ChipContexto>
+            ))}
+        </div>
+      </div>
+
+      {(
+        [
+          ['Descripción de la tarea', detalle.descripcion, 'Sin descripción.'],
+          ['Observaciones', detalle.observaciones, 'Sin observaciones.'],
+        ] as const
+      ).map(([titulo, texto, vacio]) => (
+        <div key={titulo} className="flex flex-col gap-1.5">
+          <GrupoHead titulo={titulo} />
+          <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
+            {texto?.trim() || <span className="text-muted-foreground">{vacio}</span>}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -327,7 +412,39 @@ export function TrabajosExtraView() {
         titulo="Trabajos extraordinarios"
         contexto={<ChipContexto>Respalda cobros posteriores</ChipContexto>}
       />
-      <VistaSplit formulario={formulario} historial={historial} />
+
+      {/* Mismo esquema que Reporte diario: el formulario solo, y lo ya
+          registrado en una ventana que se abre a pedido. */}
+      <VistaUnica>
+        <Boton
+          variante="contorno"
+          ancho
+          onClick={() => {
+            setDetalle(null);
+            setHistorialAbierto(true);
+          }}
+        >
+          <History className="h-[19px] w-[19px]" /> Ver historial de trabajos
+          <span className="tabular font-medium text-muted-foreground">· {registros.length}</span>
+        </Boton>
+        {formulario}
+      </VistaUnica>
+
+      <ModalTerreno
+        abierto={historialAbierto}
+        onAbiertoChange={(abierto) => {
+          setHistorialAbierto(abierto);
+          if (!abierto) setDetalle(null);
+        }}
+        titulo={detalle ? `${codigo(detalle)} · ${fmtDate(detalle.fecha)}` : 'Historial de trabajos'}
+        detalle={
+          detalle
+            ? `${detalle.faena} · turno ${detalle.turno} · ${detalle.operador}`
+            : `Patillo y Kainita · ${registros.length} ${registros.length === 1 ? 'registro' : 'registros'}`
+        }
+      >
+        {vistaDetalle || lista}
+      </ModalTerreno>
     </>
   );
 }
