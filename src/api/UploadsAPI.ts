@@ -4,18 +4,10 @@ import { axiosInstance as api } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import type { ApiResponse } from '../types/api';
 
-export async function uploadImage(file: File): Promise<string> {
-  const form = new FormData();
-  form.append('file', file);
-  // `Content-Type: multipart/form-data` explícito: la instancia axios fuerza
-  // `application/json`, y axios v1 con ese header serializa el FormData a JSON
-  // (el archivo no llega al backend → "No se recibió archivo"). Con este
-  // override el navegador arma el multipart con boundary correctamente.
-  const res = await api.post<ApiResponse<{ url: string }>>('/api/uploads', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return res.data.data.url;
-}
+// `uploadImage`/`POST /api/uploads` se borró: subía a la carpeta que el
+// backend sirve en `/uploads/` SIN sesión. Todo el front sube ahora por
+// `uploadFile`/`POST /api/files` (bucket privado, URL firmada). El endpoint
+// legacy sigue vivo en el backend para las fotos ya cargadas.
 
 export interface UploadedFile {
   /** Key `tmp/<userId>/<uuid>.<ext>` — se manda tal cual en el `photoKey`/
