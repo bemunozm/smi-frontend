@@ -1,11 +1,18 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { z } from 'zod';
 import { Button, Card, FieldError, Input, Label, Spinner, TextField } from '@heroui/react';
 
 import { signIn } from '../lib/auth-client';
+
+/** `state` que `ProtectedRoute` adjunta al redirigir a `/login`
+ * (`<Navigate state={{ from: location }} />`) — la ubicación a la que hay
+ * que volver tras el login, en vez de mandar siempre a `/inicio`. */
+interface LoginRedirectState {
+  from?: Location;
+}
 
 const loginSchema = z.object({
   email: z.string().min(1, 'El email es obligatorio').email('Ingresa un email válido'),
@@ -19,6 +26,7 @@ const SHOW_DEV_HINT = import.meta.env.DEV;
 
 export function LoginView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -39,7 +47,11 @@ export function LoginView() {
       return;
     }
 
-    navigate('/', { replace: true });
+    // Si `ProtectedRoute` mandó al usuario a `/login` desde una ruta
+    // protegida (state.from), vuelve ahí; si no, `/inicio` reparte por rol
+    // (`HomeRedirect`, ver `config/home-path.ts`).
+    const from = (location.state as LoginRedirectState | null)?.from;
+    navigate(from ? `${from.pathname}${from.search}` : '/inicio', { replace: true });
   };
 
   return (

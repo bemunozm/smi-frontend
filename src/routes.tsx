@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { GuestRoute } from './components/GuestRoute';
+import { HomeRedirect } from './components/HomeRedirect';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ROLES } from './types/roles';
 import { AppLayout } from './layout/AppLayout';
@@ -15,12 +16,13 @@ import { MovimientosView } from './views/MovimientosView';
 import { LoginView } from './views/LoginView';
 import { MantenimientoView } from './views/MantenimientoView';
 import { NotificacionesView } from './views/NotificacionesView';
+import { OperadoresView } from './views/OperadoresView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
+import { SinModulosView } from './views/SinModulosView';
 import { UsersView } from './views/UsersView';
 import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
-import { HorometroView } from './views/HorometroView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
@@ -35,10 +37,26 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      // `/inicio` reparte por rol (`HomeRedirect`) — destino de `LoginView`,
+      // `GuestRoute` y el `start_url` del manifest PWA (ver
+      // `config/home-path.ts`). Vive directo bajo el `ProtectedRoute` de
+      // arriba (cualquier sesión válida, sin `allowedRoles`): no necesita el
+      // chrome de `AppLayout`, solo decide y navega.
+      { path: '/inicio', element: <HomeRedirect /> },
+      // Home de OPERADOR (hoy sin módulo propio) — mismo criterio que
+      // `/inicio`, universal a cualquier sesión autenticada.
+      { path: '/sin-modulos', element: <SinModulosView /> },
       {
         element: <AppLayout />,
         children: [
-          { path: '/', element: <DashboardView /> },
+          // `/` NO reparte por rol a propósito (ver `config/home-path.ts` y
+          // el drawer de Terreno, que linkea acá con "Ir al panel") — pero
+          // OPERADOR no tiene Dashboard ni pantallas de datos, así que queda
+          // detrás de su propio `allowedRoles`, igual que Equipos/Inventario.
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
+            children: [{ path: '/', element: <DashboardView /> }],
+          },
           { path: '/perfil', element: <ProfileView /> },
           // Notificaciones es universal (todos los roles autenticados): solo
           // exige estar dentro de `ProtectedRoute`, sin `allowedRoles`.
@@ -64,6 +82,14 @@ export const router = createBrowserRouter([
               { path: '/inventario/movimientos', element: <MovimientosView /> },
               { path: '/inventario/:id', element: <FichaItemView /> },
             ],
+          },
+          // Catálogo de Operadores (Supervisión en Terreno) — lectura y
+          // escritura para ADMIN/SUPERVISOR (el borrado, ADMIN-only, lo
+          // restringe el backend; la UI ya oculta la acción, ver
+          // `OperadoresView`).
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
+            children: [{ path: '/operadores', element: <OperadoresView /> }],
           },
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
@@ -97,13 +123,12 @@ export const router = createBrowserRouter([
               { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
               { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
               { path: '/terreno/hallazgos', element: <HallazgosView /> },
-              // Combustible y Horómetro salieron de la navegación: la espec las
-              // fusiona en «Registro de equipo». Las rutas siguen vivas porque
-              // son las únicas dos con backend real, y de ahí hay que sacar los
-              // endpoints cuando el Módulo A deje de ser maqueta. Se borran
-              // recién entonces.
+              // Combustible sigue viva sin estar enlazada (la espec la fusiona
+              // en «Registro de equipo»): tiene backend real y de ahí hay que
+              // sacar los endpoints cuando el Módulo A deje de ser maqueta.
+              // Horómetro (la otra mitad del flujo viejo) ya se borró — ver
+              // `views/HorometroView.tsx` en el historial de git.
               { path: '/terreno/combustible', element: <CombustibleView /> },
-              { path: '/terreno/horometro', element: <HorometroView /> },
             ],
           },
         ],
