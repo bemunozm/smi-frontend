@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -116,5 +116,75 @@ describe('RegistroEquipoView', () => {
 
     expect(screen.getByText('Enviado')).toBeTruthy();
     expect(screen.queryByText('Sin enviar')).toBeNull();
+  });
+  /**
+   * El turno, el día y la hora son lo primero de la pantalla. Antes eran tres
+   * renglones chicos al fondo del formulario, con la fecha escrita a mano
+   * ('24/09/2026 08:35'), así que a las 20:01 seguía diciendo DIURNO.
+   */
+  describe('cabecera de turno', () => {
+    afterEach(() => vi.useRealTimers());
+
+    const conReloj = (fecha: Date) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(fecha);
+      renderView('desktop');
+    };
+
+    it('a media tarde anuncia el turno diurno del día del reloj', () => {
+      conReloj(new Date(2026, 8, 24, 14, 30));
+
+      expect(screen.getByRole('region', { name: 'Turno DIURNO' })).toBeTruthy();
+      expect(screen.getByText('TURNO DIURNO')).toBeTruthy();
+    });
+
+    it('pasadas las 20:00 ya es nocturno, sin recargar nada', () => {
+      conReloj(new Date(2026, 8, 24, 20, 1));
+
+      expect(screen.getByText('TURNO NOCTURNO')).toBeTruthy();
+    });
+
+    /** De madrugada el turno es el que arrancó AYER — ver . */
+    it('de madrugada sigue en el nocturno del día anterior', () => {
+      conReloj(new Date(2026, 8, 24, 2, 14));
+
+      // La cabecera anuncia el turno del día ANTERIOR (23/09/2026, miércoles),
+      // no el del reloj.
+      const cabecera = screen.getByRole('region', { name: 'Turno NOCTURNO' });
+      expect(within(cabecera).getByText(/mié 23-09/)).toBeTruthy();
+      // …y el sello del registro sigue siendo la hora real.
+      expect(within(cabecera).getByText(/02:14/)).toBeTruthy();
+    });
+
+    it('firma el registro con el usuario de la sesión', () => {
+      renderView('desktop');
+
+      expect(screen.getByText(/Supervisor:/)).toBeTruthy();
+    });
+  });
+
+  /**
+   * R4: el supervisor trabaja sobre lo suyo y sobre lo que sigue abierto. Las
+   * tarjetas de otros supervisores no puede cerrarlas, y las cerradas ya no
+   * piden nada — al final del turno son todas, y taparían lo único accionable.
+   */
+  describe('qué tarjetas ve el supervisor', () => {
+    it('no lista las tarjetas de otro supervisor', () => {
+      renderView('desktop');
+
+      // CM-021 y CM-015 (cerrada) son de Marcela Pizarro en los datos de ejemplo.
+      expect(screen.queryByText('CM-021')).toBeNull();
+    });
+
+    it('deja las cerradas fuera de la lista, detrás del historial', () => {
+      renderView('desktop');
+
+      // CA-011 cerrada del turno anterior: no está a la vista…
+      expect(screen.queryByText('Cerrada')).toBeNull();
+
+      // …hasta que se abre el historial.
+      fireEvent.click(screen.getByRole('button', { name: /Historial de cerradas/ }));
+      expect(screen.getAllByText('Cerrada').length).toBeGreaterThan(0);
+    });
   });
 });
