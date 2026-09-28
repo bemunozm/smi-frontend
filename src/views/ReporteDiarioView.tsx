@@ -4,8 +4,6 @@ import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
 import {
-  Automatico,
-  Automaticos,
   Boton,
   Campo,
   Card,
@@ -264,6 +262,49 @@ const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 
+/** Lo que el sistema completa solo. El `true` marca lo que va en cifra tabular. */
+const DATOS_FICHA: [string, string, boolean][] = [
+  ['Turno', 'DIURNO · 08–20', false],
+  ['Fecha', '24/09/2026', true],
+  ['Supervisor', 'Rodrigo Fuentes', false],
+];
+
+/**
+ * Encabezado de la ficha: qué faena, qué turno, qué día y quién firma.
+ *
+ * Los tres datos los pone el sistema, y la nota va una sola vez al pie en vez
+ * de una insignia «Automático» por fila: repetida tres veces pesaba más que
+ * el dato que acompañaba, y hacía que el bloque se leyera como una pantalla
+ * de ajustes en vez de como la cabecera de un reporte.
+ */
+function CabeceraFicha() {
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <div>
+          <span className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+            Reporte diario del supervisor
+          </span>
+          <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">Faena Patillo</h2>
+        </div>
+        <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-border pt-3 sm:grid-cols-3">
+          {DATOS_FICHA.map(([label, valor, tabular]) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt>
+                <Label>{label}</Label>
+              </dt>
+              <dd className={`m-0 text-[15px] font-semibold ${tabular ? 'tabular' : ''}`}>
+                {valor}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <Hint>Los tres los completa el sistema al abrir el reporte.</Hint>
+      </div>
+    </Card>
+  );
+}
+
 /**
  * Pares etiqueta → valor para leer un turno ya enviado. El detalle se lee, no
  * se edita: usar los campos del formulario acá invitaría a escribir sobre un
@@ -331,22 +372,14 @@ export function ReporteDiarioView() {
 
   const formulario = (
     <>
+      {/*
+       * La cabecera abre el reporte en vez de cerrarlo: es el contexto que dice
+       * en qué turno se está cargando, y al final de la pantalla llegaba cuando
+       * el registro ya estaba escrito.
+       */}
+      <CabeceraFicha />
+
       <Card>
-        {/*
-         * Turno, fecha y supervisor abren el reporte en vez de cerrarlo: son el
-         * contexto que dice en qué turno se está cargando, y al final de la
-         * pantalla llegaban cuando el registro ya estaba escrito.
-         */}
-        <div className="mb-3.5">
-          <Automaticos>
-            <Automatico label="Turno" valor="DIURNO · 08–20" />
-            <Automatico
-              label="Fecha"
-              valor={<span className="tabular text-[14.5px]">24/09/2026</span>}
-            />
-            <Automatico label="Supervisor" valor="Rodrigo Fuentes" />
-          </Automaticos>
-        </div>
         <CardHead titulo="Personal del turno" bajada="Los cuatro cargos los escribe el supervisor." />
         <Form>
           <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2 lg:flex lg:flex-col">
@@ -470,7 +503,7 @@ export function ReporteDiarioView() {
               <div key={seccion.camiones} className="flex flex-col gap-1.5">
                 <Label>{seccion.label}</Label>
                 <div className="grid grid-cols-2 gap-2.5">
-                  <Campo label="Camiones">
+                  <Campo label="Cantidad de camiones">
                     <Input
                       numerico
                       value={prod[seccion.camiones]}
@@ -670,13 +703,9 @@ export function ReporteDiarioView() {
     <>
       <VistaHead
         titulo="Reporte diario del supervisor"
-        contexto={
-          <>
-            <ChipContexto>Faena Patillo</ChipContexto>
-            <ChipContexto>DIURNO · 08–20</ChipContexto>
-            <Chip tono="warning">Maqueta</Chip>
-          </>
-        }
+        /* Faena y turno viven en la cabecera de la ficha: repetirlos acá los
+           mostraba dos veces en la misma pantalla. */
+        contexto={<Chip tono="warning">Maqueta</Chip>}
       />
 
       <VistaUnica>

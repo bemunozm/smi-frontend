@@ -82,7 +82,18 @@ describe('ReporteDiarioView · producción del turno', () => {
     for (const seccion of ['Camiones internos', 'Camiones mina-caleta', 'Camiones minera']) {
       expect(screen.getByText(seccion)).toBeTruthy();
     }
+    expect(screen.getAllByText('Cantidad de camiones')).toHaveLength(3);
     expect(screen.getAllByText('Vueltas por camión')).toHaveLength(3);
+  });
+
+  /**
+   * La faena la dice la cabecera de la ficha. Llegó a estar también en los
+   * chips del título, mostrándola dos veces en la misma pantalla.
+   */
+  it('nombra la faena una sola vez en la pantalla', () => {
+    render(<ReporteDiarioView />);
+
+    expect(screen.getAllByText('Faena Patillo')).toHaveLength(1);
   });
 
   it('muestra el total de vueltas ponderado por los camiones de cada sección', () => {
