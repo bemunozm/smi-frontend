@@ -29,12 +29,13 @@ const VALOR_INICIAL_LABEL: Record<ControlUnit, string> = {
 // se envía a `useCreateHorometro` sí respeta el tipo `HorometroForm` real.
 //
 // `operador` ya no es texto libre: viene del catálogo de Operadores
-// (`OperatorPicker`, ver `types/operator.ts`). Se guardan DOS campos —
-// `operatorId` (lo que valida el picker) y `operadorNombre` (el snapshot de
-// texto que persiste el backend hoy, ver el comentario de `onSubmit`).
+// (`OperatorPicker`, ver `types/operator.ts`). El cliente manda solo
+// `operatorId` — el servidor valida contra el catálogo
+// (`OperatorsService.assertActive`) y deriva `operador` (el nombre,
+// snapshot) él mismo; ya no acepta el nombre desde acá (ver el comentario de
+// `onSubmit`).
 const EntradaSchema = z.object({
   operatorId: z.string().min(1, 'Seleccioná un operador'),
-  operadorNombre: z.string().min(1),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: z.number().nonnegative('Valor inválido'),
   // Opcional de verdad: el `NumberField` necesita partir en 0 para quedar
@@ -47,7 +48,6 @@ type EntradaFormValues = z.infer<typeof EntradaSchema>;
 
 const DEFAULT_VALUES: EntradaFormValues = {
   operatorId: '',
-  operadorNombre: '',
   turno: 'DIURNO',
   valorInicial: 0,
   nivelCombustible: 0,
@@ -90,7 +90,6 @@ export function RegistrarEntradaModal({
     control,
     handleSubmit,
     reset,
-    setValue,
     watch,
     formState: { errors },
   } = useForm<EntradaFormValues>({
@@ -121,13 +120,11 @@ export function RegistrarEntradaModal({
   const onSubmit = (values: EntradaFormValues) => {
     const payload: HorometroForm = {
       equipoId,
-      // `operador` (el nombre) sigue siendo el snapshot de texto que
-      // persiste el backend — se completa solo, a partir de la selección
-      // del `OperatorPicker` (`operadorNombre`), en vez de texto libre.
-      operador: values.operadorNombre.trim(),
-      // `operatorId` (Fase 2 de Supervisión en Terreno, backend ya
-      // desplegado): `CreateHorometroDto` ahora lo acepta como opcional y
-      // aplica R1 con él — ver `types/horometro.ts`.
+      // El servidor valida `operatorId` contra el catálogo
+      // (`OperatorsService.assertActive`) y deriva `operador` (el nombre,
+      // snapshot) él mismo — el cliente ya no manda texto libre. Ver
+      // `types/horometro.ts` y el anexo "operador del catálogo en Trabajos
+      // extra + snapshot único".
       operatorId: values.operatorId,
       turno: values.turno,
       valorInicial: values.valorInicial,
@@ -193,10 +190,7 @@ export function RegistrarEntradaModal({
                     errorMessage={errors.operatorId?.message}
                     isInvalid={!!errors.operatorId}
                     value={field.value || null}
-                    onChange={(operator) => {
-                      field.onChange(operator?.id ?? '');
-                      setValue('operadorNombre', operator?.name ?? '', { shouldValidate: true });
-                    }}
+                    onChange={(operator) => field.onChange(operator?.id ?? '')}
                   />
                 )}
               />

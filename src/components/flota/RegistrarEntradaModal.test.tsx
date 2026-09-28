@@ -92,7 +92,7 @@ describe('RegistrarEntradaModal', () => {
     expect(screen.getByText('Odómetro total al iniciar (km)')).toBeTruthy();
   });
 
-  it('guarda con el payload esperado a partir de la selección del operador, con operatorId y sin fotoUrl (sin nivel de combustible tocado, no lo manda)', async () => {
+  it('guarda con el payload esperado a partir de la selección del operador, con operatorId y sin operador/fotoUrl (sin nivel de combustible tocado, no lo manda)', async () => {
     const { onOpenChange } = renderModal();
     elegirOperador();
     incrementar('Horómetro total al iniciar (h)', 3);
@@ -105,11 +105,14 @@ describe('RegistrarEntradaModal', () => {
     const [payload, options] = mutateMock.mock.calls[0];
     expect(payload).toMatchObject({
       equipoId: 'eq_1',
-      operador: 'Juan Pérez',
       operatorId: 'op_1',
       turno: 'DIURNO',
       valorInicial: 3,
     });
+    // El servidor deriva `operador` (el nombre) a partir de `operatorId` — el
+    // cliente ya no lo manda (ver anexo "operador del catálogo en Trabajos
+    // extra + snapshot único").
+    expect(payload.operador).toBeUndefined();
     // ENTRADA: nunca manda `valorFinal` — así el registro queda como turno
     // abierto (ver `types/horometro.ts`).
     expect(payload.valorFinal).toBeUndefined();

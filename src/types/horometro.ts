@@ -3,13 +3,12 @@ import { nonNegNumber, optNumber } from '../lib/forms';
 
 export const horometroFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
-  operador: z.string().min(1, 'Indicá el operador'),
-  // `id` del catálogo de Operadores (ver `types/operator.ts`) — snapshot,
-  // `operador` (el nombre) sigue siendo el campo que persiste el backend
-  // hoy; opcional mientras el create de horómetro de la Fase 2
-  // (Supervisión en Terreno) no lo acepte todavía. Ver
-  // `components/flota/RegistrarEntradaModal.tsx`.
-  operatorId: z.string().optional(),
+  // `id` del catálogo de Operadores (ver `types/operator.ts`) — obligatorio:
+  // el servidor lo valida (`OperatorsService.assertActive`) y deriva
+  // `operador` (el nombre, snapshot) a partir de él; el cliente ya no manda
+  // texto libre. Ver `components/flota/RegistrarEntradaModal.tsx` y el anexo
+  // "operador del catálogo en Trabajos extra + snapshot único".
+  operatorId: z.string().min(1, 'Seleccioná un operador'),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: nonNegNumber('Valor inválido'),
   valorFinal: optNumber,
