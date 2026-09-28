@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, FieldError, Input, Label, ListBox, Modal, NumberField, Select, Spinner, TextField } from '@heroui/react';
+import { Button, FieldError, Label, ListBox, Modal, NumberField, Select, Spinner } from '@heroui/react';
 
 import { useCreateHorometro } from '../../hooks/useHorometro';
+import { OperatorPicker } from '../operators/OperatorPicker';
 import type { HorometroForm } from '../../types/horometro';
 import type { ControlUnit } from '../../types/equipment';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from './modal-styles';
@@ -26,8 +27,14 @@ const VALOR_INICIAL_LABEL: Record<ControlUnit, string> = {
 // el `number | undefined` de los helpers `optNumber`/`nonNegNumber` pensados
 // para inputs nativos registrados con `valueAsNumber`). El payload final que
 // se envía a `useCreateHorometro` sí respeta el tipo `HorometroForm` real.
+//
+// `operador` ya no es texto libre: viene del catálogo de Operadores
+// (`OperatorPicker`, ver `types/operator.ts`). Se guardan DOS campos —
+// `operatorId` (lo que valida el picker) y `operadorNombre` (el snapshot de
+// texto que persiste el backend hoy, ver el comentario de `onSubmit`).
 const EntradaSchema = z.object({
-  operador: z.string().min(1, 'Indicá el operador'),
+  operatorId: z.string().min(1, 'Seleccioná un operador'),
+  operadorNombre: z.string().min(1),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: z.number().nonnegative('Valor inválido'),
   // Opcional de verdad: el `NumberField` necesita partir en 0 para quedar
@@ -39,7 +46,8 @@ const EntradaSchema = z.object({
 type EntradaFormValues = z.infer<typeof EntradaSchema>;
 
 const DEFAULT_VALUES: EntradaFormValues = {
-  operador: '',
+  operatorId: '',
+  operadorNombre: '',
   turno: 'DIURNO',
   valorInicial: 0,
   nivelCombustible: 0,
@@ -82,6 +90,7 @@ export function RegistrarEntradaModal({
     control,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { errors },
   } = useForm<EntradaFormValues>({
@@ -104,15 +113,22 @@ export function RegistrarEntradaModal({
     onOpenChange(false);
   };
 
-  const operador = watch('operador');
+  const operatorId = watch('operatorId');
   const valorInicial = watch('valorInicial');
   const puedeGuardar =
-    !crear.isPending && operador.trim().length > 0 && Number.isFinite(valorInicial) && valorInicial >= 0;
+    !crear.isPending && operatorId.trim().length > 0 && Number.isFinite(valorInicial) && valorInicial >= 0;
 
   const onSubmit = (values: EntradaFormValues) => {
     const payload: HorometroForm = {
       equipoId,
-      operador: values.operador.trim(),
+      // `operador` (el nombre) sigue siendo el snapshot de texto que
+      // persiste el backend — se completa solo, a partir de la selección
+      // del `OperatorPicker` (`operadorNombre`), en vez de texto libre.
+      operador: values.operadorNombre.trim(),
+      // `operatorId` (Fase 2 de Supervisión en Terreno, backend ya
+      // desplegado): `CreateHorometroDto` ahora lo acepta como opcional y
+      // aplica R1 con él — ver `types/horometro.ts`.
+      operatorId: values.operatorId,
       turno: values.turno,
       valorInicial: values.valorInicial,
       valorFinal: undefined,
@@ -171,20 +187,17 @@ export function RegistrarEntradaModal({
 
               <Controller
                 control={control}
-                name="operador"
+                name="operatorId"
                 render={({ field }) => (
-                  <TextField
-                    fullWidth
-                    isInvalid={!!errors.operador}
-                    name={field.name}
-                    onBlur={field.onBlur}
-                    onChange={field.onChange}
-                    value={field.value}
-                  >
-                    <Label>Operador</Label>
-                    <Input placeholder="Nombre y apellido" />
-                    {errors.operador ? <FieldError>{errors.operador.message}</FieldError> : null}
-                  </TextField>
+                  <OperatorPicker
+                    errorMessage={errors.operatorId?.message}
+                    isInvalid={!!errors.operatorId}
+                    value={field.value || null}
+                    onChange={(operator) => {
+                      field.onChange(operator?.id ?? '');
+                      setValue('operadorNombre', operator?.name ?? '', { shouldValidate: true });
+                    }}
+                  />
                 )}
               />
 

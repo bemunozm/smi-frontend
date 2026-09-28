@@ -4,6 +4,12 @@ import { nonNegNumber, optNumber } from '../lib/forms';
 export const horometroFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
   operador: z.string().min(1, 'Indicá el operador'),
+  // `id` del catálogo de Operadores (ver `types/operator.ts`) — snapshot,
+  // `operador` (el nombre) sigue siendo el campo que persiste el backend
+  // hoy; opcional mientras el create de horómetro de la Fase 2
+  // (Supervisión en Terreno) no lo acepte todavía. Ver
+  // `components/flota/RegistrarEntradaModal.tsx`.
+  operatorId: z.string().optional(),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: nonNegNumber('Valor inválido'),
   valorFinal: optNumber,

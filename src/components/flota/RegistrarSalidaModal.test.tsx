@@ -23,6 +23,7 @@ const OPEN_SHIFT: OpenShift = {
   operador: 'Ana Rojas',
   turno: 'DIURNO',
   fecha: '2026-09-15T08:00:00.000Z',
+  supervisorName: 'Marcela Pizarro',
 };
 
 function renderModal(openShift: OpenShift = OPEN_SHIFT, controlUnit: 'HOURS' | 'KM' = 'HOURS') {
