@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
+import { Avatar, Button, Chip, Dropdown, Label, toast } from '@heroui/react';
 import type { Key } from '@heroui/react';
 
-import { logout } from '../lib/logout';
+import { logout, LogoutBlockedError } from '../lib/logout';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { requestSync } from '../offline/replay';
 import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
 import { roleChipColor } from '../config/role-colors';
@@ -60,8 +61,21 @@ export function Topbar() {
     if (key === 'logout') {
       // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
       // Cache Storage privado + navega — ver ese archivo para el porqué
-      // (SEGURIDAD M1, review QA del RFC R2-storage).
-      void logout(navigate);
+      // (SEGURIDAD M1, review QA del RFC R2-storage). Fase 5 (offline): se
+      // bloquea si `user.id` tiene operaciones sin sincronizar en el outbox
+      // (realista solo para SUPERVISOR, que en la práctica vive en
+      // `TerrenoLayout` — pasa el `userId` igual acá por si algún día un
+      // outbox se usa fuera de Terreno).
+      void logout(navigate, user?.id).catch((error: unknown) => {
+        if (error instanceof LogoutBlockedError) {
+          toast.danger(error.message, {
+            description: 'Los registros quedan guardados en el equipo — no se pierden.',
+            actionProps: { children: 'Sincronizar ahora', onPress: () => requestSync() },
+          });
+          return;
+        }
+        throw error;
+      });
     }
   };
 

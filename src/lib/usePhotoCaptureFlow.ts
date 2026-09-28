@@ -5,6 +5,42 @@ import { uploadFile } from '../api/UploadsAPI';
 import { fuelReadingOcr, type FuelReadingOcrResult } from '../api/OcrAPI';
 import { readCaptureDate } from './photo-reading';
 
+/** Mismo shape que `OcrAPI.ts#SIN_SUGERENCIA` (privado ahí) — "no hay
+ * sugerencia" para cuando ni siquiera se intenta el OCR (sin señal) o
+ * cuando se agotó el tiempo de espera (ver `ocrConTimeout`). */
+const SIN_SUGERENCIA: FuelReadingOcrResult = { value: null, status: 'UNREADABLE', confidence: 0 };
+
+/** El backend hace OCR con dos modelos (ver `api/OcrAPI.ts`) — normalmente
+ * responde en segundos, pero puede colgarse con mala señal. 8 s es "todavía
+ * vale la pena esperar" sin trabar la pantalla de cierre de tarjeta más que
+ * eso (RFC "Supervisión en Terreno" §Diseño → Offline). No cancela la
+ * request en curso (`fuelReadingOcr` no expone un `AbortSignal`) — solo dejar
+ * de ESPERARLA: si llega tarde, su resultado ya no se usa. */
+const OCR_TIMEOUT_MS = 8_000;
+
+/**
+ * OCR con guardas offline: sin señal, ni se intenta (una request que se sabe
+ * de antemano que no va a llegar solo gasta batería/datos y demora el
+ * cierre) — y con o sin señal, nunca espera más de `OCR_TIMEOUT_MS`. En
+ * ambos casos cae a "sin sugerencia" SIN toast de error: el litraje se
+ * tipea a mano, que es una acción normal, no una falla (ver
+ * `components/flota/RegistrarCargaCombustibleModal.tsx`, el chip
+ * "No se pudo leer la foto, ingresá los litros a mano" que ya cubre
+ * `status === 'UNREADABLE'`).
+ */
+function ocrConTimeout(file: File): Promise<FuelReadingOcrResult> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return Promise.resolve(SIN_SUGERENCIA);
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(SIN_SUGERENCIA), OCR_TIMEOUT_MS);
+    void fuelReadingOcr(file).then((resultado) => {
+      clearTimeout(timer);
+      resolve(resultado);
+    });
+  });
+}
+
 export interface UsePhotoCaptureFlowResult {
   file: File | null;
   isReadingPhoto: boolean;
@@ -79,7 +115,7 @@ export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void):
     setCaptureDate(null);
     setIsReadingPhoto(true);
     try {
-      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), fuelReadingOcr(selected)]);
+      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), ocrConTimeout(selected)]);
       setCaptureDate(fecha);
       // Se guarda el resultado completo aunque `value` sea `null` — el modal
       // lo necesita para distinguir "sin sugerencia" (muestra aviso de baja

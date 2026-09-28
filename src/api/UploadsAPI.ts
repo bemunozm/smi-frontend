@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 
 import { axiosInstance as api } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
@@ -37,8 +38,12 @@ const TYPE_ERROR_MESSAGE = 'Formato no permitido. Solo se aceptan JPG, PNG, WebP
  * nunca la fuente de verdad. 413/415 del backend se mapean a los mismos
  * mensajes: el 413 por defecto de Multer/Nest no viene en español, y el 415
  * queda unificado con el pre-chequeo de acá.
+ *
+ * `config` es opcional: el replay offline (`offline/replay.ts`) lo usa para
+ * mandar un timeout de 60 s (subidas pesan más que un JSON) al resubir una
+ * foto de cierre de tarjeta guardada en Dexie.
  */
-export async function uploadFile(file: File): Promise<UploadedFile> {
+export async function uploadFile(file: File, config?: AxiosRequestConfig): Promise<UploadedFile> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error(SIZE_ERROR_MESSAGE);
   }
@@ -52,7 +57,8 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
     // Mismo gotcha que `uploadImage`: hay que forzar el `Content-Type` para
     // que axios arme el multipart en vez de serializar el `FormData` a JSON.
     const res = await api.post<ApiResponse<UploadedFile>>('/api/files', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      ...config,
+      headers: { ...config?.headers, 'Content-Type': 'multipart/form-data' },
     });
     return res.data.data;
   } catch (error: unknown) {
