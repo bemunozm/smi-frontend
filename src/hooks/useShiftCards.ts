@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
-import { DomainError } from '../lib/api-error';
+import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
 
 export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
 
@@ -19,7 +19,7 @@ export function useShiftCardsMine() {
 }
 
 const CODE_MESSAGES: Partial<Record<string, string>> = {
-  OPERATOR_INACTIVE: 'Ese operador ya no está activo. Elegí otro del catálogo.',
+  OPERATOR_INACTIVE: OPERATOR_INACTIVE_MESSAGE,
   ID_CONFLICT: 'Ya existe una tarjeta con ese identificador. Reintentá la acción.',
   INVALID_CAPTURE_TIME: 'La hora del registro no es válida — revisá la hora del equipo.',
   ALREADY_CLOSED: 'Esa tarjeta ya estaba cerrada.',

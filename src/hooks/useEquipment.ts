@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
-import { DomainError } from '../lib/api-error';
+import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
 import type {
   AssignEquipmentInput,
   CreateEquipmentInput,
@@ -122,7 +122,7 @@ export function useUpdateEquipmentStatus() {
 function mensajeErrorAsignacion(error: unknown): string {
   if (error instanceof DomainError) {
     if (error.code === 'OPERATOR_INACTIVE') {
-      return 'Ese operador ya no está activo. Elegí otro del catálogo.';
+      return OPERATOR_INACTIVE_MESSAGE;
     }
     if (error.status === 404) {
       return 'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.';

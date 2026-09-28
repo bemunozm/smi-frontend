@@ -54,6 +54,17 @@ export class DomainError extends Error {
 }
 
 /**
+ * Mensaje único para el 409 `OPERATOR_INACTIVE` — lo puede devolver
+ * cualquier endpoint que valida el operador contra el catálogo propio
+ * (`OperatorsService.assertActive`, backend): Tarjetas de turno
+ * (`hooks/useShiftCards.ts`), asignación de equipos (`hooks/useEquipment.ts`)
+ * y Trabajos extra (`hooks/useTrabajosExtra.ts`) comparten el mismo caso de
+ * negocio y no tenían por qué mostrar tres redacciones distintas del mismo
+ * error.
+ */
+export const OPERATOR_INACTIVE_MESSAGE = 'Ese operador ya no está activo. Elegí otro del catálogo.';
+
+/**
  * Normaliza cualquier error capturado en un `api/<X>API.ts` a un `Error`
  * con mensaje claro, distinguiendo el origen:
  * - `ZodError`: el backend (o el mock) respondió pero el shape no calza

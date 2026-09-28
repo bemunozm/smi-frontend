@@ -22,7 +22,11 @@ const actividadValues = ACTIVIDADES.map((a) => a.value) as [string, ...string[]]
 export const trabajoExtraFormSchema = z
   .object({
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
-    operador: z.string().min(1, 'Indicá el operador'),
+    // `id` del catálogo de Operadores (ver `types/operator.ts`) — ya no texto
+    // libre. El servidor guarda `operador` (el nombre) como snapshot a partir
+    // de este id; el cliente nunca manda ese campo (ver anexo "operador del
+    // catálogo en Trabajos extra + snapshot único").
+    operatorId: z.string().min(1, 'Elegí el operador'),
     faena: z.string().min(1, 'Indicá la faena'),
     turno: z.enum(['DIURNO', 'NOCTURNO']),
     horometroInicial: nonNegNumber('Valor inválido'),
@@ -53,6 +57,12 @@ export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 export interface TrabajoExtraordinario {
   id: string;
   equipoId: string;
+  /** `id` del catálogo de Operadores — `null` en registros legacy (previos al
+   * catálogo) o si el operador fue borrado (`onDelete: SetNull`). */
+  operatorId: string | null;
+  /** Snapshot del nombre al momento de crear el registro — es lo que se
+   * muestra en historial y detalle, tal cual quedó guardado (no se
+   * actualiza si el operador cambia de nombre después). */
   operador: string;
   faena: string;
   turno: string;
