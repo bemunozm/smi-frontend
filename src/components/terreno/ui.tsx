@@ -1,7 +1,9 @@
 import { cloneElement, useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
-import { X } from 'lucide-react';
+import { Moon, Sun, X } from 'lucide-react';
+
+import type { Turno } from '../../lib/turno';
 
 /**
  * Kit visual de Terreno, según la maqueta aprobada el 23/09/2026.
@@ -40,6 +42,117 @@ export function ChipContexto({ children }: { children: ReactNode }) {
     <span className="inline-flex min-h-[30px] items-center rounded-full border border-border bg-card px-2.5 text-xs font-semibold">
       {children}
     </span>
+  );
+}
+
+/* ---------- Turno ---------- */
+
+/**
+ * Identidad visual de cada turno. El diurno es claro y cálido, el nocturno es
+ * el negro del encabezado: la diferencia se lee de reojo, sin llegar a leer la
+ * palabra. Es lo que evita el error que importa —cargar un registro en el
+ * turno equivocado— en una tablet a pleno sol donde nadie se detiene a leer.
+ */
+export const TURNO_ESTILO: Record<
+  Turno,
+  { fondo: string; texto: string; suave: string; acento: string; Icono: typeof Sun }
+> = {
+  DIURNO: {
+    fondo: '#f6b73c',
+    texto: '#2a1e04',
+    suave: '#fdf3e0',
+    acento: '#b86e00',
+    Icono: Sun,
+  },
+  NOCTURNO: {
+    fondo: 'var(--terreno-head)',
+    texto: '#ffffff',
+    suave: '#e8eaf0',
+    acento: '#2e3650',
+    Icono: Moon,
+  },
+};
+
+/**
+ * Cabecera de turno: lo primero de la pantalla y lo más grande. Antes esta
+ * información eran tres renglones chicos al fondo del formulario («automáticos»),
+ * donde nadie los miraba. El turno, el día y la hora son el encabezado del
+ * registro que el supervisor está firmando: si se equivoca de turno, todo lo
+ * que cargue queda mal atribuido, y eso solo se descubre al día siguiente.
+ */
+export function CabeceraTurno({
+  turno,
+  fecha,
+  hora,
+  supervisor,
+  extra,
+}: {
+  turno: Turno;
+  /** Día del turno (`mié 24/09`), que de madrugada NO es el del reloj. */
+  fecha: string;
+  /** Hora del reloj, en vivo. */
+  hora: string;
+  supervisor: ReactNode;
+  extra?: ReactNode;
+}) {
+  const { fondo, texto, Icono } = TURNO_ESTILO[turno];
+  return (
+    <section
+      className="mb-4 flex flex-col gap-3 rounded-3xl px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:mb-5"
+      style={{ background: fondo, color: texto }}
+      aria-label={`Turno ${turno}`}
+    >
+      <div className="flex items-center gap-3">
+        <Icono className="h-7 w-7 shrink-0" strokeWidth={2.2} aria-hidden />
+        <div className="min-w-0">
+          <div className="text-[22px] leading-none font-bold tracking-[-0.01em] sm:text-[26px]">
+            TURNO {turno}
+          </div>
+          <div className="mt-1 text-[13.5px] font-semibold opacity-85">
+            {fecha} · {hora}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
+        {extra}
+        <span
+          className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3"
+          style={{ background: 'rgba(255,255,255,.22)' }}
+        >
+          Supervisor: {supervisor}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Separador de turno dentro de una lista de tarjetas. `sticky`: mientras se
+ * baja por veinte tarjetas, la barra del turno en el que se está sigue a la
+ * vista. En teléfono y tablet no hay dos columnas que den contexto, así que
+ * sin esto las tarjetas del diurno y del nocturno se leen como una sola lista.
+ */
+export function SeparadorTurno({
+  turno,
+  fecha,
+  detalle,
+}: {
+  turno: Turno;
+  fecha: string;
+  detalle?: ReactNode;
+}) {
+  const { fondo, texto, Icono } = TURNO_ESTILO[turno];
+  return (
+    <div
+      className="sticky top-0 z-[5] -mx-4 mt-5 flex items-center gap-2.5 px-4 py-2.5 first:mt-0"
+      style={{ background: fondo, color: texto }}
+    >
+      <Icono className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} aria-hidden />
+      <h3 className="text-[13.5px] font-bold tracking-[0.06em] uppercase">
+        {turno} · {fecha}
+      </h3>
+      {detalle && <span className="ml-auto text-[12.5px] font-semibold opacity-85">{detalle}</span>}
+    </div>
   );
 }
 
@@ -443,13 +556,42 @@ export function Cifras({ items }: { items: { label: string; valor: ReactNode; de
 }
 
 /** Tabla del historial en escritorio, con el mismo marco que las tarjetas. */
-export function Tabla({ titulo, detalle, children }: { titulo: string; detalle?: ReactNode; children: ReactNode }) {
+export function Tabla({
+  titulo,
+  detalle,
+  turno,
+  children,
+}: {
+  titulo: ReactNode;
+  detalle?: ReactNode;
+  /** Pinta el título con la identidad del turno, igual que `SeparadorTurno`.
+   *  En escritorio las dos tablas se ven juntas y el color las separa antes
+   *  de que haya que leer el encabezado. */
+  turno?: Turno;
+  children: ReactNode;
+}) {
+  const estilo = turno ? TURNO_ESTILO[turno] : null;
+  const Icono = estilo?.Icono;
   return (
     <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-[0_1px_2px_rgba(20,23,28,.04),0_6px_18px_rgba(20,23,28,.04)]">
       <table className="w-full border-collapse text-sm">
-        <caption className="px-4 pt-3.5 pb-2.5 text-left text-sm font-bold">
-          {titulo}
-          {detalle && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{detalle}</span>}
+        <caption
+          className={`text-left text-sm font-bold ${
+            estilo ? 'px-4 py-2.5' : 'px-4 pt-3.5 pb-2.5'
+          }`}
+          style={estilo ? { background: estilo.fondo, color: estilo.texto } : undefined}
+        >
+          <span className="flex items-center gap-2">
+            {Icono && <Icono className="h-[17px] w-[17px] shrink-0" strokeWidth={2.4} aria-hidden />}
+            {titulo}
+            {detalle && (
+              <span
+                className={`ml-auto text-[13px] font-semibold ${estilo ? 'opacity-85' : 'font-normal text-muted-foreground'}`}
+              >
+                {detalle}
+              </span>
+            )}
+          </span>
         </caption>
         {children}
       </table>

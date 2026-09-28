@@ -1,33 +1,36 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, Camera, Check, Clock, Lock, Mail, User } from 'lucide-react';
+import { ArrowRight, Camera, Check, ChevronDown, Clock, Lock, Mail, User } from 'lucide-react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { contextoTurno, fechaCorta, turnoAnterior, type Turno } from '../lib/turno';
+import { useAhora } from '../hooks/useAhora';
+import { ROLES } from '../types/roles';
 import {
-  Automatico,
-  Automaticos,
   Boton,
+  CabeceraTurno,
   Calculado,
   Campo,
   Card,
   CardHead,
   Chip,
-  ChipContexto,
   Cifras,
   Form,
-  GrupoHead,
   Hint,
   Hoja,
   Input,
   Label,
   Select,
+  SeparadorTurno,
   Tabla,
   Tarjeta,
   Textarea,
   TD,
   TH,
+  TURNO_ESTILO,
   VistaHead,
   VistaSplit,
 } from '../components/terreno/ui';
@@ -53,6 +56,9 @@ import {
 
 type Estado = 'curso' | 'cerrada';
 
+/** Los dos turnos que la pantalla muestra: el que corre y el que lo precede. */
+type Grupo = 'actual' | 'anterior';
+
 interface TarjetaTurno {
   id: number;
   equipo: string;
@@ -61,8 +67,14 @@ interface TarjetaTurno {
   inicial: number;
   final?: number;
   litros?: number;
-  turno: 'D' | 'N';
+  grupo: Grupo;
   estado: Estado;
+  /**
+   * Quién abrió la tarjeta. Un supervisor ve las suyas; el administrador ve
+   * todas. En faena hay más de un supervisor por turno y mezclarlas hace que
+   * cada uno tenga que buscar las propias en una lista que no es suya.
+   */
+  supervisor: string;
   cerradaA?: string;
   /** Clave de la foto del surtidor en R2 (no una URL pública). */
   fotoKey?: string;
@@ -86,19 +98,27 @@ const OPERADORES = [
   'Felipe Gallardo',
 ];
 
-const TARJETAS_EJEMPLO: TarjetaTurno[] = [
-  { id: 1, equipo: 'CA-011', tipo: 'Cargador', operador: 'Patricio Rojas', inicial: 12487.3, turno: 'D', estado: 'curso' },
-  { id: 2, equipo: 'PE-004', tipo: 'Perforadora', operador: 'Luis Contreras', inicial: 8412.6, turno: 'D', estado: 'curso' },
-  { id: 3, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Marcelo Soto', inicial: 6105.0, turno: 'D', estado: 'curso' },
-  { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, turno: 'D', estado: 'curso', sinSincronizar: true },
-  { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, turno: 'D', estado: 'curso', sinSincronizar: true },
-  { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, turno: 'N', estado: 'curso', arrastrada: true },
-  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, turno: 'N', estado: 'cerrada', cerradaA: '07:48' },
-  { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, turno: 'N', estado: 'cerrada', cerradaA: '07:51' },
-  { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, turno: 'N', estado: 'cerrada', cerradaA: '07:55' },
-];
+/**
+ * Supervisor de ejemplo con el que quedan las tarjetas que NO son del usuario
+ * conectado — sirve para ver que el filtro por supervisor hace algo.
+ */
+const OTRO_SUPERVISOR = 'Marcela Pizarro';
 
-const SUPERVISOR = 'Rodrigo Fuentes';
+/** Las tarjetas del usuario conectado llevan este marcador hasta que se sabe
+ *  su nombre real (la sesión llega un tick después del primer render). */
+const MIAS = '@yo';
+
+const TARJETAS_EJEMPLO: TarjetaTurno[] = [
+  { id: 1, equipo: 'CA-011', tipo: 'Cargador', operador: 'Patricio Rojas', inicial: 12487.3, grupo: 'actual', estado: 'curso', supervisor: MIAS },
+  { id: 2, equipo: 'PE-004', tipo: 'Perforadora', operador: 'Luis Contreras', inicial: 8412.6, grupo: 'actual', estado: 'curso', supervisor: MIAS },
+  { id: 3, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Marcelo Soto', inicial: 6105.0, grupo: 'actual', estado: 'curso', supervisor: MIAS },
+  { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, grupo: 'actual', estado: 'curso', supervisor: MIAS, sinSincronizar: true },
+  { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, grupo: 'actual', estado: 'curso', supervisor: OTRO_SUPERVISOR, sinSincronizar: true },
+  { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, grupo: 'anterior', estado: 'curso', supervisor: MIAS, arrastrada: true },
+  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48' },
+  { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:51' },
+  { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, grupo: 'anterior', estado: 'cerrada', supervisor: OTRO_SUPERVISOR, cerradaA: '07:55' },
+];
 
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -115,15 +135,42 @@ export function RegistroEquipoView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
 
+  // El turno sale del reloj, no de un valor escrito en la pantalla: a las 20:00
+  // cambia solo, aunque la pestaña lleve horas abierta.
+  const ahora = useAhora();
+  const ctx = useMemo(() => contextoTurno(ahora), [ahora]);
+  const anterior = useMemo(() => turnoAnterior(ctx.turno, ctx.fecha), [ctx]);
+
+  const { user, role } = useCurrentUser();
+  const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
+  /** El administrador ve el turno completo; un supervisor, solo lo suyo. */
+  const veTodo = role === ROLES.ADMIN;
+
   const [tarjetas, setTarjetas] = useState(TARJETAS_EJEMPLO);
   const [cerrandoId, setCerrandoId] = useState<number | null>(null);
   const [verReporte, setVerReporte] = useState(false);
+  const [verCerradas, setVerCerradas] = useState(false);
   const [reporte, setReporte] = useState<EstadoReporte>('sin-enviar');
   const [reporteA, setReporteA] = useState<string | null>(null);
 
-  const delDia = tarjetas.filter((t) => t.turno === 'D');
-  const enCurso = delDia.filter((t) => t.estado === 'curso');
-  const deNoche = tarjetas.filter((t) => t.turno === 'N');
+  const esMia = (t: TarjetaTurno) => t.supervisor === MIAS || t.supervisor === supervisor;
+  /**
+   * R4: el supervisor trabaja sobre sus tarjetas abiertas. Las de otros
+   * supervisores no le sirven —no puede cerrarlas— y le agrandan la lista
+   * justo cuando está apurado cerrando turno.
+   */
+  const visibles = useMemo(
+    () => (veTodo ? tarjetas : tarjetas.filter(esMia)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tarjetas, veTodo, supervisor],
+  );
+
+  const abiertas = visibles.filter((t) => t.estado === 'curso');
+  const cerradas = visibles.filter((t) => t.estado === 'cerrada');
+  const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
+  const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
+  /** Las del turno en curso: son las que entran en el reporte de salida. */
+  const enCurso = abiertasActual;
 
   /**
    * R1: solo equipos operativos. Los que están en taller o fuera de servicio no
@@ -176,8 +223,9 @@ export function RegistroEquipoView() {
         tipo: equipoElegido.type,
         operador: apertura.operador,
         inicial: aNumero(apertura.horometro) ?? equipoElegido.currentHourmeter ?? 0,
-        turno: 'D',
+        grupo: 'actual',
         estado: 'curso',
+        supervisor,
       },
       ...t,
     ]);
@@ -282,17 +330,14 @@ export function RegistroEquipoView() {
             />
           </Campo>
 
-          {/* El supervisor firma este registro: tiene que ver con qué turno,
-              qué fecha y a nombre de quién queda, aunque no los edite. */}
-          <Automaticos>
-            <Automatico label="Turno" valor="DIURNO · 08–20" />
-            <Automatico label="Fecha" valor={<span className="tabular text-[14.5px]">24/09/2026 08:35</span>} />
-            <Automatico
-              label="Supervisor"
-              valor={SUPERVISOR}
-              nota="No editable"
-            />
-          </Automaticos>
+          {/* Turno, fecha y supervisor ya no van acá abajo como tres renglones
+              «automáticos»: son la cabecera de la pantalla. Lo que queda es el
+              recordatorio de a qué turno se está agregando, porque el
+              formulario puede quedar a media pantalla del encabezado. */}
+          <Hint>
+            Se agrega al turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>, a nombre de{' '}
+            <b>{supervisor}</b>.
+          </Hint>
 
           <Boton ancho onClick={agregarEquipo}>
             Agregar equipo <ArrowRight className="h-[19px] w-[19px]" />
@@ -383,8 +428,15 @@ export function RegistroEquipoView() {
 
   const tarjeta = (t: TarjetaTurno) => {
     const cerrada = t.estado === 'cerrada';
+    // El borde izquierdo repite el color del turno: si al scrollear se pasa
+    // el separador, la tarjeta sola sigue diciendo de qué turno es.
+    const acento = TURNO_ESTILO[t.grupo === 'actual' ? ctx.turno : anterior.turno].acento;
     return (
-      <Tarjeta key={t.id} className={t.arrastrada ? 'outline-2 outline-offset-[3px] outline-dashed outline-[var(--terreno-offline)]' : ''}>
+      <Tarjeta
+        key={t.id}
+        className={`border-l-4 ${t.arrastrada ? 'outline-2 outline-offset-[3px] outline-dashed outline-[var(--terreno-offline)]' : ''}`}
+        style={{ borderLeftColor: acento }}
+      >
         <div className="flex items-start justify-between gap-2.5">
           <div>
             <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
@@ -491,27 +543,115 @@ export function RegistroEquipoView() {
     </thead>
   );
 
-  const resumenDia = `${enCurso.length} en curso${delDia.length - enCurso.length ? ` · ${delDia.length - enCurso.length} cerradas` : ''}`;
-  const abiertasNoche = deNoche.filter((t) => t.estado === 'curso').length;
-  const resumenNoche = `${deNoche.length - abiertasNoche} cerradas${abiertasNoche ? ` · ${abiertasNoche} sin cerrar` : ''}`;
+  const fechaAnterior = fechaCorta(anterior.fecha);
 
-  const historial = esEscritorio ? (
-    <>
-      <Tabla titulo="Turno DIURNO · mié 24/09" detalle={resumenDia}>
+  /** «Luis Contreras · Turno DIURNO mié 24/09» — a qué turno pertenece la
+   *  tarjeta que se está cerrando, que puede no ser el turno en curso. */
+  const bajadaCierre = cerrando
+    ? `${cerrando.operador} · Turno ${
+        cerrando.grupo === 'actual'
+          ? `${ctx.turno} ${ctx.fechaCorta}`
+          : `${anterior.turno} ${fechaAnterior}`
+      }`
+    : '';
+  const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
+
+  /**
+   * Un bloque de turno: separador + tarjetas (o tabla en escritorio). Los dos
+   * turnos se dibujan igual, así que la diferencia que ve el supervisor es
+   * solo el color y el icono — no dos diseños distintos que haya que aprender.
+   */
+  const bloque = (turno: Turno, fecha: string, ts: TarjetaTurno[], vacio: string) =>
+    esEscritorio ? (
+      <Tabla
+        key={`${turno}-${fecha}`}
+        turno={turno}
+        titulo={`TURNO ${turno} · ${fecha}`}
+        detalle={ts.length ? plural(ts.length, 'tarjeta', 'tarjetas') : undefined}
+      >
         {encabezados}
-        <tbody>{filas(delDia)}</tbody>
+        <tbody>
+          {ts.length ? (
+            filas(ts)
+          ) : (
+            <tr>
+              <td className={`${TD} text-muted-foreground`} colSpan={9}>
+                {vacio}
+              </td>
+            </tr>
+          )}
+        </tbody>
       </Tabla>
-      <Tabla titulo="Turno NOCTURNO · mar 23/09" detalle={resumenNoche}>
-        {encabezados}
-        <tbody>{filas(deNoche)}</tbody>
-      </Tabla>
-    </>
-  ) : (
+    ) : (
+      <div key={`${turno}-${fecha}`}>
+        <SeparadorTurno
+          turno={turno}
+          fecha={fecha}
+          detalle={ts.length ? plural(ts.length, 'tarjeta', 'tarjetas') : undefined}
+        />
+        {ts.length ? (
+          <div className="mt-3 flex flex-col gap-3">{ts.map(tarjeta)}</div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            {vacio}
+          </p>
+        )}
+      </div>
+    );
+
+  /**
+   * R4: la lista es la de tarjetas ABIERTAS. Las cerradas ya no piden nada al
+   * supervisor y son las que más crecen —al final de un turno son todas—, así
+   * que viven detrás de un botón en vez de empujar hacia abajo lo único sobre
+   * lo que todavía hay que actuar.
+   */
+  const historial = (
     <>
-      <GrupoHead titulo="Turno DIURNO · mié 24/09" detalle={resumenDia} />
-      <div className="flex flex-col gap-3">{delDia.map(tarjeta)}</div>
-      <GrupoHead titulo="Turno NOCTURNO · mar 23/09" detalle={resumenNoche} />
-      <div className="flex flex-col gap-3">{deNoche.map(tarjeta)}</div>
+      {bloque(
+        ctx.turno,
+        ctx.fechaCorta,
+        abiertasActual,
+        veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tenés tarjetas abiertas en este turno.',
+      )}
+
+      {abiertasAnterior.length > 0 &&
+        bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
+
+      <div className="mt-5">
+        <button
+          type="button"
+          onClick={() => setVerCerradas((v) => !v)}
+          aria-expanded={verCerradas}
+          className="flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 text-left"
+        >
+          <span className="text-sm font-bold">Historial de cerradas</span>
+          <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            {plural(cerradas.length, 'tarjeta', 'tarjetas')}
+            <ChevronDown
+              className={`h-[18px] w-[18px] transition-transform ${verCerradas ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </span>
+        </button>
+
+        {verCerradas && (
+          <div className="mt-3 flex flex-col gap-4">
+            {cerradas.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Todavía no cerraste ninguna tarjeta.
+              </p>
+            ) : (
+              [
+                { turno: ctx.turno, fecha: ctx.fechaCorta, grupo: 'actual' as const },
+                { turno: anterior.turno, fecha: fechaAnterior, grupo: 'anterior' as const },
+              ]
+                .map((g) => ({ ...g, ts: cerradas.filter((t) => t.grupo === g.grupo) }))
+                .filter((g) => g.ts.length > 0)
+                .map((g) => bloque(g.turno, g.fecha, g.ts, ''))
+            )}
+          </div>
+        )}
+      </div>
     </>
   );
 
@@ -596,15 +736,27 @@ export function RegistroEquipoView() {
 
   return (
     <>
+      {/* Primero el turno, después el título: lo que el supervisor necesita
+          confirmar de un vistazo es EN QUÉ turno está registrando, no en qué
+          pantalla. Ver `CabeceraTurno`. */}
+      <CabeceraTurno
+        turno={ctx.turno}
+        fecha={ctx.fechaCorta}
+        hora={ctx.fechaHora}
+        supervisor={supervisor}
+        extra={
+          <span
+            className="inline-flex min-h-[32px] items-center rounded-full px-3"
+            style={{ background: 'rgba(255,255,255,.22)' }}
+          >
+            Faena Patillo
+          </span>
+        }
+      />
+
       <VistaHead
         titulo="Registro de equipo"
-        contexto={
-          <>
-            <ChipContexto>Faena Patillo</ChipContexto>
-            <ChipContexto>DIURNO · 08–20</ChipContexto>
-            <Chip tono="warning">Maqueta</Chip>
-          </>
-        }
+        contexto={<Chip tono="warning">Maqueta</Chip>}
       />
 
       <VistaSplit
@@ -620,7 +772,7 @@ export function RegistroEquipoView() {
                       <span className="tabular">{cerrando.equipo}</span> · {cerrando.tipo}
                     </>
                   }
-                  bajada={`${cerrando.operador} · Turno ${cerrando.turno === 'D' ? 'DIURNO 24/09' : 'NOCTURNO 23/09'}`}
+                  bajada={bajadaCierre}
                   extra={
                     <button
                       type="button"
@@ -651,7 +803,7 @@ export function RegistroEquipoView() {
         <Hoja
           eyebrow="Cerrar tarjeta"
           titulo={`${cerrando.equipo} · ${cerrando.tipo}`}
-          bajada={`${cerrando.operador} · Turno ${cerrando.turno === 'D' ? 'DIURNO 24/09' : 'NOCTURNO 23/09'}`}
+          bajada={bajadaCierre}
           onCerrar={() => setCerrandoId(null)}
         >
           <Form>{formularioCierre}</Form>
@@ -677,10 +829,10 @@ export function RegistroEquipoView() {
             </div>
             <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-2 border-b border-border px-3.5 py-3 text-[13px]">
               {[
-                ['Fecha', '24/09/2026'],
-                ['Turno', 'DIURNO · 08–20'],
+                ['Fecha', ctx.fecha.toLocaleDateString('es-CL')],
+                ['Turno', ctx.etiqueta],
                 ['Emitido', reporteA ?? '08:41'],
-                ['Supervisor', SUPERVISOR],
+                ['Supervisor', supervisor],
               ].map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-[10.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{k}</dt>
