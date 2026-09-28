@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -262,6 +263,18 @@ const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 
+/**
+ * Nombre de una sección dentro de una tarjeta.
+ *
+ * Va en 15 px y caja normal, no en la versaleta de `Label`: las secciones y
+ * los campos compartían estilo, y «CAMIONES INTERNOS» no se distinguía de
+ * «CANTIDAD DE CAMIONES» justo debajo. Es el mismo tratamiento que ya usan
+ * los ítems de Traspasos en esta pantalla.
+ */
+function TituloSeccion({ children }: { children: ReactNode }) {
+  return <b className="text-[15px] leading-tight">{children}</b>;
+}
+
 /** Lo que el sistema completa solo. El `true` marca lo que va en cifra tabular. */
 const DATOS_FICHA: [string, string, boolean][] = [
   ['Turno', 'DIURNO · 08–20', false],
@@ -501,7 +514,7 @@ export function ReporteDiarioView() {
           <div className="flex flex-col gap-3">
             {SECCIONES_CAMIONES.map((seccion) => (
               <div key={seccion.camiones} className="flex flex-col gap-1.5">
-                <Label>{seccion.label}</Label>
+                <TituloSeccion>{seccion.label}</TituloSeccion>
                 <div className="grid grid-cols-2 gap-2.5">
                   <Campo label="Cantidad de camiones">
                     <Input
@@ -537,7 +550,7 @@ export function ReporteDiarioView() {
           />
 
           <div className="flex flex-col gap-1.5">
-            <Label>Vueltas por tolva</Label>
+            <TituloSeccion>Vueltas por tolva</TituloSeccion>
             <div className="grid grid-cols-3 gap-2.5">
               {TOLVAS.map((tolva) => (
                 <Campo key={tolva.clave} label={tolva.label}>
