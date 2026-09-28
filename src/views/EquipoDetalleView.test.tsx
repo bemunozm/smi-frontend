@@ -613,6 +613,7 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
     operador: 'Carlos Núñez',
     turno: 'NOCTURNO',
     fecha: '2026-08-06T20:00:00.000Z',
+    supervisorName: 'Marcela Pizarro',
   };
 
   it('sin turno abierto: ofrece "Registrar entrada" y no muestra el banner de turno en curso', () => {

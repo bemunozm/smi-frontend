@@ -51,6 +51,11 @@ const OpenShiftSchema = z.object({
   operador: z.string(),
   turno: z.string(),
   fecha: z.string().datetime(),
+  /** Nombre del supervisor que abrió la tarjeta, o `null` si el registro no
+   * tiene supervisor asociado (dato legacy) o el usuario ya no existe —
+   * alimenta el "ocupado por X" del selector de equipo en Registro de
+   * equipo (`hooks/useShiftRegister.ts`, RFC "Supervisión en Terreno"). */
+  supervisorName: z.string().nullable(),
 });
 export type OpenShift = z.infer<typeof OpenShiftSchema>;
 

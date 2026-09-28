@@ -179,6 +179,7 @@ describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
         operador: 'Carlos Núñez',
         turno: 'DIURNO',
         fecha: '2026-08-06T08:00:00.000Z',
+        supervisorName: 'Marcela Pizarro',
       },
     };
     const { container } = renderConDatos(<EquiposView />, (qc) => {

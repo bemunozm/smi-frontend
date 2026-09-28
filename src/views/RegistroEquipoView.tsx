@@ -1,14 +1,24 @@
-import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Clock, History, Lock, Mail, User } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Download,
+  History,
+  Lock,
+  Mail,
+  User,
+} from 'lucide-react';
 
-import { useEquipment } from '../hooks/useEquipment';
-import { useCurrentUser } from '../hooks/useCurrentUser';
-import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
+import { lineaEstadoCorreo, useShiftRegister, type EstadoReporte, type TarjetaTurno } from '../hooks/useShiftRegister';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { contextoTurno, fechaCorta, turnoAnterior, type Turno } from '../lib/turno';
-import { useAhora } from '../hooks/useAhora';
-import { ROLES } from '../types/roles';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { fmtTime, plural } from '../lib/format';
+import { fechaCorta, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
   Boton,
@@ -49,227 +59,69 @@ import {
  * cliente describió en la reunión, con la falla de cargadores que se supo recién
  * al turno siguiente. Por eso el botón no está escondido al final del formulario.
  *
- * ⚠️ MAQUETA PARCIAL. El catálogo de equipos SÍ es real (sale de
- * `useEquipment()` y se filtra por estado operativo, que es la regla R1). Las
- * tarjetas del turno son de ejemplo: el modelo `turno` + `registro_equipo_turno`
- * no existe todavía, ni el reporte de salida en PDF. Nada de lo que se registra
- * acá se guarda.
+ * Conectada de punta a punta (RFC "Supervisión en Terreno", Fases 4b+5): el
+ * catálogo de equipos/operadores, las tarjetas de turno (apertura/cierre) y
+ * el reporte de salida en PDF salen todos de `useShiftRegister()` — online
+ * y sin señal por igual, vía el outbox de Dexie (`offline/outbox.ts`/
+ * `offline/replay.ts`). El JSX de acá abajo no cambió desde la maqueta
+ * original, solo la capa de estado.
  */
-
-type Estado = 'curso' | 'cerrada';
-
-/** Los dos turnos que la pantalla muestra: el que corre y el que lo precede. */
-type Grupo = 'actual' | 'anterior';
-
-interface TarjetaTurno {
-  id: number;
-  equipo: string;
-  tipo: string;
-  operador: string;
-  inicial: number;
-  final?: number;
-  litros?: number;
-  grupo: Grupo;
-  estado: Estado;
-  /**
-   * Quién abrió la tarjeta. Un supervisor ve las suyas; el administrador ve
-   * todas. En faena hay más de un supervisor por turno y mezclarlas hace que
-   * cada uno tenga que buscar las propias en una lista que no es suya.
-   */
-  supervisor: string;
-  cerradaA?: string;
-  /** Lo que el supervisor anotó al cerrar; se lee en el detalle del historial. */
-  observaciones?: string;
-  /** Clave de la foto del surtidor en R2 (no una URL pública). */
-  fotoKey?: string;
-  /** Registrada sin señal: está en el equipo, todavía no en el servidor. */
-  sinSincronizar?: boolean;
-  /** Quedó abierta al terminar el turno anterior — ver la nota de Q5. */
-  arrastrada?: boolean;
-}
-
-const OPERADORES = [
-  'Patricio Rojas',
-  'Luis Contreras',
-  'Marcelo Soto',
-  'Cristian Araya',
-  'Héctor Villalobos',
-  'Sebastián Tapia',
-  'Nicolás Espinoza',
-  'Jorge Pizarro',
-  'Rubén Carrasco',
-  'Mauricio Olivares',
-  'Felipe Gallardo',
-];
-
-/**
- * Supervisor de ejemplo con el que quedan las tarjetas que NO son del usuario
- * conectado — sirve para ver que el filtro por supervisor hace algo.
- */
-const OTRO_SUPERVISOR = 'Marcela Pizarro';
-
-/** Las tarjetas del usuario conectado llevan este marcador hasta que se sabe
- *  su nombre real (la sesión llega un tick después del primer render). */
-const MIAS = '@yo';
-
-const TARJETAS_EJEMPLO: TarjetaTurno[] = [
-  { id: 1, equipo: 'CA-011', tipo: 'Cargador', operador: 'Patricio Rojas', inicial: 12487.3, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 2, equipo: 'PE-004', tipo: 'Perforadora', operador: 'Luis Contreras', inicial: 8412.6, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 3, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Marcelo Soto', inicial: 6105.0, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, grupo: 'actual', estado: 'curso', supervisor: MIAS, sinSincronizar: true },
-  { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, grupo: 'actual', estado: 'curso', supervisor: OTRO_SUPERVISOR, sinSincronizar: true },
-  { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, grupo: 'anterior', estado: 'curso', supervisor: MIAS, arrastrada: true },
-  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48', observaciones: 'Ruido en el balde al descargar. Revisar pasadores en la mantención.' },
-  { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:51' },
-  { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, grupo: 'anterior', estado: 'cerrada', supervisor: OTRO_SUPERVISOR, cerradaA: '07:55' },
-];
 
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-const aNumero = (s: string): number | null => {
-  if (!s.trim()) return null;
-  const v = Number.parseFloat(s.replace(/\./g, '').replace(',', '.'));
-  return Number.isNaN(v) ? null : v;
-};
-
-type EstadoReporte = 'sin-enviar' | 'enviado';
-
 export function RegistroEquipoView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
-  const { data: equipos = [] } = useEquipment();
+  const enLinea = useOnlineStatus();
 
-  // El turno sale del reloj, no de un valor escrito en la pantalla: a las 20:00
-  // cambia solo, aunque la pestaña lleve horas abierta.
-  const ahora = useAhora();
-  const ctx = useMemo(() => contextoTurno(ahora), [ahora]);
-  const anterior = useMemo(() => turnoAnterior(ctx.turno, ctx.fecha), [ctx]);
-
-  const { user, role } = useCurrentUser();
-  const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
-  /** El administrador ve el turno completo; un supervisor, solo lo suyo. */
-  const veTodo = role === ROLES.ADMIN;
-
-  const [tarjetas, setTarjetas] = useState(TARJETAS_EJEMPLO);
-  const [cerrandoId, setCerrandoId] = useState<number | null>(null);
-  const [verReporte, setVerReporte] = useState(false);
-  const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
-  const [reporte, setReporte] = useState<EstadoReporte>('sin-enviar');
-  const [reporteA, setReporteA] = useState<string | null>(null);
-
-  const esMia = (t: TarjetaTurno) => t.supervisor === MIAS || t.supervisor === supervisor;
-  /**
-   * R4: el supervisor trabaja sobre sus tarjetas abiertas. Las de otros
-   * supervisores no le sirven —no puede cerrarlas— y le agrandan la lista
-   * justo cuando está apurado cerrando turno.
-   */
-  const visibles = useMemo(
-    () => (veTodo ? tarjetas : tarjetas.filter(esMia)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tarjetas, veTodo, supervisor],
-  );
-
-  const abiertas = visibles.filter((t) => t.estado === 'curso');
-  const cerradas = visibles.filter((t) => t.estado === 'cerrada');
-  const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
-  const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
-  /** Las del turno en curso: son las que entran en el reporte de salida. */
-  const enCurso = abiertasActual;
-
-  /**
-   * R1: solo equipos operativos. Los que están en taller o fuera de servicio no
-   * aparecen — y tampoco los que ya tienen una tarjeta abierta en este turno,
-   * porque un equipo no sale dos veces a la vez.
-   */
-  const disponibles = useMemo(() => {
-    const ocupados = new Set(enCurso.map((t) => t.equipo));
-    return equipos.filter((e) => e.status === 'OPERATIONAL' && !ocupados.has(e.internalCode));
-  }, [equipos, enCurso]);
-
-  const enTaller = equipos.filter((e) => e.status !== 'OPERATIONAL');
-
-  const [apertura, setApertura] = useState({ equipoId: '', operador: OPERADORES[5], horometro: '' });
-  const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
-
-  const [cierre, setCierre] = useState({ final: '', litros: '', observaciones: '' });
-
-  /**
-   * Foto del surtidor, OCR y subida: se toma entero del flujo que ya construyó
-   * Flota (`usePhotoCaptureFlow` + `FotoRespaldoField`, PRs #21 a #23). No se
-   * rehace nada acá.
-   *
-   * Lo que ese flujo aporta y esta maqueta antes simulaba:
-   * - la foto se sube a **R2 privado** y devuelve una clave de almacenamiento,
-   *   no una URL pública inventada;
-   * - un OCR local lee los litros del display y **prellena el campo**, que
-   *   sigue siendo editable — el supervisor confirma en vez de tipear;
-   * - la fecha de captura sale del EXIF, así que la pantalla puede avisar si
-   *   la foto no es de ahora.
-   *
-   * La foto sigue siendo obligatoria para cerrar: es el respaldo de la carga
-   * y el cliente la pidió explícitamente.
-   */
-  const foto = usePhotoCaptureFlow((litros) =>
-    setCierre((c) => ({ ...c, litros: fmt(litros) })),
-  );
-
-  const cerrando = tarjetas.find((t) => t.id === cerrandoId) ?? null;
-  const finalNum = aNumero(cierre.final);
-  const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
-  const finalInvalido = horasMaquina != null && horasMaquina < 0;
-
-  const agregarEquipo = () => {
-    if (!equipoElegido) return;
-    setTarjetas((t) => [
-      {
-        id: Math.max(0, ...t.map((x) => x.id)) + 1,
-        equipo: equipoElegido.internalCode,
-        tipo: equipoElegido.type,
-        operador: apertura.operador,
-        inicial: aNumero(apertura.horometro) ?? equipoElegido.currentHourmeter ?? 0,
-        grupo: 'actual',
-        estado: 'curso',
-        supervisor,
-      },
-      ...t,
-    ]);
-    setApertura((a) => ({ ...a, equipoId: '', horometro: '' }));
-  };
-
-  const abrirCierre = (id: number) => {
-    setCerrandoId(id);
-    setCierre({ final: '', litros: '', observaciones: '' });
-    // La foto es de ESTA tarjeta: arrastrar la anterior mezclaría el respaldo
-    // de un equipo con el de otro.
-    foto.resetPhoto();
-  };
-
-  const confirmarCierre = async () => {
-    if (!cerrando || finalNum == null || finalInvalido || !foto.file) return;
-
-    // La foto se sube a R2 y lo que queda guardado es su clave, no un enlace
-    // público. Si la subida falla, `upload` avisa y no se cierra la tarjeta.
-    const storageKey = await foto.upload(foto.file);
-    if (!storageKey) return;
-
-    setTarjetas((ts) =>
-      ts.map((t) =>
-        t.id === cerrando.id
-          ? {
-              ...t,
-              estado: 'cerrada',
-              final: finalNum,
-              litros: aNumero(cierre.litros) ?? 0,
-              fotoKey: storageKey,
-              observaciones: cierre.observaciones,
-              cerradaA: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-            }
-          : t,
-      ),
-    );
-    setCerrandoId(null);
-  };
+  const {
+    ctx,
+    anterior,
+    turnoSeleccion,
+    siguienteTurno,
+    avanzarTurno,
+    volverTurnoActual,
+    mostrarSelectorTurno,
+    supervisor,
+    veTodo,
+    disponibles,
+    equipoHint,
+    operadores,
+    abiertasActual,
+    abiertasAnterior,
+    cerradas,
+    enCurso,
+    apertura,
+    setApertura,
+    equipoElegido,
+    valorInicialApertura,
+    abrir: agregarEquipo,
+    isAbriendo,
+    setCerrandoId,
+    cerrando,
+    cierre,
+    setCierre,
+    abrirCierre,
+    cerrar: confirmarCierre,
+    finalNum,
+    horasMaquina,
+    finalInvalido,
+    isCerrando,
+    foto,
+    verReporte,
+    setVerReporte,
+    historialAbierto,
+    setHistorialAbierto,
+    detalleCerrada,
+    setDetalleCerrada,
+    reporteEstado,
+    reporteUltimo,
+    reporteError,
+    reportePuedeReenviar,
+    enviarReporte,
+    isEnviandoReporte,
+    reporteUrl,
+  } = useShiftRegister();
 
   // --- Apertura -------------------------------------------------------------
 
@@ -280,14 +132,7 @@ export function RegistroEquipoView() {
         <Hint>Todos los equipos operativos ya tienen una tarjeta abierta en este turno.</Hint>
       ) : (
         <Form>
-          <Campo
-            label="Equipo"
-            hint={
-              enTaller.length > 0
-                ? `Solo equipos operativos. ${enTaller.length === 1 ? `${enTaller[0].internalCode} no aparece porque no está operativo.` : `${enTaller.length} equipos no aparecen porque no están operativos.`}`
-                : 'Solo equipos operativos.'
-            }
-          >
+          <Campo label="Equipo" hint={equipoHint}>
             <Selector
               etiqueta="Equipo"
               tituloTabular
@@ -307,9 +152,9 @@ export function RegistroEquipoView() {
           <Campo label="Operador">
             <Selector
               etiqueta="Operador"
-              valor={apertura.operador}
-              onChange={(operador) => setApertura((a) => ({ ...a, operador }))}
-              opciones={OPERADORES.map((o) => ({ valor: o, titulo: o }))}
+              valor={apertura.operatorId}
+              onChange={(operatorId) => setApertura((a) => ({ ...a, operatorId }))}
+              opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
             />
           </Campo>
 
@@ -343,55 +188,119 @@ export function RegistroEquipoView() {
             <b>{supervisor}</b>.
           </Hint>
 
-          <Boton ancho onClick={agregarEquipo}>
-            Agregar equipo <ArrowRight className="h-[19px] w-[19px]" />
+          <Boton
+            ancho
+            onClick={agregarEquipo}
+            disabled={!apertura.operatorId || isAbriendo || valorInicialApertura == null}
+          >
+            {isAbriendo ? 'Abriendo…' : 'Agregar equipo'} <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
+          {!apertura.operatorId && (
+            <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+              Elegí el operador para agregar el equipo.
+            </p>
+          )}
         </Form>
       )}
     </Card>
   );
 
-  // --- Reporte de salida ----------------------------------------------------
+  // --- Reporte de salida (Fase 5: conectado al outbox offline) --------------
+
+  /**
+   * Estilo por estado — restaurado tras la revisión de la Fase 5: mientras
+   * "enviado" era falso (Fase 4b, UI-only), usaba el mismo ámbar/`Clock` que
+   * "en cola" a propósito, para no insinuar una entrega que no había
+   * ocurrido. Ahora que el servidor lo confirma de verdad, cada estado
+   * vuelve a tener su propio color — el mismo criterio que ya usa
+   * `reporteChip` (éxito/amarillo/rojo), aplicado también al fondo del
+   * panel y de la barra flotante. `'sin-enviar'` sigue aparte: usa el color
+   * de marca (`--terreno-head`) para el llamado a la acción, no un tono
+   * semántico.
+   */
+  const REPORTE_ESTILO: Record<
+    Exclude<EstadoReporte, 'sin-enviar'>,
+    { fondo: string; texto: string; borde: string; Icono: typeof Clock }
+  > = {
+    'en-cola': {
+      fondo: 'bg-[var(--warning-soft)]',
+      texto: 'text-[var(--warning-soft-foreground)]',
+      borde: 'border-[1.5px] border-[#f1d9a2]',
+      Icono: Clock,
+    },
+    'requiere-atencion': {
+      fondo: 'bg-[var(--danger-soft)]',
+      texto: 'text-[var(--danger)]',
+      borde: 'border-[1.5px] border-[#f3c9c9]',
+      Icono: AlertTriangle,
+    },
+    enviado: {
+      fondo: 'bg-[var(--success-soft)]',
+      texto: 'text-[var(--success-soft-foreground)]',
+      borde: 'border-[1.5px] border-[#bfe3cd]',
+      Icono: CheckCircle2,
+    },
+  };
+  const esUrgente = reporteEstado === 'sin-enviar';
+  const estiloReporte = esUrgente ? null : REPORTE_ESTILO[reporteEstado];
+
+  /** Chip + línea de resumen por estado — la misma lectura en el panel de
+   * escritorio y en la barra flotante de teléfono/tablet. */
+  const reporteChip =
+    reporteEstado === 'enviado' ? (
+      <Chip tono="success">Enviado</Chip>
+    ) : reporteEstado === 'en-cola' ? (
+      <Chip tono="warning">En cola</Chip>
+    ) : reporteEstado === 'requiere-atencion' ? (
+      <Chip tono="danger">Requiere atención</Chip>
+    ) : (
+      <Chip tono="danger">Sin enviar</Chip>
+    );
+
+  const reporteResumen =
+    reporteEstado === 'enviado' && reporteUltimo ? (
+      <>
+        Preparado a las <b className="tabular">{fmtTime(reporteUltimo.requestedAt)}</b> con{' '}
+        <b>{plural(reporteUltimo.cardCount, 'equipo', 'equipos')}</b>. {lineaEstadoCorreo(reporteUltimo.emailStatus)}.
+        {reportePuedeReenviar && ' Se agregaron equipos desde entonces.'}
+      </>
+    ) : reporteEstado === 'en-cola' ? (
+      <>
+        <b>{plural(enCurso.length, 'equipo', 'equipos')}</b>. En cola: se enviará solo cuando vuelva la señal.
+      </>
+    ) : reporteEstado === 'requiere-atencion' ? (
+      <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisá el detalle en el panel de sincronización.'}</>
+    ) : (
+      <>
+        <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron en este turno y la
+        administración todavía no lo sabe.
+      </>
+    );
 
   const panelReporte = (
     <div
       className={`flex flex-col gap-3 rounded-3xl p-[18px] ${
-        reporte === 'enviado'
-          ? 'border-[1.5px] border-[#b6e2c5] bg-[var(--success-soft)] text-[var(--success-soft-foreground)]'
-          : 'text-white'
+        estiloReporte ? `${estiloReporte.borde} ${estiloReporte.fondo} ${estiloReporte.texto}` : 'text-white'
       }`}
-      style={reporte === 'enviado' ? undefined : { background: 'var(--terreno-head)' }}
+      style={esUrgente ? { background: 'var(--terreno-head)' } : undefined}
     >
       <div className="flex items-center justify-between gap-2">
-        <span
-          className={`text-[11.5px] font-bold tracking-[0.08em] uppercase ${
-            reporte === 'enviado' ? '' : 'text-white/70'
-          }`}
-        >
+        <span className={`text-[11.5px] font-bold tracking-[0.08em] uppercase ${esUrgente ? 'text-white/70' : ''}`}>
           Reporte de salida
         </span>
-        {reporte === 'enviado' ? <Chip tono="success">Enviado</Chip> : <Chip tono="danger">Sin enviar</Chip>}
+        <div className="flex items-center gap-1.5">
+          {estiloReporte && <estiloReporte.Icono className="h-[15px] w-[15px]" />}
+          {reporteChip}
+        </div>
       </div>
-      <p className={`m-0 text-sm leading-snug ${reporte === 'enviado' ? '' : 'text-white/85'}`}>
-        {reporte === 'enviado' ? (
-          <>
-            Enviado a las <b className="tabular">{reporteA}</b> con <b>{enCurso.length} equipos</b>. Lo recibieron el
-            administrador y Sergio Torres.
-          </>
-        ) : (
-          <>
-            <b className="text-white">{enCurso.length} equipos</b> salieron en este turno y la administración todavía no
-            lo sabe.
-          </>
-        )}
-      </p>
-      {reporte === 'sin-enviar' ? (
+      <p className={`m-0 text-sm leading-snug ${esUrgente ? 'text-white/85' : ''}`}>{reporteResumen}</p>
+      {reporteEstado === 'sin-enviar' ? (
         <>
           <Boton variante="acento" ancho className="min-h-[60px] !rounded-[18px] !text-[17px] shadow-[0_0_0_4px_rgba(29,78,216,.35)]" onClick={() => setVerReporte(true)}>
             Enviar reporte de salida <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           <p className="m-0 text-[12.5px] text-white/85">
-            Aviso en el sistema y correo con el PDF al administrador y a Sergio Torres.
+            Aviso en el sistema y correo con el PDF a la administración.
           </p>
         </>
       ) : (
@@ -413,12 +322,13 @@ export function RegistroEquipoView() {
    */
   const FLOTANTE = 'sticky bottom-[78px] z-10 mt-4 rounded-3xl shadow-[0_10px_30px_rgba(13,12,10,.22)]';
   const barraReporte =
-    reporte === 'sin-enviar' ? (
+    reporteEstado === 'sin-enviar' ? (
       <div className={`${FLOTANTE} px-4 py-3 text-white`} style={{ background: 'var(--terreno-head)' }}>
         <div className="flex items-center gap-2 text-[12.5px] text-white/80">
           <i className="h-2 w-2 shrink-0 rounded-full bg-[#ff6b5a]" />
           <span>
-            <b className="text-white">{enCurso.length} equipos</b> salieron y la administración aún no lo sabe.
+            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron y la administración
+            aún no lo sabe.
           </span>
         </div>
         <Boton variante="acento" ancho className="mt-2 min-h-[60px] !rounded-[18px] !text-[17px]" onClick={() => setVerReporte(true)}>
@@ -426,15 +336,28 @@ export function RegistroEquipoView() {
         </Boton>
       </div>
     ) : (
-      <div className={`${FLOTANTE} flex items-center gap-2.5 border border-[#b6e2c5] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success-soft-foreground)]`}>
-        <Check className="h-[18px] w-[18px] shrink-0" />
-        <span className="flex-1">
-          Reporte enviado a las <span className="tabular">{reporteA}</span> · {enCurso.length} equipos
-        </span>
-        <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setVerReporte(true)}>
-          Ver
-        </Boton>
-      </div>
+      estiloReporte && (
+        <div
+          className={`${FLOTANTE} flex items-center gap-2.5 ${estiloReporte.borde} ${estiloReporte.fondo} px-4 py-3 text-sm font-semibold ${estiloReporte.texto}`}
+        >
+          <estiloReporte.Icono className="h-[18px] w-[18px] shrink-0" />
+          <span className="flex-1">
+            {reporteEstado === 'enviado' && reporteUltimo && (
+              <>
+                Reporte enviado · {fmtTime(reporteUltimo.requestedAt)} ·{' '}
+                {plural(reporteUltimo.cardCount, 'equipo', 'equipos')}
+              </>
+            )}
+            {reporteEstado === 'en-cola' && (
+              <>En cola · se enviará al volver la señal · {plural(enCurso.length, 'equipo', 'equipos')}</>
+            )}
+            {reporteEstado === 'requiere-atencion' && 'Reporte con error — revisá el panel de sincronización'}
+          </span>
+          <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setVerReporte(true)}>
+            Ver
+          </Boton>
+        </div>
+      )
     );
 
   // --- Historial ------------------------------------------------------------
@@ -566,7 +489,6 @@ export function RegistroEquipoView() {
           : `${anterior.turno} ${fechaAnterior}`
       }`
     : '';
-  const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
 
   /**
    * Un bloque de turno: separador + tarjetas (o tabla en escritorio). Los dos
@@ -651,7 +573,6 @@ export function RegistroEquipoView() {
   /** A qué turno pertenece una tarjeta, con su fecha: `DIURNO lun 28-09`. */
   const turnoDe = (t: TarjetaTurno) =>
     t.grupo === 'actual' ? `${ctx.turno} ${ctx.fechaCorta}` : `${anterior.turno} ${fechaAnterior}`;
-  const firmante = (t: TarjetaTurno) => (t.supervisor === MIAS ? supervisor : t.supervisor);
 
   const listaCerradas =
     cerradas.length === 0 ? (
@@ -726,7 +647,7 @@ export function RegistroEquipoView() {
             ['Equipo', `${detalleCerrada.equipo} · ${detalleCerrada.tipo}`],
             ['Operador', detalleCerrada.operador],
             ['Turno', turnoDe(detalleCerrada)],
-            ['Supervisor', firmante(detalleCerrada)],
+            ['Supervisor', detalleCerrada.supervisor],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
             [
               'Foto del surtidor',
@@ -814,10 +735,15 @@ export function RegistroEquipoView() {
         ancho
         onClick={confirmarCierre}
         disabled={
-          !foto.file || foto.isReadingPhoto || foto.isUploadingPhoto || finalNum == null || finalInvalido
+          !foto.file ||
+          foto.isReadingPhoto ||
+          foto.isUploadingPhoto ||
+          isCerrando ||
+          finalNum == null ||
+          finalInvalido
         }
       >
-        {foto.isUploadingPhoto ? 'Subiendo la foto…' : 'Cerrar tarjeta'}
+        {foto.isUploadingPhoto ? 'Subiendo la foto…' : isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       {!foto.file && (
@@ -839,19 +765,40 @@ export function RegistroEquipoView() {
         hora={ctx.fechaHora}
         supervisor={supervisor}
         extra={
-          <span
-            className="inline-flex min-h-[32px] items-center rounded-full px-3"
-            style={{ background: 'rgba(255,255,255,.22)' }}
-          >
-            Faena Patillo
-          </span>
+          <>
+            {/* Selector turno actual/siguiente (RFC "Supervisión en
+                Terreno" §Diseño): a las 07:30 el reloj todavía propone el
+                NOCTURNO de anoche, pero el supervisor ya está empezando el
+                DIURNO de hoy — este botón deja adelantarse UN turno sin
+                esperar a las 08:00. Solo visible cerca del cambio de turno
+                (o con el override ya activo, para poder volver) — fuera de
+                esa ventana un toque accidental cargaría tarjetas en el
+                turno equivocado (`mostrarSelectorTurno`). */}
+            {mostrarSelectorTurno && (
+              <button
+                type="button"
+                onClick={turnoSeleccion === 'siguiente' ? volverTurnoActual : avanzarTurno}
+                className="inline-flex min-h-[32px] cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold"
+                style={{ background: 'rgba(255,255,255,.22)' }}
+              >
+                {turnoSeleccion === 'siguiente' ? 'Volver al turno del reloj' : `Adelantar a ${siguienteTurno}`}
+              </button>
+            )}
+            <span
+              className="inline-flex min-h-[32px] items-center rounded-full px-3"
+              style={{ background: 'rgba(255,255,255,.22)' }}
+            >
+              Faena Patillo
+            </span>
+          </>
         }
       />
 
-      <VistaHead
-        titulo="Registro de equipo"
-        contexto={<Chip tono="warning">Maqueta</Chip>}
-      />
+      {/* El chip "Sin modo offline" de la maqueta se retira acá: el modo
+          offline ya existe (Fase 5) y su estado real se ve en el
+          `SyncStatus` del layout de Terreno — repetirlo acá sería
+          redundante o, peor, quedar desactualizado. */}
+      <VistaHead titulo="Registro de equipo" />
 
       <VistaSplit
         formulario={
@@ -927,7 +874,7 @@ export function RegistroEquipoView() {
       {verReporte && (
         <Hoja
           eyebrow="Reporte de salida de turno"
-          titulo={reporte === 'enviado' ? 'Reporte emitido' : 'Revisá y enviá'}
+          titulo={reporteEstado === 'enviado' ? 'Reporte enviado' : 'Revisá y enviá'}
           bajada="Así lo recibe la administración, también en PDF."
           onCerrar={() => setVerReporte(false)}
         >
@@ -945,7 +892,7 @@ export function RegistroEquipoView() {
               {[
                 ['Fecha', ctx.fecha.toLocaleDateString('es-CL')],
                 ['Turno', ctx.etiqueta],
-                ['Emitido', reporteA ?? '08:41'],
+                ['Emitido', reporteUltimo ? fmtTime(reporteUltimo.requestedAt) : '—'],
                 ['Supervisor', supervisor],
               ].map(([k, v]) => (
                 <div key={k}>
@@ -982,24 +929,79 @@ export function RegistroEquipoView() {
           <div className="flex items-start gap-2.5 rounded-2xl bg-[#f5f6f8] px-3 py-2.5 text-[13px] text-muted-foreground">
             <Mail className="h-[18px] w-[18px] shrink-0 text-foreground" />
             <span>
-              <b className="text-foreground">Destinatarios:</b> administrador y Sergio Torres. Aviso dentro del sistema
-              y correo con el PDF adjunto. Nunca a los clientes finales de Optimiza.
+              <b className="text-foreground">Destinatarios:</b> la administración (aviso en el sistema y correo con
+              el PDF adjunto). Nunca a los clientes finales de Optimiza.
             </span>
           </div>
 
-          {reporte === 'sin-enviar' && (
+          {reporteEstado === 'sin-enviar' && (
             <Boton
               variante="acento"
               ancho
               className="min-h-[60px] !rounded-[18px] !text-[17px]"
+              disabled={isEnviandoReporte}
               onClick={() => {
-                setReporte('enviado');
-                setReporteA(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }));
+                enviarReporte();
                 setVerReporte(false);
               }}
             >
-              Enviar ahora <ArrowRight className="h-[19px] w-[19px]" />
+              {isEnviandoReporte ? 'Enviando…' : 'Enviar ahora'} <ArrowRight className="h-[19px] w-[19px]" />
             </Boton>
+          )}
+
+          {reporteEstado === 'en-cola' && (
+            <div className="flex items-center gap-2.5 rounded-2xl bg-[var(--warning-soft)] px-3.5 py-3 text-sm font-medium text-[var(--warning-soft-foreground)]">
+              <Clock className="h-[18px] w-[18px] shrink-0" />
+              En cola: se enviará solo cuando vuelva la señal.
+            </div>
+          )}
+
+          {reporteEstado === 'requiere-atencion' && (
+            <div className="flex items-center gap-2.5 rounded-2xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm font-medium text-[var(--danger)]">
+              <AlertTriangle className="h-[18px] w-[18px] shrink-0" />
+              {reporteError?.message ?? 'El servidor rechazó el reporte.'} Reintentá o descartalo desde el panel de
+              sincronización.
+            </div>
+          )}
+
+          {reporteEstado === 'enviado' && reporteUltimo && (
+            <>
+              <a
+                href={reporteUrl(reporteUltimo.id)}
+                target="_blank"
+                rel="noopener"
+                aria-disabled={!enLinea}
+                onClick={(e) => {
+                  if (!enLinea) e.preventDefault();
+                }}
+                className={`inline-flex min-h-[52px] w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl px-5 text-[15.5px] font-semibold ${
+                  enLinea
+                    ? 'bg-secondary text-secondary-foreground hover:bg-black'
+                    : 'cursor-not-allowed bg-[#c9ced6] text-white'
+                }`}
+              >
+                <Download className="h-[19px] w-[19px]" /> Descargar PDF
+              </a>
+              {!enLinea && (
+                <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+                  Necesitás señal para descargar el PDF.
+                </p>
+              )}
+              {reportePuedeReenviar && (
+                <Boton
+                  variante="contorno"
+                  ancho
+                  disabled={isEnviandoReporte}
+                  onClick={() => {
+                    enviarReporte();
+                    setVerReporte(false);
+                  }}
+                >
+                  {isEnviandoReporte ? 'Enviando…' : `Reenviar con ${plural(enCurso.length, 'equipo', 'equipos')}`}{' '}
+                  <ArrowRight className="h-[19px] w-[19px]" />
+                </Boton>
+              )}
+            </>
           )}
         </Hoja>
       )}

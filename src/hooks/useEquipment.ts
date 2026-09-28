@@ -9,7 +9,10 @@ import type {
   UpdateEquipmentInput,
 } from '../types/equipment';
 
-const EQUIPMENT_KEY = ['equipment'] as const;
+// Exportada: `components/terreno/SyncStatus.tsx` la usa para refetchear el
+// catálogo al "Preparar para uso sin señal" (RFC "Supervisión en Terreno"
+// §Diseño → Offline), sin repetir el literal `['equipment']` a mano.
+export const EQUIPMENT_KEY = ['equipment'] as const;
 
 /**
  * Lista de equipos (Flota). Fuente única del dominio — la usan tanto las
