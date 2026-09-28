@@ -55,17 +55,6 @@ describe('BottomNav', () => {
     expect(screen.queryByText('Mantención')).toBeNull();
   });
 
-  it('OPERADOR ve solo Notificaciones', () => {
-    renderNav(ROLES.OPERADOR);
-
-    expect(screen.getByText('Notificaciones')).toBeTruthy();
-    expect(screen.queryByText('Inicio')).toBeNull();
-    expect(screen.queryByText('Equipos')).toBeNull();
-    expect(screen.queryByText('Inventario')).toBeNull();
-    expect(screen.queryByText('Mantención')).toBeNull();
-    expect(screen.queryByText('Terreno')).toBeNull();
-  });
-
   it('«Más» abre el mismo cajón del menú lateral', () => {
     renderNav(ROLES.ADMIN);
 

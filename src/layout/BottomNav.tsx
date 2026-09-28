@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router-dom';
 import {
-  Bell,
   ClipboardCheck,
   Ellipsis,
   LayoutDashboard,
@@ -27,7 +26,6 @@ const MANTENCION: PrimaryItem = { to: '/mantenimiento', label: 'Mantención', ic
 // El ícono calca el de "Registro de equipo" en `TerrenoLayout` — `/terreno`
 // redirige ahí, así que en la práctica es el mismo destino.
 const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: ClipboardCheck };
-const NOTIFICACIONES: PrimaryItem = { to: '/notificaciones', label: 'Notificaciones', icon: Bell };
 
 /**
  * Ítems primarios de la barra inferior, POR ROL — antes un único `PRIMARY`
@@ -35,9 +33,7 @@ const NOTIFICACIONES: PrimaryItem = { to: '/notificaciones', label: 'Notificacio
  * rol puede realmente ver o con dónde vive su trabajo diario (ver plan
  * "Supervisión en Terreno", sección "Roles (frontend)"):
  * - SUPERVISOR vive en Terreno — va primero;
- * - ADMIN/MANTENEDOR mantienen el set original;
- * - OPERADOR hoy no tiene Dashboard ni pantallas de datos (`config/
- *   home-path.ts` lo manda a `/sin-modulos`), así que solo ve Notificaciones.
+ * - ADMIN/MANTENEDOR mantienen el set original.
  *
  * Este mapa decide ORDEN + qué mostrar por rol; el gate real de acceso sigue
  * viviendo en `routes.tsx`/`NAV_ITEMS` — por eso más abajo se sigue
@@ -47,7 +43,6 @@ const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.SUPERVISOR]: [TERRENO, INICIO, EQUIPOS, INVENTARIO],
   [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
   [ROLES.MANTENEDOR]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
-  [ROLES.OPERADOR]: [NOTIFICACIONES],
 };
 
 /**

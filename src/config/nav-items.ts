@@ -21,10 +21,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Dashboard',
     to: '/',
-    // OPERADOR no tiene Dashboard ni pantallas de datos (ver plan
-    // "Supervisión en Terreno", sección Roles; `config/home-path.ts` lo manda
-    // a `/sin-modulos`) — la ruta `/` ya lo exige en `routes.tsx`, este item
-    // tiene que coincidir o mostraría un link que rebota a `/forbidden`.
     roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
   },
   {

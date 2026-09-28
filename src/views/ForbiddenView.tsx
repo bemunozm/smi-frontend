@@ -7,8 +7,8 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 /**
  * Vista mostrada cuando `ProtectedRoute` deniega el acceso por rol. Vuelve a
  * `homePathFor(role)` (no a `/` fijo): con roles por-rol (ver `config/
- * home-path.ts`) un `/` hardcodeado reboteaba de nuevo a OPERADOR, a quien
- * `/` ya no le corresponde.
+ * home-path.ts`) un `/` hardcodeado podría rebotar de nuevo a un rol al que
+ * `/` no le corresponde.
  */
 export function ForbiddenView() {
   const navigate = useNavigate();

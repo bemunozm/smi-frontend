@@ -19,7 +19,6 @@ import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
-import { SinModulosView } from './views/SinModulosView';
 import { UsersView } from './views/UsersView';
 import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
@@ -43,15 +42,11 @@ export const router = createBrowserRouter([
       // arriba (cualquier sesión válida, sin `allowedRoles`): no necesita el
       // chrome de `AppLayout`, solo decide y navega.
       { path: '/inicio', element: <HomeRedirect /> },
-      // Home de OPERADOR (hoy sin módulo propio) — mismo criterio que
-      // `/inicio`, universal a cualquier sesión autenticada.
-      { path: '/sin-modulos', element: <SinModulosView /> },
       {
         element: <AppLayout />,
         children: [
           // `/` NO reparte por rol a propósito (ver `config/home-path.ts` y
-          // el drawer de Terreno, que linkea acá con "Ir al panel") — pero
-          // OPERADOR no tiene Dashboard ni pantallas de datos, así que queda
+          // el drawer de Terreno, que linkea acá con "Ir al panel") — sigue
           // detrás de su propio `allowedRoles`, igual que Equipos/Inventario.
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
