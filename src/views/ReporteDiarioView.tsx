@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { calcularTotales } from '../lib/reporte-diario';
+import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
 import {
   Automatico,
   Automaticos,
@@ -19,12 +19,13 @@ import {
   Input,
   Label,
   ChipSeleccion,
+  ModalTerreno,
   Tabla,
   Tarjeta,
   TD,
   TH,
   VistaHead,
-  VistaSplit,
+  VistaUnica,
 } from '../components/terreno/ui';
 
 /**
@@ -78,12 +79,164 @@ const OPERADORES_DEL_TURNO = [
   { nombre: 'Héctor Villalobos', equipo: 'CM-021' },
 ];
 
-const ANTERIORES = [
-  { fecha: '22/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 10, vueltas: 54 },
-  { fecha: '22/09', turno: 'DIURNO', supervisor: 'Rodrigo Fuentes', camiones: 12, vueltas: 71 },
-  { fecha: '21/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 9, vueltas: 46 },
-  { fecha: '21/09', turno: 'DIURNO', supervisor: 'Rodrigo Fuentes', camiones: 12, vueltas: 68 },
-  { fecha: '20/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 10, vueltas: 57 },
+/**
+ * Un turno ya enviado, con todo lo que se ve al abrir su detalle. Los totales
+ * NO se guardan acá: se calculan desde `secciones` con la misma regla que el
+ * formulario, para que un dato de ejemplo no pueda contradecir a otro.
+ */
+interface ReporteAnterior {
+  fecha: string;
+  turno: string;
+  supervisor: string;
+  personal: [string, string][];
+  secciones: { label: string; camiones: number; vueltas: number }[];
+  tolvas: number[];
+  plantas: [string, string][];
+  traspasos: [string, string][];
+  empresas: string[];
+}
+
+const ANTERIORES: ReporteAnterior[] = [
+  {
+    fecha: '22/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 5, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [10, 8, 6],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.R.2', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '1'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Sijam'],
+  },
+  {
+    fecha: '22/09',
+    turno: 'DIURNO',
+    supervisor: 'Rodrigo Fuentes',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Claudio Bravo'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 6, vueltas: 7 },
+      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+    ],
+    tolvas: [14, 11, 8],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.P.2', 'Sal fina'],
+      ['P.P.4', 'Sal gruesa granel'],
+      ['Producto Camino', 'Sal para camino'],
+    ],
+    traspasos: [
+      ['Equipos internos', '4'],
+      ['Equipos externos', '2'],
+      ['Equipos Mina-Puerto', '5'],
+    ],
+    empresas: ['Hyd', 'Casa Blanca', 'Sijam'],
+  },
+  {
+    fecha: '21/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Mauricio Pinto'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Ignacio Sepúlveda'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 4, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 4 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+    ],
+    tolvas: [9, 7, 5],
+    plantas: [
+      ['P.R.2', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '2'],
+      ['Equipos externos', '1'],
+      ['Equipos Mina-Puerto', '3'],
+    ],
+    empresas: ['Coseducam'],
+  },
+  {
+    fecha: '21/09',
+    turno: 'DIURNO',
+    supervisor: 'Rodrigo Fuentes',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Claudio Bravo'],
+      ['HSE · prevención de riesgos', 'Paulina Vergara'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 6, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 6 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [13, 10, 7],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.P.2', 'Sal fina'],
+      ['Apoyo piso externos', 'Carguío a contratistas'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '3'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Casa Blanca', 'Coseducam', 'Sijam'],
+  },
+  {
+    fecha: '20/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Mauricio Pinto'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Ignacio Sepúlveda'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 5, vueltas: 7 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [11, 9, 6],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.R.4', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '2'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Sijam'],
+  },
 ];
 
 /**
@@ -111,8 +264,31 @@ const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 
+/**
+ * Pares etiqueta → valor para leer un turno ya enviado. El detalle se lee, no
+ * se edita: usar los campos del formulario acá invitaría a escribir sobre un
+ * reporte que ya se mandó.
+ */
+function Filas({ filas }: { filas: [string, string][] }) {
+  return (
+    <dl className="m-0 overflow-hidden rounded-2xl border border-border">
+      {filas.map(([label, valor]) => (
+        <div
+          key={label}
+          className="flex items-baseline justify-between gap-3 bg-[#fafbfc] px-3 py-2.5 not-first:border-t not-first:border-border"
+        >
+          <dt className="text-[12.5px] text-muted-foreground">{label}</dt>
+          <dd className="m-0 text-right text-[14.5px] font-medium">{valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function ReporteDiarioView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [detalle, setDetalle] = useState<ReporteAnterior | null>(null);
 
   const [personal, setPersonal] = useState({
     jefeMina: 'Álvaro Henríquez',
@@ -360,7 +536,7 @@ export function ReporteDiarioView() {
     </>
   );
 
-  const historial = esEscritorio ? (
+  const lista = esEscritorio ? (
     <Tabla titulo="Reportes anteriores" detalle={`Faena Patillo · últimos ${ANTERIORES.length} turnos`}>
       <thead>
         <tr>
@@ -370,28 +546,43 @@ export function ReporteDiarioView() {
           <th className={`${TH} text-right`}>Camiones</th>
           <th className={`${TH} text-right`}>Vueltas</th>
           <th className={TH}>Estado</th>
+          <th className={TH}>
+            <span className="sr-only">Detalle</span>
+          </th>
         </tr>
       </thead>
       <tbody>
-        {ANTERIORES.map((r, i) => (
-          <tr key={i}>
-            <td className={`${TD} tabular`}>{r.fecha}/2026</td>
-            <td className={TD}>{r.turno}</td>
-            <td className={TD}>{r.supervisor}</td>
-            <td className={`${TD} tabular text-right`}>{r.camiones}</td>
-            <td className={`${TD} tabular text-right`}>{fmt(r.vueltas)}</td>
-            <td className={TD}>
-              <Chip tono="success">Enviado</Chip>
-            </td>
-          </tr>
-        ))}
+        {ANTERIORES.map((r, i) => {
+          const t = totalesDeSecciones(r.secciones);
+          return (
+            <tr key={i}>
+              <td className={`${TD} tabular`}>{r.fecha}/2026</td>
+              <td className={TD}>{r.turno}</td>
+              <td className={TD}>{r.supervisor}</td>
+              <td className={`${TD} tabular text-right`}>{t.camiones}</td>
+              <td className={`${TD} tabular text-right`}>{fmt(t.vueltas)}</td>
+              <td className={TD}>
+                <Chip tono="success">Enviado</Chip>
+              </td>
+              <td className={`${TD} text-right`}>
+                <button
+                  type="button"
+                  onClick={() => setDetalle(r)}
+                  className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
+                >
+                  Ver más detalle <ChevronRight className="h-4 w-4" />
+                </button>
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </Tabla>
   ) : (
-    <>
-      <GrupoHead titulo="Reportes anteriores" detalle={`${ANTERIORES.length} turnos`} />
-      <div className="flex flex-col gap-3">
-        {ANTERIORES.map((r, i) => (
+    <div className="flex flex-col gap-3">
+      {ANTERIORES.map((r, i) => {
+        const t = totalesDeSecciones(r.secciones);
+        return (
           <Tarjeta key={i}>
             <div className="flex items-center justify-between gap-2">
               <b>
@@ -402,14 +593,77 @@ export function ReporteDiarioView() {
             <span className="text-[13px] text-muted-foreground">{r.supervisor}</span>
             <Cifras
               items={[
-                { label: 'Camiones', valor: r.camiones },
-                { label: 'Vueltas', valor: fmt(r.vueltas), destacado: true },
+                { label: 'Camiones', valor: t.camiones },
+                { label: 'Vueltas', valor: fmt(t.vueltas), destacado: true },
               ]}
             />
+            <Boton variante="contorno" ancho onClick={() => setDetalle(r)}>
+              Ver más detalle <ChevronRight className="h-[18px] w-[18px]" />
+            </Boton>
           </Tarjeta>
-        ))}
+        );
+      })}
+    </div>
+  );
+
+  const vistaDetalle = detalle && (
+    <div className="flex flex-col gap-4">
+      <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
+        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+      </Boton>
+
+      <Cifras
+        items={[
+          { label: 'Camiones', valor: totalesDeSecciones(detalle.secciones).camiones },
+          {
+            label: 'Vueltas',
+            valor: fmt(totalesDeSecciones(detalle.secciones).vueltas),
+            destacado: true,
+          },
+        ]}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Producción del turno" />
+        <Filas
+          filas={detalle.secciones.map((s): [string, string] => [
+            s.label,
+            `${s.camiones} camiones × ${s.vueltas} vueltas`,
+          ])}
+        />
       </div>
-    </>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Vueltas por tolva" />
+        <Cifras
+          items={detalle.tolvas.map((v, i) => ({ label: `Tolva ${i + 1}`, valor: v }))}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Personal del turno" />
+        <Filas filas={detalle.personal} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Operaciones en planta" detalle={`${detalle.plantas.length} con operación`} />
+        <Filas filas={detalle.plantas} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Traspasos" />
+        <Filas filas={detalle.traspasos} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Empresas externas" />
+        <div className="flex flex-wrap gap-1.5">
+          {detalle.empresas.map((e) => (
+            <ChipContexto key={e}>{e}</ChipContexto>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 
   return (
@@ -424,7 +678,37 @@ export function ReporteDiarioView() {
           </>
         }
       />
-      <VistaSplit formulario={formulario} historial={historial} />
+
+      <VistaUnica>
+        <Boton
+          variante="contorno"
+          ancho
+          onClick={() => {
+            setDetalle(null);
+            setHistorialAbierto(true);
+          }}
+        >
+          <History className="h-[19px] w-[19px]" /> Ver historial de reportes
+        </Boton>
+        {formulario}
+      </VistaUnica>
+
+      {/*
+       * Lista y detalle son dos pantallas de la MISMA ventana, no una ventana
+       * sobre otra: dos modales apilados se pelean el foco y en tablet dejan
+       * al supervisor sin saber cuál cierra con Escape.
+       */}
+      <ModalTerreno
+        abierto={historialAbierto}
+        onAbiertoChange={(abierto) => {
+          setHistorialAbierto(abierto);
+          if (!abierto) setDetalle(null);
+        }}
+        titulo={detalle ? `Reporte del ${detalle.fecha}/2026 · ${detalle.turno}` : 'Historial de reportes'}
+        detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${ANTERIORES.length} turnos`}
+      >
+        {vistaDetalle ?? lista}
+      </ModalTerreno>
     </>
   );
 }

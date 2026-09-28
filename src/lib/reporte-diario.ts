@@ -29,25 +29,38 @@ export interface SeccionesCamiones {
   vueltasMinera: string;
 }
 
+export interface SeccionNumerica {
+  camiones: number;
+  vueltas: number;
+}
+
 /**
- * Totales del turno a partir de las tres secciones de camiones.
+ * Totales de un turno a partir de sus secciones de camiones.
  *
- * El campo de vueltas de cada sección es **por camión**, no el total ya
- * sumado: una sección de 8 camiones a 6 vueltas aporta 48 al turno, no 6. Es
- * el mismo significado que tenía el campo único «Vueltas por camión» antes de
- * abrirse en tres.
+ * Las vueltas de cada sección son **por camión**, no el total ya sumado: una
+ * sección de 8 camiones a 6 vueltas aporta 48 al turno, no 6. Es el mismo
+ * significado que tenía el campo único «Vueltas por camión» antes de abrirse
+ * en tres.
+ *
+ * Vive acá, y no en la vista, porque la regla la aplican dos lados: el
+ * formulario del turno en curso y el historial de turnos pasados. Partida en
+ * dos se arreglaría en uno solo el día que cambie.
  */
-export function calcularTotales(s: SeccionesCamiones): { camiones: number; vueltas: number } {
-  const secciones: [string, string][] = [
-    [s.camionesInternos, s.vueltasInternos],
-    [s.camionesMinaCaleta, s.vueltasMinaCaleta],
-    [s.camionesMinera, s.vueltasMinera],
-  ];
+export function totalesDeSecciones(secciones: readonly SeccionNumerica[]): {
+  camiones: number;
+  vueltas: number;
+} {
   return {
-    camiones: secciones.reduce((total, [camiones]) => total + aNumero(camiones), 0),
-    vueltas: secciones.reduce(
-      (total, [camiones, vueltas]) => total + aNumero(camiones) * aNumero(vueltas),
-      0,
-    ),
+    camiones: secciones.reduce((total, s) => total + s.camiones, 0),
+    vueltas: secciones.reduce((total, s) => total + s.camiones * s.vueltas, 0),
   };
+}
+
+/** Los totales del formulario, cuyos campos son texto en formato es-CL. */
+export function calcularTotales(s: SeccionesCamiones): { camiones: number; vueltas: number } {
+  return totalesDeSecciones([
+    { camiones: aNumero(s.camionesInternos), vueltas: aNumero(s.vueltasInternos) },
+    { camiones: aNumero(s.camionesMinaCaleta), vueltas: aNumero(s.vueltasMinaCaleta) },
+    { camiones: aNumero(s.camionesMinera), vueltas: aNumero(s.vueltasMinera) },
+  ]);
 }

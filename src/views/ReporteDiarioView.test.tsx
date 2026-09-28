@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-import { calcularTotales } from '../lib/reporte-diario';
+import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
 import { ReporteDiarioView } from './ReporteDiarioView';
 
 afterEach(cleanup);
@@ -46,6 +46,32 @@ describe('calcularTotales', () => {
     });
     expect(totales.camiones).toBe(1207);
     expect(totales.vueltas).toBe(1232);
+  });
+});
+
+/**
+ * La misma regla que `calcularTotales`, pero sobre secciones ya numéricas —
+ * es la que usa el historial, donde los turnos pasados no vienen como texto
+ * de formulario. Se prueba aparte para que el día que alguien cambie la
+ * ponderación no quede aplicada en una mitad de la pantalla y no en la otra.
+ */
+describe('totalesDeSecciones', () => {
+  const SECCIONES_NUMERICAS = [
+    { camiones: 5, vueltas: 6 },
+    { camiones: 3, vueltas: 5 },
+    { camiones: 2, vueltas: 4 },
+  ];
+
+  it('suma los camiones de todas las secciones', () => {
+    expect(totalesDeSecciones(SECCIONES_NUMERICAS).camiones).toBe(10);
+  });
+
+  it('pondera las vueltas por los camiones de cada sección', () => {
+    expect(totalesDeSecciones(SECCIONES_NUMERICAS).vueltas).toBe(53);
+  });
+
+  it('devuelve cero sin secciones', () => {
+    expect(totalesDeSecciones([])).toEqual({ camiones: 0, vueltas: 0 });
   });
 });
 
@@ -99,5 +125,61 @@ describe('ReporteDiarioView · producción del turno', () => {
     const personal = screen.getByRole('heading', { name: 'Personal del turno' });
 
     expect(turno.compareDocumentPosition(personal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('ReporteDiarioView · historial en ventana', () => {
+  const abrirHistorial = () => {
+    render(<ReporteDiarioView />);
+    fireEvent.click(screen.getByText('Ver historial de reportes'));
+  };
+
+  it('no muestra los reportes anteriores hasta abrir la ventana', () => {
+    render(<ReporteDiarioView />);
+
+    expect(screen.queryByText('Gonzalo Riquelme')).toBeNull();
+  });
+
+  it('abre la ventana con los turnos anteriores', () => {
+    abrirHistorial();
+
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getAllByText('Gonzalo Riquelme').length).toBeGreaterThan(0);
+  });
+
+  /**
+   * El turno del 22/09 noche son 5×6 + 3×5 + 2×4. Si el historial dejara de
+   * ponderar por camión mostraría 15, que es la suma cruda de las vueltas.
+   */
+  it('pondera las vueltas de cada turno pasado en la lista', () => {
+    abrirHistorial();
+
+    const tarjeta = screen.getByText('22/09 · NOCTURNO').closest('article');
+    expect(tarjeta?.textContent).toContain('53');
+    expect(tarjeta?.textContent).not.toContain('15');
+  });
+
+  it('abre el reporte completo del turno al pedir más detalle', () => {
+    abrirHistorial();
+    fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
+
+    // Se consulta DENTRO del diálogo: el formulario del turno en curso sigue
+    // montado detrás y comparte varias de estas etiquetas.
+    const ventana = within(screen.getByRole('dialog'));
+
+    expect(ventana.getByRole('heading', { name: /Reporte del 22\/09\/2026 · NOCTURNO/ })).toBeTruthy();
+    // Secciones, personal y plantas: el reporte entero, no solo la cabecera.
+    expect(ventana.getByText('Camiones mina-caleta')).toBeTruthy();
+    expect(ventana.getByText('Nelson Cáceres')).toBeTruthy();
+    expect(ventana.getByText('Rechazo a acopio')).toBeTruthy();
+  });
+
+  it('vuelve del detalle a la lista sin cerrar la ventana', () => {
+    abrirHistorial();
+    fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
+    fireEvent.click(screen.getByText('Volver al historial'));
+
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getAllByText('Ver más detalle').length).toBe(5);
   });
 });
