@@ -6,13 +6,14 @@ import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustibl
 import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
 import { fmtDate, fmtNum, fmtTime } from '../lib/format';
+import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
   Card,
   Chip,
   Field,
   FieldLabel,
   ListCard,
-  PhotoDropzone,
   PrimaryButton,
   Segmented,
   SelectField,
@@ -44,10 +45,30 @@ export function CombustibleView() {
   });
 
   const tipo = (watch('tipo') as CombustibleForm['tipo']) ?? 'PETROLEO';
-  const fotoUrl = watch('fotoUrl');
 
-  const onSubmit = (values: CombustibleForm) =>
-    crear.mutate(values, { onSuccess: () => reset({ equipoId: '', tipo: 'PETROLEO', fotoUrl: undefined }) });
+  /** El OCR prellena los litros y el campo queda editable: el supervisor
+   *  confirma en vez de tipear el totalizador a mano. */
+  const foto = usePhotoCaptureFlow((litros) =>
+    setValue('litros', litros, { shouldValidate: true }),
+  );
+
+  const onSubmit = async (values: CombustibleForm) => {
+    // La foto se sube antes de crear el registro: si la subida falla, no queda
+    // una carga guardada sin su respaldo.
+    if (!foto.file) return;
+    const fotoKey = await foto.upload(foto.file);
+    if (!fotoKey) return;
+
+    crear.mutate(
+      { ...values, fotoKey },
+      {
+        onSuccess: () => {
+          reset({ equipoId: '', tipo: 'PETROLEO', fotoUrl: undefined });
+          foto.resetPhoto();
+        },
+      },
+    );
+  };
 
   const formulario = (
     <form onSubmit={handleSubmit(onSubmit)}>
@@ -77,20 +98,36 @@ export function CombustibleView() {
           <Segmented value={tipo} onChange={(v) => setValue('tipo', v)} options={TIPO_ITEMS} />
         </div>
 
-        <div>
-          <FieldLabel hint={<span className="text-[var(--danger)]">Requerida</span>}>Foto de la carga</FieldLabel>
-          <PhotoDropzone
-            value={fotoUrl}
-            onChange={(u) => setValue('fotoUrl', u)}
-            title="Fotografiar surtidor"
-            subtitle="Debe verse el totalizador"
-          />
-        </div>
+        {/* Mismo bloque que usa Flota: sube a storage privado y devuelve una
+            key firmada al leerla, en vez de la URL pública de `/api/uploads`.
+            De paso trae el OCR de litros y el aviso de foto vieja por EXIF. */}
+        <FotoRespaldoField
+          file={foto.file}
+          isReadingPhoto={foto.isReadingPhoto}
+          isUploadingPhoto={foto.isUploadingPhoto}
+          captureDate={foto.captureDate}
+          onSelect={foto.handleSelectPhoto}
+          onClear={foto.handleClearPhoto}
+          title="Fotografiar surtidor"
+          subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+          staleQuestion="¿Es la carga de este turno?"
+        />
 
-        <PrimaryButton type="submit" disabled={crear.isPending}>
-          {crear.isPending ? 'Guardando…' : 'Registrar carga'}
+        <PrimaryButton
+          type="submit"
+          disabled={crear.isPending || !foto.file || foto.isReadingPhoto || foto.isUploadingPhoto}
+        >
+          {foto.isUploadingPhoto ? 'Subiendo la foto…' : crear.isPending ? 'Guardando…' : 'Registrar carga'}
           <ArrowRight className="h-4 w-4" />
         </PrimaryButton>
+        {/* El label siempre dijo «Requerida» pero nada lo exigía: se podía
+            guardar una carga sin respaldo. Ahora el botón lo refleja, y dice
+            por qué en vez de quedar apagado sin explicación. */}
+        {!foto.file && (
+          <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+            Falta la foto del surtidor para registrar la carga.
+          </p>
+        )}
       </Card>
     </form>
   );

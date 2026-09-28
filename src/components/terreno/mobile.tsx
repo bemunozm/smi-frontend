@@ -6,9 +6,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { forwardRef, useRef, useState } from 'react';
-import { Camera, ImageIcon, X } from 'lucide-react';
-import { uploadImage, assetUrl } from '../../api/UploadsAPI';
+import { forwardRef } from 'react';
 
 /* ---------- Chip ---------- */
 export type ChipTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'danger-solid';
@@ -240,124 +238,12 @@ export function Avatar({ initials }: { initials: string }) {
   );
 }
 
-/* ---------- Foto: dropzone y botones (subida real) ---------- */
-function useUpload(onChange: (url: string | undefined) => void) {
-  const [uploading, setUploading] = useState(false);
-  const handle = async (file?: File) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      onChange(await uploadImage(file));
-    } catch {
-      /* noop */
-    } finally {
-      setUploading(false);
-    }
-  };
-  return { uploading, handle };
-}
-
-export function PhotoDropzone({
-  value,
-  onChange,
-  title,
-  subtitle,
-}: {
-  value?: string;
-  onChange: (url: string | undefined) => void;
-  title: string;
-  subtitle?: string;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { uploading, handle } = useUpload(onChange);
-  const preview = assetUrl(value);
-
-  if (preview) {
-    return (
-      <div className="relative overflow-hidden rounded-2xl border border-border">
-        <img src={preview} alt="Foto" className="h-40 w-full object-cover" />
-        <button
-          type="button"
-          onClick={() => {
-            onChange(undefined);
-            if (inputRef.current) inputRef.current.value = '';
-          }}
-          className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
-          aria-label="Quitar foto"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => inputRef.current?.click()}
-      className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-[var(--accent)]/40 bg-[var(--accent-soft)]/60 px-4 py-6 text-center transition hover:bg-[var(--accent-soft)]"
-    >
-      <Camera className="h-6 w-6 text-[var(--accent)]" />
-      <span className="text-sm font-semibold text-[var(--accent-soft-foreground)]">
-        {uploading ? 'Subiendo…' : title}
-      </span>
-      {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => handle(e.target.files?.[0])}
-      />
-    </button>
-  );
-}
-
-export function PhotoButtons({
-  value,
-  onChange,
-}: {
-  value?: string;
-  onChange: (url: string | undefined) => void;
-}) {
-  const camRef = useRef<HTMLInputElement>(null);
-  const galRef = useRef<HTMLInputElement>(null);
-  const { uploading, handle } = useUpload(onChange);
-  const preview = assetUrl(value);
-
-  if (preview) {
-    return (
-      <div className="relative overflow-hidden rounded-2xl border border-border">
-        <img src={preview} alt="Foto" className="h-36 w-full object-cover" />
-        <button
-          type="button"
-          onClick={() => onChange(undefined)}
-          className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
-          aria-label="Quitar foto"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    );
-  }
-
-  const box = 'flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border py-5 text-center transition hover:bg-[var(--surface-hover)]';
-  return (
-    <div className="flex gap-3">
-      <button type="button" onClick={() => camRef.current?.click()} className={box}>
-        <Camera className="h-5 w-5 text-muted-foreground" />
-        <span className="text-xs font-semibold text-foreground">{uploading ? 'Subiendo…' : 'Tomar foto'}</span>
-      </button>
-      <button type="button" onClick={() => galRef.current?.click()} className={box}>
-        <ImageIcon className="h-5 w-5 text-muted-foreground" />
-        <span className="text-xs font-semibold text-foreground">Desde galería</span>
-      </button>
-      <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
-      <input ref={galRef} type="file" accept="image/*" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
-    </div>
-  );
-}
+/* ---------- Foto ----------
+   `PhotoDropzone` y `PhotoButtons` vivían acá y subían por `POST /api/uploads`,
+   que sirve los archivos en `/uploads/` SIN sesión: cualquiera con el enlace
+   leía la foto. Se reemplazaron por `FotoRespaldoField` + `usePhotoCaptureFlow`
+   (storage privado con URL firmada). Se borran en vez de dejarse "por las
+   dudas": mientras existan, cablear subida pública sigue siendo un import.  */
 
 /* ---------- ListCard (contenedor de item de lista) ---------- */
 export function ListCard({

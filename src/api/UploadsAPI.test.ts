@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { uploadFile, uploadImage } from './UploadsAPI';
+import { uploadFile } from './UploadsAPI';
 
 // Los mocks de axios se declaran con `vi.hoisted` porque `vi.mock` se
 // "hoistea" arriba de los imports — mismo criterio que `EquipmentAPI.test.ts`.
@@ -112,20 +112,5 @@ describe('uploadFile', () => {
     postMock.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosError: true }));
 
     await expect(uploadFile(archivo(1024))).rejects.toThrow('No se pudo subir el archivo.');
-  });
-});
-
-describe('uploadImage (legacy Terreno, sin cambios)', () => {
-  it('sigue posteando a /api/uploads con el header multipart y devolviendo la url', async () => {
-    postMock.mockResolvedValueOnce({ data: { data: { url: '/uploads/foto.jpg' }, message: 'ok' } });
-
-    const result = await uploadImage(archivo(1024));
-
-    expect(postMock).toHaveBeenCalledWith(
-      '/api/uploads',
-      expect.any(FormData),
-      expect.objectContaining({ headers: { 'Content-Type': 'multipart/form-data' } }),
-    );
-    expect(result).toBe('/uploads/foto.jpg');
   });
 });

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
 import {
-  Automatico,
-  Automaticos,
   Boton,
   Campo,
   Card,
@@ -18,12 +18,13 @@ import {
   Input,
   Label,
   ChipSeleccion,
+  ModalTerreno,
   Tabla,
   Tarjeta,
   TD,
   TH,
   VistaHead,
-  VistaSplit,
+  VistaUnica,
 } from '../components/terreno/ui';
 
 /**
@@ -77,29 +78,271 @@ const OPERADORES_DEL_TURNO = [
   { nombre: 'Héctor Villalobos', equipo: 'CM-021' },
 ];
 
-const ANTERIORES = [
-  { fecha: '22/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 10, tonelaje: 1860, piso: 31 },
-  { fecha: '22/09', turno: 'DIURNO', supervisor: 'Rodrigo Fuentes', camiones: 12, tonelaje: 2250, piso: 28 },
-  { fecha: '21/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 9, tonelaje: 1590, piso: 33 },
-  { fecha: '21/09', turno: 'DIURNO', supervisor: 'Rodrigo Fuentes', camiones: 12, tonelaje: 2190, piso: 26 },
-  { fecha: '20/09', turno: 'NOCTURNO', supervisor: 'Gonzalo Riquelme', camiones: 10, tonelaje: 1770, piso: 30 },
+/**
+ * Un turno ya enviado, con todo lo que se ve al abrir su detalle. Los totales
+ * NO se guardan acá: se calculan desde `secciones` con la misma regla que el
+ * formulario, para que un dato de ejemplo no pueda contradecir a otro.
+ */
+interface ReporteAnterior {
+  fecha: string;
+  turno: string;
+  supervisor: string;
+  personal: [string, string][];
+  secciones: { label: string; camiones: number; vueltas: number }[];
+  tolvas: number[];
+  plantas: [string, string][];
+  traspasos: [string, string][];
+  empresas: string[];
+}
+
+const ANTERIORES: ReporteAnterior[] = [
+  {
+    fecha: '22/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 5, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [10, 8, 6],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.R.2', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '1'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Sijam'],
+  },
+  {
+    fecha: '22/09',
+    turno: 'DIURNO',
+    supervisor: 'Rodrigo Fuentes',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Claudio Bravo'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 6, vueltas: 7 },
+      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+    ],
+    tolvas: [14, 11, 8],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.P.2', 'Sal fina'],
+      ['P.P.4', 'Sal gruesa granel'],
+      ['Producto Camino', 'Sal para camino'],
+    ],
+    traspasos: [
+      ['Equipos internos', '4'],
+      ['Equipos externos', '2'],
+      ['Equipos Mina-Puerto', '5'],
+    ],
+    empresas: ['Hyd', 'Casa Blanca', 'Sijam'],
+  },
+  {
+    fecha: '21/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Mauricio Pinto'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Ignacio Sepúlveda'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 4, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 4 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+    ],
+    tolvas: [9, 7, 5],
+    plantas: [
+      ['P.R.2', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '2'],
+      ['Equipos externos', '1'],
+      ['Equipos Mina-Puerto', '3'],
+    ],
+    empresas: ['Coseducam'],
+  },
+  {
+    fecha: '21/09',
+    turno: 'DIURNO',
+    supervisor: 'Rodrigo Fuentes',
+    personal: [
+      ['Jefe de turno mina', 'Álvaro Henríquez'],
+      ['Jefe de turno transporte', 'Claudio Bravo'],
+      ['HSE · prevención de riesgos', 'Paulina Vergara'],
+      ['Asistente de planta', 'Javiera Morales'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 6, vueltas: 6 },
+      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 6 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [13, 10, 7],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.P.2', 'Sal fina'],
+      ['Apoyo piso externos', 'Carguío a contratistas'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '3'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Casa Blanca', 'Coseducam', 'Sijam'],
+  },
+  {
+    fecha: '20/09',
+    turno: 'NOCTURNO',
+    supervisor: 'Gonzalo Riquelme',
+    personal: [
+      ['Jefe de turno mina', 'Mauricio Pinto'],
+      ['Jefe de turno transporte', 'Nelson Cáceres'],
+      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
+      ['Asistente de planta', 'Ignacio Sepúlveda'],
+    ],
+    secciones: [
+      { label: 'Camiones internos', camiones: 5, vueltas: 7 },
+      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
+      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+    ],
+    tolvas: [11, 9, 6],
+    plantas: [
+      ['P.P.1', 'Sal gruesa granel'],
+      ['P.R.4', 'Rechazo a acopio'],
+      ['Producto Fino', 'Fino a silo 2'],
+    ],
+    traspasos: [
+      ['Equipos internos', '3'],
+      ['Equipos externos', '2'],
+      ['Equipos Mina-Puerto', '4'],
+    ],
+    empresas: ['Hyd', 'Sijam'],
+  },
 ];
 
-/** Toneladas por camión, según la referencia que dio el cliente. */
-const TONELADAS_POR_CAMION = 30;
-/** Meta de carga de piso — es la remunerada, y el cliente quiere verla. */
-const META_PISO = 30;
+/**
+ * Las tres secciones de camiones. Cada una registra cuántos camiones tiene y
+ * cuántas vueltas da cada uno de esos camiones en el turno.
+ */
+const SECCIONES_CAMIONES = [
+  { label: 'Camiones internos', camiones: 'camionesInternos', vueltas: 'vueltasInternos' },
+  { label: 'Camiones mina-caleta', camiones: 'camionesMinaCaleta', vueltas: 'vueltasMinaCaleta' },
+  { label: 'Camiones minera', camiones: 'camionesMinera', vueltas: 'vueltasMinera' },
+] as const;
+
+/**
+ * Las tres tolvas. Su «vuelta» es un ciclo de llenado y descarga de la tolva
+ * misma — no tiene relación con las vueltas de los camiones, y por eso no se
+ * cruzan ni se suman entre sí.
+ */
+const TOLVAS = [
+  { label: 'Tolva 1', clave: 'tolva1' },
+  { label: 'Tolva 2', clave: 'tolva2' },
+  { label: 'Tolva 3', clave: 'tolva3' },
+] as const;
 
 const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-const aNumero = (s: string): number => {
-  const v = Number.parseFloat(s.replace(/\./g, '').replace(',', '.'));
-  return Number.isNaN(v) ? 0 : v;
-};
+
+/**
+ * Nombre de una sección dentro de una tarjeta.
+ *
+ * Va en 15 px y caja normal, no en la versaleta de `Label`: las secciones y
+ * los campos compartían estilo, y «CAMIONES INTERNOS» no se distinguía de
+ * «CANTIDAD DE CAMIONES» justo debajo. Es el mismo tratamiento que ya usan
+ * los ítems de Traspasos en esta pantalla.
+ */
+function TituloSeccion({ children }: { children: ReactNode }) {
+  return <b className="text-[15px] leading-tight">{children}</b>;
+}
+
+/** Lo que el sistema completa solo. El `true` marca lo que va en cifra tabular. */
+const DATOS_FICHA: [string, string, boolean][] = [
+  ['Turno', 'DIURNO · 08–20', false],
+  ['Fecha', '24/09/2026', true],
+  ['Supervisor', 'Rodrigo Fuentes', false],
+];
+
+/**
+ * Encabezado de la ficha: qué faena, qué turno, qué día y quién firma.
+ *
+ * Los tres datos los pone el sistema, y la nota va una sola vez al pie en vez
+ * de una insignia «Automático» por fila: repetida tres veces pesaba más que
+ * el dato que acompañaba, y hacía que el bloque se leyera como una pantalla
+ * de ajustes en vez de como la cabecera de un reporte.
+ */
+function CabeceraFicha() {
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <div>
+          <span className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+            Reporte diario del supervisor
+          </span>
+          <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">Faena Patillo</h2>
+        </div>
+        <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-border pt-3 sm:grid-cols-3">
+          {DATOS_FICHA.map(([label, valor, tabular]) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt>
+                <Label>{label}</Label>
+              </dt>
+              <dd className={`m-0 text-[15px] font-semibold ${tabular ? 'tabular' : ''}`}>
+                {valor}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <Hint>Los tres los completa el sistema al abrir el reporte.</Hint>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Pares etiqueta → valor para leer un turno ya enviado. El detalle se lee, no
+ * se edita: usar los campos del formulario acá invitaría a escribir sobre un
+ * reporte que ya se mandó.
+ */
+function Filas({ filas }: { filas: [string, string][] }) {
+  return (
+    <dl className="m-0 overflow-hidden rounded-2xl border border-border">
+      {filas.map(([label, valor]) => (
+        <div
+          key={label}
+          className="flex items-baseline justify-between gap-3 bg-[#fafbfc] px-3 py-2.5 not-first:border-t not-first:border-border"
+        >
+          <dt className="text-[12.5px] text-muted-foreground">{label}</dt>
+          <dd className="m-0 text-right text-[14.5px] font-medium">{valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 export function ReporteDiarioView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [detalle, setDetalle] = useState<ReporteAnterior | null>(null);
 
   const [personal, setPersonal] = useState({
     jefeMina: 'Álvaro Henríquez',
@@ -128,37 +371,27 @@ export function ReporteDiarioView() {
   });
   const [prod, setProd] = useState({
     camionesInternos: '8',
+    vueltasInternos: '6',
     camionesMinaCaleta: '4',
-    vueltas: '6',
-    tonelaje: '2.160',
-    piso: '583',
-    planta: '1.577',
-    tf: '720',
-    tm: '860',
-    tg: '580',
-    report: 'R-0917',
-    horasReport: '3,5',
+    vueltasMinaCaleta: '5',
+    camionesMinera: '3',
+    vueltasMinera: '4',
+    tolva1: '12',
+    tolva2: '9',
+    tolva3: '7',
   });
 
-  /**
-   * El tonelaje se sugiere, no se impone: la especificación dice «puede
-   * calcularse desde vueltas × 30 y dejarse editable». El supervisor sabe
-   * cuándo un camión salió a media carga.
-   */
-  const sugerido = useMemo(() => {
-    const camiones = aNumero(prod.camionesInternos) + aNumero(prod.camionesMinaCaleta);
-    return camiones * aNumero(prod.vueltas) * TONELADAS_POR_CAMION;
-  }, [prod.camionesInternos, prod.camionesMinaCaleta, prod.vueltas]);
-
-  const piso = aNumero(prod.piso);
-  const planta = aNumero(prod.planta);
-  const total = piso + planta;
-  const pctPiso = total ? Math.round((piso / total) * 100) : 0;
-  const brechaMeta = META_PISO - pctPiso;
-  const sumaTolvas = aNumero(prod.tf) + aNumero(prod.tm) + aNumero(prod.tg);
+  const totales = useMemo(() => calcularTotales(prod), [prod]);
 
   const formulario = (
     <>
+      {/*
+       * La cabecera abre el reporte en vez de cerrarlo: es el contexto que dice
+       * en qué turno se está cargando, y al final de la pantalla llegaba cuando
+       * el registro ya estaba escrito.
+       */}
+      <CabeceraFicha />
+
       <Card>
         <CardHead titulo="Personal del turno" bajada="Los cuatro cargos los escribe el supervisor." />
         <Form>
@@ -273,114 +506,70 @@ export function ReporteDiarioView() {
       <Card>
         <CardHead titulo="Producción del turno" bajada="Mide el turno y respalda lo que se cobra." />
         <Form>
-          <div className="grid grid-cols-3 gap-2.5">
-            <Campo label="Camiones internos">
-              <Input numerico value={prod.camionesInternos} className="!pr-3.5" onChange={(e) => setProd((p) => ({ ...p, camionesInternos: e.target.value }))} />
-            </Campo>
-            <Campo label="Camiones mina-caleta">
-              <Input numerico value={prod.camionesMinaCaleta} className="!pr-3.5" onChange={(e) => setProd((p) => ({ ...p, camionesMinaCaleta: e.target.value }))} />
-            </Campo>
-            <Campo label="Vueltas por camión">
-              <Input numerico value={prod.vueltas} className="!pr-3.5" onChange={(e) => setProd((p) => ({ ...p, vueltas: e.target.value }))} />
-            </Campo>
+          {/*
+           * Una fila por sección: cuántos camiones tiene y cuántas vueltas da
+           * cada uno de ellos. Las dos cifras van lado a lado porque es el par
+           * que el supervisor anota junto, sección por sección.
+           */}
+          <div className="flex flex-col gap-3">
+            {SECCIONES_CAMIONES.map((seccion) => (
+              <div key={seccion.camiones} className="flex flex-col gap-1.5">
+                <TituloSeccion>{seccion.label}</TituloSeccion>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Campo label="Cantidad de camiones">
+                    <Input
+                      numerico
+                      value={prod[seccion.camiones]}
+                      className="!pr-3.5"
+                      onChange={(e) =>
+                        setProd((p) => ({ ...p, [seccion.camiones]: e.target.value }))
+                      }
+                    />
+                  </Campo>
+                  <Campo label="Vueltas por camión">
+                    <Input
+                      numerico
+                      value={prod[seccion.vueltas]}
+                      className="!pr-3.5"
+                      onChange={(e) =>
+                        setProd((p) => ({ ...p, [seccion.vueltas]: e.target.value }))
+                      }
+                    />
+                  </Campo>
+                </div>
+              </div>
+            ))}
           </div>
           <Hint>Referencia: entre 5 y 7 vueltas por camión en el turno.</Hint>
 
-          <Campo label="Tonelaje estimado" unidad="t">
-            <Input numerico value={prod.tonelaje} onChange={(e) => setProd((p) => ({ ...p, tonelaje: e.target.value }))} />
-          </Campo>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-muted-foreground">
-            <span>
-              Sugerido: {aNumero(prod.camionesInternos) + aNumero(prod.camionesMinaCaleta)} camiones ×{' '}
-              {prod.vueltas} vueltas × {TONELADAS_POR_CAMION} t ={' '}
-              <b className="tabular text-foreground">{fmt(sugerido)} t</b>
-            </span>
-            <button
-              type="button"
-              onClick={() => setProd((p) => ({ ...p, tonelaje: fmt(sugerido) }))}
-              className="min-h-[34px] cursor-pointer rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold text-[var(--accent-soft-foreground)]"
-            >
-              Usar sugerido
-            </button>
-          </div>
+          <Cifras
+            items={[
+              { label: 'Total camiones', valor: fmt(totales.camiones) },
+              { label: 'Total vueltas', valor: fmt(totales.vueltas), destacado: true },
+            ]}
+          />
 
           <div className="flex flex-col gap-1.5">
-            <Label>Carga de piso vs. carga de planta</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <Campo label="Piso" unidad="t">
-                <Input numerico value={prod.piso} onChange={(e) => setProd((p) => ({ ...p, piso: e.target.value }))} />
-              </Campo>
-              <Campo label="Planta" unidad="t">
-                <Input numerico value={prod.planta} onChange={(e) => setProd((p) => ({ ...p, planta: e.target.value }))} />
-              </Campo>
-            </div>
-            {/* La carga de piso es la remunerada: la meta se dibuja para que la
-                brecha se vea sin tener que calcularla mentalmente. */}
-            <div className="mt-1.5 flex flex-col gap-2 rounded-2xl bg-[#f5f6f8] p-3">
-              <div className="relative mt-3.5 h-[18px] rounded-[9px] bg-[#b9c1cc]">
-                <span
-                  className="absolute inset-y-0 left-0 rounded-[9px] bg-[var(--accent)]"
-                  style={{ width: `${pctPiso}%` }}
-                />
-                <span className="absolute -top-1.5 -bottom-1.5 border-l-2 border-dashed border-foreground" style={{ left: `${META_PISO}%` }}>
-                  <span className="absolute -top-[18px] left-1 text-[10.5px] font-bold tracking-wide whitespace-nowrap">
-                    META {META_PISO} %
-                  </span>
-                </span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[13px]">
-                <span>
-                  <i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-[var(--accent)]" />
-                  Piso <b className="tabular">{pctPiso} %</b>
-                </span>
-                <span>
-                  <i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-[#b9c1cc]" />
-                  Planta <b className="tabular">{total ? 100 - pctPiso : 0} %</b>
-                </span>
-                <Chip tono={brechaMeta <= 0 ? 'success' : 'warning'}>
-                  {brechaMeta <= 0 ? 'Cumple la meta' : `${brechaMeta} pts bajo la meta`}
-                </Chip>
-              </div>
-              <Hint>La carga de piso es remunerada. Meta: {META_PISO} % piso · {100 - META_PISO} % planta.</Hint>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Producción por tolva</Label>
+            <TituloSeccion>Vueltas por tolva</TituloSeccion>
             <div className="grid grid-cols-3 gap-2.5">
-              <Campo label="TF · fina" unidad="t">
-                <Input numerico value={prod.tf} onChange={(e) => setProd((p) => ({ ...p, tf: e.target.value }))} />
-              </Campo>
-              <Campo label="TM · media" unidad="t">
-                <Input numerico value={prod.tm} onChange={(e) => setProd((p) => ({ ...p, tm: e.target.value }))} />
-              </Campo>
-              <Campo label="TG · gruesa" unidad="t">
-                <Input numerico value={prod.tg} onChange={(e) => setProd((p) => ({ ...p, tg: e.target.value }))} />
-              </Campo>
+              {TOLVAS.map((tolva) => (
+                <Campo key={tolva.clave} label={tolva.label}>
+                  <Input
+                    numerico
+                    value={prod[tolva.clave]}
+                    className="!pr-3.5"
+                    onChange={(e) => setProd((p) => ({ ...p, [tolva.clave]: e.target.value }))}
+                  />
+                </Campo>
+              ))}
             </div>
             <Hint>
-              Suma de tolvas: <b className="tabular text-foreground">{fmt(sumaTolvas)} t</b> · piso + planta:{' '}
-              <b className="tabular text-foreground">{fmt(total)} t</b>
+              Una vuelta de tolva es un ciclo de llenado y descarga. No son las vueltas de los
+              camiones: se cuentan aparte y no tienen por qué cuadrar entre sí.
             </Hint>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Campo label="N.º de report">
-              <Input value={prod.report} className="tabular" onChange={(e) => setProd((p) => ({ ...p, report: e.target.value }))} />
-            </Campo>
-            <Campo label="Horas del report" unidad="h">
-              <Input numerico value={prod.horasReport} onChange={(e) => setProd((p) => ({ ...p, horasReport: e.target.value }))} />
-            </Campo>
-          </div>
-          <Hint>Para asegurar que se adjunten las fotos de los trabajos adicionales.</Hint>
         </Form>
       </Card>
-
-      <Automaticos>
-        <Automatico label="Turno" valor="DIURNO · 08–20" />
-        <Automatico label="Fecha" valor={<span className="tabular text-[14.5px]">24/09/2026</span>} />
-        <Automatico label="Supervisor" valor="Rodrigo Fuentes" />
-      </Automaticos>
 
       <Boton ancho disabled>
         Enviar reporte diario <ArrowRight className="h-[19px] w-[19px]" />
@@ -393,7 +582,7 @@ export function ReporteDiarioView() {
     </>
   );
 
-  const historial = esEscritorio ? (
+  const lista = esEscritorio ? (
     <Tabla titulo="Reportes anteriores" detalle={`Faena Patillo · últimos ${ANTERIORES.length} turnos`}>
       <thead>
         <tr>
@@ -401,36 +590,45 @@ export function ReporteDiarioView() {
           <th className={TH}>Turno</th>
           <th className={TH}>Supervisor</th>
           <th className={`${TH} text-right`}>Camiones</th>
-          <th className={`${TH} text-right`}>Tonelaje</th>
-          <th className={`${TH} text-right`}>Piso / planta</th>
+          <th className={`${TH} text-right`}>Vueltas</th>
           <th className={TH}>Estado</th>
+          <th className={TH}>
+            <span className="sr-only">Detalle</span>
+          </th>
         </tr>
       </thead>
       <tbody>
-        {ANTERIORES.map((r, i) => (
-          <tr key={i}>
-            <td className={`${TD} tabular`}>{r.fecha}/2026</td>
-            <td className={TD}>{r.turno}</td>
-            <td className={TD}>{r.supervisor}</td>
-            <td className={`${TD} tabular text-right`}>{r.camiones}</td>
-            <td className={`${TD} tabular text-right`}>{fmt(r.tonelaje)} t</td>
-            <td className={`${TD} text-right`}>
-              <Chip tono={r.piso >= META_PISO ? 'success' : 'warning'}>
-                {r.piso} / {100 - r.piso}
-              </Chip>
-            </td>
-            <td className={TD}>
-              <Chip tono="success">Enviado</Chip>
-            </td>
-          </tr>
-        ))}
+        {ANTERIORES.map((r, i) => {
+          const t = totalesDeSecciones(r.secciones);
+          return (
+            <tr key={i}>
+              <td className={`${TD} tabular`}>{r.fecha}/2026</td>
+              <td className={TD}>{r.turno}</td>
+              <td className={TD}>{r.supervisor}</td>
+              <td className={`${TD} tabular text-right`}>{t.camiones}</td>
+              <td className={`${TD} tabular text-right`}>{fmt(t.vueltas)}</td>
+              <td className={TD}>
+                <Chip tono="success">Enviado</Chip>
+              </td>
+              <td className={`${TD} text-right`}>
+                <button
+                  type="button"
+                  onClick={() => setDetalle(r)}
+                  className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
+                >
+                  Ver más detalle <ChevronRight className="h-4 w-4" />
+                </button>
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </Tabla>
   ) : (
-    <>
-      <GrupoHead titulo="Reportes anteriores" detalle={`${ANTERIORES.length} turnos`} />
-      <div className="flex flex-col gap-3">
-        {ANTERIORES.map((r, i) => (
+    <div className="flex flex-col gap-3">
+      {ANTERIORES.map((r, i) => {
+        const t = totalesDeSecciones(r.secciones);
+        return (
           <Tarjeta key={i}>
             <div className="flex items-center justify-between gap-2">
               <b>
@@ -441,30 +639,118 @@ export function ReporteDiarioView() {
             <span className="text-[13px] text-muted-foreground">{r.supervisor}</span>
             <Cifras
               items={[
-                { label: 'Camiones', valor: r.camiones },
-                { label: 'Tonelaje', valor: `${fmt(r.tonelaje)} t` },
-                { label: 'Piso', valor: `${r.piso} %`, destacado: r.piso < META_PISO },
+                { label: 'Camiones', valor: t.camiones },
+                { label: 'Vueltas', valor: fmt(t.vueltas), destacado: true },
               ]}
             />
+            <Boton variante="contorno" ancho onClick={() => setDetalle(r)}>
+              Ver más detalle <ChevronRight className="h-[18px] w-[18px]" />
+            </Boton>
           </Tarjeta>
-        ))}
+        );
+      })}
+    </div>
+  );
+
+  const vistaDetalle = detalle && (
+    <div className="flex flex-col gap-4">
+      <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
+        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+      </Boton>
+
+      <Cifras
+        items={[
+          { label: 'Camiones', valor: totalesDeSecciones(detalle.secciones).camiones },
+          {
+            label: 'Vueltas',
+            valor: fmt(totalesDeSecciones(detalle.secciones).vueltas),
+            destacado: true,
+          },
+        ]}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Producción del turno" />
+        <Filas
+          filas={detalle.secciones.map((s): [string, string] => [
+            s.label,
+            `${s.camiones} camiones × ${s.vueltas} vueltas`,
+          ])}
+        />
       </div>
-    </>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Vueltas por tolva" />
+        <Cifras
+          items={detalle.tolvas.map((v, i) => ({ label: `Tolva ${i + 1}`, valor: v }))}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Personal del turno" />
+        <Filas filas={detalle.personal} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Operaciones en planta" detalle={`${detalle.plantas.length} con operación`} />
+        <Filas filas={detalle.plantas} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Traspasos" />
+        <Filas filas={detalle.traspasos} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Empresas externas" />
+        <div className="flex flex-wrap gap-1.5">
+          {detalle.empresas.map((e) => (
+            <ChipContexto key={e}>{e}</ChipContexto>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 
   return (
     <>
       <VistaHead
         titulo="Reporte diario del supervisor"
-        contexto={
-          <>
-            <ChipContexto>Faena Patillo</ChipContexto>
-            <ChipContexto>DIURNO · 08–20</ChipContexto>
-            <Chip tono="warning">Maqueta</Chip>
-          </>
-        }
+        /* Faena y turno viven en la cabecera de la ficha: repetirlos acá los
+           mostraba dos veces en la misma pantalla. */
+        contexto={<Chip tono="warning">Maqueta</Chip>}
       />
-      <VistaSplit formulario={formulario} historial={historial} />
+
+      <VistaUnica>
+        <Boton
+          variante="contorno"
+          ancho
+          onClick={() => {
+            setDetalle(null);
+            setHistorialAbierto(true);
+          }}
+        >
+          <History className="h-[19px] w-[19px]" /> Ver historial de reportes
+        </Boton>
+        {formulario}
+      </VistaUnica>
+
+      {/*
+       * Lista y detalle son dos pantallas de la MISMA ventana, no una ventana
+       * sobre otra: dos modales apilados se pelean el foco y en tablet dejan
+       * al supervisor sin saber cuál cierra con Escape.
+       */}
+      <ModalTerreno
+        abierto={historialAbierto}
+        onAbiertoChange={(abierto) => {
+          setHistorialAbierto(abierto);
+          if (!abierto) setDetalle(null);
+        }}
+        titulo={detalle ? `Reporte del ${detalle.fecha}/2026 · ${detalle.turno}` : 'Historial de reportes'}
+        detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${ANTERIORES.length} turnos`}
+      >
+        {vistaDetalle ?? lista}
+      </ModalTerreno>
     </>
   );
 }

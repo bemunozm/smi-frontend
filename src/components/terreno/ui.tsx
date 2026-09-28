@@ -1,6 +1,7 @@
 import { cloneElement, useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
+import { Moon, Sun, X } from 'lucide-react';
 
 import type { Turno } from '../../lib/turno';
 
@@ -680,5 +681,80 @@ export function VistaSplit({ formulario, historial }: { formulario: ReactNode; h
       <section className="flex flex-col gap-3.5">{formulario}</section>
       <section className="mt-5 flex min-w-0 flex-col gap-3.5 lg:mt-0">{historial}</section>
     </div>
+  );
+}
+
+/**
+ * Una sola columna centrada, para las vistas cuyo historial no vive al lado
+ * sino en una ventana aparte. Queda más ancha que la columna de `VistaSplit`
+ * porque acá el formulario ya no comparte el ancho con nadie.
+ */
+export function VistaUnica({ children }: { children: ReactNode }) {
+  return <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3.5">{children}</div>;
+}
+
+/* ---------- Ventana modal ---------- */
+
+/**
+ * Diálogo del kit de Terreno.
+ *
+ * Se arma sobre `react-aria-components` —la misma base sobre la que está
+ * construido HeroUI— y no sobre HeroUI directo: esta es la primera ventana
+ * modal de Terreno, y los estilos por defecto de HeroUI no conocen los
+ * tamaños de este kit. De la librería viene justo lo que sale mal cuando se
+ * hace a mano: el foco queda atrapado dentro del diálogo, Escape cierra, y el
+ * fondo deja de scrollear detrás.
+ *
+ * En celular y tablet ocupa la pantalla completa —es como se opera en faena,
+ * con una mano— y desde `sm` es una ventana centrada.
+ */
+export function ModalTerreno({
+  abierto,
+  onAbiertoChange,
+  titulo,
+  detalle,
+  children,
+}: {
+  abierto: boolean;
+  onAbiertoChange: (abierto: boolean) => void;
+  titulo: ReactNode;
+  detalle?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <ModalOverlay
+      isOpen={abierto}
+      onOpenChange={onAbiertoChange}
+      isDismissable
+      className="fixed inset-0 z-50 flex items-stretch bg-[rgba(20,23,28,.45)] sm:items-center sm:justify-center sm:p-6"
+    >
+      <Modal className="flex w-full flex-col bg-card sm:max-h-[85vh] sm:max-w-[760px] sm:rounded-3xl sm:border sm:border-border sm:shadow-[0_24px_60px_rgba(20,23,28,.18)]">
+        <Dialog className="flex min-h-0 flex-1 flex-col outline-none">
+          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3.5">
+            <div className="min-w-0">
+              <Heading
+                slot="title"
+                className="text-[17px] leading-tight font-bold tracking-[-0.01em]"
+              >
+                {titulo}
+              </Heading>
+              {detalle && <p className="mt-0.5 text-[13px] text-muted-foreground">{detalle}</p>}
+            </div>
+            {/* 44 px de lado: el mínimo para acertarle con guantes. */}
+            <button
+              type="button"
+              aria-label="Cerrar"
+              onClick={() => onAbiertoChange(false)}
+              className="-mr-1 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-4">
+            {children}
+          </div>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
