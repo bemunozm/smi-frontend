@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useAhora } from '../hooks/useAhora';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
+import { contextoTurno, turnoAnterior, type Turno } from '../lib/turno';
 import {
   Boton,
   Campo,
@@ -12,6 +15,7 @@ import {
   Chip,
   ChipContexto,
   Cifras,
+  Filas,
   Form,
   GrupoHead,
   Hint,
@@ -79,14 +83,11 @@ const OPERADORES_DEL_TURNO = [
 ];
 
 /**
- * Un turno ya enviado, con todo lo que se ve al abrir su detalle. Los totales
- * NO se guardan acá: se calculan desde `secciones` con la misma regla que el
+ * Lo que el supervisor escribió en un turno ya enviado. Los totales NO se
+ * guardan acá: se calculan desde `secciones` con la misma regla que el
  * formulario, para que un dato de ejemplo no pueda contradecir a otro.
  */
-interface ReporteAnterior {
-  fecha: string;
-  turno: string;
-  supervisor: string;
+interface ContenidoReporte {
   personal: [string, string][];
   secciones: { label: string; camiones: number; vueltas: number }[];
   tolvas: number[];
@@ -95,11 +96,27 @@ interface ReporteAnterior {
   empresas: string[];
 }
 
-const ANTERIORES: ReporteAnterior[] = [
+/** Un turno ya enviado: su contenido más a qué turno pertenece y quién firmó. */
+interface ReporteAnterior extends ContenidoReporte {
+  fecha: Date;
+  turno: Turno;
+  supervisor: string;
+}
+
+/** Quién firmó los turnos de ejemplo. En el sistema real viene del reporte. */
+const SUPERVISOR_DE_EJEMPLO: Record<Turno, string> = {
+  DIURNO: 'Rodrigo Fuentes',
+  NOCTURNO: 'Gonzalo Riquelme',
+};
+
+/**
+ * Contenido de los cinco turnos anteriores, del más reciente al más viejo.
+ * La fecha y el turno NO están escritos acá: salen del reloj, así el
+ * historial siempre muestra los turnos que de verdad precedieron al actual en
+ * vez de una semana fija que queda vieja al día siguiente.
+ */
+const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
   {
-    fecha: '22/09',
-    turno: 'NOCTURNO',
-    supervisor: 'Gonzalo Riquelme',
     personal: [
       ['Jefe de turno mina', 'Álvaro Henríquez'],
       ['Jefe de turno transporte', 'Nelson Cáceres'],
@@ -125,9 +142,6 @@ const ANTERIORES: ReporteAnterior[] = [
     empresas: ['Hyd', 'Sijam'],
   },
   {
-    fecha: '22/09',
-    turno: 'DIURNO',
-    supervisor: 'Rodrigo Fuentes',
     personal: [
       ['Jefe de turno mina', 'Álvaro Henríquez'],
       ['Jefe de turno transporte', 'Claudio Bravo'],
@@ -154,9 +168,6 @@ const ANTERIORES: ReporteAnterior[] = [
     empresas: ['Hyd', 'Casa Blanca', 'Sijam'],
   },
   {
-    fecha: '21/09',
-    turno: 'NOCTURNO',
-    supervisor: 'Gonzalo Riquelme',
     personal: [
       ['Jefe de turno mina', 'Mauricio Pinto'],
       ['Jefe de turno transporte', 'Nelson Cáceres'],
@@ -181,9 +192,6 @@ const ANTERIORES: ReporteAnterior[] = [
     empresas: ['Coseducam'],
   },
   {
-    fecha: '21/09',
-    turno: 'DIURNO',
-    supervisor: 'Rodrigo Fuentes',
     personal: [
       ['Jefe de turno mina', 'Álvaro Henríquez'],
       ['Jefe de turno transporte', 'Claudio Bravo'],
@@ -209,9 +217,6 @@ const ANTERIORES: ReporteAnterior[] = [
     empresas: ['Hyd', 'Casa Blanca', 'Coseducam', 'Sijam'],
   },
   {
-    fecha: '20/09',
-    turno: 'NOCTURNO',
-    supervisor: 'Gonzalo Riquelme',
     personal: [
       ['Jefe de turno mina', 'Mauricio Pinto'],
       ['Jefe de turno transporte', 'Nelson Cáceres'],
@@ -262,6 +267,27 @@ const TOLVAS = [
 const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
+const dd = (n: number) => String(n).padStart(2, '0');
+/** `22/09` */
+const diaMes = (f: Date) => `${dd(f.getDate())}/${dd(f.getMonth() + 1)}`;
+/** `22/09/2026` */
+const fechaCompleta = (f: Date) => `${diaMes(f)}/${f.getFullYear()}`;
+
+/**
+ * Los `n` turnos que preceden al turno en curso, del más reciente al más
+ * viejo. Se encadena `turnoAnterior` en vez de restar días: al diurno lo
+ * precede el nocturno del día ANTERIOR, y al nocturno el diurno del mismo día.
+ */
+function turnosPrevios(turno: Turno, fecha: Date, n: number): { turno: Turno; fecha: Date }[] {
+  const previos: { turno: Turno; fecha: Date }[] = [];
+  let actual = { turno, fecha };
+  for (let i = 0; i < n; i++) {
+    actual = turnoAnterior(actual.turno, actual.fecha);
+    previos.push(actual);
+  }
+  return previos;
+}
+
 
 /**
  * Nombre de una sección dentro de una tarjeta.
@@ -275,13 +301,6 @@ function TituloSeccion({ children }: { children: ReactNode }) {
   return <b className="text-[15px] leading-tight">{children}</b>;
 }
 
-/** Lo que el sistema completa solo. El `true` marca lo que va en cifra tabular. */
-const DATOS_FICHA: [string, string, boolean][] = [
-  ['Turno', 'DIURNO · 08–20', false],
-  ['Fecha', '24/09/2026', true],
-  ['Supervisor', 'Rodrigo Fuentes', false],
-];
-
 /**
  * Encabezado de la ficha: qué faena, qué turno, qué día y quién firma.
  *
@@ -289,8 +308,18 @@ const DATOS_FICHA: [string, string, boolean][] = [
  * de una insignia «Automático» por fila: repetida tres veces pesaba más que
  * el dato que acompañaba, y hacía que el bloque se leyera como una pantalla
  * de ajustes en vez de como la cabecera de un reporte.
+ *
+ * Turno y fecha salen del reloj con la misma regla que Registro de equipo
+ * (`lib/turno`): de madrugada la fecha es la del día en que arrancó el
+ * nocturno, no la del reloj. El supervisor es el usuario de la sesión.
  */
-function CabeceraFicha() {
+function CabeceraFicha({ turno, fecha, supervisor }: { turno: string; fecha: string; supervisor: string }) {
+  /** El `true` marca lo que va en cifra tabular. */
+  const datos: [string, string, boolean][] = [
+    ['Turno', turno, false],
+    ['Fecha', fecha, true],
+    ['Supervisor', supervisor, false],
+  ];
   return (
     <Card>
       <div className="flex flex-col gap-3">
@@ -301,7 +330,7 @@ function CabeceraFicha() {
           <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">Faena Patillo</h2>
         </div>
         <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-border pt-3 sm:grid-cols-3">
-          {DATOS_FICHA.map(([label, valor, tabular]) => (
+          {datos.map(([label, valor, tabular]) => (
             <div key={label} className="flex flex-col gap-0.5">
               <dt>
                 <Label>{label}</Label>
@@ -318,29 +347,23 @@ function CabeceraFicha() {
   );
 }
 
-/**
- * Pares etiqueta → valor para leer un turno ya enviado. El detalle se lee, no
- * se edita: usar los campos del formulario acá invitaría a escribir sobre un
- * reporte que ya se mandó.
- */
-function Filas({ filas }: { filas: [string, string][] }) {
-  return (
-    <dl className="m-0 overflow-hidden rounded-2xl border border-border">
-      {filas.map(([label, valor]) => (
-        <div
-          key={label}
-          className="flex items-baseline justify-between gap-3 bg-[#fafbfc] px-3 py-2.5 not-first:border-t not-first:border-border"
-        >
-          <dt className="text-[12.5px] text-muted-foreground">{label}</dt>
-          <dd className="m-0 text-right text-[14.5px] font-medium">{valor}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 export function ReporteDiarioView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+
+  const ahora = useAhora();
+  const ctx = useMemo(() => contextoTurno(ahora), [ahora]);
+  const { user } = useCurrentUser();
+  const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
+
+  const anteriores = useMemo<ReporteAnterior[]>(() => {
+    const previos = turnosPrevios(ctx.turno, ctx.fecha, CONTENIDO_ANTERIORES.length);
+    return CONTENIDO_ANTERIORES.map((contenido, i) => ({
+      ...contenido,
+      ...previos[i],
+      supervisor: SUPERVISOR_DE_EJEMPLO[previos[i].turno],
+    }));
+  }, [ctx]);
+
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalle, setDetalle] = useState<ReporteAnterior | null>(null);
 
@@ -390,7 +413,11 @@ export function ReporteDiarioView() {
        * en qué turno se está cargando, y al final de la pantalla llegaba cuando
        * el registro ya estaba escrito.
        */}
-      <CabeceraFicha />
+      <CabeceraFicha
+        turno={ctx.etiqueta}
+        fecha={ctx.fecha.toLocaleDateString('es-CL')}
+        supervisor={supervisor}
+      />
 
       <Card>
         <CardHead titulo="Personal del turno" bajada="Los cuatro cargos los escribe el supervisor." />
@@ -583,7 +610,7 @@ export function ReporteDiarioView() {
   );
 
   const lista = esEscritorio ? (
-    <Tabla titulo="Reportes anteriores" detalle={`Faena Patillo · últimos ${ANTERIORES.length} turnos`}>
+    <Tabla titulo="Reportes anteriores" detalle={`Faena Patillo · últimos ${anteriores.length} turnos`}>
       <thead>
         <tr>
           <th className={TH}>Fecha</th>
@@ -598,11 +625,11 @@ export function ReporteDiarioView() {
         </tr>
       </thead>
       <tbody>
-        {ANTERIORES.map((r, i) => {
+        {anteriores.map((r, i) => {
           const t = totalesDeSecciones(r.secciones);
           return (
             <tr key={i}>
-              <td className={`${TD} tabular`}>{r.fecha}/2026</td>
+              <td className={`${TD} tabular`}>{fechaCompleta(r.fecha)}</td>
               <td className={TD}>{r.turno}</td>
               <td className={TD}>{r.supervisor}</td>
               <td className={`${TD} tabular text-right`}>{t.camiones}</td>
@@ -626,13 +653,13 @@ export function ReporteDiarioView() {
     </Tabla>
   ) : (
     <div className="flex flex-col gap-3">
-      {ANTERIORES.map((r, i) => {
+      {anteriores.map((r, i) => {
         const t = totalesDeSecciones(r.secciones);
         return (
           <Tarjeta key={i}>
             <div className="flex items-center justify-between gap-2">
               <b>
-                {r.fecha} · {r.turno}
+                {diaMes(r.fecha)} · {r.turno}
               </b>
               <Chip tono="success">Enviado</Chip>
             </div>
@@ -746,8 +773,8 @@ export function ReporteDiarioView() {
           setHistorialAbierto(abierto);
           if (!abierto) setDetalle(null);
         }}
-        titulo={detalle ? `Reporte del ${detalle.fecha}/2026 · ${detalle.turno}` : 'Historial de reportes'}
-        detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${ANTERIORES.length} turnos`}
+        titulo={detalle ? `Reporte del ${fechaCompleta(detalle.fecha)} · ${detalle.turno}` : 'Historial de reportes'}
+        detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${anteriores.length} turnos`}
       >
         {vistaDetalle ?? lista}
       </ModalTerreno>

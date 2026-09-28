@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, Camera, Check, ChevronDown, Clock, Lock, Mail, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Clock, History, Lock, Mail, User } from 'lucide-react';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -10,6 +10,7 @@ import { contextoTurno, fechaCorta, turnoAnterior, type Turno } from '../lib/tur
 import { useAhora } from '../hooks/useAhora';
 import { ROLES } from '../types/roles';
 import {
+  BloqueTurno,
   Boton,
   CabeceraTurno,
   Calculado,
@@ -18,19 +19,20 @@ import {
   CardHead,
   Chip,
   Cifras,
+  Filas,
   Form,
+  GrupoHead,
   Hint,
   Hoja,
   Input,
   Label,
-  Select,
-  SeparadorTurno,
+  ModalTerreno,
+  Selector,
   Tabla,
   Tarjeta,
   Textarea,
   TD,
   TH,
-  TURNO_ESTILO,
   VistaHead,
   VistaSplit,
 } from '../components/terreno/ui';
@@ -76,6 +78,8 @@ interface TarjetaTurno {
    */
   supervisor: string;
   cerradaA?: string;
+  /** Lo que el supervisor anotó al cerrar; se lee en el detalle del historial. */
+  observaciones?: string;
   /** Clave de la foto del surtidor en R2 (no una URL pública). */
   fotoKey?: string;
   /** Registrada sin señal: está en el equipo, todavía no en el servidor. */
@@ -115,7 +119,7 @@ const TARJETAS_EJEMPLO: TarjetaTurno[] = [
   { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, grupo: 'actual', estado: 'curso', supervisor: MIAS, sinSincronizar: true },
   { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, grupo: 'actual', estado: 'curso', supervisor: OTRO_SUPERVISOR, sinSincronizar: true },
   { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, grupo: 'anterior', estado: 'curso', supervisor: MIAS, arrastrada: true },
-  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48' },
+  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48', observaciones: 'Ruido en el balde al descargar. Revisar pasadores en la mantención.' },
   { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:51' },
   { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, grupo: 'anterior', estado: 'cerrada', supervisor: OTRO_SUPERVISOR, cerradaA: '07:55' },
 ];
@@ -149,7 +153,8 @@ export function RegistroEquipoView() {
   const [tarjetas, setTarjetas] = useState(TARJETAS_EJEMPLO);
   const [cerrandoId, setCerrandoId] = useState<number | null>(null);
   const [verReporte, setVerReporte] = useState(false);
-  const [verCerradas, setVerCerradas] = useState(false);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
   const [reporte, setReporte] = useState<EstadoReporte>('sin-enviar');
   const [reporteA, setReporteA] = useState<string | null>(null);
 
@@ -257,6 +262,7 @@ export function RegistroEquipoView() {
               final: finalNum,
               litros: aNumero(cierre.litros) ?? 0,
               fotoKey: storageKey,
+              observaciones: cierre.observaciones,
               cerradaA: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
             }
           : t,
@@ -282,31 +288,29 @@ export function RegistroEquipoView() {
                 : 'Solo equipos operativos.'
             }
           >
-            <Select
-              value={equipoElegido?.id ?? ''}
-              onChange={(e) => {
-                const eq = disponibles.find((x) => x.id === e.target.value);
+            <Selector
+              etiqueta="Equipo"
+              tituloTabular
+              valor={equipoElegido?.id ?? ''}
+              onChange={(id) => {
+                const eq = disponibles.find((x) => x.id === id);
                 setApertura((a) => ({
                   ...a,
-                  equipoId: e.target.value,
+                  equipoId: id,
                   horometro: eq?.currentHourmeter != null ? fmt(eq.currentHourmeter) : '',
                 }));
               }}
-            >
-              {disponibles.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.internalCode} · {e.type}
-                </option>
-              ))}
-            </Select>
+              opciones={disponibles.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+            />
           </Campo>
 
           <Campo label="Operador">
-            <Select value={apertura.operador} onChange={(e) => setApertura((a) => ({ ...a, operador: e.target.value }))}>
-              {OPERADORES.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </Select>
+            <Selector
+              etiqueta="Operador"
+              valor={apertura.operador}
+              onChange={(operador) => setApertura((a) => ({ ...a, operador }))}
+              opciones={OPERADORES.map((o) => ({ valor: o, titulo: o }))}
+            />
           </Campo>
 
           <Campo
@@ -398,10 +402,19 @@ export function RegistroEquipoView() {
     </div>
   );
 
-  /** En teléfono y tablet el reporte no cabe en la columna: va como barra fija. */
+  /**
+   * En teléfono y tablet el reporte no cabe en la columna: va como tarjeta
+   * flotante, pegada abajo mientras se scrollea.
+   *
+   * Flota sobre la barra de pestañas, no en `bottom-0`: esa barra también es
+   * `sticky bottom-0` y le gana en z-index, así que ahí el botón quedaba tapado
+   * justo mientras había tarjetas que mirar. 78 px = los 66 de la barra de
+   * pestañas + 12 de aire.
+   */
+  const FLOTANTE = 'sticky bottom-[78px] z-10 mt-4 rounded-3xl shadow-[0_10px_30px_rgba(13,12,10,.22)]';
   const barraReporte =
     reporte === 'sin-enviar' ? (
-      <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-black px-4 py-3 text-white" style={{ background: 'var(--terreno-head)' }}>
+      <div className={`${FLOTANTE} px-4 py-3 text-white`} style={{ background: 'var(--terreno-head)' }}>
         <div className="flex items-center gap-2 text-[12.5px] text-white/80">
           <i className="h-2 w-2 shrink-0 rounded-full bg-[#ff6b5a]" />
           <span>
@@ -413,7 +426,7 @@ export function RegistroEquipoView() {
         </Boton>
       </div>
     ) : (
-      <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-2.5 border-t border-[#b6e2c5] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success-soft-foreground)]">
+      <div className={`${FLOTANTE} flex items-center gap-2.5 border border-[#b6e2c5] bg-[var(--success-soft)] px-4 py-3 text-sm font-semibold text-[var(--success-soft-foreground)]`}>
         <Check className="h-[18px] w-[18px] shrink-0" />
         <span className="flex-1">
           Reporte enviado a las <span className="tabular">{reporteA}</span> · {enCurso.length} equipos
@@ -428,14 +441,13 @@ export function RegistroEquipoView() {
 
   const tarjeta = (t: TarjetaTurno) => {
     const cerrada = t.estado === 'cerrada';
-    // El borde izquierdo repite el color del turno: si al scrollear se pasa
-    // el separador, la tarjeta sola sigue diciendo de qué turno es.
-    const acento = TURNO_ESTILO[t.grupo === 'actual' ? ctx.turno : anterior.turno].acento;
+    // Sin borde izquierdo de color: la tarjeta vive dentro del `BloqueTurno`,
+    // que ya dice de qué turno es, y un borde grueso sobre esquinas de 24 px
+    // se doblaba en una media luna.
     return (
       <Tarjeta
         key={t.id}
-        className={`border-l-4 ${t.arrastrada ? 'outline-2 outline-offset-[3px] outline-dashed outline-[var(--terreno-offline)]' : ''}`}
-        style={{ borderLeftColor: acento }}
+        className={t.arrastrada ? 'outline-2 outline-offset-[3px] outline-dashed outline-[var(--terreno-offline)]' : ''}
       >
         <div className="flex items-start justify-between gap-2.5">
           <div>
@@ -583,20 +595,20 @@ export function RegistroEquipoView() {
         </tbody>
       </Tabla>
     ) : (
-      <div key={`${turno}-${fecha}`}>
-        <SeparadorTurno
-          turno={turno}
-          fecha={fecha}
-          detalle={ts.length ? plural(ts.length, 'tarjeta', 'tarjetas') : undefined}
-        />
+      <BloqueTurno
+        key={`${turno}-${fecha}`}
+        turno={turno}
+        fecha={fecha}
+        detalle={ts.length ? plural(ts.length, 'tarjeta', 'tarjetas') : undefined}
+      >
         {ts.length ? (
-          <div className="mt-3 flex flex-col gap-3">{ts.map(tarjeta)}</div>
+          ts.map(tarjeta)
         ) : (
-          <p className="mt-3 rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+          <p className="m-0 rounded-2xl border border-dashed border-border bg-card/60 px-4 py-8 text-center text-sm text-muted-foreground">
             {vacio}
           </p>
         )}
-      </div>
+      </BloqueTurno>
     );
 
   /**
@@ -607,6 +619,21 @@ export function RegistroEquipoView() {
    */
   const historial = (
     <>
+      {/* El historial de cerradas se abre en una ventana, igual que el de
+          Reporte diario: las cerradas ya no piden nada y no tienen por qué
+          empujar hacia abajo las que siguen abiertas. */}
+      <Boton
+        variante="contorno"
+        ancho
+        onClick={() => {
+          setDetalleCerrada(null);
+          setHistorialAbierto(true);
+        }}
+      >
+        <History className="h-[19px] w-[19px]" /> Ver historial de cerradas
+        <span className="tabular font-medium text-muted-foreground">· {cerradas.length}</span>
+      </Boton>
+
       {bloque(
         ctx.turno,
         ctx.fechaCorta,
@@ -616,43 +643,110 @@ export function RegistroEquipoView() {
 
       {abiertasAnterior.length > 0 &&
         bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
-
-      <div className="mt-5">
-        <button
-          type="button"
-          onClick={() => setVerCerradas((v) => !v)}
-          aria-expanded={verCerradas}
-          className="flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 text-left"
-        >
-          <span className="text-sm font-bold">Historial de cerradas</span>
-          <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            {plural(cerradas.length, 'tarjeta', 'tarjetas')}
-            <ChevronDown
-              className={`h-[18px] w-[18px] transition-transform ${verCerradas ? 'rotate-180' : ''}`}
-              aria-hidden
-            />
-          </span>
-        </button>
-
-        {verCerradas && (
-          <div className="mt-3 flex flex-col gap-4">
-            {cerradas.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                Todavía no cerraste ninguna tarjeta.
-              </p>
-            ) : (
-              [
-                { turno: ctx.turno, fecha: ctx.fechaCorta, grupo: 'actual' as const },
-                { turno: anterior.turno, fecha: fechaAnterior, grupo: 'anterior' as const },
-              ]
-                .map((g) => ({ ...g, ts: cerradas.filter((t) => t.grupo === g.grupo) }))
-                .filter((g) => g.ts.length > 0)
-                .map((g) => bloque(g.turno, g.fecha, g.ts, ''))
-            )}
-          </div>
-        )}
-      </div>
     </>
+  );
+
+  // --- Historial de cerradas (ventana) --------------------------------------
+
+  /** A qué turno pertenece una tarjeta, con su fecha: `DIURNO lun 28-09`. */
+  const turnoDe = (t: TarjetaTurno) =>
+    t.grupo === 'actual' ? `${ctx.turno} ${ctx.fechaCorta}` : `${anterior.turno} ${fechaAnterior}`;
+  const firmante = (t: TarjetaTurno) => (t.supervisor === MIAS ? supervisor : t.supervisor);
+
+  const listaCerradas =
+    cerradas.length === 0 ? (
+      <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+        Todavía no cerraste ninguna tarjeta.
+      </p>
+    ) : (
+      [
+        { turno: ctx.turno, fecha: ctx.fechaCorta, grupo: 'actual' as const },
+        { turno: anterior.turno, fecha: fechaAnterior, grupo: 'anterior' as const },
+      ]
+        .map((g) => ({ ...g, ts: cerradas.filter((t) => t.grupo === g.grupo) }))
+        .filter((g) => g.ts.length > 0)
+        .map((g) => (
+          <div key={g.grupo} className="flex flex-col gap-2.5">
+            <GrupoHead
+              titulo={`TURNO ${g.turno} · ${g.fecha}`}
+              detalle={plural(g.ts.length, 'tarjeta', 'tarjetas')}
+            />
+            {g.ts.map((t) => (
+              <Tarjeta key={t.id}>
+                <div className="flex items-start justify-between gap-2.5">
+                  <div>
+                    <div className="tabular text-[17px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
+                    <div className="text-[13px] text-muted-foreground">
+                      {t.tipo} · {t.operador}
+                    </div>
+                  </div>
+                  <Chip tono="success">Cerrada</Chip>
+                </div>
+                <Cifras
+                  items={[
+                    { label: 'Inicial', valor: fmt(t.inicial) },
+                    { label: 'Final', valor: fmt(t.final) },
+                    { label: 'Horas', valor: fmt(t.final! - t.inicial), destacado: true },
+                    { label: 'Litros', valor: fmt(t.litros, 0) },
+                  ]}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-muted-foreground">
+                    Cerrada a las <span className="tabular">{t.cerradaA}</span>
+                  </span>
+                  <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
+                    Ver detalle <ChevronRight className="h-4 w-4" />
+                  </Boton>
+                </div>
+              </Tarjeta>
+            ))}
+          </div>
+        ))
+    );
+
+  const vistaDetalleCerrada = detalleCerrada && (
+    <div className="flex flex-col gap-4">
+      <Boton variante="contorno" onClick={() => setDetalleCerrada(null)} className="self-start">
+        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+      </Boton>
+
+      <Cifras
+        items={[
+          { label: 'Inicial', valor: fmt(detalleCerrada.inicial) },
+          { label: 'Final', valor: fmt(detalleCerrada.final) },
+          { label: 'Horas', valor: fmt(detalleCerrada.final! - detalleCerrada.inicial), destacado: true },
+          { label: 'Litros', valor: fmt(detalleCerrada.litros, 0) },
+        ]}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Tarjeta" />
+        <Filas
+          filas={[
+            ['Equipo', `${detalleCerrada.equipo} · ${detalleCerrada.tipo}`],
+            ['Operador', detalleCerrada.operador],
+            ['Turno', turnoDe(detalleCerrada)],
+            ['Supervisor', firmante(detalleCerrada)],
+            ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
+            [
+              'Foto del surtidor',
+              <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
+                <Camera className="h-4 w-4" /> Adjunta
+              </span>,
+            ],
+          ]}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Observaciones" />
+        <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px]">
+          {detalleCerrada.observaciones?.trim() || (
+            <span className="text-muted-foreground">Sin observaciones.</span>
+          )}
+        </p>
+      </div>
+    </div>
   );
 
   // --- Cierre de tarjeta ----------------------------------------------------
@@ -809,6 +903,26 @@ export function RegistroEquipoView() {
           <Form>{formularioCierre}</Form>
         </Hoja>
       )}
+
+      {/* Lista y detalle son dos pantallas de la MISMA ventana, como en
+          Reporte diario: dos modales apilados se pelean el foco. */}
+      <ModalTerreno
+        abierto={historialAbierto}
+        onAbiertoChange={(abierto) => {
+          setHistorialAbierto(abierto);
+          if (!abierto) setDetalleCerrada(null);
+        }}
+        titulo={
+          detalleCerrada ? `${detalleCerrada.equipo} · ${detalleCerrada.tipo}` : 'Historial de cerradas'
+        }
+        detalle={
+          detalleCerrada
+            ? `Turno ${turnoDe(detalleCerrada)} · cerrada a las ${detalleCerrada.cerradaA ?? '—'}`
+            : `${plural(cerradas.length, 'tarjeta cerrada', 'tarjetas cerradas')} · este turno y el anterior`
+        }
+      >
+        {vistaDetalleCerrada || listaCerradas}
+      </ModalTerreno>
 
       {verReporte && (
         <Hoja

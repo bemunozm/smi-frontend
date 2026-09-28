@@ -46,11 +46,13 @@ describe('RegistroEquipoView', () => {
   it('solo ofrece equipos operativos', () => {
     renderView();
 
-    const selector = screen.getByLabelText('Equipo');
-    expect(within(selector).getByRole('option', { name: /EX-005/ })).toBeTruthy();
-    expect(within(selector).getByRole('option', { name: /PE-009/ })).toBeTruthy();
-    expect(within(selector).queryByRole('option', { name: /CA-003/ })).toBeNull();
-    expect(within(selector).queryByRole('option', { name: /CM-099/ })).toBeNull();
+    fireEvent.click(screen.getByLabelText('Equipo'));
+
+    const lista = within(screen.getByRole('listbox'));
+    expect(lista.getByRole('option', { name: /EX-005/ })).toBeTruthy();
+    expect(lista.getByRole('option', { name: /PE-009/ })).toBeTruthy();
+    expect(lista.queryByRole('option', { name: /CA-003/ })).toBeNull();
+    expect(lista.queryByRole('option', { name: /CM-099/ })).toBeNull();
   });
 
   it('propone el último horómetro registrado del equipo', () => {
@@ -182,9 +184,26 @@ describe('RegistroEquipoView', () => {
       // CA-011 cerrada del turno anterior: no está a la vista…
       expect(screen.queryByText('Cerrada')).toBeNull();
 
-      // …hasta que se abre el historial.
-      fireEvent.click(screen.getByRole('button', { name: /Historial de cerradas/ }));
-      expect(screen.getAllByText('Cerrada').length).toBeGreaterThan(0);
+      // …hasta que se abre el historial, que es una ventana aparte.
+      fireEvent.click(screen.getByRole('button', { name: /historial de cerradas/i }));
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getAllByText('Cerrada').length).toBeGreaterThan(0);
+    });
+
+    /** Igual que en Reporte diario: la lista y el detalle viven en la misma ventana. */
+    it('abre el detalle de una cerrada, con sus observaciones, y vuelve a la lista', () => {
+      renderView('desktop');
+
+      fireEvent.click(screen.getByRole('button', { name: /historial de cerradas/i }));
+      fireEvent.click(screen.getAllByRole('button', { name: /Ver detalle/ })[0]);
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByRole('heading', { name: 'CA-011 · Cargador' })).toBeTruthy();
+      expect(ventana.getByText('Jorge Pizarro')).toBeTruthy();
+      expect(ventana.getByText(/Revisar pasadores/)).toBeTruthy();
+
+      fireEvent.click(ventana.getByText('Volver al historial'));
+      expect(within(screen.getByRole('dialog')).getAllByRole('button', { name: /Ver detalle/ }).length).toBe(2);
     });
   });
 });

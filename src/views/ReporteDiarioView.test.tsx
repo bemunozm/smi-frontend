@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
 import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
@@ -139,7 +139,48 @@ describe('ReporteDiarioView · producción del turno', () => {
   });
 });
 
+/**
+ * Turno, fecha y supervisor ya no están escritos en la pantalla: salen del
+ * reloj y de la sesión con la misma regla que Registro de equipo. Solo se
+ * finge `Date` —no los timers— para no frenar el diálogo de react-aria.
+ */
+describe('ReporteDiarioView · cabecera de la ficha', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const dato = (label: string) => screen.getByText(label).closest('div')?.textContent ?? '';
+
+  it('a media tarde es el diurno del día del reloj', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 28, 10, 25));
+    render(<ReporteDiarioView />);
+
+    expect(dato('Turno')).toContain('DIURNO · 08–20');
+    expect(dato('Fecha')).toContain('28-09-2026');
+  });
+
+  /** De madrugada el turno es el nocturno que arrancó el día ANTERIOR. */
+  it('de madrugada es el nocturno del día anterior', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 24, 2, 14));
+    render(<ReporteDiarioView />);
+
+    expect(dato('Turno')).toContain('NOCTURNO · 20–08');
+    expect(dato('Fecha')).toContain('23-09-2026');
+  });
+});
+
 describe('ReporteDiarioView · historial en ventana', () => {
+  /**
+   * El historial son los turnos que preceden al actual, calculados desde el
+   * reloj. Con el reloj a media tarde del 23/09 los cinco anteriores son del
+   * 22/09 noche hacia atrás.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
+  });
+  afterEach(() => vi.useRealTimers());
+
   const abrirHistorial = () => {
     render(<ReporteDiarioView />);
     fireEvent.click(screen.getByText('Ver historial de reportes'));
