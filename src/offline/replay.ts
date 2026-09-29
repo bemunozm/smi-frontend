@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { toast } from '@heroui/react';
 import type { AxiosRequestConfig } from 'axios';
 
 import { db, pendingStatusFor, type CloseCardOp, type OutboxLastError, type OutboxOp } from './db';
@@ -9,9 +8,9 @@ import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { DomainError, toDomainError } from '../lib/api-error';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import { queryClient } from '../lib/query-client';
-import { useCurrentUser } from '../hooks/useCurrentUser';
-import { mensajeErrorTarjeta, SHIFT_CARDS_MINE_KEY } from '../hooks/useShiftCards';
+import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
 import type { ShiftCardResponse, ShiftReportResponse } from '../types/shift';
 
 /**
@@ -35,6 +34,13 @@ interface EngineState {
   authRequired: boolean;
   lastSyncAt: number | null;
   lastError: OutboxLastError | null;
+  /** Aviso puntual sin un lugar persistido natural (ej. "reporte enviado con
+   * equipos faltantes", ver `applyReportToCache`) — `offline/` no dispara UI
+   * directo (nunca importa `@heroui/react` ni llama a `toast()`, ver
+   * CLAUDE.md), así que viaja como estado hasta que un componente de la UI
+   * (`components/SyncEngineMount.tsx`) lo lee vía `useSyncState()`, lo
+   * presenta y lo limpia con `clearEngineNotice()`. */
+  notice: string | null;
 }
 
 const useEngineStore = create<EngineState>(() => ({
@@ -42,12 +48,19 @@ const useEngineStore = create<EngineState>(() => ({
   authRequired: false,
   lastSyncAt: null,
   lastError: null,
+  notice: null,
 }));
 
 /** Exportado SOLO para `offline/replay.test.ts`: inspecciona/resetea el
  * estado del motor entre tests sin tener que montar un componente React
  * (el store de zustand ya expone `getState`/`setState`, ver `create()`). */
 export const useEngineStoreForTests = useEngineStore;
+
+/** Limpia el aviso puntual del motor — lo llama el componente de UI que lo
+ * presentó (`components/SyncEngineMount.tsx`), justo después de mostrarlo. */
+export function clearEngineNotice(): void {
+  useEngineStore.setState({ notice: null });
+}
 
 export interface SyncState {
   /** Operaciones que todavía no terminaron (`pending*`/`syncing`), SIN
@@ -60,20 +73,23 @@ export interface SyncState {
   authRequired: boolean;
   lastSyncAt: number | null;
   lastError: OutboxLastError | null;
+  notice: string | null;
 }
 
 /**
- * Estado combinado para `SyncStatus`: el ciclo de vida del motor
- * (`useEngineStore`, arriba) + los contadores derivados EN VIVO del outbox
- * del usuario actual (`useOutboxOps`). Vive acá (no en un store aparte)
- * porque son la misma idea — "cómo va la sincronización" — y ningún otro
- * lugar de la app necesita el detalle del motor sin el contador, o
- * viceversa.
+ * Estado combinado para la UI: el ciclo de vida del motor (`useEngineStore`,
+ * arriba) + los contadores derivados EN VIVO del outbox del usuario actual
+ * (`useOutboxOps`). Vive acá (no en un store aparte) porque son la misma
+ * idea — "cómo va la sincronización" — y ningún otro lugar de la app
+ * necesita el detalle del motor sin el contador, o viceversa.
+ *
+ * `userId` lo lee el LLAMADOR (`useCurrentUser()`) y lo pasa acá — `offline/`
+ * no puede importar `hooks/` (regla de dependencias: `hooks/` es capa de UI,
+ * `offline/` vive por debajo y la comparten componentes que no son React).
  */
-export function useSyncState(): SyncState {
-  const { user } = useCurrentUser();
+export function useSyncState(userId: string | null | undefined): SyncState {
   const engine = useEngineStore();
-  const ops = useOutboxOps(user?.id);
+  const ops = useOutboxOps(userId ?? undefined);
 
   let pendingCount = 0;
   let attentionCount = 0;
@@ -89,6 +105,7 @@ export function useSyncState(): SyncState {
     authRequired: engine.authRequired,
     lastSyncAt: engine.lastSyncAt,
     lastError: engine.lastError,
+    notice: engine.notice,
   };
 }
 
@@ -100,7 +117,7 @@ export function useSyncState(): SyncState {
 let fallbackLockHeld = false;
 
 /**
- * Disparador perdido (revisión de la Fase 5): con `ifAvailable: true`, un
+ * Disparador perdido: con `ifAvailable: true`, un
  * `requestSync()` que llega mientras OTRO run ya tiene el candado se
  * descarta sin más — si eso pasa justo después del último `nextPendingOp`
  * del loop en curso (que ya devolvió `undefined`) pero ANTES de que el
@@ -188,21 +205,22 @@ async function runReplayForCurrentUser(): Promise<void> {
 /**
  * Hook de arranque: engancha `setCurrentUser` al usuario de la sesión y los
  * disparadores de tiempo/conectividad (`online`, `visibilitychange` →
- * visible, cada 45 s). Se monta UNA vez, dentro de `SyncStatus`
- * (`components/terreno/SyncStatus.tsx`) — el único lugar de la app que
- * necesita saber el estado de sync, así que el motor vive con su único
- * consumidor real.
+ * visible, cada 45 s). Se monta UNA vez, a nivel de SESIÓN
+ * (`components/SyncEngineMount.tsx`, dentro del árbol autenticado de
+ * `routes.tsx`) — no dentro de una pantalla en particular: si viviera solo
+ * en `TerrenoLayout` (como antes en `SyncStatus`), navegar a `/` desmontaría
+ * el motor y los disparadores se cortarían hasta volver a Terreno.
  *
  * El intervalo de 45 s corre siempre mientras el componente está montado
  * (no solo "cuando hay pendientes"): `runReplay` ya sale rápido si no hay
  * nada que hacer (una consulta indexada que no encuentra nada), así que
  * prender/apagar el timer según el contador en vivo solo agregaría
  * complejidad sin un ahorro real.
+ *
+ * `userId` lo lee el LLAMADOR (`useCurrentUser()`) y lo pasa acá — mismo
+ * motivo que en `useSyncState`, arriba.
  */
-export function useSyncEngine(): void {
-  const { user } = useCurrentUser();
-  const userId = user?.id ?? null;
-
+export function useSyncEngine(userId: string | null): void {
   useEffect(() => {
     setCurrentUser(userId);
   }, [userId]);
@@ -273,10 +291,12 @@ function applyReportToCache(cardIds: readonly string[], report: ShiftReportRespo
 
   if (report.missingCardIds.length > 0) {
     // No hay un lugar persistido natural para esto (la operación ya se
-    // borró del outbox al llegar acá) — un aviso puntual es la forma más
-    // honesta de no ocultar que el PDF quedó incompleto.
-    toast('Reporte enviado con equipos faltantes', {
-      description: `${report.missingCardIds.length} equipo(s) no se encontraron en el servidor al generar el PDF.`,
+    // borró del outbox al llegar acá) — un aviso puntual en el estado del
+    // motor es la forma más honesta de no ocultar que el PDF quedó
+    // incompleto, sin que `offline/` dispare UI directo (`components/
+    // SyncEngineMount.tsx` lo presenta y lo limpia, ver `EngineState.notice`).
+    useEngineStore.setState({
+      notice: `Reporte enviado con equipos faltantes: ${report.missingCardIds.length} equipo(s) no se encontraron en el servidor al generar el PDF.`,
     });
   }
 }
@@ -329,7 +349,7 @@ async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutco
   const lastError: OutboxLastError = {
     code: domainError.code,
     status: domainError.status,
-    message: mensajeErrorTarjeta(domainError),
+    message: mensajeErrorOperacion(domainError),
   };
 
   // `put()` (reemplazo completo) en vez de `update()`: el `UpdateSpec` de
@@ -367,7 +387,7 @@ async function uploadClosePhoto(op: CloseCardOp): Promise<string> {
     // sentido reintentar solo. `code: 'PHOTO_MISSING'` — sin esto,
     // `classify()` lo trataba como error de red (sin `status`) y trababa la
     // cola entera reintentando para siempre algo que un reintento nunca
-    // arregla (ver revisión de la Fase 5).
+    // arregla.
     throw new DomainError('Falta la foto guardada para cerrar esta tarjeta — hay que volver a tomarla.', {
       code: 'PHOTO_MISSING',
     });
@@ -384,8 +404,7 @@ async function processCloseCard(op: CloseCardOp, allowExpiredRetry = true): Prom
   // tuvo éxito pero el POST de cierre que sigue falla, `handleOpError`
   // guarda el objeto que se le pasa con `put()` (reemplazo completo) — pasar
   // el `op` VIEJO (sin `tmpKey`) borraría la key recién subida, y el próximo
-  // intento la resubiría de nuevo (un objeto `tmp/` huérfano cada vez; ver
-  // revisión de la Fase 5).
+  // intento la resubiría de nuevo (un objeto `tmp/` huérfano cada vez).
   let currentOp = op;
   let tmpKey = currentOp.tmpKey;
   if (!tmpKey) {
@@ -454,8 +473,8 @@ async function processOp(op: OutboxOp): Promise<ProcessOutcome> {
  * automático), `syncing` (ya la está procesando ESTE mismo run; no debería
  * verse porque el run es secuencial, pero queda como guarda), y cualquier
  * `closeCard` cuyo `openCard` (misma `cardId`, ver `blockedCardIds` abajo)
- * esté en `needs_attention` (revisión QA — "un cierre cuya apertura
- * falló"): mandarlo igual solo le garantiza al backend un 404
+ * esté en `needs_attention` (un cierre cuya apertura falló): mandarlo igual
+ * solo le garantiza al backend un 404
  * `CARD_NOT_FOUND` (esa tarjeta nunca llegó a existir) y, si el supervisor
  * lo descarta ahí, pierde la foto/los litros sin necesidad — con la
  * apertura resuelta (reintentada con éxito, o descartada — ver
@@ -480,9 +499,9 @@ async function nextPendingOp(userId: string): Promise<OutboxOp | undefined> {
 }
 
 /**
- * BUG CRÍTICO (revisión de la Fase 5): `processOp` deja una operación en
- * `'syncing'` mientras la request está en vuelo, y `nextPendingOp` la
- * excluye a propósito (para no procesarla dos veces EN EL MISMO run). Pero
+ * `processOp` deja una operación en `'syncing'` mientras la request está en
+ * vuelo, y `nextPendingOp` la excluye a propósito (para no procesarla dos
+ * veces EN EL MISMO run). Pero
  * si la pestaña/PWA se mata a mitad de esa request — un iPad mata apps en
  * segundo plano todo el tiempo, o simplemente se recarga la página — esa
  * operación queda en `'syncing'` PARA SIEMPRE: ningún run futuro la vuelve a
@@ -547,4 +566,21 @@ async function runReplay(userId: string): Promise<void> {
   } finally {
     useEngineStore.setState({ syncing: false });
   }
+}
+
+/**
+ * Resetea TODO el estado de módulo del motor — exportado SOLO para
+ * `offline/replay.test.ts#beforeEach`, que antes repetía a mano
+ * `setCurrentUser(null)` + `useEngineStoreForTests.setState(...)` y dejaba
+ * afuera `syncScheduled`/`rerunRequested`/`fallbackLockHeld` (variables de
+ * módulo, no del store) — un test que dependiera de alguna quedando en un
+ * valor no-default de un test anterior fallaría en un orden pero no en
+ * otro. Nunca se llama desde código de producción.
+ */
+export function resetReplayEngineForTests(): void {
+  currentUserId = null;
+  syncScheduled = false;
+  rerunRequested = false;
+  fallbackLockHeld = false;
+  useEngineStore.setState({ syncing: false, authRequired: false, lastSyncAt: null, lastError: null, notice: null });
 }

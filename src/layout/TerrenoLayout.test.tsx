@@ -148,7 +148,7 @@ describe('TerrenoLayout', () => {
   });
 
   /**
-   * Fase 5 (offline): `logout()` (`lib/logout.ts`) se bloquea con
+   * `logout()` (`lib/logout.ts`) se bloquea con
    * `LogoutBlockedError` si el usuario tiene operaciones sin sincronizar —
    * el layout debe atrapar ESE error puntual (no cualquier otro) y ofrecer
    * "Sincronizar ahora" en vez de dejar que la excepción se propague.

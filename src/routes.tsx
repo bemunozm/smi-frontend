@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { GuestRoute } from './components/GuestRoute';
 import { HomeRedirect } from './components/HomeRedirect';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { SyncEngineMount } from './components/SyncEngineMount';
 import { ROLES } from './types/roles';
 import { AppLayout } from './layout/AppLayout';
 import { DashboardView } from './views/DashboardView';
@@ -36,94 +37,109 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      // `/inicio` reparte por rol (`HomeRedirect`) — destino de `LoginView`,
-      // `GuestRoute` y el `start_url` del manifest PWA (ver
-      // `config/home-path.ts`). Vive directo bajo el `ProtectedRoute` de
-      // arriba (cualquier sesión válida, sin `allowedRoles`): no necesita el
-      // chrome de `AppLayout`, solo decide y navega.
-      { path: '/inicio', element: <HomeRedirect /> },
       {
-        element: <AppLayout />,
+        // `SyncEngineMount` (sin UI) monta el motor de sync a nivel de
+        // SESIÓN — directo bajo el `ProtectedRoute` de arriba (cualquier
+        // sesión válida, sin `allowedRoles`), ancestro TANTO de `AppLayout`
+        // como de `TerrenoLayout` más abajo: así los disparadores del motor
+        // (`online`, `visibilitychange`, los 45 s) no se cortan al navegar
+        // entre "Ir al panel" (`/`) y Terreno. Ver ese componente.
+        element: <SyncEngineMount />,
         children: [
-          // `/` NO reparte por rol a propósito (ver `config/home-path.ts` y
-          // el drawer de Terreno, que linkea acá con "Ir al panel") — sigue
-          // detrás de su propio `allowedRoles`, igual que Equipos/Inventario.
+          // `/inicio` reparte por rol (`HomeRedirect`) — destino de
+          // `LoginView`, `GuestRoute` y el `start_url` del manifest PWA (ver
+          // `config/home-path.ts`). No necesita el chrome de `AppLayout`,
+          // solo decide y navega.
+          { path: '/inicio', element: <HomeRedirect /> },
           {
-            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
-            children: [{ path: '/', element: <DashboardView /> }],
-          },
-          { path: '/perfil', element: <ProfileView /> },
-          // Notificaciones es universal (todos los roles autenticados): solo
-          // exige estar dentro de `ProtectedRoute`, sin `allowedRoles`.
-          { path: '/notificaciones', element: <NotificacionesView /> },
-          // Flota + Inventario (Amin). La LECTURA la comparten los roles que
-          // necesitan consultar equipos y stock: Terreno para saber qué máquina
-          // opera, Taller para saber si hay repuesto. La escritura la restringe
-          // el backend por endpoint (@Roles), y la UI oculta las acciones que
-          // el rol no puede ejecutar.
-          {
-            element: (
-              <ProtectedRoute
-                allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]}
-              />
-            ),
+            element: <AppLayout />,
             children: [
-              { path: '/equipos', element: <EquiposView /> },
-              { path: '/equipos/:id', element: <EquipoDetalleView /> },
-              { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
-              { path: '/inventario', element: <InventarioView /> },
-              // Antes que `:id`: si no, "movimientos" se leería como el id de
-              // un ítem y la pantalla pediría un kardex que no existe.
-              { path: '/inventario/movimientos', element: <MovimientosView /> },
-              { path: '/inventario/:id', element: <FichaItemView /> },
+              // `/` NO reparte por rol a propósito (ver `config/home-path.ts`
+              // y el drawer de Terreno, que linkea acá con "Ir al panel") —
+              // sigue detrás de su propio `allowedRoles`, igual que
+              // Equipos/Inventario.
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
+                children: [{ path: '/', element: <DashboardView /> }],
+              },
+              { path: '/perfil', element: <ProfileView /> },
+              // Notificaciones es universal (todos los roles autenticados):
+              // solo exige estar dentro de `ProtectedRoute`, sin `allowedRoles`.
+              { path: '/notificaciones', element: <NotificacionesView /> },
+              // Flota + Inventario (Amin). La LECTURA la comparten los roles
+              // que necesitan consultar equipos y stock: Terreno para saber
+              // qué máquina opera, Taller para saber si hay repuesto. La
+              // escritura la restringe el backend por endpoint (@Roles), y la
+              // UI oculta las acciones que el rol no puede ejecutar.
+              {
+                element: (
+                  <ProtectedRoute
+                    allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]}
+                  />
+                ),
+                children: [
+                  { path: '/equipos', element: <EquiposView /> },
+                  { path: '/equipos/:id', element: <EquipoDetalleView /> },
+                  { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
+                  { path: '/inventario', element: <InventarioView /> },
+                  // Antes que `:id`: si no, "movimientos" se leería como el id
+                  // de un ítem y la pantalla pediría un kardex que no existe.
+                  { path: '/inventario/movimientos', element: <MovimientosView /> },
+                  { path: '/inventario/:id', element: <FichaItemView /> },
+                ],
+              },
+              // Catálogo de Operadores (Supervisión en Terreno) — lectura y
+              // escritura para ADMIN/SUPERVISOR (el borrado, ADMIN-only, lo
+              // restringe el backend; la UI ya oculta la acción, ver
+              // `OperadoresView`).
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
+                children: [{ path: '/operadores', element: <OperadoresView /> }],
+              },
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                children: [
+                  { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
+                  { path: '/usuarios', element: <UsersView /> },
+                ],
+              },
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
+                children: [{ path: '/mantenimiento', element: <MantenimientoView /> }],
+              },
             ],
           },
-          // Catálogo de Operadores (Supervisión en Terreno) — lectura y
-          // escritura para ADMIN/SUPERVISOR (el borrado, ADMIN-only, lo
-          // restringe el backend; la UI ya oculta la acción, ver
-          // `OperadoresView`).
+          // Operación en Terreno — shell propio (fuera del layout de
+          // escritorio), restringido a ADMIN + SUPERVISOR. Se integra con la
+          // auth/rutas del equipo; su header + navegación reemplazan al
+          // Sidebar/Topbar. Nació solo para teléfono; desde T46 también se
+          // usa en tablet y PC. Vive DENTRO de `SyncEngineMount` (no como
+          // sibling suyo bajo el `ProtectedRoute` de arriba): es justo el
+          // árbol al que un SUPERVISOR entra y sale con el motor corriendo
+          // de fondo.
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
-            children: [{ path: '/operadores', element: <OperadoresView /> }],
-          },
-          {
-            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
             children: [
-              { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
-              { path: '/usuarios', element: <UsersView /> },
-            ],
-          },
-          {
-            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
-            children: [{ path: '/mantenimiento', element: <MantenimientoView /> }],
-          },
-        ],
-      },
-      // Operación en Terreno — shell propio (fuera del layout de escritorio),
-      // restringido a ADMIN + SUPERVISOR. Se integra con la auth/rutas del
-      // equipo; su header + navegación reemplazan al Sidebar/Topbar. Nació
-      // solo para teléfono; desde T46 también se usa en tablet y PC.
-      {
-        element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
-        children: [
-          {
-            element: <TerrenoLayout />,
-            children: [
-              { path: '/terreno', element: <Navigate replace to="/terreno/registro" /> },
-              // Los cuatro destinos del módulo, en el orden de la maqueta.
-              // `registro` y `reporte-diario` son los módulos A y B de la espec
-              // del 21/09: maquetas sin backend todavía — ver la cabecera de
-              // cada vista.
-              { path: '/terreno/registro', element: <RegistroEquipoView /> },
-              { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
-              { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
-              { path: '/terreno/hallazgos', element: <HallazgosView /> },
-              // Combustible sigue viva sin estar enlazada (la espec la fusiona
-              // en «Registro de equipo»): tiene backend real y de ahí hay que
-              // sacar los endpoints cuando el Módulo A deje de ser maqueta.
-              // Horómetro (la otra mitad del flujo viejo) ya se borró — ver
-              // `views/HorometroView.tsx` en el historial de git.
-              { path: '/terreno/combustible', element: <CombustibleView /> },
+              {
+                element: <TerrenoLayout />,
+                children: [
+                  { path: '/terreno', element: <Navigate replace to="/terreno/registro" /> },
+                  // Los cuatro destinos del módulo, en el orden de la
+                  // maqueta. `reporte-diario` es el Módulo B: maqueta sin
+                  // backend todavía — ver la cabecera de esa vista.
+                  { path: '/terreno/registro', element: <RegistroEquipoView /> },
+                  { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
+                  { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
+                  { path: '/terreno/hallazgos', element: <HallazgosView /> },
+                  // Combustible sigue viva sin estar enlazada (la espec la
+                  // fusiona en «Registro de equipo»): tiene backend real y de
+                  // ahí hay que sacar los endpoints cuando el Módulo A deje
+                  // de ser maqueta. Horómetro (la otra mitad del flujo viejo)
+                  // ya se borró — ver `views/HorometroView.tsx` en el
+                  // historial de git.
+                  { path: '/terreno/combustible', element: <CombustibleView /> },
+                ],
+              },
             ],
           },
         ],

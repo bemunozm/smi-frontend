@@ -1,22 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Circle, Clock, RefreshCw, WifiOff, X, XCircle } from 'lucide-react';
+import { CheckCircle2, Circle, X, XCircle } from 'lucide-react';
 
-import { EquipmentAPI } from '../../api/EquipmentAPI';
-import { OperatorAPI } from '../../api/OperatorAPI';
-import { ShiftCardAPI } from '../../api/ShiftCardAPI';
+import { usePrepareOffline } from '../../hooks/usePrepareOffline';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { EQUIPMENT_KEY } from '../../hooks/useEquipment';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
-import { OPERATORS_KEY } from '../../hooks/useOperators';
-import { SHIFT_CARDS_MINE_KEY } from '../../hooks/useShiftCards';
 import { CONTAINER } from '../../layout/TerrenoLayout';
-import { plural } from '../../lib/format';
-import { queryClient } from '../../lib/query-client';
 import type { CloseCardOp, OutboxOp } from '../../offline/db';
 import { discardOp, retryOp } from '../../offline/outbox';
 import { useOutboxOps } from '../../offline/useOutboxOps';
-import { useSyncEngine, useSyncState } from '../../offline/replay';
+import { useSyncState } from '../../offline/replay';
+import { syncStatusPresentation, type SyncStatusTono } from '../../offline/sync-status-presentation';
 
 /**
  * Barra + hoja de estado de sincronización — reemplaza a `BarraSinSenal`
@@ -25,9 +19,11 @@ import { useSyncEngine, useSyncState } from '../../offline/replay';
  * → Offline). Acá el contador es REAL: sale del outbox de Dexie
  * (`offline/replay.ts#useSyncState`), en vivo.
  *
- * Monta `useSyncEngine()` — el único lugar de la app que lo hace: los
- * disparadores de sync (arranque, `online`, `visibilitychange`, 45 s) viven
- * con su único consumidor real.
+ * Consumidor puro de `useSyncState()` — el motor (`useSyncEngine()`) vive a
+ * nivel de sesión en `components/SyncEngineMount.tsx`, no acá: si viviera
+ * en este componente (montado solo dentro de `TerrenoLayout`), navegar a
+ * `/` lo desmontaría y la sincronización se detendría hasta volver a
+ * Terreno.
  */
 
 function labelOp(op: OutboxOp): string {
@@ -42,78 +38,15 @@ function labelOp(op: OutboxOp): string {
 }
 
 /** El `closeCard` que depende de ESTE `openCard` (misma `cardId`), si
- * existe — revisión QA "un cierre cuya apertura falló": `nextPendingOp`
- * (`offline/replay.ts`) lo retiene sin mandarlo mientras la apertura siga
- * en `needs_attention`, así que acá se avisa por qué ese cierre no avanza,
- * y `discardOp` (`offline/outbox.ts`) lo arrastra si se descarta la
- * apertura. Busca en TODAS las operaciones (no solo las de atención): el
- * cierre dependiente sigue `pending_upload`/`pending_claim`, nunca
- * `needs_attention` por sí mismo. */
+ * existe: `nextPendingOp` (`offline/replay.ts`) lo retiene sin mandarlo
+ * mientras la apertura siga en `needs_attention`, así que acá se avisa por
+ * qué ese cierre no avanza, y `discardOp` (`offline/outbox.ts`) lo arrastra
+ * si se descarta la apertura. Busca en TODAS las operaciones (no solo las
+ * de atención): el cierre dependiente sigue `pending_upload`/`pending_claim`,
+ * nunca `needs_attention` por sí mismo. */
 function cierreDependiente(op: OutboxOp, ops: OutboxOp[]): CloseCardOp | undefined {
   if (op.type !== 'openCard') return undefined;
   return ops.find((o): o is CloseCardOp => o.type === 'closeCard' && o.payload.cardId === op.id);
-}
-
-/** `(display-mode: standalone)` cubre Android/desktop; `navigator.standalone`
- * es la señal equivalente (no estándar) que usa Safari/iOS — ninguna de las
- * dos alcanza sola en todos los casos, así que se combinan. */
-function isStandalonePwa(): boolean {
-  if (typeof window === 'undefined') return false;
-  const standaloneMedia = window.matchMedia?.('(display-mode: standalone)').matches ?? false;
-  const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return standaloneMedia || iosStandalone;
-}
-
-type PrepItemResult = 'ok' | 'error';
-
-interface PrepResult {
-  persist: PrepItemResult;
-  equipment: PrepItemResult;
-  operators: PrepItemResult;
-  shiftCards: PrepItemResult;
-  installed: boolean;
-}
-
-/** Descarga en paralelo lo que el arranque en frío sin señal necesita
- * (equipos, operadores activos, tarjetas propias) bajo las MISMAS query
- * keys que ya usan `useEquipment()`/`useOperators({isActive:true})`/
- * `useShiftCardsMine()` — así el caché de TanStack queda tibio Y, de paso,
- * la petición GET real pasa por el Service Worker, que la guarda en el
- * cache `smi-api` (`vite.config.ts`, `NetworkFirst`, 72 h) para el próximo
- * arranque sin señal. `navigator.storage.persist()` pide que el navegador
- * no evicte ese storage bajo presión — best-effort, algunos navegadores
- * simplemente no lo soportan. */
-async function prepararParaUsoSinSenal(): Promise<PrepResult> {
-  const persist =
-    'storage' in navigator && typeof navigator.storage.persist === 'function'
-      ? await navigator.storage.persist().then(
-          (granted) => (granted ? 'ok' : 'error'),
-          () => 'error',
-        )
-      : 'error';
-
-  // `retry: false`: el default del `queryClient` (`retry: 1` con backoff, ver
-  // `lib/query-client.ts`) sirve para queries normales de la UI, pero acá el
-  // checklist tiene que devolver un resultado rápido — reintentar con espera
-  // antes de decirle al supervisor "esto no se pudo precargar" es peor que
-  // fallar rápido y dejar que vuelva a tocar el botón.
-  const [equipment, operators, shiftCards] = await Promise.allSettled([
-    queryClient.fetchQuery({ queryKey: EQUIPMENT_KEY, queryFn: () => EquipmentAPI.list({}), retry: false }),
-    queryClient.fetchQuery({
-      queryKey: [...OPERATORS_KEY, { isActive: true }],
-      queryFn: () => OperatorAPI.list({ isActive: true }),
-      retry: false,
-    }),
-    queryClient.fetchQuery({ queryKey: SHIFT_CARDS_MINE_KEY, queryFn: ShiftCardAPI.listMine, retry: false }),
-  ]);
-
-  return {
-    persist: persist as PrepItemResult,
-    equipment: equipment.status === 'fulfilled' ? 'ok' : 'error',
-    operators: operators.status === 'fulfilled' ? 'ok' : 'error',
-    shiftCards: shiftCards.status === 'fulfilled' ? 'ok' : 'error',
-    installed: isStandalonePwa(),
-  };
 }
 
 function PrepItemRow({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -130,100 +63,19 @@ function PrepItemRow({ ok, children }: { ok: boolean; children: React.ReactNode 
 }
 
 export function SyncStatus() {
-  useSyncEngine();
-
-  const { isOfflineSnapshot } = useCurrentUser();
+  const { user, isOfflineSnapshot } = useCurrentUser();
   const enLinea = useOnlineStatus();
-  const sync = useSyncState();
-  const { user } = useCurrentUser();
+  const sync = useSyncState(user?.id);
   const ops = useOutboxOps(user?.id);
   const opsAtencion = ops.filter((op) => op.status === 'needs_attention');
+  const { preparando, resultadoPrep, handlePreparar } = usePrepareOffline();
 
   const [abierto, setAbierto] = useState(false);
   const [descartando, setDescartando] = useState<string | null>(null);
-  const [preparando, setPreparando] = useState(false);
-  const [resultadoPrep, setResultadoPrep] = useState<PrepResult | null>(null);
 
-  const handlePreparar = async () => {
-    setPreparando(true);
-    setResultadoPrep(null);
-    try {
-      const resultado = await prepararParaUsoSinSenal();
-      setResultadoPrep(resultado);
-    } finally {
-      setPreparando(false);
-    }
-  };
+  const { tono, icono, texto } = syncStatusPresentation(sync, isOfflineSnapshot, enLinea);
 
-  // --- Texto/tono de la barra, por prioridad ---------------------------------
-
-  type Tono = 'danger' | 'warning' | 'success' | 'neutral';
-  let tono: Tono;
-  let icono = <Clock className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-  let texto: React.ReactNode;
-
-  if (sync.authRequired) {
-    tono = 'danger';
-    icono = <AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-    texto = (
-      <>
-        <b>Tu sesión expiró.</b> Iniciá sesión para sincronizar.
-      </>
-    );
-  } else if (isOfflineSnapshot) {
-    tono = 'warning';
-    icono = <WifiOff className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-    texto = (
-      <>
-        <b>Sin señal</b> · sesión guardada.
-      </>
-    );
-  } else if (sync.attentionCount > 0) {
-    // El número de la barra sale de `useSyncState` (fuente "oficial" del
-    // resumen) — `opsAtencion` (abajo) es la MISMA cuenta, solo que con los
-    // objetos completos que necesita la hoja de detalle (mensaje de error,
-    // id para Reintentar/Descartar). En la app real son consistentes entre
-    // sí porque las dos leen del mismo outbox en vivo.
-    tono = 'danger';
-    icono = <AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-    texto = (
-      <>
-        <b>{plural(sync.attentionCount, 'registro', 'registros')}</b>{' '}
-        {sync.attentionCount === 1 ? 'requiere' : 'requieren'} atención.
-      </>
-    );
-  } else if (sync.syncing) {
-    tono = 'neutral';
-    icono = <RefreshCw className="mt-0.5 h-[18px] w-[18px] shrink-0 animate-spin" />;
-    texto = 'Sincronizando…';
-  } else if (sync.pendingCount > 0) {
-    tono = 'warning';
-    texto = (
-      <>
-        <b>{plural(sync.pendingCount, 'registro', 'registros')}</b> por sincronizar.
-      </>
-    );
-  } else if (!enLinea) {
-    tono = 'warning';
-    icono = <WifiOff className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-    texto = 'Sin señal. Lo que registres queda guardado en el equipo y se envía solo al volver la conexión.';
-  } else if (sync.lastSyncAt != null) {
-    tono = 'success';
-    icono = <CheckCircle2 className="mt-0.5 h-[18px] w-[18px] shrink-0" />;
-    texto = (
-      <>
-        Todo sincronizado ·{' '}
-        <span className="tabular">
-          {new Date(sync.lastSyncAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </>
-    );
-  } else {
-    tono = 'neutral';
-    texto = 'Preparado para registrar sin señal.';
-  }
-
-  const estilos: Record<Tono, string> = {
+  const estilos: Record<SyncStatusTono, string> = {
     danger: 'bg-[var(--danger-soft)] text-[var(--danger)] border-[#f3c9c9]',
     warning: 'bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] border-[#f1d9a2]',
     success: 'bg-[var(--success-soft)] text-[var(--success-soft-foreground)] border-[#bfe3cd]',

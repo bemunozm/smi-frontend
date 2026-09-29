@@ -6,10 +6,9 @@ import { SyncStatus } from './SyncStatus';
 import type { OutboxOp } from '../../offline/db';
 import type { SyncState } from '../../offline/replay';
 
-const { retryOpMock, discardOpMock, useSyncEngineMock } = vi.hoisted(() => ({
+const { retryOpMock, discardOpMock } = vi.hoisted(() => ({
   retryOpMock: vi.fn(),
   discardOpMock: vi.fn(),
-  useSyncEngineMock: vi.fn(),
 }));
 
 vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discardOpMock }));
@@ -21,10 +20,10 @@ let mockSyncState: SyncState = {
   authRequired: false,
   lastSyncAt: null,
   lastError: null,
+  notice: null,
 };
 vi.mock('../../offline/replay', () => ({
   useSyncState: () => mockSyncState,
-  useSyncEngine: () => useSyncEngineMock(),
 }));
 
 let mockOps: OutboxOp[] = [];
@@ -81,7 +80,7 @@ function attentionOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
 
 /** Un `closeCard` pendiente que depende del `openCard` de `attentionOp()`
  * (misma `cardId` = `'op-1'`, el `id` de esa apertura) — el caso "un cierre
- * cuya apertura falló" (revisión QA). */
+ * cuya apertura falló". */
 function pendingCloseOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
   return {
     id: 'close-1',
@@ -111,6 +110,7 @@ afterEach(() => {
     authRequired: false,
     lastSyncAt: null,
     lastError: null,
+    notice: null,
   };
   mockOps = [];
   mockIsOfflineSnapshot = false;
@@ -118,11 +118,6 @@ afterEach(() => {
 });
 
 describe('SyncStatus — barra (prioridad de estados)', () => {
-  it('monta el motor de sync (useSyncEngine) — un único lugar de la app', () => {
-    renderBar();
-    expect(useSyncEngineMock).toHaveBeenCalledTimes(1);
-  });
-
   it('authRequired tiene la MÁXIMA prioridad', () => {
     mockSyncState = { ...mockSyncState, authRequired: true, pendingCount: 3 };
     renderBar();
@@ -267,7 +262,7 @@ describe('SyncStatus — hoja de detalle', () => {
   });
 });
 
-describe('SyncStatus — un cierre cuya apertura falló (revisión QA)', () => {
+describe('SyncStatus — un cierre cuya apertura falló', () => {
   it('avisa que la tarjeta también tiene un cierre guardado esperando la apertura', () => {
     mockSyncState = { ...mockSyncState, attentionCount: 1 };
     mockOps = [attentionOp(), pendingCloseOp()];

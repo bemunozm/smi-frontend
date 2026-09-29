@@ -21,10 +21,10 @@ vi.mock('@heroui/react', () => ({ toast: Object.assign(toastMock, { danger: vi.f
 
 import { db, type CloseCardOp, type OpenCardOp, type SendExitReportOp } from './db';
 import { countPending, retryOp } from './outbox';
-import { requestSync, setCurrentUser, useEngineStoreForTests } from './replay';
-import { SHIFT_CARDS_MINE_KEY } from '../hooks/useShiftCards';
+import { requestSync, resetReplayEngineForTests, setCurrentUser, useEngineStoreForTests } from './replay';
 import { DomainError } from '../lib/api-error';
 import { queryClient } from '../lib/query-client';
+import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
 import type { ShiftCardResponse, ShiftReportResponse } from '../types/shift';
 
 function baseCard(overrides: Partial<ShiftCardResponse> = {}): ShiftCardResponse {
@@ -126,13 +126,12 @@ beforeEach(async () => {
   await db.outbox.clear();
   await db.photos.clear();
   queryClient.clear();
-  useEngineStoreForTests.setState({ syncing: false, authRequired: false, lastSyncAt: null, lastError: null });
-  setCurrentUser(null);
+  resetReplayEngineForTests();
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  setCurrentUser(null);
+  resetReplayEngineForTests();
 });
 
 /**
@@ -362,7 +361,7 @@ describe('replay — candado', () => {
   });
 
   /**
-   * Disparador perdido (revisión de la Fase 5, ítem 4): un `requestSync()`
+   * Disparador perdido: un `requestSync()`
    * que llega con el candado ocupado NO debe dejar la operación recién
    * encolada esperando hasta el próximo disparador externo (45 s / online /
    * visibilitychange). Esta prueba verifica el CONTRATO observable — c-2
@@ -451,7 +450,7 @@ describe('replay — operación atascada en "syncing" (bug crítico)', () => {
   });
 });
 
-describe('replay — tmpKey se conserva tras un error posterior a la subida (revisión Fase 5, ítem 2)', () => {
+describe('replay — tmpKey se conserva tras un error posterior a la subida', () => {
   it('un error TRANSITORIO en el POST de cierre, después de subir la foto, NO borra el tmpKey ni resube en el próximo run', async () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
     closeCardMock.mockRejectedValueOnce(new DomainError('Network Error')); // sin status = transitorio
@@ -486,7 +485,7 @@ describe('replay — tmpKey se conserva tras un error posterior a la subida (rev
   });
 });
 
-describe('replay — clasificación de errores sin status (revisión Fase 5, ítem 3)', () => {
+describe('replay — clasificación de errores sin status', () => {
   it('PHOTO_MISSING (falta la foto guardada): queda needs_attention, no se retiene reintentando para siempre', async () => {
     await putCloseOp(); // sin `putPhoto()`: la fila de `photos` no existe
 
@@ -516,7 +515,7 @@ describe('replay — clasificación de errores sin status (revisión Fase 5, ít
   });
 });
 
-describe('replay — 429 REPORT_RATE_LIMITED (revisión Fase 5, ítem 5)', () => {
+describe('replay — 429 REPORT_RATE_LIMITED', () => {
   it('con code REPORT_RATE_LIMITED: needs_attention, no reintenta en bucle', async () => {
     sendExitReportMock.mockRejectedValueOnce(new DomainError('Demasiados reportes', { status: 429, code: 'REPORT_RATE_LIMITED' }));
     await putReportOp();
@@ -540,7 +539,40 @@ describe('replay — 429 REPORT_RATE_LIMITED (revisión Fase 5, ítem 5)', () =>
   });
 });
 
-describe('replay — cierre cuya apertura falló (revisión QA, "no lo mandes, ligalos")', () => {
+describe('replay — 409 NO_CARDS (reporte de salida sin equipos para incluir)', () => {
+  it('queda needs_attention y el siguiente op en la cola sigue sincronizando', async () => {
+    sendExitReportMock.mockRejectedValueOnce(
+      new DomainError('No hay tarjetas para el reporte', { status: 409, code: 'NO_CARDS' }),
+    );
+    openCardMock.mockResolvedValueOnce(baseCard({ id: 'c-9' }));
+    await putReportOp({ id: 'rep-1', createdAt: 1 });
+    await putOpenOp({
+      id: 'c-9',
+      createdAt: 2,
+      payload: {
+        id: 'c-9',
+        equipoId: 'eq-9',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+
+    await syncAndSettle();
+
+    const rep = await db.outbox.get('rep-1');
+    expect(rep?.status).toBe('needs_attention');
+    expect(rep?.lastError).toMatchObject({ code: 'NO_CARDS' });
+    // El run CONTINÚA con la siguiente operación — un 409 de negocio no
+    // corta la cola (mismo criterio que ID_CONFLICT).
+    expect(openCardMock).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get('c-9')).toBeUndefined();
+  });
+});
+
+describe('replay — cierre cuya apertura falló ("no lo mandes, ligalos")', () => {
   /**
    * Escenario: sin señal, el supervisor abre la tarjeta X y la cierra — las
    * dos operaciones quedan en el outbox. Al reintentar, `openCard(X)` recibe

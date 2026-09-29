@@ -84,7 +84,7 @@ export function TerrenoLayout() {
   const handleSignOut = async () => {
     // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
     // Cache Storage privado + navega — ver ese archivo para el porqué
-    // (SEGURIDAD M1, review QA del RFC R2-storage). Fase 5 (offline): se le
+    // (SEGURIDAD M1, RFC R2-storage). Se le
     // pasa el `userId` para que bloquee si hay operaciones sin sincronizar
     // en el outbox — el catch de acá abajo es ESE bloqueo, no un error real.
     try {

@@ -108,7 +108,7 @@ export async function enqueueExitReport(userId: string, input: SendExitReportInp
  * último error, así no queda un mensaje viejo mientras el nuevo intento
  * está en vuelo.
  *
- * `userId` (defensa en profundidad, revisión QA): `SyncStatus` solo lista
+ * `userId` (defensa en profundidad): `SyncStatus` solo lista
  * las operaciones del usuario de la sesión (`useOutboxOps`), así que en la
  * UI normal `id` siempre es de ESE usuario — esto es una segunda barrera
  * por si algún día un `id` de otro usuario llega hasta acá (bug de UI, id
@@ -133,7 +133,7 @@ export async function retryOp(id: string, userId: string): Promise<void> {
  * dejar una fila huérfana en `photos`.
  *
  * Descartar un `openCard` arrastra con él a cualquier `closeCard` que
- * dependa de esa `cardId` (revisión QA — "un cierre cuya apertura falló"):
+ * dependa de esa `cardId` ("un cierre cuya apertura falló"):
  * sin la apertura esa tarjeta NUNCA va a existir en el servidor, así que un
  * cierre huérfano solo puede terminar en un 404 `CARD_NOT_FOUND` más
  * adelante. Se borra todo (operaciones + fotos) en UNA transacción — la

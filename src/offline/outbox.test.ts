@@ -138,7 +138,7 @@ describe('discardOp', () => {
     expect(await db.outbox.get('card-1')).toBeTruthy();
   });
 
-  // Revisión QA — "un cierre cuya apertura falló": descartar la apertura
+  // "Un cierre cuya apertura falló": descartar la apertura
   // arrastra su cierre dependiente (misma `cardId`), porque sin la apertura
   // esa tarjeta nunca va a existir en el servidor.
   describe('cascada apertura → cierre dependiente', () => {
