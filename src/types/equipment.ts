@@ -56,6 +56,12 @@ const OpenShiftSchema = z.object({
    * alimenta el "ocupado por X" del selector de equipo en Registro de
    * equipo (`hooks/useShiftRegister.ts`, RFC "Supervisión en Terreno"). */
   supervisorName: z.string().nullable(),
+  /** id del `Shift` (Módulo A) si esta tarjeta viene de Registro de turno —
+   * `null` para un `RegistroHorometro` abierto solo desde Flota. Lo usa
+   * `RegistrarSalidaModal` (salida de Flota) para avisar que cerrar ahí no
+   * registra litros ni foto, y que un cierre guardado sin señal desde
+   * Registro de turno quedaría rechazado. */
+  shiftId: z.string().nullable(),
 });
 export type OpenShift = z.infer<typeof OpenShiftSchema>;
 

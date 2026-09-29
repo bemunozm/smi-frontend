@@ -30,8 +30,7 @@ export interface OperatorPickerProps {
    * inyecta como opción del picker aunque `useOperators({ isActive: true })`
    * (solo activos) no lo traiga. Sin esto, abrir el form de un equipo cuyo
    * operador pasó a inactivo lo mostraría "sin seleccionar", y guardar sin
-   * tocar el campo lo desasignaría en silencio (ver anexo "el operador deja
-   * de ser usuario de la plataforma", Fase 2 front — pickers de Flota).
+   * tocar el campo lo desasignaría en silencio.
    * `null`/`undefined` = no hay asignación actual, no agrega nada.
    */
   currentAssignee?: OperatorOption | null;

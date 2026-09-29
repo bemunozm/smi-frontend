@@ -123,8 +123,7 @@ export function RegistrarEntradaModal({
       // El servidor valida `operatorId` contra el catálogo
       // (`OperatorsService.assertActive`) y deriva `operador` (el nombre,
       // snapshot) él mismo — el cliente ya no manda texto libre. Ver
-      // `types/horometro.ts` y el anexo "operador del catálogo en Trabajos
-      // extra + snapshot único".
+      // `types/horometro.ts`.
       operatorId: values.operatorId,
       turno: values.turno,
       valorInicial: values.valorInicial,

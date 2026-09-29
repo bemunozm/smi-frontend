@@ -110,8 +110,7 @@ describe('RegistrarEntradaModal', () => {
       valorInicial: 3,
     });
     // El servidor deriva `operador` (el nombre) a partir de `operatorId` — el
-    // cliente ya no lo manda (ver anexo "operador del catálogo en Trabajos
-    // extra + snapshot único").
+    // cliente ya no lo manda.
     expect(payload.operador).toBeUndefined();
     // ENTRADA: nunca manda `valorFinal` — así el registro queda como turno
     // abierto (ver `types/horometro.ts`).

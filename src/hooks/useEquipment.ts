@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
-import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
+import { DomainError } from '../lib/api-error';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import type {
   AssignEquipmentInput,
   CreateEquipmentInput,
@@ -110,25 +111,18 @@ export function useUpdateEquipmentStatus() {
 
 /**
  * Mensaje amigable para un error de `EquipmentAPI.assign` — el operador es
- * ahora un id del catálogo propio (`OperatorsService.assertActive`, ver
- * anexo "el operador deja de ser usuario de la plataforma"), así que guardar
- * puede fallar con 409 `OPERATOR_INACTIVE` (el operador elegido se desactivó
- * entre que se abrió el form y se guardó) o 404 (dejó de existir en el
- * catálogo). Mismo texto que ya usa `useShiftCards.ts#CODE_MESSAGES` para el
- * mismo código, para no mostrar dos redacciones distintas del mismo caso en
- * la app. El 404 no trae un `code` propio del backend — se distingue por
- * `status`, no por texto (que podría no ser ni claro ni estar en español).
+ * ahora un id del catálogo propio (`OperatorsService.assertActive`), así que
+ * guardar puede fallar con 409 `OPERATOR_INACTIVE` (mapeado en `lib/error-messages.ts`,
+ * compartido con Tarjetas de turno y Trabajos extra) o 404 (dejó de existir
+ * en el catálogo). El 404 no trae un `code` propio del backend — se
+ * distingue por `status`, no por texto (que podría no ser ni claro ni estar
+ * en español), así que ese caso queda como contexto propio de este caller.
  */
 function mensajeErrorAsignacion(error: unknown): string {
-  if (error instanceof DomainError) {
-    if (error.code === 'OPERATOR_INACTIVE') {
-      return OPERATOR_INACTIVE_MESSAGE;
-    }
-    if (error.status === 404) {
-      return 'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.';
-    }
+  if (error instanceof DomainError && error.status === 404) {
+    return 'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.';
   }
-  return error instanceof Error ? error.message : 'No se pudo actualizar la asignación.';
+  return mensajeErrorOperacion(error, 'No se pudo actualizar la asignación.');
 }
 
 /**

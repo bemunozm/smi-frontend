@@ -45,7 +45,7 @@ export class LogoutBlockedError extends Error {
  *   que la entrada expirara sola (antes 30 días; bajado a 7 en el mismo fix,
  *   ver `vite.config.ts`).
  *
- * FASE 5 (offline): `userId` es opcional (sesiones sin outbox, ej. ADMIN/
+ * `userId` es opcional (sesiones sin outbox, ej. ADMIN/
  * MANTENEDOR, no tienen por qué pasarlo) — cuando viene y tiene operaciones
  * pendientes en Dexie (CUALQUIER estado, incluido `needs_attention`: esas
  * necesitan Reintentar o Descartar primero, ver `SyncStatus`), el logout se

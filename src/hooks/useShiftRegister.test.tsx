@@ -62,8 +62,8 @@ vi.mock('../offline/useOutboxOps', () => ({
 // El flujo foto→OCR→subida ya tiene sus propios tests (Flota) — acá se
 // mockea entero para controlar `file`/`captureDate` sin simular una
 // selección de archivo real. `upload` ya NO lo llama `useShiftRegister`
-// (Fase 5: la subida pasa al replay) — sigue en el doble por si algún test
-// lo inspecciona, pero nada lo invoca.
+// (la subida pasa al replay) — sigue en el doble por si algún test lo
+// inspecciona, pero nada lo invoca.
 let mockFotoFile: File | null = null;
 vi.mock('../lib/usePhotoCaptureFlow', () => ({
   usePhotoCaptureFlow: () => ({
@@ -418,7 +418,7 @@ describe('useShiftRegister', () => {
     });
   });
 
-  describe('reporte de salida (Fase 5: conectado al outbox)', () => {
+  describe('reporte de salida (conectado al outbox)', () => {
     it('sin nada, es "sin-enviar"', async () => {
       mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
       const { Wrapper } = withQueryClient();
@@ -449,7 +449,7 @@ describe('useShiftRegister', () => {
     });
 
     /**
-     * Doble-toque (revisión de la Fase 5, ítem 5): sin el guard, dos toques
+     * Doble-toque: sin el guard, dos toques
      * antes de que `liveQuery` alcance a reflejar el primer encolado
      * generaban DOS operaciones con uuids distintos — dos PDF, dos rondas
      * de correo.

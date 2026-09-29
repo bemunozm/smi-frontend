@@ -84,7 +84,7 @@ export const OPERATOR_INACTIVE_MESSAGE = 'Ese operador ya no está activo. Eleg�
 export function toDomainError(error: unknown, fallbackMessage: string): DomainError {
   if (error instanceof ZodError) {
     const firstIssue = error.issues[0]?.message ?? 'formato inesperado';
-    // `code: 'INVALID_RESPONSE'` (Fase 5, revisión offline): sin esto,
+    // `code: 'INVALID_RESPONSE'`: sin esto,
     // `offline/replay.ts#classify` no tenía forma de distinguir esto de un
     // error de red (mismo `status: undefined`) — un reintento automático de
     // una respuesta que el servidor SÍ procesó (ej. un `openCard` replayado

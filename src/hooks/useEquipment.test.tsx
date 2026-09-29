@@ -202,8 +202,7 @@ describe('useAssignEquipment', () => {
   });
 
   // El operador es ahora un id del catálogo propio (`OperatorsService.
-  // assertActive`, ver anexo "el operador deja de ser usuario de la
-  // plataforma"): guardar puede fallar con 409 `OPERATOR_INACTIVE` (se
+  // assertActive`): guardar puede fallar con 409 `OPERATOR_INACTIVE` (se
   // desactivó entre que se abrió el form y se guardó) o 404 (dejó de existir
   // en el catálogo) — ambos casos deben mostrar un toast claro, no el texto
   // técnico de axios.

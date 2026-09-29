@@ -4,7 +4,7 @@ import { CONTROL_UNIT } from './equipment';
 
 /**
  * Contrato de tarjetas de turno del Módulo A (`POST/GET /api/shift-cards`,
- * backend `src/shifts/*`, RFC "Supervisión en Terreno" Fase 2 — done).
+ * backend `src/shifts/*`, RFC "Supervisión en Terreno").
  * Mismo vocabulario que `lib/turno.ts#Turno`, redeclarado acá porque este
  * archivo modela el contrato HTTP, no la lógica de reloj.
  */
@@ -110,10 +110,10 @@ export interface CloseShiftCardInput {
 }
 
 /**
- * Contrato del reporte de salida de turno (`POST /api/shift-reports`,
- * backend Fase 3 — done). Conectado recién en la Fase 5 (offline, ver el
- * plan "Supervisión en Terreno" §Diseño → Offline): se manda vía el outbox
- * (`offline/outbox.ts#enqueueExitReport`), nunca directo desde la vista.
+ * Contrato del reporte de salida de turno (`POST /api/shift-reports`). Se
+ * manda vía el outbox offline (RFC "Supervisión en Terreno" §Diseño →
+ * Offline, `offline/outbox.ts#enqueueExitReport`), nunca directo desde la
+ * vista.
  */
 export const EMAIL_STATUSES = ['PENDING', 'SENT', 'FAILED', 'SKIPPED'] as const;
 export type EmailStatus = (typeof EMAIL_STATUSES)[number];

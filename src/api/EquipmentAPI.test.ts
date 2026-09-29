@@ -109,6 +109,7 @@ describe('EquipmentAPI.list', () => {
         turno: 'NOCTURNO',
         fecha: '2026-08-06T20:00:00.000Z',
         supervisorName: 'Marcela Pizarro',
+        shiftId: null,
       },
     };
     getMock.mockResolvedValueOnce({ data: { data: [conTurnoAbierto], message: 'ok' } });

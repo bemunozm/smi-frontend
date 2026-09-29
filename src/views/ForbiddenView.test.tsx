@@ -34,9 +34,8 @@ describe('ForbiddenView', () => {
     expect(screen.getByText('Dashboard')).toBeTruthy();
   });
 
-  // Un rol nulo (sesión sin rol reconocido, o un rol que ya no existe — ver
-  // anexo "el operador deja de ser usuario de la plataforma") también cae a
-  // `homePathFor(null) === '/'` — mismo destino que ADMIN/MANTENEDOR, nunca
+  // Un rol nulo (sesión sin rol reconocido, o un rol que ya no existe)
+  // también cae a `homePathFor(null) === '/'` — mismo destino que ADMIN/MANTENEDOR, nunca
   // un `undefined`/ruta rota que deje el botón sin adónde ir.
   it('un rol nulo también vuelve al dashboard (mismo destino que ADMIN/MANTENEDOR)', () => {
     mockRole = null;

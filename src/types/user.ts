@@ -52,9 +52,8 @@ export type CreateUserInput = z.infer<typeof CreateUserSchema>;
  * Schema del FORM de creación (`UsersView#CreateUserModal`) — distinto de
  * `CreateUserSchema` (el payload real que espera el backend) en un solo
  * campo: `role` arranca vacío (`''`) a propósito, sin ningún default. Antes
- * el form partía en `ROLES.OPERADOR`; ese rol ya no existe (ver anexo "el
- * operador deja de ser usuario de la plataforma") y, más de fondo, un ADMIN
- * nunca debería poder crear un usuario sin elegir su rol a propósito.
+ * el form partía en `ROLES.OPERADOR`; ese rol ya no existe, y más de fondo un
+ * ADMIN nunca debería poder crear un usuario sin elegir su rol a propósito.
  *
  * El `.refine` valida "no vacío" con un mensaje propio — y, con TS 5.5+
  * (inferred type predicates), `value !== ''` alcanza para que TypeScript

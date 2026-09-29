@@ -48,13 +48,9 @@ import { EQUIPMENT_STATUS, type EquipmentDetail, type EquipmentStatus } from '..
 import type { EquipmentDocument } from '../types/equipment-document';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { StatusChip } from '../components/flota/StatusChip';
-import {
-  buildAssignmentDiff,
-  DeleteEquipoAlertDialog,
-  EditEquipoModal,
-  SIN_ASIGNAR,
-} from '../components/flota/EquipoEditDelete';
+import { DeleteEquipoAlertDialog, EditEquipoModal } from '../components/flota/EquipoEditDelete';
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
+import { buildAssignmentDiff, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
 
@@ -150,16 +146,14 @@ function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps)
 }
 
 /**
- * Pickers de operador/supervisor + "Guardar asignación"/"Liberar" — la
- * acción de asignar/liberar que pide la Fase 2 (§2). Solo se monta para
- * quien puede escribir la asignación (ver `puedeAsignar` en la vista); el
+ * Pickers de operador/supervisor + "Guardar asignación"/"Liberar". Solo se
+ * monta para quien puede escribir la asignación (ver `puedeAsignar` en la vista); el
  * backend gatilla `PATCH /equipment/:id/assignment` a ADMIN/SUPERVISOR,
  * mismo criterio que `updateStatus` en `EquiposView`.
  */
 function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   const assignEquipment = useAssignEquipment();
-  // El picker de operador sale del catálogo propio (`OperatorPicker`, ver
-  // anexo "el operador deja de ser usuario de la plataforma"); el de
+  // El picker de operador sale del catálogo propio (`OperatorPicker`); el de
   // supervisor sigue con `useUsers` (rol SUPERVISOR).
   const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
   const [operatorId, setOperatorId] = useState(equipo.operator?.id ?? SIN_ASIGNAR);

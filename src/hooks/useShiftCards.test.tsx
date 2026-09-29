@@ -9,8 +9,8 @@ vi.mock('../api/ShiftCardAPI', () => ({
   ShiftCardAPI: { listMine: listMineMock },
 }));
 
-import { mensajeErrorTarjeta, SHIFT_CARDS_MINE_KEY, useShiftCardsMine } from './useShiftCards';
-import { DomainError } from '../lib/api-error';
+import { useShiftCardsMine } from './useShiftCards';
+import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
 
 afterEach(() => {
   cleanup();
@@ -54,41 +54,5 @@ describe('useShiftCardsMine', () => {
 
     await waitFor(() => expect(result.current.data).toEqual([CARD]));
     expect(queryClient.getQueryData(SHIFT_CARDS_MINE_KEY)).toEqual([CARD]);
-  });
-});
-
-describe('mensajeErrorTarjeta', () => {
-  it('EQUIPMENT_BUSY: muestra el mensaje del backend tal cual (trae quién y desde cuándo)', () => {
-    const error = new DomainError('CA-011 está ocupado por Marcela Pizarro desde las 07:40', {
-      code: 'EQUIPMENT_BUSY',
-    });
-    expect(mensajeErrorTarjeta(error)).toBe('CA-011 está ocupado por Marcela Pizarro desde las 07:40');
-  });
-
-  it('HOURMETER_BELOW_INITIAL: usa el texto amigable mapeado por code', () => {
-    const error = new DomainError('mensaje técnico', { code: 'HOURMETER_BELOW_INITIAL' });
-    expect(mensajeErrorTarjeta(error)).toBe('El horómetro final no puede ser menor que el inicial.');
-  });
-
-  // Fase 5 (revisión offline) — códigos nuevos del backend/del propio replay.
-  it.each([
-    ['INVALID_SHIFT_DATE', 'La fecha del turno no es válida — revisá la fecha y la hora del equipo.'],
-    ['REPORT_RATE_LIMITED', 'Se mandaron demasiados reportes seguidos — esperá unos minutos y reintentá.'],
-    ['PHOTO_MISSING', 'Falta la foto guardada para este cierre — descartalo y volvé a cerrar la tarjeta.'],
-    ['INVALID_RESPONSE', 'Respuesta inesperada del servidor — reintentá más tarde o avisá si sigue pasando.'],
-    [
-      'CARD_NOT_FOUND',
-      'La tarjeta no existe en el servidor (su apertura no llegó). Revisá la apertura pendiente o descartá este cierre.',
-    ],
-  ])('%s: usa el texto amigable mapeado por code', (code, esperado) => {
-    expect(mensajeErrorTarjeta(new DomainError('mensaje técnico', { code }))).toBe(esperado);
-  });
-
-  it('sin code ni DomainError, cae al mensaje genérico de Error', () => {
-    expect(mensajeErrorTarjeta(new Error('boom'))).toBe('boom');
-  });
-
-  it('un valor no-Error cae al fallback genérico', () => {
-    expect(mensajeErrorTarjeta('rareza')).toBe('No se pudo completar la operación.');
   });
 });

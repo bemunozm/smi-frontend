@@ -13,10 +13,10 @@ describe('homePathFor', () => {
     expect(homePathFor(ROLES.MANTENEDOR)).toBe('/');
   });
 
-  // `null` cubre tanto "sesión sin rol" como un rol que YA NO EXISTE (ver
-  // anexo "el operador deja de ser usuario de la plataforma" — `isRole()`
-  // angosta cualquier valor desconocido, incluido un snapshot viejo con
-  // `role: 'OPERADOR'`, a `null` antes de que llegue acá). Cae a `/`, igual
+  // `null` cubre tanto "sesión sin rol" como un rol que YA NO EXISTE
+  // (`isRole()` angosta cualquier valor desconocido, incluido un snapshot
+  // viejo con `role: 'OPERADOR'`, a `null` antes de que llegue acá). Cae a
+  // `/`, igual
   // que ADMIN/MANTENEDOR — `ProtectedRoute` lo termina de filtrar con su
   // `allowedRoles`, así que nunca queda dando vueltas: aterriza en
   // `/forbidden` en UN solo salto, nunca en loop (ver la prueba de

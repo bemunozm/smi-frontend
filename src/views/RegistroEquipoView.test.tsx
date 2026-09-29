@@ -129,7 +129,6 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     abiertasAnterior: [],
     cerradas: [TARJETA_CERRADA],
     enCurso: [TARJETA_ABIERTA],
-    isLoadingTarjetas: false,
     // Operador ya elegido + horómetro válido por defecto (equivale al
     // "listo para agregar"): los tests de guardas/deshabilitado pisan estos
     // campos explícitamente, ver la sección "guardas de Agregar equipo".
@@ -351,12 +350,12 @@ describe('RegistroEquipoView', () => {
   });
 
   /**
-   * Fase 5: el reporte de salida está conectado de verdad al outbox
+   * El reporte de salida está conectado de verdad al outbox
    * (`enviarReporte`) — la pantalla nunca debe afirmar una entrega que el
    * servidor no confirmó (`reporteEstado` deriva de datos, no de un
    * `useState` local, ver `hooks/useShiftRegister.ts`).
    */
-  describe('reporte de salida (Fase 5: conectado al outbox)', () => {
+  describe('reporte de salida (conectado al outbox)', () => {
     it('arranca "Sin enviar"', () => {
       renderView('desktop');
       expect(screen.getByText('Sin enviar')).toBeTruthy();
@@ -371,7 +370,7 @@ describe('RegistroEquipoView', () => {
     });
 
     /**
-     * Revisión QA (item 2): el frontend no puede saber si el destinatario
+     * El frontend no puede saber si el destinatario
      * extra (Sergio Torres) está configurado en el backend
      * (`SHIFT_REPORT_EXTRA_RECIPIENTS`, todavía pendiente del lado del
      * cliente) — la copia tiene que ser neutra y nunca prometer un

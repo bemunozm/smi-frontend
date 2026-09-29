@@ -61,7 +61,7 @@ describe('toDomainError', () => {
     expect(mensaje).toBe('Datos inválidos');
   });
 
-  it('un ZodError se traduce a "Respuesta inválida" con code INVALID_RESPONSE (Fase 5: para que el replay lo clasifique como negocio, no como red)', () => {
+  it('un ZodError se traduce a "Respuesta inválida" con code INVALID_RESPONSE (para que el replay lo clasifique como negocio, no como red)', () => {
     const schema = z.object({ id: z.string() });
     const result = schema.safeParse({});
     expect(result.success).toBe(false);

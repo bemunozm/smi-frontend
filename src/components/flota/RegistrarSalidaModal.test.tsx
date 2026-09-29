@@ -24,6 +24,7 @@ const OPEN_SHIFT: OpenShift = {
   turno: 'DIURNO',
   fecha: '2026-09-15T08:00:00.000Z',
   supervisorName: 'Marcela Pizarro',
+  shiftId: null,
 };
 
 function renderModal(openShift: OpenShift = OPEN_SHIFT, controlUnit: 'HOURS' | 'KM' = 'HOURS') {
@@ -166,6 +167,25 @@ describe('RegistrarSalidaModal', () => {
     expect(screen.queryByText(/Uso: 3/)).toBeNull();
     const guardar = screen.getByRole('button', { name: 'Registrar salida' });
     expect(guardar.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('sin shiftId (turno abierto solo desde Flota), no muestra el aviso de Registro de turno', () => {
+    renderModal();
+    expect(screen.queryByText(/Registro de turno/)).toBeNull();
+  });
+
+  it('con shiftId (tarjeta de Registro de turno), avisa que cerrar acá no registra litros ni foto', () => {
+    renderModal({ ...OPEN_SHIFT, shiftId: 'sh_1' });
+
+    expect(
+      screen.getByText(
+        /Esta tarjeta es del Registro de turno\. Cerrarla acá no registra litros ni la foto del surtidor/,
+      ),
+    ).toBeTruthy();
+    // El aviso no bloquea la acción — el backend sigue siendo el guardián
+    // real (409 salvo ADMIN).
+    incrementar('Horómetro total al terminar (h)', 8);
+    expect(screen.getByRole('button', { name: 'Registrar salida' }).hasAttribute('disabled')).toBe(false);
   });
 
   it('mientras la mutación está pendiente, Guardar y Cancelar quedan deshabilitados (evita doble submit)', () => {

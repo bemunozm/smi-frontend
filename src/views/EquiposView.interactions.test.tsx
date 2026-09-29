@@ -82,8 +82,7 @@ vi.mock('../api/UserAPI', () => ({
 }));
 
 // El picker de operador (`OperatorPicker`, dentro de `CamposEquipo`) sale
-// del catálogo propio, NO de `UserAPI` — se mockea `OperatorAPI` aparte (ver
-// anexo "el operador deja de ser usuario de la plataforma").
+// del catálogo propio, NO de `UserAPI` — se mockea `OperatorAPI` aparte.
 const { operatorListMock } = vi.hoisted(() => ({
   operatorListMock: vi.fn(),
 }));
@@ -386,13 +385,12 @@ describe('EquiposView — editar equipo', () => {
     await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_1' }));
     // El picker de operador sale del catálogo propio (`OperatorAPI.list`,
     // solo activos) — ya no filtra `UserAPI` por `role: 'OPERADOR'` (ese rol
-    // no existe más, ver anexo "el operador deja de ser usuario de la
-    // plataforma").
+    // no existe más).
     expect(operatorListMock).toHaveBeenCalledWith({ isActive: true });
     expect(userListMock).not.toHaveBeenCalledWith(expect.objectContaining({ role: 'OPERADOR' }));
   });
 
-  // Reproduce el bug reportado por QA: el operador ya asignado se desactivó
+  // El operador ya asignado se desactivó
   // (no aparece en el catálogo de activos, igual que el test de arriba "el
   // operador asignado hoy sigue visible..."), y el usuario cambia SOLO el
   // supervisor. Antes esto mandaba `operatorId` de todos modos (aunque no
@@ -600,7 +598,7 @@ describe('EquiposView — editar equipo', () => {
   // desmonta al cerrar) — antes, cancelar sin guardar no descartaba los
   // cambios de texto: `values` del `useForm` solo re-sincroniza cuando el
   // `equipo` en sí cambia, no cuando el usuario descarta su propia edición
-  // (Fix 1, review QA, mismo criterio que `CreateEquipoModal`).
+  // (mismo criterio que `CreateEquipoModal`).
   it('EditEquipoModal descarta los cambios de texto no guardados al cancelar y reabrir', async () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
@@ -626,7 +624,7 @@ describe('EquiposView — editar equipo', () => {
   // esperar su resultado, y el modal cerraba de inmediato (con el toast de
   // éxito de `updateEquipment` ya mostrado) — si la asignación fallaba (p.
   // ej. el operador perdió el rol → 400 de `assertUserWithRole`), el modal
-  // ya había cerrado y el cambio se perdía en silencio (Fix 2, review QA).
+  // ya había cerrado y el cambio se perdía en silencio.
   it('si la asignación falla al guardar la edición, el modal permanece abierto (no enmascara el error)', async () => {
     const OPERADOR = { id: 'op_1', name: 'Pedro Soto' };
     listMock.mockResolvedValue([EQUIPO]);
@@ -658,8 +656,7 @@ describe('EquiposView — editar equipo', () => {
   // El modal de crear es controlado y queda montado (no se desmonta al
   // cerrar) — antes, el `reset()` del form y de los pickers vivía SOLO en el
   // `onSuccess` de crear: cancelar sin crear dejaba código/marca/modelo y el
-  // operador elegido, y reaparecían "viejos" la próxima vez que se abría
-  // (Fix 1, review QA).
+  // operador elegido, y reaparecían "viejos" la próxima vez que se abría.
   it('CreateEquipoModal se resetea al cancelar y reabrir (no arrastra datos de un intento anterior)', async () => {
     listMock.mockResolvedValue([]);
     resumenMock.mockResolvedValue({

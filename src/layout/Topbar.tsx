@@ -61,7 +61,7 @@ export function Topbar() {
     if (key === 'logout') {
       // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
       // Cache Storage privado + navega — ver ese archivo para el porqué
-      // (SEGURIDAD M1, review QA del RFC R2-storage). Fase 5 (offline): se
+      // (SEGURIDAD M1, RFC R2-storage). Se
       // bloquea si `user.id` tiene operaciones sin sincronizar en el outbox
       // (realista solo para SUPERVISOR, que en la práctica vive en
       // `TerrenoLayout` — pasa el `userId` igual acá por si algún día un

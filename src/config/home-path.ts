@@ -8,10 +8,9 @@ import { ROLES, type Role } from '../types/roles';
  * - SUPERVISOR entra directo a Terreno (su única pantalla de trabajo);
  * - ADMIN/MANTENEDOR, al dashboard de escritorio.
  *
- * `role: null` (sesión sin rol reconocido — incluye un rol que YA NO EXISTE,
- * ver anexo "el operador deja de ser usuario de la plataforma": el catálogo
- * `Operator` es un CRUD aparte, sin acceso a la plataforma, así que ya no
- * hay un rol "sin módulos" que aterrizar) cae al dashboard, igual que
+ * `role: null` (sesión sin rol reconocido — incluye un rol que YA NO EXISTE:
+ * el catálogo `Operator` es un CRUD aparte, sin acceso a la plataforma, así
+ * que ya no hay un rol "sin módulos" que aterrizar) cae al dashboard, igual que
  * ADMIN/MANTENEDOR — `ProtectedRoute` lo termina de filtrar si no
  * corresponde, así nunca queda dando vueltas: entra directo a `/forbidden`
  * (nunca un loop, ver `home-path.test.ts`).

@@ -24,8 +24,7 @@ export const trabajoExtraFormSchema = z
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
     // `id` del catálogo de Operadores (ver `types/operator.ts`) — ya no texto
     // libre. El servidor guarda `operador` (el nombre) como snapshot a partir
-    // de este id; el cliente nunca manda ese campo (ver anexo "operador del
-    // catálogo en Trabajos extra + snapshot único").
+    // de este id; el cliente nunca manda ese campo.
     operatorId: z.string().min(1, 'Elegí el operador'),
     faena: z.string().min(1, 'Indicá la faena'),
     turno: z.enum(['DIURNO', 'NOCTURNO']),

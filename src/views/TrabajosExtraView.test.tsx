@@ -8,8 +8,7 @@ import { TrabajosExtraView } from './TrabajosExtraView';
 // pruebas de abajo siguen alimentando vía `qc.setQueryData`, mismo criterio
 // que `equipment`/`horometro`) — así el `mutate` real de
 // `useCreateTrabajoExtra` corre de verdad y se puede probar el flujo
-// completo vista → hook → API, incluido el mapeo de errores a toast (ver
-// anexo "operador del catálogo en Trabajos extra + snapshot único").
+// completo vista → hook → API, incluido el mapeo de errores a toast.
 const { createTrabajoExtraMock } = vi.hoisted(() => ({ createTrabajoExtraMock: vi.fn() }));
 
 vi.mock('../api/TrabajosExtraAPI', async (importOriginal) => {
@@ -223,8 +222,7 @@ describe('TrabajosExtraView', () => {
   /**
    * El operador dejó de ser texto libre: sale del catálogo propio
    * (`useOperators({ isActive: true })`), mismo `Selector` del kit de
-   * Terreno y mismo criterio que `RegistroEquipoView` — ver anexo "operador
-   * del catálogo en Trabajos extra + snapshot único".
+   * Terreno y mismo criterio que `RegistroEquipoView`.
    */
   it('el selector de operador ofrece el catálogo real (no texto libre)', () => {
     renderConRegistro();

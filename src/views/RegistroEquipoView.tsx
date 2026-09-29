@@ -205,13 +205,13 @@ export function RegistroEquipoView() {
     </Card>
   );
 
-  // --- Reporte de salida (Fase 5: conectado al outbox offline) --------------
+  // --- Reporte de salida (conectado al outbox offline) --------------
 
   /**
-   * Estilo por estado — restaurado tras la revisión de la Fase 5: mientras
-   * "enviado" era falso (Fase 4b, UI-only), usaba el mismo ámbar/`Clock` que
-   * "en cola" a propósito, para no insinuar una entrega que no había
-   * ocurrido. Ahora que el servidor lo confirma de verdad, cada estado
+   * Estilo por estado: mientras "enviado" no estaba conectado al servidor,
+   * usaba el mismo ámbar/`Clock` que "en cola" a propósito, para no insinuar
+   * una entrega que no había ocurrido. Ahora que el servidor lo confirma de
+   * verdad, cada estado
    * vuelve a tener su propio color — el mismo criterio que ya usa
    * `reporteChip` (éxito/amarillo/rojo), aplicado también al fondo del
    * panel y de la barra flotante. `'sin-enviar'` sigue aparte: usa el color
@@ -795,9 +795,9 @@ export function RegistroEquipoView() {
       />
 
       {/* El chip "Sin modo offline" de la maqueta se retira acá: el modo
-          offline ya existe (Fase 5) y su estado real se ve en el
-          `SyncStatus` del layout de Terreno — repetirlo acá sería
-          redundante o, peor, quedar desactualizado. */}
+          offline ya existe y su estado real se ve en el `SyncStatus` del
+          layout de Terreno — repetirlo acá sería redundante o, peor, quedar
+          desactualizado. */}
       <VistaHead titulo="Registro de equipo" />
 
       <VistaSplit

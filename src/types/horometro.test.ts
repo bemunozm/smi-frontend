@@ -17,8 +17,7 @@ describe('horometroFormSchema', () => {
   });
 
   // El operador ya no es texto libre: el cliente manda solo `operatorId` del
-  // catálogo (ver anexo "operador del catálogo en Trabajos extra + snapshot
-  // único") — sin él, el backend no tiene forma de validar ni derivar el
+  // catálogo — sin él, el backend no tiene forma de validar ni derivar el
   // snapshot `operador`.
   it('rechaza sin operatorId', () => {
     const r = horometroFormSchema.safeParse({

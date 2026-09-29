@@ -72,7 +72,7 @@ describe('logout', () => {
     const deleteMock = vi.fn().mockResolvedValue(true);
     const keysMock = vi
       .fn()
-      .mockResolvedValue(['smi-signed-files', 'smi-api', 'smi-uploads', 'workbox-precache-v2-https://smi.cl/']);
+      .mockResolvedValue(['smi-signed-files', 'smi-api', 'smi-example', 'workbox-precache-v2-https://smi.cl/']);
     vi.stubGlobal('caches', { keys: keysMock, delete: deleteMock });
     const navigate = vi.fn();
 
@@ -81,7 +81,7 @@ describe('logout', () => {
     expect(deleteMock).toHaveBeenCalledTimes(3);
     expect(deleteMock).toHaveBeenCalledWith('smi-signed-files');
     expect(deleteMock).toHaveBeenCalledWith('smi-api');
-    expect(deleteMock).toHaveBeenCalledWith('smi-uploads');
+    expect(deleteMock).toHaveBeenCalledWith('smi-example');
     expect(deleteMock).not.toHaveBeenCalledWith('workbox-precache-v2-https://smi.cl/');
     expect(navigate).toHaveBeenCalledWith('/login', { replace: true });
   });
@@ -113,7 +113,7 @@ describe('logout', () => {
   });
 
   /**
-   * Fase 5 (offline, RFC "Supervisión en Terreno" §Diseño → Offline): "logout()
+   * RFC "Supervisión en Terreno" §Diseño → Offline: "logout()
    * no borra el outbox y bloquea si hay pendientes". El candado se revisa
    * ANTES de `signOut()` — nada de la sesión se toca si el logout se bloquea.
    */

@@ -470,7 +470,7 @@ describe('EquipoDetalleView', () => {
   // Antes "Liberar" limpiaba los pickers a "Sin asignar" ANTES de que la
   // mutación resolviera; si fallaba, `onError` de `useAssignEquipment` solo
   // toastea (no invalida), así que los pickers quedaban mostrando "Sin
-  // asignar" aunque el server mantuviera la asignación (Fix 3, review QA).
+  // asignar" aunque el server mantuviera la asignación.
   it('si "Liberar" falla, los pickers siguen mostrando la asignación real (no se limpian de forma optimista)', async () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -551,7 +551,7 @@ describe('EquipoDetalleView', () => {
     fireEvent.click(opcion);
   }
 
-  // Reproduce el bug reportado por QA: `PATCH /equipment/:id/assignment`
+  // `PATCH /equipment/:id/assignment`
   // revalidaba SIEMPRE `operatorId` (aunque no cambiara) contra
   // `OperatorsService.assertActive` — un operador ya inactivo bloqueaba con
   // 409 `OPERATOR_INACTIVE` un guardado que solo tocaba el supervisor. Ahora
@@ -638,7 +638,7 @@ describe('EquipoDetalleView', () => {
   // Antes esto se decidía leyendo `inUse` (que el backend deriva de
   // `!!operator`): un equipo con supervisor asignado pero SIN operador
   // mostraba "Disponible" y el supervisor desaparecía de la ficha, aunque el
-  // picker de editar lo mostraba preseleccionado (Fix 4, review QA).
+  // picker de editar lo mostraba preseleccionado.
   it('muestra al supervisor aunque no haya operador asignado (no depende solo de "inUse")', () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -763,6 +763,7 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
     turno: 'NOCTURNO',
     fecha: '2026-08-06T20:00:00.000Z',
     supervisorName: 'Marcela Pizarro',
+    shiftId: null,
   };
 
   it('sin turno abierto: ofrece "Registrar entrada" y no muestra el banner de turno en curso', () => {

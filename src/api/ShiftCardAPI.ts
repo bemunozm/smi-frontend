@@ -14,7 +14,7 @@ import {
  * Abre una tarjeta de turno (Módulo A). Idempotente por `input.id` (UUID
  * generado en el CLIENTE, ver `lib/uuid.ts`): reintentar la MISMA request
  * devuelve la misma tarjeta en vez de fallar o duplicar — clave para el
- * flujo offline (Fase 5, `offline/replay.ts`). Los errores de negocio
+ * flujo offline (`offline/replay.ts`). Los errores de negocio
  * (`EQUIPMENT_BUSY`, `EQUIPMENT_NOT_OPERATIONAL`, `OPERATOR_INACTIVE`,
  * `ID_CONFLICT`, `INVALID_CAPTURE_TIME`) llegan con `code` — ver
  * `lib/api-error.ts#DomainError` y `hooks/useShiftCards.ts`.

@@ -67,8 +67,8 @@ describe('ShiftCardAPI.openCard', () => {
     };
     const result = await ShiftCardAPI.openCard(input);
 
-    // Tercer arg `undefined`: el `config` opcional (Fase 5, replay offline —
-    // ver `offline/replay.ts`) que acá no se manda.
+    // Tercer arg `undefined`: el `config` opcional (replay offline — ver
+    // `offline/replay.ts`) que acá no se manda.
     expect(postMock).toHaveBeenCalledWith('/api/shift-cards', input, undefined);
     expect(result).toEqual(CARD);
   });

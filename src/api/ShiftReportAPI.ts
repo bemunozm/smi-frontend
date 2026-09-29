@@ -10,9 +10,9 @@ import {
 } from '../types/shift';
 
 /**
- * Reporte de salida de turno (Módulo A, backend Fase 3). Idempotente por
+ * Reporte de salida de turno (Módulo A). Idempotente por
  * `input.id` (UUID generado en el CLIENTE, mismo criterio que
- * `ShiftCardAPI#openCard`) — clave para el outbox offline (Fase 5, ver
+ * `ShiftCardAPI#openCard`) — clave para el outbox offline (ver
  * `offline/outbox.ts#enqueueExitReport` / `offline/replay.ts`), que es el
  * ÚNICO llamador real: la vista nunca llama a esto directo (ver
  * `hooks/useShiftRegister.ts#enviarReporte`).

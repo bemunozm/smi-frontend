@@ -52,10 +52,9 @@ describe('HomeRedirect', () => {
   });
 
   // Integración con `ProtectedRoute` (mismo anidamiento que `routes.tsx`):
-  // un rol nulo (sesión sin rol reconocido, o un rol que ya no existe — ver
-  // anexo "el operador deja de ser usuario de la plataforma") aterriza en
-  // `/` vía `homePathFor`, pero `ProtectedRoute` lo rebota a `/forbidden` por
-  // su `allowedRoles`. Prueba que ese rebote es UN solo salto — nunca un
+  // un rol nulo (sesión sin rol reconocido, o un rol que ya no existe)
+  // aterriza en `/` vía `homePathFor`, pero `ProtectedRoute` lo rebota a
+  // `/forbidden` por su `allowedRoles`. Prueba que ese rebote es UN solo salto — nunca un
   // loop de redirects — y que el usuario termina viendo "Sin permiso", no
   // una pantalla en blanco ni el Dashboard.
   it('un rol nulo nunca queda en loop: aterriza en /forbidden en un solo salto', () => {

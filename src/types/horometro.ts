@@ -6,8 +6,7 @@ export const horometroFormSchema = z.object({
   // `id` del catálogo de Operadores (ver `types/operator.ts`) — obligatorio:
   // el servidor lo valida (`OperatorsService.assertActive`) y deriva
   // `operador` (el nombre, snapshot) a partir de él; el cliente ya no manda
-  // texto libre. Ver `components/flota/RegistrarEntradaModal.tsx` y el anexo
-  // "operador del catálogo en Trabajos extra + snapshot único".
+  // texto libre. Ver `components/flota/RegistrarEntradaModal.tsx`.
   operatorId: z.string().min(1, 'Seleccioná un operador'),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: nonNegNumber('Valor inválido'),

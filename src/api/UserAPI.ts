@@ -13,8 +13,7 @@ import {
 export interface UserFiltros {
   /** Puebla el picker de supervisor de Flota (`GET /api/users?role=SUPERVISOR`).
    * El operador ya no es un rol de usuario — su picker sale del catálogo
-   * propio (`useOperators`, ver anexo "el operador deja de ser usuario de la
-   * plataforma"). */
+   * propio (`useOperators`). */
   role?: Role;
 }
 

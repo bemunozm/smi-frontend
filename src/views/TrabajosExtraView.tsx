@@ -80,8 +80,7 @@ export function TrabajosExtraView() {
   const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
   const { data: lecturas = [] } = useHorometroList();
-  // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker` —
-  // ver anexo "operador del catálogo en Trabajos extra + snapshot único".
+  // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
   const { data: operadores = [] } = useOperators({ isActive: true });
   const crear = useCreateTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);

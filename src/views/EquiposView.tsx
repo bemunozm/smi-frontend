@@ -23,8 +23,6 @@ import {
   DeleteEquipoAlertDialog,
   EditEquipoModal,
   EquipoPhotoBanner,
-  idDesdeSentinel,
-  SIN_ASIGNAR,
 } from '../components/flota/EquipoEditDelete';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { FuelGauge } from '../components/flota/FuelGauge';
@@ -33,6 +31,7 @@ import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCar
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { StatusChip } from '../components/flota/StatusChip';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
 import {
   useAssignEquipment,
