@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
+import { seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { ReporteDiarioView } from './ReporteDiarioView';
 
 afterEach(cleanup);
@@ -16,62 +16,35 @@ const SECCIONES = {
   vueltasMinera: '4',
 };
 
-describe('calcularTotales', () => {
-  it('suma los camiones de las tres secciones', () => {
-    expect(calcularTotales(SECCIONES).camiones).toBe(15);
+/**
+ * El campo de cada sección es «vueltas por camión», no el total ya sumado.
+ * Y cada sección es su propio contador: cada tipo de camión tiene tarifa
+ * distinta (Acta N.° 004, R9), así que no hay un total que las sume.
+ */
+describe('vueltasDeSeccion', () => {
+  it('pondera las vueltas por la cantidad de camiones', () => {
+    expect(vueltasDeSeccion({ camiones: 8, vueltas: 6 })).toBe(48);
   });
 
-  /**
-   * El campo de cada sección es «vueltas por camión», no el total ya sumado:
-   * 8×6 + 4×5 + 3×4. Si alguien lo cambiara a una suma directa daría 15, que
-   * es justo el total de camiones — de ahí que las dos cifras se prueben por
-   * separado y con números que no se confundan entre sí.
-   */
-  it('pondera las vueltas por la cantidad de camiones de cada sección', () => {
-    expect(calcularTotales(SECCIONES).vueltas).toBe(80);
+  it('vale cero sin camiones', () => {
+    expect(vueltasDeSeccion({ camiones: 0, vueltas: 6 })).toBe(0);
+  });
+});
+
+describe('seccionesDelFormulario', () => {
+  it('lee las tres secciones en orden: internos, Mina Caleta, mineras', () => {
+    expect(seccionesDelFormulario(SECCIONES).map(vueltasDeSeccion)).toEqual([48, 20, 12]);
   });
 
   it('trata un campo vacío como cero en vez de NaN', () => {
-    const totales = calcularTotales({ ...SECCIONES, camionesMinera: '', vueltasMinera: '' });
-    expect(totales.camiones).toBe(12);
-    expect(totales.vueltas).toBe(68);
+    const [, , mineras] = seccionesDelFormulario({ ...SECCIONES, camionesMinera: '', vueltasMinera: '' });
+    expect(vueltasDeSeccion(mineras)).toBe(0);
   });
 
   /** El formulario guarda strings en formato es-CL: «1.200» son mil doscientos. */
   it('entiende el separador de miles es-CL', () => {
-    const totales = calcularTotales({
-      ...SECCIONES,
-      camionesInternos: '1.200',
-      vueltasInternos: '1',
-    });
-    expect(totales.camiones).toBe(1207);
-    expect(totales.vueltas).toBe(1232);
-  });
-});
-
-/**
- * La misma regla que `calcularTotales`, pero sobre secciones ya numéricas —
- * es la que usa el historial, donde los turnos pasados no vienen como texto
- * de formulario. Se prueba aparte para que el día que alguien cambie la
- * ponderación no quede aplicada en una mitad de la pantalla y no en la otra.
- */
-describe('totalesDeSecciones', () => {
-  const SECCIONES_NUMERICAS = [
-    { camiones: 5, vueltas: 6 },
-    { camiones: 3, vueltas: 5 },
-    { camiones: 2, vueltas: 4 },
-  ];
-
-  it('suma los camiones de todas las secciones', () => {
-    expect(totalesDeSecciones(SECCIONES_NUMERICAS).camiones).toBe(10);
-  });
-
-  it('pondera las vueltas por los camiones de cada sección', () => {
-    expect(totalesDeSecciones(SECCIONES_NUMERICAS).vueltas).toBe(53);
-  });
-
-  it('devuelve cero sin secciones', () => {
-    expect(totalesDeSecciones([])).toEqual({ camiones: 0, vueltas: 0 });
+    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: '1.200', vueltasInternos: '1' });
+    expect(vueltasDeSeccion(internos)).toBe(1200);
   });
 });
 
@@ -79,7 +52,7 @@ describe('ReporteDiarioView · producción del turno', () => {
   it('registra camiones y vueltas para cada una de las tres secciones', () => {
     render(<ReporteDiarioView />);
 
-    for (const seccion of ['Camiones internos', 'Camiones mina-caleta', 'Camiones minera']) {
+    for (const seccion of ['Camiones internos', 'Camiones Mina Caleta', 'Camiones mineras']) {
       expect(screen.getByText(seccion)).toBeTruthy();
     }
     expect(screen.getAllByText('Cantidad de camiones')).toHaveLength(3);
@@ -96,16 +69,35 @@ describe('ReporteDiarioView · producción del turno', () => {
     expect(screen.getAllByText('Faena Patillo')).toHaveLength(1);
   });
 
-  it('muestra el total de vueltas ponderado por los camiones de cada sección', () => {
+  /**
+   * R9: un contador por tipo de camión y ningún total que los sume. Con los
+   * valores iniciales del formulario: internos 5×5, Mina Caleta 18×3 y
+   * mineras 38×1.
+   */
+  it('lleva un contador de vueltas independiente por tipo de camión', () => {
     render(<ReporteDiarioView />);
 
-    expect(screen.getByText('Total camiones').parentElement?.textContent).toContain('15');
-    expect(screen.getByText('Total vueltas').parentElement?.textContent).toContain('80');
+    expect(screen.getByText('Internos').parentElement?.textContent).toContain('25');
+    expect(screen.getByText('Mina Caleta').parentElement?.textContent).toContain('54');
+    expect(screen.getByText('Mineras').parentElement?.textContent).toContain('38');
+    expect(screen.queryByText('Total vueltas')).toBeNull();
   });
 
-  it('cuenta las vueltas de las tres tolvas', () => {
+  it('recalcula el contador de la sección al cambiar sus camiones', () => {
     render(<ReporteDiarioView />);
 
+    const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(camionesInternos, { target: { value: '8' } });
+
+    expect(screen.getByText('Internos').parentElement?.textContent).toContain('40');
+  });
+
+  /** Acta N.° 004, punto 3: «vueltas por tolva» pasa a «Alimentación Planta PPE». */
+  it('registra la alimentación de la planta PPE por tolva', () => {
+    render(<ReporteDiarioView />);
+
+    expect(screen.getByText('Alimentación Planta PPE')).toBeTruthy();
+    expect(screen.queryByText('Vueltas por tolva')).toBeNull();
     for (const tolva of ['Tolva 1', 'Tolva 2', 'Tolva 3']) {
       expect(screen.getByText(tolva)).toBeTruthy();
     }
@@ -189,26 +181,29 @@ describe('ReporteDiarioView · historial en ventana', () => {
   it('no muestra los reportes anteriores hasta abrir la ventana', () => {
     render(<ReporteDiarioView />);
 
-    expect(screen.queryByText('Gonzalo Riquelme')).toBeNull();
+    expect(screen.queryByText('José Pérez')).toBeNull();
   });
 
   it('abre la ventana con los turnos anteriores', () => {
     abrirHistorial();
 
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getAllByText('Gonzalo Riquelme').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('José Pérez').length).toBeGreaterThan(0);
   });
 
   /**
-   * El turno del 22/09 noche son 5×6 + 3×5 + 2×4. Si el historial dejara de
-   * ponderar por camión mostraría 15, que es la suma cruda de las vueltas.
+   * El turno del 22/09 noche son internos 5×4, Mina Caleta 16×3 y mineras
+   * 34×1: un contador ponderado por tipo (20, 48 y 34), y nunca su suma (102),
+   * porque cada tipo se cobra con otra tarifa.
    */
-  it('pondera las vueltas de cada turno pasado en la lista', () => {
+  it('muestra las vueltas de cada turno pasado por tipo de camión, sin sumarlas', () => {
     abrirHistorial();
 
-    const tarjeta = screen.getByText('22/09 · NOCTURNO').closest('article');
-    expect(tarjeta?.textContent).toContain('53');
-    expect(tarjeta?.textContent).not.toContain('15');
+    const tarjeta = within(screen.getByText('22/09 · NOCTURNO').closest('article')!);
+    expect(tarjeta.getByText('Internos').parentElement?.textContent).toContain('20');
+    expect(tarjeta.getByText('Mina Caleta').parentElement?.textContent).toContain('48');
+    expect(tarjeta.getByText('Mineras').parentElement?.textContent).toContain('34');
+    expect(tarjeta.queryByText('102')).toBeNull();
   });
 
   it('abre el reporte completo del turno al pedir más detalle', () => {
@@ -221,7 +216,8 @@ describe('ReporteDiarioView · historial en ventana', () => {
 
     expect(ventana.getByRole('heading', { name: /Reporte del 22\/09\/2026 · NOCTURNO/ })).toBeTruthy();
     // Secciones, personal y plantas: el reporte entero, no solo la cabecera.
-    expect(ventana.getByText('Camiones mina-caleta')).toBeTruthy();
+    expect(ventana.getByText('Camiones Mina Caleta')).toBeTruthy();
+    expect(ventana.getByText('Alimentación Planta PPE')).toBeTruthy();
     expect(ventana.getByText('Nelson Cáceres')).toBeTruthy();
     expect(ventana.getByText('Rechazo a acopio')).toBeTruthy();
   });
@@ -233,5 +229,54 @@ describe('ReporteDiarioView · historial en ventana', () => {
 
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getAllByText('Ver más detalle').length).toBe(5);
+  });
+});
+
+/**
+ * Acta N.° 004, R13: un reporte ya enviado se corrige desde el historial,
+ * sin autorización pero avisando al administrador, y el detalle guarda quién
+ * cambió qué. Guardar sin tocar nada no es un cambio.
+ */
+describe('ReporteDiarioView · corregir un reporte enviado', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const abrirEdicion = () => {
+    render(<ReporteDiarioView />);
+    fireEvent.click(screen.getByText('Ver historial de reportes'));
+    fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Editar/ }));
+    return () => within(screen.getByRole('dialog'));
+  };
+
+  it('abre el reporte prellenado con el aviso al administrador', () => {
+    const ventana = abrirEdicion();
+
+    expect(ventana().getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
+    expect((ventana().getByLabelText('Jefe de turno transporte') as HTMLInputElement).value).toBe('Nelson Cáceres');
+  });
+
+  it('guarda la corrección y la deja en el historial de cambios', () => {
+    const ventana = abrirEdicion();
+
+    fireEvent.change(ventana().getByLabelText('Jefe de turno transporte'), { target: { value: 'Claudio Bravo' } });
+    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+
+    expect(ventana().getByText(/Cambio guardado. Se avisó al administrador./)).toBeTruthy();
+    // El detalle ya muestra el dato nuevo, y el historial el antes y el después.
+    expect(ventana().getAllByText('Claudio Bravo').length).toBeGreaterThan(0);
+    expect(ventana().getByText('Historial de cambios').parentElement?.textContent).toContain('1 cambio');
+    expect(ventana().getByText('Nelson Cáceres')).toBeTruthy();
+  });
+
+  it('guardar sin cambiar nada no agrega un cambio', () => {
+    const ventana = abrirEdicion();
+    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+
+    expect(ventana().queryByText(/Cambio guardado/)).toBeNull();
+    expect(ventana().getByText('Sin cambios desde que se registró.')).toBeTruthy();
   });
 });
