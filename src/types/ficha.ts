@@ -22,7 +22,7 @@ export type EventoFichaTipo = (typeof EVENTO_TIPOS)[number];
  * `meta` varía según `tipo` (distintas claves para HALLAZGO, HOROMETRO,
  * etc.) — se modela como record flexible en vez de una unión discriminada:
  * la timeline es de solo lectura y no necesita distinguir el shape en el
- * tipo, solo en el render (Fase 3).
+ * tipo, solo en el render.
  */
 export const EventoFichaSchema = z.object({
   id: z.string(),

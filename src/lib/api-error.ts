@@ -65,11 +65,29 @@ export class DomainError extends Error {
 export const OPERATOR_INACTIVE_MESSAGE = 'Ese operador ya no está activo. Elegí otro del catálogo.';
 
 /**
+ * Mensaje de un error de axios que nunca recibió respuesta (sin señal, DNS,
+ * timeout). Los módulos de oficina no tienen cola offline: en vez de quedar
+ * esperando en silencio, el guardado falla rápido con este aviso (ver
+ * `lib/query-client.ts`, `mutations.networkMode`).
+ */
+export const NETWORK_ERROR_MESSAGE = 'Sin señal: no se pudo guardar. Revisá la conexión e intentá de nuevo.';
+
+/** El mensaje habla de "guardar", así que solo aplica a requests que
+ * escriben — una lectura que no llegó (GET) conserva el fallback propio de
+ * su `api/<X>API.ts`. */
+function esMetodoDeEscritura(method: string | undefined): boolean {
+  return method != null && !['get', 'head', 'options'].includes(method.toLowerCase());
+}
+
+/**
  * Normaliza cualquier error capturado en un `api/<X>API.ts` a un `Error`
  * con mensaje claro, distinguiendo el origen:
  * - `ZodError`: el backend (o el mock) respondió pero el shape no calza
  *   con nuestro contrato (`types/<x>.ts`) — bug de contrato, no de red.
- * - Error de axios: prioriza el `message` descriptivo del backend
+ * - Error de axios sin respuesta (red caída) en una request que ESCRIBE:
+ *   `NETWORK_ERROR_MESSAGE`, sin `status`. En una lectura sin respuesta, el
+ *   fallback del caller.
+ * - Error de axios con respuesta: prioriza el `message` descriptivo del backend
  *   (`error.response.data.message`, p. ej. "User already exists"). Si no
  *   vino ninguno (caída de red, 500 sin body, etc.) usa `fallbackMessage`
  *   — NUNCA el `error.message` técnico de axios ("Request failed with
@@ -94,6 +112,12 @@ export function toDomainError(error: unknown, fallbackMessage: string): DomainEr
     return new DomainError(`Respuesta inválida: ${firstIssue}`, { code: 'INVALID_RESPONSE' });
   }
   if (axios.isAxiosError(error)) {
+    // Sin respuesta (red caída/timeout): `status` queda `undefined` a
+    // propósito — `offline/replay.ts#classify` depende de eso para tratarlo
+    // como transitorio y reintentar.
+    if (!error.response && esMetodoDeEscritura(error.config?.method)) {
+      return new DomainError(NETWORK_ERROR_MESSAGE);
+    }
     const backendMessage = extractBackendMessage(error.response?.data);
     return new DomainError(backendMessage ?? fallbackMessage, {
       code: extractBackendCode(error.response?.data),

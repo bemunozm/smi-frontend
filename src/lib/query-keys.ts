@@ -15,3 +15,20 @@
  * (upsert en caché tras cada operación sincronizada).
  */
 export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
+
+/**
+ * Listas de Hallazgos y Trabajos extra — las lee `hooks/useHallazgos.ts` /
+ * `hooks/useTrabajosExtra.ts` y las escribe `offline/replay.ts` (upsert del
+ * registro recién sincronizado + invalidación al terminar el run).
+ */
+export const HALLAZGOS_KEY = ['hallazgos'] as const;
+export const TRABAJOS_EXTRA_KEY = ['trabajos-extra'] as const;
+
+/** Lecturas de horómetro: de ahí sale la pista "equipo ocupado" de Trabajos
+ * extra, que `hooks/usePrepareOffline.ts` precarga. */
+export const HOROMETRO_KEY = ['horometro'] as const;
+
+/** Raíz del árbol de equipos; la lista sin filtros (catálogo completo) vive
+ * exactamente en esta key. `offline/replay.ts` la lee para completar el
+ * código de equipo de un registro sincronizado sin importar `hooks/`. */
+export const EQUIPMENT_KEY = ['equipment'] as const;

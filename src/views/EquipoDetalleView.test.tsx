@@ -10,7 +10,7 @@ import type { EquipmentDetail } from '../types/equipment';
 // Rol controlable por test — decide si se monta `AsignacionForm` (acción
 // asignar/liberar, gateada a ADMIN/SUPERVISOR igual que `updateStatus` en
 // `EquiposView`) y las nuevas acciones de cabecera (Cambiar estado/Editar
-// equipo/Eliminar equipo, §1 de la auditoría de fidelidad).
+// equipo/Eliminar equipo).
 let currentUserResult: {
   user: { id: string; name: string; email: string; role: string };
   role: string;
@@ -313,7 +313,7 @@ describe('EquipoDetalleView', () => {
     // `FichaEquipoClientePC.dc.html`, que repite `this.uso(e)` en ambos
     // lugares).
     expect(screen.getAllByText('1.200 h').length).toBe(2);
-    // KPI nuevo de Fase 2: combustible actual, ya no solo en la sección de abajo.
+    // KPI de combustible actual, además de la sección de abajo.
     expect(screen.getAllByText('72%').length).toBeGreaterThan(0);
     // Los 4 contadores por dominio que ya traía la ficha se conservan.
     expect(screen.getByText('Hallazgos')).toBeTruthy();
@@ -655,9 +655,8 @@ describe('EquipoDetalleView', () => {
   });
 });
 
-// Acciones nuevas de la cabecera (auditoría de fidelidad Flota/Equipos §1):
-// Cambiar estado, Editar equipo, Eliminar equipo — antes solo existía
-// "Registrar lectura". Reusan los mismos hooks/mutaciones que `EquiposView`
+// Acciones de la cabecera: Cambiar estado, Editar equipo, Eliminar equipo
+// (además de "Registrar lectura"). Reusan los mismos hooks/mutaciones que `EquiposView`
 // (`useUpdateEquipmentStatus`, `EditEquipoModal`, `DeleteEquipoAlertDialog`
 // importados de `components/flota/EquipoEditDelete`).
 describe('EquipoDetalleView — acciones de cabecera', () => {

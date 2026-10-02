@@ -1,12 +1,15 @@
 import { useState } from 'react';
 
 import { EquipmentAPI } from '../api/EquipmentAPI';
+import { listHallazgos } from '../api/HallazgosAPI';
+import { listHorometro } from '../api/HorometroAPI';
 import { OperatorAPI } from '../api/OperatorAPI';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
+import { listTrabajosExtra } from '../api/TrabajosExtraAPI';
 import { EQUIPMENT_KEY } from './useEquipment';
 import { OPERATORS_KEY } from './useOperators';
 import { queryClient } from '../lib/query-client';
-import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
+import { HALLAZGOS_KEY, HOROMETRO_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 
 /** `(display-mode: standalone)` cubre Android/desktop; `navigator.standalone`
  * es la señal equivalente (no estándar) que usa Safari/iOS — ninguna de las
@@ -25,11 +28,17 @@ export interface PrepResult {
   equipment: PrepItemResult;
   operators: PrepItemResult;
   shiftCards: PrepItemResult;
+  hallazgos: PrepItemResult;
+  trabajosExtra: PrepItemResult;
+  /** Lecturas de horómetro: de ahí sale la pista "equipo ocupado" de
+   * Trabajos extra. */
+  horometro: PrepItemResult;
   installed: boolean;
 }
 
 /** Descarga en paralelo lo que el arranque en frío sin señal necesita
- * (equipos, operadores activos, tarjetas propias) bajo las MISMAS query
+ * (equipos, operadores activos, tarjetas propias, hallazgos, trabajos extra y
+ * horómetro) bajo las MISMAS query
  * keys que ya usan `useEquipment()`/`useOperators({isActive:true})`/
  * `useShiftCardsMine()` — así el caché de TanStack queda tibio Y, de paso,
  * la petición GET real pasa por el Service Worker, que la guarda en el
@@ -51,7 +60,7 @@ async function prepararParaUsoSinSenal(): Promise<PrepResult> {
   // checklist tiene que devolver un resultado rápido — reintentar con espera
   // antes de decirle al supervisor "esto no se pudo precargar" es peor que
   // fallar rápido y dejar que vuelva a tocar el botón.
-  const [equipment, operators, shiftCards] = await Promise.allSettled([
+  const [equipment, operators, shiftCards, hallazgos, trabajosExtra, horometro] = await Promise.allSettled([
     queryClient.fetchQuery({ queryKey: EQUIPMENT_KEY, queryFn: () => EquipmentAPI.list({}), retry: false }),
     queryClient.fetchQuery({
       queryKey: [...OPERATORS_KEY, { isActive: true }],
@@ -59,6 +68,9 @@ async function prepararParaUsoSinSenal(): Promise<PrepResult> {
       retry: false,
     }),
     queryClient.fetchQuery({ queryKey: SHIFT_CARDS_MINE_KEY, queryFn: ShiftCardAPI.listMine, retry: false }),
+    queryClient.fetchQuery({ queryKey: HALLAZGOS_KEY, queryFn: listHallazgos, retry: false }),
+    queryClient.fetchQuery({ queryKey: TRABAJOS_EXTRA_KEY, queryFn: listTrabajosExtra, retry: false }),
+    queryClient.fetchQuery({ queryKey: HOROMETRO_KEY, queryFn: listHorometro, retry: false }),
   ]);
 
   return {
@@ -66,6 +78,9 @@ async function prepararParaUsoSinSenal(): Promise<PrepResult> {
     equipment: equipment.status === 'fulfilled' ? 'ok' : 'error',
     operators: operators.status === 'fulfilled' ? 'ok' : 'error',
     shiftCards: shiftCards.status === 'fulfilled' ? 'ok' : 'error',
+    hallazgos: hallazgos.status === 'fulfilled' ? 'ok' : 'error',
+    trabajosExtra: trabajosExtra.status === 'fulfilled' ? 'ok' : 'error',
+    horometro: horometro.status === 'fulfilled' ? 'ok' : 'error',
     installed: isStandalonePwa(),
   };
 }
@@ -78,7 +93,7 @@ export interface UsePrepareOfflineResult {
 
 /**
  * Checklist "Preparar para uso sin señal" de `components/terreno/SyncStatus.tsx`
- * — extraído a un hook aparte (Anexo 3, revisión final) para que la lógica de
+ * — extraído a un hook aparte para que la lógica de
  * precarga se pueda testear sin levantar el componente completo.
  */
 export function usePrepareOffline(): UsePrepareOfflineResult {
