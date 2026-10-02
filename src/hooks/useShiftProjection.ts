@@ -99,8 +99,7 @@ export interface UseShiftProjectionResult {
 /**
  * Proyección offline-first: servidor (`tarjetasServidor`) + outbox
  * (`ops`), merge por id, MÁS los equipos disponibles para abrir una tarjeta
- * nueva (R1: operativos y sin turno abierto). Sub-hook de `useShiftRegister`
- * (Anexo 3, revisión final).
+ * nueva (R1: operativos y sin turno abierto). Sub-hook de `useShiftRegister`.
  */
 export function useShiftProjection({
   ctx,

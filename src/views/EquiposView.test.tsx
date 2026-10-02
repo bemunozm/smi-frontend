@@ -200,8 +200,7 @@ describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
   });
 });
 
-// R3 — vista diferenciada por clase (auditoría de fidelidad Flota/Equipos):
-// el listado no mostraba la patente en absoluto; ahora un equipo PESADO se
+// R3 — vista diferenciada por clase: un equipo PESADO se
 // identifica de un vistazo por su patente, y uno LIVIANO por
 // patente+marca+modelo (`equipoIdentidad`, `flota-colors.ts`).
 describe('EquiposView — R3 identidad por clase', () => {
@@ -315,7 +314,6 @@ describe('EquiposView — indicador de documentos', () => {
 });
 
 // La ficha de detalle (`EquipoDetalleView`) tiene su propio archivo de tests
-// — `EquipoDetalleView.test.tsx` — desde la Fase 2 (fidelidad con el
-// artefacto): creció lo suficiente (KPIs, estado de uso, actividad reciente)
-// como para justificar separarla de este archivo, mismo criterio que el
+// — `EquipoDetalleView.test.tsx`: tiene suficiente superficie (KPIs, estado
+// de uso, actividad reciente) como para separarla de este archivo, mismo criterio que el
 // resto de las vistas de Flota/Terreno (`CombustibleView.test.tsx`, etc.).

@@ -45,7 +45,7 @@ export interface UseExitReportStateResult {
 
 /**
  * Reporte de salida del turno actual, conectado al outbox — sub-hook de
- * `useShiftRegister` (Anexo 3, revisión final).
+ * `useShiftRegister`.
  */
 export function useExitReportState({
   tarjetasServidor,

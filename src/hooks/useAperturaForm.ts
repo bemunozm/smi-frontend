@@ -35,8 +35,8 @@ export interface UseAperturaFormResult {
 }
 
 /**
- * Formulario de apertura de tarjeta — sub-hook de `useShiftRegister` (Anexo
- * 3, revisión final). `abrir()` SIEMPRE encola vía `enqueueOpenCard` (online
+ * Formulario de apertura de tarjeta — sub-hook de `useShiftRegister`.
+ * `abrir()` SIEMPRE encola vía `enqueueOpenCard` (online
  * u offline, un único camino) — nunca llama a la API directo.
  */
 export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormParams): UseAperturaFormResult {

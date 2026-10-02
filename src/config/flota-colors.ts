@@ -124,7 +124,7 @@ export function turnoLabel(turno: string): string {
  * Tonos por umbral de combustible (≤20% peligro, ≤50% advertencia, resto
  * éxito) — calca `FlotaClientePC.dc.html#fuelColor`. Fuente única para
  * `FuelGauge` (barra chica de tabla/tarjeta) y `EquipoDetalleView` (barra
- * grande de "Nivel actual" + badge del KPI de combustible, Fase 2): mismo
+ * grande de "Nivel actual" + badge del KPI de combustible): mismo
  * umbral, solo cambian los tokens de color entre una barra sólida y un
  * badge "soft". Las clases van completas (no interpoladas) porque Tailwind
  * necesita verlas literales en el código para generarlas.

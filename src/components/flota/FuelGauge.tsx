@@ -3,12 +3,12 @@ import { FUEL_TONE_CLASSES, fuelTone } from '../../config/flota-colors';
 /**
  * Barra de combustible (nivel % del último `RegistroHorometro`). Vive en
  * `components/flota/` (no local a `EquiposView`) porque la ficha de equipo
- * (Fase 2) va a necesitar el mismo indicador — ver `types/equipment.ts:
+ * necesita el mismo indicador — ver `types/equipment.ts:
  * currentFuelLevel`.
  *
  * `fuelTone`/`FUEL_TONE_CLASSES` (umbral ≤20% peligro, ≤50% advertencia,
  * resto éxito — calca `FlotaClientePC.dc.html#fuelColor`) viven en
- * `config/flota-colors.ts`, no acá: `EquipoDetalleView` (Fase 2) también los
+ * `config/flota-colors.ts`, no acá: `EquipoDetalleView` también los
  * necesita (barra grande de "Nivel actual" + badge del KPI de combustible) y
  * un archivo que solo exporta el componente mantiene el fast refresh de Vite
  * intacto (oxlint `react(only-export-components)`).
