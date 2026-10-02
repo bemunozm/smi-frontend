@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ZodError, z } from 'zod';
 
-import { DomainError, extractBackendCode, toDomainError } from './api-error';
+import { DomainError, NETWORK_ERROR_MESSAGE, extractBackendCode, toDomainError } from './api-error';
 
 /** Error "de axios" tal como lo entrega el backend — mismo helper que usan
  * `BranchAPI.test.ts`/`OperatorAPI.test.ts`. */
@@ -76,5 +76,45 @@ describe('toDomainError', () => {
   it('un error desconocido cae al fallback', () => {
     const error = toDomainError('algo raro', 'Fallback amigable.');
     expect(error.message).toBe('Fallback amigable.');
+  });
+});
+
+describe('toDomainError — sin respuesta (red caída / sin señal)', () => {
+  /** Un `AxiosError` real de una caída de red: sin `response`, con el
+   * `config.method` de la request que no llegó. */
+  function sinRespuesta(method: string): Error {
+    return Object.assign(new Error('Network Error'), { isAxiosError: true, config: { method } });
+  }
+
+  it.each(['post', 'put', 'patch', 'delete', 'POST'])(
+    '%s sin respuesta: mensaje honesto de "Sin señal", sin status ni code',
+    (method) => {
+      const error = toDomainError(sinRespuesta(method), 'No se pudo guardar el equipo.');
+
+      expect(error.message).toBe(NETWORK_ERROR_MESSAGE);
+      expect(error.message).toBe('Sin señal: no se pudo guardar. Revisá la conexión e intentá de nuevo.');
+      // `status` undefined: `offline/replay.ts#classify` lo sigue tratando como transitorio.
+      expect(error.status).toBeUndefined();
+      expect(error.code).toBeUndefined();
+    },
+  );
+
+  it('una LECTURA (get) sin respuesta conserva el fallback del caller: el mensaje habla de "guardar"', () => {
+    const error = toDomainError(sinRespuesta('get'), 'No se pudo obtener la lista de equipos.');
+
+    expect(error.message).toBe('No se pudo obtener la lista de equipos.');
+  });
+
+  it('un error con respuesta del servidor NO usa el mensaje de red, aunque sea una escritura', () => {
+    const conRespuesta = Object.assign(new Error('Request failed'), {
+      isAxiosError: true,
+      config: { method: 'post' },
+      response: { status: 500, data: {} },
+    });
+
+    const error = toDomainError(conRespuesta, 'No se pudo guardar el equipo.');
+
+    expect(error.message).toBe('No se pudo guardar el equipo.');
+    expect(error.status).toBe(500);
   });
 });
