@@ -3,13 +3,20 @@ import { Chip } from '@heroui/react';
 
 import { useMarkRead } from '../../hooks/useNotificaciones';
 import { notificacionTipoConfig } from '../../config/notificacion-colors';
+import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { relativeTime } from '../../lib/relative-time';
-import type { Notificacion } from '../../types/notificacion';
+import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
 
 function equipoIdFrom(data: Notificacion['data']): string | null {
   if (!data) return null;
   const { equipoId } = data;
   return typeof equipoId === 'string' && equipoId.length > 0 ? equipoId : null;
+}
+
+function reportIdFrom(data: Notificacion['data']): string | null {
+  if (!data) return null;
+  const { reportId } = data;
+  return typeof reportId === 'string' && reportId.length > 0 ? reportId : null;
 }
 
 export interface NotificationItemProps {
@@ -33,6 +40,18 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
 
   const handleClick = (): void => {
     markRead.mutate(notificacion.id);
+
+    // `shift.exit-report` (RFC "Supervisión en Terreno" §Backend): no tiene
+    // una pantalla propia — abre directo el PDF (302 a la URL firmada, ver
+    // `api/ShiftReportAPI.ts#fileUrl`), no una navegación interna con
+    // `navigate()`. Se resuelve ANTES que `equipoIdFrom` porque
+    // `data.equipoId` no aplica a este tipo.
+    const reportId = notificacion.tipo === NOTIF_TIPOS.SHIFT_EXIT_REPORT ? reportIdFrom(notificacion.data) : null;
+    if (reportId) {
+      window.open(ShiftReportAPI.fileUrl(reportId), '_blank', 'noopener');
+      onAfterClick?.();
+      return;
+    }
 
     const equipoId = equipoIdFrom(notificacion.data);
     if (equipoId) navigate(`/equipos/${equipoId}/ficha`);

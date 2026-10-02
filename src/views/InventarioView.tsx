@@ -44,7 +44,7 @@ import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useItems } from '../hooks/useInventory';
-import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
 import type { Branch } from '../types/branch';
@@ -229,12 +229,12 @@ function ItemsList({
   onOpen: (item: InventoryItem, view: ItemAction) => void;
   onEdit: (item: InventoryItem) => void;
 }) {
-  const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const isDesktop = useMediaQuery(TABLE_LAYOUT_QUERY);
   const isAll = branchId === ALL_BRANCHES;
 
   if (items.length === 0) return <EmptyState />;
 
-  // Tarjetas en teléfono Y en tablet; la tabla aparece recién en escritorio.
+  // Tarjetas en teléfono Y en tablet; la tabla aparece recién en pantallas anchas (ver TABLE_LAYOUT_QUERY).
   if (!isDesktop) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -498,7 +498,7 @@ export function InventarioView() {
         value={tab}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />

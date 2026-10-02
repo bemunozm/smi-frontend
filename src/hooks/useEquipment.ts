@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
+import { DomainError } from '../lib/api-error';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import type {
   AssignEquipmentInput,
   CreateEquipmentInput,
@@ -9,7 +11,10 @@ import type {
   UpdateEquipmentInput,
 } from '../types/equipment';
 
-const EQUIPMENT_KEY = ['equipment'] as const;
+// Exportada: `components/terreno/SyncStatus.tsx` la usa para refetchear el
+// catálogo al "Preparar para uso sin señal" (RFC "Supervisión en Terreno"
+// §Diseño → Offline), sin repetir el literal `['equipment']` a mano.
+export const EQUIPMENT_KEY = ['equipment'] as const;
 
 /**
  * Lista de equipos (Flota). Fuente única del dominio — la usan tanto las
@@ -105,6 +110,22 @@ export function useUpdateEquipmentStatus() {
 }
 
 /**
+ * Mensaje amigable para un error de `EquipmentAPI.assign` — el operador es
+ * ahora un id del catálogo propio (`OperatorsService.assertActive`), así que
+ * guardar puede fallar con 409 `OPERATOR_INACTIVE` (mapeado en `lib/error-messages.ts`,
+ * compartido con Tarjetas de turno y Trabajos extra) o 404 (dejó de existir
+ * en el catálogo). El 404 no trae un `code` propio del backend — se
+ * distingue por `status`, no por texto (que podría no ser ni claro ni estar
+ * en español), así que ese caso queda como contexto propio de este caller.
+ */
+function mensajeErrorAsignacion(error: unknown): string {
+  if (error instanceof DomainError && error.status === 404) {
+    return 'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.';
+  }
+  return mensajeErrorOperacion(error, 'No se pudo actualizar la asignación.');
+}
+
+/**
  * Asigna/libera operador y supervisor (`PATCH /equipment/:id/assignment`).
  * Mutación aparte de `useUpdateEquipment` porque es un endpoint distinto en
  * el backend (gate de rol propio) y porque `EquipoActionsMenu`/`CamposEquipo`
@@ -121,7 +142,7 @@ export function useAssignEquipment() {
       toast.success('Asignación actualizada', { description: equipment.internalCode });
     },
     onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar la asignación.');
+      toast.danger(mensajeErrorAsignacion(error));
     },
   });
 }

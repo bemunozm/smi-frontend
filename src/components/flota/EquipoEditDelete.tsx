@@ -17,10 +17,12 @@ import {
 } from '@heroui/react';
 
 import { uploadFile } from '../../api/UploadsAPI';
+import { OperatorPicker, type OperatorOption } from '../operators/OperatorPicker';
 import { useBranch, useBranches } from '../../hooks/useBranches';
 import { useAssignEquipment, useDeleteEquipment, useUpdateEquipment } from '../../hooks/useEquipment';
 import { useUsers } from '../../hooks/useUsers';
 import { CONTROL_UNIT_OPTIONS, EQUIPMENT_CLASS_OPTIONS, EQUIPMENT_STATUS_OPTIONS } from '../../config/flota-colors';
+import { buildAssignmentDiff, SIN_ASIGNAR, SIN_SUCURSAL } from '../../lib/equipment-assignment';
 import { ROLES } from '../../types/roles';
 import {
   EquipmentFormSchema,
@@ -40,19 +42,11 @@ import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from './modal-styles';
  * este módulo entre ambas vistas. `CreateEquipoModal` se queda en
  * `EquiposView.tsx` (la ficha no crea equipos), pero reusa `CamposEquipo`
  * de acá, así los campos siguen siendo una sola fuente.
+ *
+ * Los sentinels de picker (`SIN_ASIGNAR`/`SIN_SUCURSAL`) y `buildAssignmentDiff`
+ * viven en `lib/equipment-assignment.ts` — de ahí los importa este archivo y
+ * también `EquiposView`/`EquipoDetalleView`, sin duplicarlos.
  */
-
-/** `null` (sin sucursal/asignar) no es un `id` válido para `Select` de
- * HeroUI — sentinels para los pickers de este form, compartidos por
- * `EquiposView` (`CreateEquipoModal`) y `EquipoDetalleView`. */
-export const SIN_SUCURSAL = '__sin_sucursal__';
-export const SIN_ASIGNAR = '__sin_asignar__';
-
-/** Resuelve el sentinel del picker al id real (o `null`) que espera
- * `AssignEquipmentInput`. */
-export function idDesdeSentinel(value: string): string | null {
-  return value === SIN_ASIGNAR ? null : value;
-}
 
 /**
  * Banner de foto del equipo — header visual del modal de crear/editar (§2 de
@@ -205,6 +199,10 @@ interface CamposProps {
   onOperatorIdChange: (id: string) => void;
   supervisorId: string;
   onSupervisorIdChange: (id: string) => void;
+  /** Operador HOY asignado al equipo que se está editando (`undefined` en
+   * creación) — se lo pasa tal cual a `OperatorPicker#currentAssignee` para
+   * que siga viéndose aunque ya esté inactivo (ver ese componente). */
+  currentOperator?: OperatorOption | null;
 }
 
 /**
@@ -222,6 +220,7 @@ export function CamposEquipo({
   onOperatorIdChange,
   supervisorId,
   onSupervisorIdChange,
+  currentOperator = null,
 }: CamposProps) {
   // El selector de sucursal base solo debe ofrecer sucursales activas.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
@@ -232,9 +231,9 @@ export function CamposEquipo({
   const opcionesSucursal =
     sucursalActual && !yaEstaEnActivas ? [...(sucursalesActivas ?? []), sucursalActual] : (sucursalesActivas ?? []);
 
-  // Pickers de asignación — operador (rol OPERADOR) y supervisor (rol
-  // SUPERVISOR); cada uno cachea aparte gracias al filtro de `useUsers`.
-  const { data: operadores } = useUsers({ role: ROLES.OPERADOR });
+  // Picker de supervisor (rol SUPERVISOR, `useUsers`) — el de operador sale
+  // del catálogo propio (`OperatorPicker`): el operador ya no es un rol de
+  // usuario.
   const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
 
   return (
@@ -530,27 +529,12 @@ export function CamposEquipo({
       <section className="flex flex-col gap-3 border-t border-separator pt-4">
         <p className="label">Asignación</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <Select fullWidth value={operatorId} onChange={(value) => value && onOperatorIdChange(String(value))}>
-            <Label>Operador</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id={SIN_ASIGNAR} textValue="Sin operador asignado">
-                  Sin operador asignado
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                {(operadores ?? []).map((operador) => (
-                  <ListBox.Item key={operador.id} id={operador.id} textValue={operador.name}>
-                    {operador.name}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+          <OperatorPicker
+            allowsUnassign
+            currentAssignee={currentOperator}
+            value={operatorId === SIN_ASIGNAR ? null : operatorId}
+            onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
+          />
 
           <Select fullWidth value={supervisorId} onChange={(value) => value && onSupervisorIdChange(String(value))}>
             <Label>Supervisor a cargo</Label>
@@ -694,15 +678,16 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                   input: toUpdateEquipmentPayload(values, photoKey),
                 });
 
-                const operatorIdFinal = idDesdeSentinel(operatorId);
-                const supervisorIdFinal = idDesdeSentinel(supervisorId);
-                const cambioAsignacion =
-                  operatorIdFinal !== (equipo.operator?.id ?? null) ||
-                  supervisorIdFinal !== (equipo.supervisor?.id ?? null);
-                if (cambioAsignacion) {
+                // Solo manda la(s) clave(s) que de verdad cambiaron respecto
+                // de la asignación actual del equipo — ver `buildAssignmentDiff`
+                // (evita revalidar contra el catálogo un campo que el usuario
+                // nunca tocó, p. ej. un operador ya inactivo cuando solo se
+                // cambió el supervisor).
+                const assignmentDiff = buildAssignmentDiff(equipo, operatorId, supervisorId);
+                if (Object.keys(assignmentDiff).length > 0) {
                   await assignEquipment.mutateAsync({
                     id: equipo.id,
-                    input: { operatorId: operatorIdFinal, supervisorId: supervisorIdFinal },
+                    input: assignmentDiff,
                   });
                 }
 
@@ -733,6 +718,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                     <CamposEquipo
                       control={control}
                       currentHomeBranchId={equipo.homeBranchId}
+                      currentOperator={equipo.operator}
                       errors={errors}
                       internalCodeEditable={false}
                       onOperatorIdChange={setOperatorId}

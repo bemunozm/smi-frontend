@@ -36,6 +36,14 @@ vi.mock('../../hooks/useUsers', () => ({
   useUsers: () => ({ data: [] }),
 }));
 
+// El picker de operador (`OperatorPicker`, dentro de `CamposEquipo`) sale
+// del catálogo propio — se mockea igual que `useUsers` arriba, para que este
+// test siga aislado de la red (sin esto, `useOperators` pegaría de verdad a
+// `OperatorAPI.list` vía axios en cada render).
+vi.mock('../../hooks/useOperators', () => ({
+  useOperators: () => ({ data: [], isPending: false }),
+}));
+
 const uploadFileMock = vi.fn();
 vi.mock('../../api/UploadsAPI', () => ({
   uploadFile: (...args: unknown[]) => uploadFileMock(...args),

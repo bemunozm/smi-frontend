@@ -15,6 +15,7 @@ import { turnoDe } from '../lib/turno';
 import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
+import { useOperators } from '../hooks/useOperators';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
@@ -79,6 +80,8 @@ export function TrabajosExtraView() {
   const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
   const { data: lecturas = [] } = useHorometroList();
+  // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
+  const { data: operadores = [] } = useOperators({ isActive: true });
   const crear = useCreateTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
@@ -91,7 +94,7 @@ export function TrabajosExtraView() {
    */
   const vacio = (): Partial<TrabajoExtraFormInput> => ({
     equipoId: '',
-    operador: '',
+    operatorId: '',
     faena: 'Patillo',
     turno: turnoDe(new Date()),
     actividades: [],
@@ -178,8 +181,14 @@ export function TrabajosExtraView() {
                 }))}
               />
             </Campo>
-            <Campo label="Operador" hint={errors.operador?.message}>
-              <Input placeholder="Nombre y apellido" {...register('operador')} />
+            <Campo label="Operador" hint={errors.operatorId?.message}>
+              <Selector
+                etiqueta="Operador"
+                placeholder="Elegí el operador"
+                valor={watch('operatorId') ?? ''}
+                onChange={(operatorId) => setValue('operatorId', operatorId, { shouldValidate: true })}
+                opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
+              />
             </Campo>
           </div>
 

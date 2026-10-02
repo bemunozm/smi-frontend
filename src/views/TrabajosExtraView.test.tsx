@@ -1,13 +1,39 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
 import { TrabajosExtraView } from './TrabajosExtraView';
 
+// Se mockea solo `createTrabajoExtra` (no `listTrabajosExtra`, que las
+// pruebas de abajo siguen alimentando vía `qc.setQueryData`, mismo criterio
+// que `equipment`/`horometro`) — así el `mutate` real de
+// `useCreateTrabajoExtra` corre de verdad y se puede probar el flujo
+// completo vista → hook → API, incluido el mapeo de errores a toast.
+const { createTrabajoExtraMock } = vi.hoisted(() => ({ createTrabajoExtraMock: vi.fn() }));
+
+vi.mock('../api/TrabajosExtraAPI', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/TrabajosExtraAPI')>();
+  return { ...actual, createTrabajoExtra: createTrabajoExtraMock };
+});
+
+const { toastDangerMock } = vi.hoisted(() => ({ toastDangerMock: vi.fn() }));
+vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
+
 afterEach(cleanup);
+
+const OPERADOR = {
+  id: 'op_1',
+  name: 'Rodrigo Paredes',
+  rut: null,
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 const REGISTRO = {
   id: 'r1',
   equipoId: 'e1',
+  operatorId: 'op_1',
   operador: 'Juan Rojas',
   faena: 'Rajo Norte',
   turno: 'DIURNO',
@@ -27,6 +53,7 @@ function renderConRegistro() {
   qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
   qc.setQueryData(['trabajos-extra'], [REGISTRO]);
   qc.setQueryData(['horometro'], []);
+  qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
   return render(
     <QueryClientProvider client={qc}>
       <TrabajosExtraView />
@@ -34,7 +61,31 @@ function renderConRegistro() {
   );
 }
 
+/** Completa el formulario con valores válidos — opcionalmente sin elegir
+ * operador, para probar la validación de ese campo en particular. */
+function completarFormularioValido({ conOperador = true }: { conOperador?: boolean } = {}) {
+  fireEvent.click(screen.getByLabelText('Equipo'));
+  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-003/ }));
+
+  if (conOperador) {
+    fireEvent.click(screen.getByLabelText('Operador'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: OPERADOR.name }));
+  }
+
+  fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
+  fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '112' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Soltar material' }));
+  fireEvent.change(screen.getByLabelText('Descripción de la tarea'), {
+    target: { value: 'Carga de material extra' },
+  });
+}
+
 describe('TrabajosExtraView', () => {
+  beforeEach(() => {
+    createTrabajoExtraMock.mockReset();
+    toastDangerMock.mockClear();
+  });
+
   afterEach(() => vi.useRealTimers());
 
   it('renderiza con datos sin lanzar', () => {
@@ -110,6 +161,7 @@ describe('TrabajosExtraView', () => {
         { id: 'h2', equipoId: 'e1', valorInicial: 50, valorFinal: 62 },
       ],
     );
+    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
 
     render(
       <QueryClientProvider client={qc}>
@@ -143,6 +195,7 @@ describe('TrabajosExtraView', () => {
     qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
     qc.setQueryData(['trabajos-extra'], []);
     qc.setQueryData(['horometro'], []);
+    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
 
     render(
       <QueryClientProvider client={qc}>
@@ -164,5 +217,78 @@ describe('TrabajosExtraView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Otro' }));
     expect(screen.getByLabelText(/otra actividad/i)).toBeTruthy();
+  });
+
+  /**
+   * El operador dejó de ser texto libre: sale del catálogo propio
+   * (`useOperators({ isActive: true })`), mismo `Selector` del kit de
+   * Terreno y mismo criterio que `RegistroEquipoView`.
+   */
+  it('el selector de operador ofrece el catálogo real (no texto libre)', () => {
+    renderConRegistro();
+
+    fireEvent.click(screen.getByLabelText('Operador'));
+
+    const lista = within(screen.getByRole('listbox'));
+    expect(lista.getByRole('option', { name: OPERADOR.name })).toBeTruthy();
+  });
+
+  /** El historial sigue leyendo el snapshot `operador` (texto), no el
+   * catálogo — así un registro sigue siendo legible aunque el operador que
+   * lo hizo se haya borrado o desactivado después. */
+  it('el historial sigue mostrando el nombre del operador (snapshot)', () => {
+    renderConRegistro();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+
+    expect(within(screen.getByRole('dialog')).getByText('Juan Rojas')).toBeTruthy();
+  });
+
+  it('no deja enviar sin elegir un operador: muestra el error y no llama a la API', async () => {
+    renderConRegistro();
+
+    completarFormularioValido({ conOperador: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() => expect(screen.getByText('Elegí el operador')).toBeTruthy());
+    expect(createTrabajoExtraMock).not.toHaveBeenCalled();
+  });
+
+  it('al guardar, manda operatorId del operador elegido y no manda operador', async () => {
+    createTrabajoExtraMock.mockResolvedValueOnce({ ...REGISTRO, id: 'r2' });
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() => expect(createTrabajoExtraMock).toHaveBeenCalledTimes(1));
+    const payload = createTrabajoExtraMock.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      equipoId: 'e1',
+      operatorId: 'op_1',
+      horometroInicial: 100,
+      horometroFinal: 112,
+      actividades: ['SOLTAR_MATERIAL'],
+      descripcion: 'Carga de material extra',
+    });
+    expect(payload.operador).toBeUndefined();
+  });
+
+  // El operador es un `operatorId` validado contra el catálogo
+  // (`OperatorsService.assertActive`, backend): guardar puede fallar con 409
+  // `OPERATOR_INACTIVE` si se desactivó entre que se abrió el formulario y
+  // se guardó — mismo texto que `hooks/useShiftCards.ts`/`hooks/useEquipment.ts`
+  // (ver `lib/api-error.ts#OPERATOR_INACTIVE_MESSAGE`), no el mensaje técnico
+  // del backend.
+  it('un 409 OPERATOR_INACTIVE al guardar muestra un toast claro', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(
+      new DomainError('Operator op_1 is inactive', { code: 'OPERATOR_INACTIVE', status: 409 }),
+    );
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() => expect(toastDangerMock).toHaveBeenCalledWith(OPERATOR_INACTIVE_MESSAGE));
   });
 });

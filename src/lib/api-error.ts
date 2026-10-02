@@ -16,6 +16,55 @@ export function extractBackendMessage(data: unknown): string | undefined {
 }
 
 /**
+ * Extrae `code` del body `{ data, message, code? }` — el clasificador de
+ * negocio opcional que homogeniza `HttpExceptionFilter` (backend, ver
+ * `smi-backend/src/common/filters/http-exception.filter.ts`) SOLO cuando
+ * quien lanzó la excepción lo puso explícito (ej. `new
+ * ConflictException({ message, code: 'EQUIPMENT_BUSY' })`). `undefined` en
+ * cualquier otro caso — nunca se inventa a partir del `message`.
+ */
+export function extractBackendCode(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null || !('code' in data)) {
+    return undefined;
+  }
+  const raw = (data as { code?: unknown }).code;
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined;
+}
+
+/**
+ * Error de dominio que arma `toDomainError`. Sigue siendo un `Error` común
+ * — mismo `.message`, mismo `instanceof Error` — así que los ~40 callers
+ * existentes de `toDomainError` (que solo leen `.message`) no ven ningún
+ * cambio. Además lleva, cuando corresponde, `code` (el clasificador de
+ * negocio del backend, ver `extractBackendCode`) y `status` (el HTTP status
+ * de la respuesta) — para el caller que SÍ necesita diferenciar casos de
+ * negocio sin volver a parsear `.message` (ver `hooks/useShiftCards.ts`,
+ * Módulo A de Supervisión en Terreno).
+ */
+export class DomainError extends Error {
+  readonly code?: string;
+  readonly status?: number;
+
+  constructor(message: string, options?: { code?: string; status?: number }) {
+    super(message);
+    this.name = 'DomainError';
+    this.code = options?.code;
+    this.status = options?.status;
+  }
+}
+
+/**
+ * Mensaje único para el 409 `OPERATOR_INACTIVE` — lo puede devolver
+ * cualquier endpoint que valida el operador contra el catálogo propio
+ * (`OperatorsService.assertActive`, backend): Tarjetas de turno
+ * (`hooks/useShiftCards.ts`), asignación de equipos (`hooks/useEquipment.ts`)
+ * y Trabajos extra (`hooks/useTrabajosExtra.ts`) comparten el mismo caso de
+ * negocio y no tenían por qué mostrar tres redacciones distintas del mismo
+ * error.
+ */
+export const OPERATOR_INACTIVE_MESSAGE = 'Ese operador ya no está activo. Elegí otro del catálogo.';
+
+/**
  * Normaliza cualquier error capturado en un `api/<X>API.ts` a un `Error`
  * con mensaje claro, distinguiendo el origen:
  * - `ZodError`: el backend (o el mock) respondió pero el shape no calza
@@ -32,17 +81,27 @@ export function extractBackendMessage(data: unknown): string | undefined {
  * no reescribe `error.message` precisamente para que esta sea la única
  * lógica de mensajes en todo el frontend.
  */
-export function toDomainError(error: unknown, fallbackMessage: string): Error {
+export function toDomainError(error: unknown, fallbackMessage: string): DomainError {
   if (error instanceof ZodError) {
     const firstIssue = error.issues[0]?.message ?? 'formato inesperado';
-    return new Error(`Respuesta inválida: ${firstIssue}`);
+    // `code: 'INVALID_RESPONSE'`: sin esto,
+    // `offline/replay.ts#classify` no tenía forma de distinguir esto de un
+    // error de red (mismo `status: undefined`) — un reintento automático de
+    // una respuesta que el servidor SÍ procesó (ej. un `openCard` replayado
+    // cuyo 200 de vuelta no calza con el schema) volvía a fallar exactamente
+    // igual cada vez, trabando la cola entera para siempre en vez de quedar
+    // en `needs_attention` y dejar avanzar el resto.
+    return new DomainError(`Respuesta inválida: ${firstIssue}`, { code: 'INVALID_RESPONSE' });
   }
   if (axios.isAxiosError(error)) {
     const backendMessage = extractBackendMessage(error.response?.data);
-    return new Error(backendMessage ?? fallbackMessage);
+    return new DomainError(backendMessage ?? fallbackMessage, {
+      code: extractBackendCode(error.response?.data),
+      status: error.response?.status,
+    });
   }
   if (error instanceof Error) {
-    return new Error(error.message);
+    return new DomainError(error.message);
   }
-  return new Error(fallbackMessage);
+  return new DomainError(fallbackMessage);
 }

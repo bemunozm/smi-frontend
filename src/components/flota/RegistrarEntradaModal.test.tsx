@@ -3,11 +3,25 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { RegistrarEntradaModal } from './RegistrarEntradaModal';
+import type { Operator } from '../../types/operator';
+
+const OPERATOR: Operator = {
+  id: 'op_1',
+  name: 'Juan Pérez',
+  rut: '12345678-5',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 const mutateMock = vi.fn();
 let isPending = false;
 vi.mock('../../hooks/useHorometro', () => ({
   useCreateHorometro: () => ({ mutate: mutateMock, isPending }),
+}));
+
+vi.mock('../../hooks/useOperators', () => ({
+  useOperators: () => ({ data: [OPERATOR], isPending: false }),
 }));
 
 afterEach(cleanup);
@@ -29,8 +43,17 @@ function renderModal(equipoId = 'eq_1', controlUnit: 'HOURS' | 'KM' = 'HOURS') {
   return { onOpenChange, qc, ...utils };
 }
 
-function llenarOperador(nombre = 'Juan Pérez') {
-  fireEvent.change(screen.getByPlaceholderText('Nombre y apellido'), { target: { value: nombre } });
+/** Selecciona el operador de prueba desde el `OperatorPicker` — el trigger se
+ * ubica por clase (no por rol/nombre: su nombre accesible termina
+ * resolviendo al label del campo, `aria-labelledby` gana sobre `aria-label`,
+ * ver `components/operators/OperatorPicker.test.tsx`) y se busca en todo
+ * `document`, no en el `container` de `render()`: `Modal.Backdrop` porta su
+ * contenido a `document.body` (React Portal), fuera del árbol devuelto. */
+function elegirOperador(nombre = 'Juan Pérez') {
+  const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+  fireEvent.click(trigger);
+  const opcion = screen.getByRole('option', { name: new RegExp(nombre) });
+  fireEvent.click(opcion);
 }
 
 /** El registro es manual (sin foto/OCR) — usa el stepper del `NumberField`,
@@ -46,15 +69,15 @@ describe('RegistrarEntradaModal', () => {
     isPending = false;
   });
 
-  it('el botón guardar está deshabilitado mientras no haya operador', () => {
+  it('el botón guardar está deshabilitado mientras no haya operador seleccionado', () => {
     renderModal();
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     expect(guardar.hasAttribute('disabled')).toBe(true);
   });
 
-  it('el botón guardar se habilita con solo cargar el operador — no requiere foto', () => {
+  it('el botón guardar se habilita al elegir un operador — no requiere foto', () => {
     renderModal();
-    llenarOperador();
+    elegirOperador();
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     expect(guardar.hasAttribute('disabled')).toBe(false);
   });
@@ -69,9 +92,9 @@ describe('RegistrarEntradaModal', () => {
     expect(screen.getByText('Odómetro total al iniciar (km)')).toBeTruthy();
   });
 
-  it('guarda con el payload esperado a partir de la carga manual, sin fotoUrl (sin nivel de combustible tocado, no lo manda)', async () => {
+  it('guarda con el payload esperado a partir de la selección del operador, con operatorId y sin operador/fotoUrl (sin nivel de combustible tocado, no lo manda)', async () => {
     const { onOpenChange } = renderModal();
-    llenarOperador();
+    elegirOperador();
     incrementar('Horómetro total al iniciar (h)', 3);
 
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
@@ -82,10 +105,13 @@ describe('RegistrarEntradaModal', () => {
     const [payload, options] = mutateMock.mock.calls[0];
     expect(payload).toMatchObject({
       equipoId: 'eq_1',
-      operador: 'Juan Pérez',
+      operatorId: 'op_1',
       turno: 'DIURNO',
       valorInicial: 3,
     });
+    // El servidor deriva `operador` (el nombre) a partir de `operatorId` — el
+    // cliente ya no lo manda.
+    expect(payload.operador).toBeUndefined();
     // ENTRADA: nunca manda `valorFinal` — así el registro queda como turno
     // abierto (ver `types/horometro.ts`).
     expect(payload.valorFinal).toBeUndefined();
@@ -102,7 +128,7 @@ describe('RegistrarEntradaModal', () => {
 
   it('si el usuario sí ingresa un nivel de combustible, lo incluye en el payload', async () => {
     renderModal();
-    llenarOperador();
+    elegirOperador();
     incrementar('Nivel de combustible (%, opcional)');
 
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
@@ -116,7 +142,7 @@ describe('RegistrarEntradaModal', () => {
 
   it('Cancelar limpia el estado — reabrir el mismo modal para otro equipo no arrastra el operador/lectura anterior', () => {
     const { onOpenChange, qc, rerender } = renderModal('eq_1');
-    llenarOperador();
+    elegirOperador();
     incrementar('Horómetro total al iniciar (h)', 3);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -145,7 +171,6 @@ describe('RegistrarEntradaModal', () => {
       </QueryClientProvider>,
     );
 
-    expect((screen.getByPlaceholderText('Nombre y apellido') as HTMLInputElement).value).toBe('');
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     expect(guardar.hasAttribute('disabled')).toBe(true);
   });
@@ -154,7 +179,7 @@ describe('RegistrarEntradaModal', () => {
     isPending = true;
 
     renderModal();
-    llenarOperador();
+    elegirOperador();
 
     // Con `isPending` el botón muestra un spinner en vez del texto "Registrar
     // entrada" (ver el render-prop `{ isPending }` del `Button`), así que acá
@@ -179,7 +204,7 @@ describe('RegistrarEntradaModal', () => {
     });
 
     const { onOpenChange } = renderModal();
-    llenarOperador();
+    elegirOperador();
 
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     fireEvent.click(guardar);

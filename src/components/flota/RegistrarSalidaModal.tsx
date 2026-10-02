@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { TriangleAlert } from 'lucide-react';
 import { Button, Chip, FieldError, Label, Modal, NumberField, Spinner } from '@heroui/react';
 
 import { useCerrarHorometro } from '../../hooks/useHorometro';
@@ -58,6 +59,14 @@ interface RegistrarSalidaModalProps {
  * backend rechaza con 404 (el turno ya no existe), 409 (ya está cerrado) o
  * 400 (`valorFinal` menor que `valorInicial`) — los tres llegan tal cual vía
  * el toast de error de `useCerrarHorometro`.
+ *
+ * Si `openShift.shiftId` no es `null`, esta tarjeta es del Registro de turno
+ * (RFC "Supervisión en Terreno") — cerrarla desde acá no pasa por ese flujo
+ * (no pide litros ni foto del surtidor) y, si el supervisor tiene un cierre
+ * guardado sin señal para la misma tarjeta, ese cierre queda rechazado al
+ * sincronizar (`ALREADY_CLOSED`/`SHIFT_CARD_CLOSE_ELSEWHERE`, ver
+ * `lib/error-messages.ts`). Se avisa con un banner; el backend sigue siendo
+ * el guardián real (409 salvo ADMIN), así que el botón no se deshabilita.
  */
 export function RegistrarSalidaModal({
   equipoLabel,
@@ -224,6 +233,16 @@ export function RegistrarSalidaModal({
                   </NumberField>
                 )}
               />
+
+              {openShift.shiftId != null && (
+                <div className="flex items-start gap-2.5 rounded-xl bg-[var(--warning-soft)] px-3.5 py-3 text-[13px] text-[var(--warning-soft-foreground)]">
+                  <TriangleAlert className="mt-0.5 h-[18px] w-[18px] shrink-0" />
+                  <span>
+                    Esta tarjeta es del Registro de turno. Cerrarla acá no registra litros ni la foto del surtidor, y
+                    si el supervisor tiene el cierre guardado sin señal, ese cierre quedará rechazado.
+                  </span>
+                </div>
+              )}
             </form>
           </Modal.Body>
           <Modal.Footer>

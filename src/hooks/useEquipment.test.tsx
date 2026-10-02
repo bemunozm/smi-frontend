@@ -32,6 +32,8 @@ vi.mock('@heroui/react', () => ({
   toast: { success: vi.fn(), danger: vi.fn() },
 }));
 
+import { toast } from '@heroui/react';
+import { DomainError } from '../lib/api-error';
 import {
   useAssignEquipment,
   useCreateEquipment,
@@ -197,6 +199,51 @@ describe('useAssignEquipment', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment'] });
+  });
+
+  // El operador es ahora un id del catálogo propio (`OperatorsService.
+  // assertActive`): guardar puede fallar con 409 `OPERATOR_INACTIVE` (se
+  // desactivó entre que se abrió el form y se guardó) o 404 (dejó de existir
+  // en el catálogo) — ambos casos deben mostrar un toast claro, no el texto
+  // técnico de axios.
+  it('un 409 OPERATOR_INACTIVE muestra un toast claro en vez del mensaje crudo del backend', async () => {
+    assignMock.mockRejectedValueOnce(
+      new DomainError('Operator op_1 is inactive', { code: 'OPERATOR_INACTIVE', status: 409 }),
+    );
+    const queryClient = new QueryClient();
+
+    const { result } = renderHook(() => useAssignEquipment(), { wrapper: withQueryClient(queryClient) });
+
+    result.current.mutate({ id: 'eq_1', input: { operatorId: 'op_1', supervisorId: null } });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(toast.danger).toHaveBeenCalledWith('Ese operador ya no está activo. Elegí otro del catálogo.');
+  });
+
+  it('un 404 (operador que ya no existe) muestra un toast claro, sin depender del texto del backend', async () => {
+    assignMock.mockRejectedValueOnce(new DomainError('Not Found', { status: 404 }));
+    const queryClient = new QueryClient();
+
+    const { result } = renderHook(() => useAssignEquipment(), { wrapper: withQueryClient(queryClient) });
+
+    result.current.mutate({ id: 'eq_1', input: { operatorId: 'op_borrado', supervisorId: null } });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(toast.danger).toHaveBeenCalledWith(
+      'El operador o supervisor elegido ya no existe. Actualizá la página e intentá de nuevo.',
+    );
+  });
+
+  it('otros errores muestran el mensaje del backend tal cual (p. ej. EQUIPMENT_BUSY, que ya es claro)', async () => {
+    assignMock.mockRejectedValueOnce(new DomainError('El equipo ya tiene un turno abierto.', { code: 'EQUIPMENT_BUSY' }));
+    const queryClient = new QueryClient();
+
+    const { result } = renderHook(() => useAssignEquipment(), { wrapper: withQueryClient(queryClient) });
+
+    result.current.mutate({ id: 'eq_1', input: { operatorId: 'op_1', supervisorId: null } });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(toast.danger).toHaveBeenCalledWith('El equipo ya tiene un turno abierto.');
   });
 });
 
