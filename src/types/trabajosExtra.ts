@@ -53,6 +53,14 @@ export const trabajoExtraFormSchema = z
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
 export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
+/** Body de `POST /api/trabajos-extra` y payload del outbox: el formulario
+ * validado + `id` (clave de idempotencia, uuid v4 del cliente) + `capturedAt`
+ * (hora del dispositivo). */
+export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
+  id: string;
+  capturedAt: string;
+}
+
 export interface TrabajoExtraordinario {
   id: string;
   equipoId: string;

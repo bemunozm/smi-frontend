@@ -17,6 +17,25 @@ export const hallazgoFormSchema = z.object({
 
 export type HallazgoForm = z.infer<typeof hallazgoFormSchema>;
 
+/**
+ * Lo que se guarda en el outbox al registrar un hallazgo: `id` es la clave de
+ * idempotencia (uuid v4 del cliente) y `capturedAt` la hora del dispositivo.
+ * La foto no viaja acá — se sube aparte y su key se agrega al mandar el POST
+ * (ver `CreateHallazgoBody`).
+ */
+export interface CreateHallazgoInput {
+  id: string;
+  equipoId: string;
+  descripcion: string;
+  prioridad: HallazgoForm['prioridad'];
+  capturedAt: string;
+}
+
+/** Body real de `POST /api/hallazgos`. */
+export interface CreateHallazgoBody extends CreateHallazgoInput {
+  fotoKey?: string;
+}
+
 export interface Hallazgo {
   id: string;
   equipoId: string;

@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 import { cerrarHorometro, createHorometro, listHorometro } from '../api/HorometroAPI';
+import { HOROMETRO_KEY as KEY } from '../lib/query-keys';
 import type { CerrarHorometroInput } from '../types/horometro';
-
-const KEY = ['horometro'];
 
 export function useHorometroList() {
   return useQuery({ queryKey: KEY, queryFn: listHorometro });

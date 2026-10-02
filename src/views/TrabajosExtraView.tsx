@@ -9,15 +9,16 @@ import {
   actividadLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
-  type TrabajoExtraordinario,
 } from '../types/trabajosExtra';
 import { turnoDe } from '../lib/turno';
-import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
+import { useRegistrarTrabajoExtra } from '../hooks/useTrabajosExtra';
+import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
 import { useOperators } from '../hooks/useOperators';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   Boton,
   Calculado,
@@ -78,27 +79,36 @@ const FAENAS = [
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
-  const { data: registros = [] } = useTrabajosExtraList();
+  const { registros } = useTrabajosExtraProjection();
   const { data: lecturas = [] } = useHorometroList();
   // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
   const { data: operadores = [] } = useOperators({ isActive: true });
-  const crear = useCreateTrabajoExtra();
+  const { registrar, isGuardando } = useRegistrarTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
+  const [detalle, setDetalle] = useState<TrabajoExtraProyectado | null>(null);
 
   /**
    * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
    * regla que Registro de equipo), no siempre en DIURNO: de noche el valor
    * por defecto quedaba mal y había que acordarse de cambiarlo. Sigue siendo
    * editable, porque un trabajo se puede cargar después de terminado.
+   *
+   * Los campos de texto y los horómetros van explícitos en `''`: `reset()` de
+   * react-hook-form solo limpia el DOM de los campos que aparecen en el
+   * objeto — sin ellos, tras guardar quedaba la descripción y los horómetros
+   * del trabajo anterior en pantalla.
    */
   const vacio = (): Partial<TrabajoExtraFormInput> => ({
     equipoId: '',
     operatorId: '',
     faena: 'Patillo',
     turno: turnoDe(new Date()),
+    horometroInicial: '',
+    horometroFinal: '',
     actividades: [],
     otraActividad: '',
+    descripcion: '',
+    observaciones: '',
   });
 
   /**
@@ -138,10 +148,10 @@ export function TrabajosExtraView() {
   const fin = Number(watch('horometroFinal')) || 0;
   const totalHoras = fin > ini ? fin - ini : null;
 
-  const onSubmit = (values: TrabajoExtraForm) =>
-    crear.mutate(values, {
-      onSuccess: () => reset(vacio()),
-    });
+  const onSubmit = async (values: TrabajoExtraForm) => {
+    const guardado = await registrar(values);
+    if (guardado) reset(vacio());
+  };
 
   const formulario = (
     <form onSubmit={handleSubmit(onSubmit)}>
@@ -279,8 +289,8 @@ export function TrabajosExtraView() {
             <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
           </Campo>
 
-          <Boton ancho type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar trabajo'}
+          <Boton ancho type="submit" disabled={isGuardando}>
+            {isGuardando ? 'Guardando…' : 'Registrar trabajo'}
             <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
         </Form>
@@ -288,7 +298,7 @@ export function TrabajosExtraView() {
     </form>
   );
 
-  const codigo = (r: TrabajoExtraordinario) => r.equipo?.internalCode ?? r.equipoId;
+  const codigo = (r: TrabajoExtraProyectado) => r.equipo?.internalCode ?? r.equipoId;
 
   const lista =
     registros.length === 0 ? (
@@ -320,7 +330,10 @@ export function TrabajosExtraView() {
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
-              <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
+              <td className={`${TD} whitespace-nowrap`}>
+                {r.operador}
+                {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+              </td>
               <td className={`${TD} tabular text-right font-semibold`}>{fmtNum(r.totalHoras)} h</td>
               <td className={`${TD} text-right`}>
                 <button
@@ -347,6 +360,7 @@ export function TrabajosExtraView() {
               <Chip tono="neutral">{r.faena}</Chip>
             </div>
             <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
             <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
               <span>
                 {fmtDate(r.fecha)} · {r.turno}
@@ -366,6 +380,8 @@ export function TrabajosExtraView() {
       <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
         <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
       </Boton>
+
+      {detalle.sinSincronizar && <MarcaSinSincronizar requiereAtencion={detalle.requiereAtencion} />}
 
       <Cifras
         items={[

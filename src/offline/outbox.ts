@@ -1,7 +1,16 @@
-import { db, pendingStatusFor, type CloseCardOp, type OutboxOp } from './db';
+import {
+  db,
+  pendingStatusFor,
+  type CloseCardOp,
+  type CreateHallazgoOp,
+  type CreateTrabajoExtraOp,
+  type OutboxOp,
+} from './db';
 import { compressPhoto } from './photo';
 import { requestSync } from './replay';
+import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
+import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 function now(): number {
   return Date.now();
@@ -103,6 +112,71 @@ export async function enqueueExitReport(userId: string, input: SendExitReportInp
 }
 
 /**
+ * Encola un hallazgo, con foto opcional. Mismo criterio que
+ * `enqueueCloseCard`: la foto se comprime ANTES de la transacción y la fila
+ * de `photos` + la operación se escriben juntas, así nunca queda una foto
+ * sin operación ni una operación `pending_upload` sin foto. El id de la foto
+ * es el del hallazgo (relación 1:1). Sin foto, la operación nace `pending`.
+ */
+export async function enqueueCreateHallazgo(
+  userId: string,
+  input: CreateHallazgoInput,
+  photo?: File,
+): Promise<void> {
+  const compressed = photo ? await compressPhoto(photo) : undefined;
+  const timestamp = now();
+  const base = {
+    id: input.id,
+    type: 'createHallazgo' as const,
+    v: 1 as const,
+    userId,
+    payload: input,
+    attempts: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  if (!compressed) {
+    const op: CreateHallazgoOp = { ...base, status: 'pending' };
+    await db.outbox.put(op);
+    requestSync();
+    return;
+  }
+
+  await db.transaction('rw', db.outbox, db.photos, async () => {
+    await db.photos.put({
+      id: input.id,
+      data: compressed.data,
+      mime: compressed.mime,
+      name: compressed.name,
+      createdAt: timestamp,
+    });
+    const op: CreateHallazgoOp = { ...base, status: 'pending_upload', photoId: input.id };
+    await db.outbox.put(op);
+  });
+  requestSync();
+}
+
+/** Encola un trabajo extraordinario (sin foto). `input.id` es el id de la
+ * operación — mismo criterio que las demás. */
+export async function enqueueCreateTrabajoExtra(userId: string, input: CreateTrabajoExtraInput): Promise<void> {
+  const timestamp = now();
+  const op: CreateTrabajoExtraOp = {
+    id: input.id,
+    type: 'createTrabajoExtra',
+    v: 1,
+    userId,
+    payload: input,
+    status: 'pending',
+    attempts: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  await db.outbox.put(op);
+  requestSync();
+}
+
+/**
  * Reintenta una operación en `needs_attention` (acción "Reintentar" de
  * `SyncStatus`) — vuelve al estado pendiente que le corresponde y limpia el
  * último error, así no queda un mensaje viejo mientras el nuevo intento
@@ -129,7 +203,8 @@ export async function retryOp(id: string, userId: string): Promise<void> {
 
 /**
  * Descarta una operación (acción "Descartar" de `SyncStatus`, con
- * confirmación en la UI) — borra también su foto si es un cierre, para no
+ * confirmación en la UI) — borra también su foto si es un cierre o un
+ * hallazgo con adjunto, para no
  * dejar una fila huérfana en `photos`.
  *
  * Descartar un `openCard` arrastra con él a cualquier `closeCard` que
@@ -146,7 +221,7 @@ export async function discardOp(id: string, userId: string): Promise<void> {
   const op = await db.outbox.get(id);
   if (!op || op.userId !== userId) return;
   await db.transaction('rw', db.outbox, db.photos, async () => {
-    if (op.type === 'closeCard') {
+    if ((op.type === 'closeCard' || op.type === 'createHallazgo') && op.photoId) {
       await db.photos.delete(op.photoId);
     }
     if (op.type === 'openCard') {

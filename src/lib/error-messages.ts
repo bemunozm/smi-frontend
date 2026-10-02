@@ -18,7 +18,8 @@ import type { ErrorCode } from '../types/error-codes';
  */
 export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   OPERATOR_INACTIVE: OPERATOR_INACTIVE_MESSAGE,
-  ID_CONFLICT: 'Ya existe una tarjeta con ese identificador. Reintentá la acción.',
+  ID_CONFLICT: 'Ya existe un registro con ese identificador. Descartá este registro en Sincronización y volvé a crearlo.',
+  EQUIPMENT_ON_SHIFT: 'Ese equipo tiene un turno abierto: no puede registrar trabajo extra hasta cerrarlo.',
   INVALID_CAPTURE_TIME: 'La hora del registro no es válida — revisá la hora del equipo.',
   // Cierre en cola desde Registro de turno cuya tarjeta ya cerró otra
   // persona (ej. el administrador, desde Flota) antes de que la
@@ -33,8 +34,8 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   TMP_KEY_EXPIRED: 'La foto expiró antes de guardarse — volvé a tomarla y reintentá.',
   INVALID_SHIFT_DATE: 'La fecha del turno no es válida — revisá la fecha y la hora del equipo.',
   REPORT_RATE_LIMITED: 'Se mandaron demasiados reportes seguidos — esperá unos minutos y reintentá.',
-  // Cliente: ver `offline/replay.ts#uploadClosePhoto`/`lib/api-error.ts#toDomainError`.
-  PHOTO_MISSING: 'Falta la foto guardada para este cierre — descartalo y volvé a cerrar la tarjeta.',
+  // Cliente: ver `offline/replay.ts#uploadOpPhoto`/`lib/api-error.ts#toDomainError`.
+  PHOTO_MISSING: 'Falta la foto guardada de este registro — descartalo y volvé a registrarlo.',
   INVALID_RESPONSE: 'Respuesta inesperada del servidor — reintentá más tarde o avisá si sigue pasando.',
   // `nextPendingOp` (`offline/replay.ts`) ya evita mandar un cierre mientras
   // su apertura sigue en `needs_attention` — este código cubre cualquier

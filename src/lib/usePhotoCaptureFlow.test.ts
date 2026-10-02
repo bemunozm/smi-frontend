@@ -105,3 +105,20 @@ describe('usePhotoCaptureFlow — OCR offline/timeout', () => {
     expect(onReadingDetected).toHaveBeenCalledWith(20.5);
   });
 });
+
+describe('usePhotoCaptureFlow — opción `ocr: false`', () => {
+  it('con señal y `ocr: false`, NO llama a fuelReadingOcr pero sí lee la fecha EXIF', async () => {
+    stubOnline(true);
+    const fecha = new Date('2026-09-24T09:00:00.000Z');
+    readCaptureDateMock.mockResolvedValue(fecha);
+    const { result } = renderHook(() => usePhotoCaptureFlow(vi.fn(), { ocr: false }));
+
+    await act(async () => {
+      await result.current.handleSelectPhoto(onlineArchivo());
+    });
+
+    expect(fuelReadingOcrMock).not.toHaveBeenCalled();
+    expect(result.current.captureDate).toEqual(fecha);
+    expect(result.current.ocr).toEqual({ value: null, status: 'UNREADABLE', confidence: 0 });
+  });
+});

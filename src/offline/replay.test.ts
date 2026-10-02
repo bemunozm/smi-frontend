@@ -2,13 +2,26 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 
-const { openCardMock, closeCardMock, sendExitReportMock, uploadFileMock, toastMock } = vi.hoisted(() => ({
+const {
+  openCardMock,
+  closeCardMock,
+  sendExitReportMock,
+  uploadFileMock,
+  toastMock,
+  createHallazgoMock,
+  createTrabajoExtraMock,
+} = vi.hoisted(() => ({
   openCardMock: vi.fn(),
   closeCardMock: vi.fn(),
   sendExitReportMock: vi.fn(),
   uploadFileMock: vi.fn(),
   toastMock: vi.fn(),
+  createHallazgoMock: vi.fn(),
+  createTrabajoExtraMock: vi.fn(),
 }));
+
+vi.mock('../api/HallazgosAPI', () => ({ createHallazgo: createHallazgoMock, listHallazgos: vi.fn() }));
+vi.mock('../api/TrabajosExtraAPI', () => ({ createTrabajoExtra: createTrabajoExtraMock, listTrabajosExtra: vi.fn() }));
 
 vi.mock('../api/ShiftCardAPI', () => ({
   ShiftCardAPI: { openCard: openCardMock, closeCard: closeCardMock, listMine: vi.fn() },
@@ -19,13 +32,22 @@ vi.mock('../api/ShiftReportAPI', () => ({
 vi.mock('../api/UploadsAPI', () => ({ uploadFile: uploadFileMock }));
 vi.mock('@heroui/react', () => ({ toast: Object.assign(toastMock, { danger: vi.fn(), success: vi.fn() }) }));
 
-import { db, type CloseCardOp, type OpenCardOp, type SendExitReportOp } from './db';
+import {
+  db,
+  type CloseCardOp,
+  type CreateHallazgoOp,
+  type CreateTrabajoExtraOp,
+  type OpenCardOp,
+  type SendExitReportOp,
+} from './db';
 import { countPending, retryOp } from './outbox';
 import { requestSync, resetReplayEngineForTests, setCurrentUser, useEngineStoreForTests } from './replay';
 import { DomainError } from '../lib/api-error';
 import { queryClient } from '../lib/query-client';
-import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
+import { EQUIPMENT_KEY, HALLAZGOS_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
+import type { Hallazgo } from '../types/hallazgos';
 import type { ShiftCardResponse, ShiftReportResponse } from '../types/shift';
+import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
 function baseCard(overrides: Partial<ShiftCardResponse> = {}): ShiftCardResponse {
   return {
@@ -640,5 +662,350 @@ describe('replay — cierre cuya apertura falló ("no lo mandes, ligalos")', () 
     // el par bloqueado sigue exactamente como estaba — nadie lo tocó.
     expect((await db.outbox.get('close-1'))?.status).toBe('pending_upload');
     expect((await db.outbox.get('card-1'))?.status).toBe('needs_attention');
+  });
+});
+
+// --- Hallazgos y trabajos extra ----------------------------------------------
+
+function hallazgo(overrides: Partial<Hallazgo> = {}): Hallazgo {
+  return {
+    id: 'h-1',
+    equipoId: 'eq-1',
+    descripcion: 'Fuga de aceite',
+    prioridad: 'ALTA',
+    estado: 'ABIERTO',
+    fotoUrl: null,
+    fecha: '2026-09-24T09:00:00.000Z',
+    equipo: { internalCode: 'EX-005' },
+    ...overrides,
+  };
+}
+
+function putHallazgoOp(overrides: Partial<CreateHallazgoOp> = {}): Promise<string> {
+  const base: CreateHallazgoOp = {
+    id: 'h-1',
+    type: 'createHallazgo',
+    v: 1,
+    userId: 'u1',
+    status: 'pending',
+    attempts: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    payload: {
+      id: 'h-1',
+      equipoId: 'eq-1',
+      descripcion: 'Fuga de aceite',
+      prioridad: 'ALTA',
+      capturedAt: '2026-09-24T09:00:00.000Z',
+    },
+    ...overrides,
+  };
+  return db.outbox.put(base);
+}
+
+function trabajo(overrides: Partial<TrabajoExtraordinario> = {}): TrabajoExtraordinario {
+  return {
+    id: 't-1',
+    equipoId: 'eq-1',
+    operatorId: 'op-1',
+    operador: 'Patricio Rojas',
+    faena: 'Patillo',
+    turno: 'DIURNO',
+    horometroInicial: 100,
+    horometroFinal: 112,
+    totalHoras: 12,
+    actividades: ['SOLTAR_MATERIAL'],
+    otraActividad: null,
+    descripcion: 'Carga extra',
+    observaciones: null,
+    fecha: '2026-09-24T09:00:00.000Z',
+    equipo: { internalCode: 'EX-005' },
+    ...overrides,
+  };
+}
+
+function putTrabajoOp(overrides: Partial<CreateTrabajoExtraOp> = {}): Promise<string> {
+  const base: CreateTrabajoExtraOp = {
+    id: 't-1',
+    type: 'createTrabajoExtra',
+    v: 1,
+    userId: 'u1',
+    status: 'pending',
+    attempts: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    payload: {
+      id: 't-1',
+      equipoId: 'eq-1',
+      operatorId: 'op-1',
+      faena: 'Patillo',
+      turno: 'DIURNO',
+      horometroInicial: 100,
+      horometroFinal: 112,
+      actividades: ['SOLTAR_MATERIAL'],
+      descripcion: 'Carga extra',
+      capturedAt: '2026-09-24T09:00:00.000Z',
+    },
+    ...overrides,
+  };
+  return db.outbox.put(base);
+}
+
+describe('replay — hallazgo', () => {
+  it('sin foto: manda el POST con id y el capturedAt ORIGINAL, hace upsert en el caché y borra la operación', async () => {
+    queryClient.setQueryData(HALLAZGOS_KEY, [hallazgo({ id: 'otro' })]);
+    createHallazgoMock.mockResolvedValueOnce(hallazgo());
+    await putHallazgoOp();
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).not.toHaveBeenCalled();
+    expect(createHallazgoMock).toHaveBeenCalledTimes(1);
+    const [body, config] = createHallazgoMock.mock.calls[0]!;
+    expect(body).toMatchObject({ id: 'h-1', capturedAt: '2026-09-24T09:00:00.000Z' });
+    expect('fotoKey' in body).toBe(false);
+    expect(config.headers['X-Client-Time']).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(await db.outbox.get('h-1')).toBeUndefined();
+    const cache = queryClient.getQueryData<Hallazgo[]>(HALLAZGOS_KEY);
+    expect(cache?.map((h) => h.id)).toEqual(['h-1', 'otro']);
+  });
+
+  it('respuesta sin `equipo`: lo completa desde el catálogo cacheado antes del upsert', async () => {
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-1', internalCode: 'EX-005' }]);
+    const { equipo: _omitido, ...sinEquipo } = hallazgo();
+    createHallazgoMock.mockResolvedValueOnce(sinEquipo);
+    await putHallazgoOp();
+
+    await syncAndSettle();
+
+    const cache = queryClient.getQueryData<Hallazgo[]>(HALLAZGOS_KEY);
+    expect(cache?.[0]?.equipo).toEqual({ internalCode: 'EX-005' });
+  });
+
+  it('respuesta sin `equipo` y sin catálogo cacheado: hace upsert igual, sin equipo', async () => {
+    const { equipo: _omitido, ...sinEquipo } = hallazgo();
+    createHallazgoMock.mockResolvedValueOnce(sinEquipo);
+    await putHallazgoOp();
+
+    await syncAndSettle();
+
+    const cache = queryClient.getQueryData<Hallazgo[]>(HALLAZGOS_KEY);
+    expect(cache?.map((h) => h.id)).toEqual(['h-1']);
+    expect(cache?.[0]?.equipo).toBeUndefined();
+  });
+
+  it('con foto: sube (pending_upload a pending_claim), manda fotoKey, y borra operación y foto', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/hallazgo.jpg', url: 'https://x' });
+    createHallazgoMock.mockResolvedValueOnce(hallazgo({ fotoUrl: 'https://r2/x' }));
+    await putHallazgoOp({ status: 'pending_upload', photoId: 'h-1' });
+    await putPhoto('h-1');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(1);
+    expect(createHallazgoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'h-1', fotoKey: 'tmp/u1/hallazgo.jpg' }),
+      expect.anything(),
+    );
+    expect(await db.outbox.get('h-1')).toBeUndefined();
+    expect(await db.photos.get('h-1')).toBeUndefined();
+  });
+
+  it('TMP_KEY_EXPIRED: limpia la key, RESUBE una vez en el mismo run y reclama la nueva', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/vencida.jpg', url: 'https://x' });
+    createHallazgoMock.mockRejectedValueOnce(new DomainError('expiró', { status: 400, code: 'TMP_KEY_EXPIRED' }));
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/nueva.jpg', url: 'https://x' });
+    createHallazgoMock.mockResolvedValueOnce(hallazgo());
+    await putHallazgoOp({ status: 'pending_upload', photoId: 'h-1' });
+    await putPhoto('h-1');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(2);
+    expect(createHallazgoMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ fotoKey: 'tmp/vencida.jpg' }),
+      expect.anything(),
+    );
+    expect(createHallazgoMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ fotoKey: 'tmp/nueva.jpg' }),
+      expect.anything(),
+    );
+    expect(await db.outbox.get('h-1')).toBeUndefined();
+    expect(await db.photos.get('h-1')).toBeUndefined();
+  });
+
+  it('error de red tras subir la foto: queda pending_claim CON la tmpKey (no resube en el próximo run)', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/hallazgo.jpg', url: 'https://x' });
+    createHallazgoMock.mockRejectedValueOnce(new DomainError('Network Error'));
+    await putHallazgoOp({ status: 'pending_upload', photoId: 'h-1' });
+    await putPhoto('h-1');
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('h-1');
+    expect(op).toMatchObject({ status: 'pending_claim', tmpKey: 'tmp/u1/hallazgo.jpg', attempts: 1 });
+    expect(await db.photos.get('h-1')).toBeTruthy();
+  });
+
+  it('error de red al subir la foto: sigue pending_upload y no llama al POST', async () => {
+    uploadFileMock.mockRejectedValueOnce(new DomainError('Network Error'));
+    await putHallazgoOp({ status: 'pending_upload', photoId: 'h-1' });
+    await putPhoto('h-1');
+
+    await syncAndSettle();
+
+    expect((await db.outbox.get('h-1'))?.status).toBe('pending_upload');
+    expect(createHallazgoMock).not.toHaveBeenCalled();
+  });
+
+  it('409 de negocio: needs_attention, conserva la foto y el run continúa', async () => {
+    createHallazgoMock.mockRejectedValueOnce(new DomainError('Ya existe', { status: 409, code: 'ID_CONFLICT' }));
+    createHallazgoMock.mockResolvedValueOnce(hallazgo({ id: 'h-2' }));
+    await putHallazgoOp({ id: 'h-1', createdAt: 1, status: 'pending_claim', photoId: 'h-1', tmpKey: 'tmp/k.jpg' });
+    await putPhoto('h-1');
+    await putHallazgoOp({
+      id: 'h-2',
+      createdAt: 2,
+      payload: { id: 'h-2', equipoId: 'eq-1', descripcion: 'otro', prioridad: 'BAJA', capturedAt: 't' },
+    });
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('h-1');
+    expect(op?.status).toBe('needs_attention');
+    expect(op?.lastError).toMatchObject({ code: 'ID_CONFLICT' });
+    expect(await db.photos.get('h-1')).toBeTruthy();
+    expect(await db.outbox.get('h-2')).toBeUndefined();
+  });
+
+  it('404 sin code: needs_attention con un mensaje propio (el equipo ya no existe), no el técnico', async () => {
+    createHallazgoMock.mockRejectedValueOnce(new DomainError('Equipment not found', { status: 404 }));
+    await putHallazgoOp();
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('h-1');
+    expect(op?.status).toBe('needs_attention');
+    expect(op?.lastError?.message).toMatch(/ya no existe en el catálogo/);
+  });
+
+  it('PHOTO_MISSING (foto borrada del equipo): needs_attention, no se reintenta para siempre', async () => {
+    await putHallazgoOp({ status: 'pending_upload', photoId: 'h-1' });
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('h-1');
+    expect(op?.status).toBe('needs_attention');
+    expect(op?.lastError?.code).toBe('PHOTO_MISSING');
+    expect(createHallazgoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('replay — trabajo extra', () => {
+  it('éxito: manda id + capturedAt originales, hace upsert en el caché y borra la operación', async () => {
+    queryClient.setQueryData(TRABAJOS_EXTRA_KEY, [trabajo({ id: 'otro' })]);
+    createTrabajoExtraMock.mockResolvedValueOnce(trabajo());
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    const [body] = createTrabajoExtraMock.mock.calls[0]!;
+    expect(body).toMatchObject({ id: 't-1', capturedAt: '2026-09-24T09:00:00.000Z', equipoId: 'eq-1' });
+    expect(await db.outbox.get('t-1')).toBeUndefined();
+    const cache = queryClient.getQueryData<TrabajoExtraordinario[]>(TRABAJOS_EXTRA_KEY);
+    expect(cache?.map((t) => t.id)).toEqual(['t-1', 'otro']);
+  });
+
+  it('respuesta sin `equipo`: lo completa desde el catálogo cacheado antes del upsert', async () => {
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-1', internalCode: 'EX-005' }]);
+    const { equipo: _omitido, ...sinEquipo } = trabajo();
+    createTrabajoExtraMock.mockResolvedValueOnce(sinEquipo);
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    const cache = queryClient.getQueryData<TrabajoExtraordinario[]>(TRABAJOS_EXTRA_KEY);
+    expect(cache?.[0]?.equipo).toEqual({ internalCode: 'EX-005' });
+  });
+
+  it('400 EQUIPMENT_ON_SHIFT: needs_attention con el texto amigable', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(
+      new DomainError('Equipment has an open shift', { status: 400, code: 'EQUIPMENT_ON_SHIFT' }),
+    );
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('t-1');
+    expect(op?.status).toBe('needs_attention');
+    expect(op?.lastError?.message).toMatch(/turno abierto/);
+  });
+
+  it('409 OPERATOR_INACTIVE: needs_attention con el texto del operador inactivo', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(
+      new DomainError('inactive', { status: 409, code: 'OPERATOR_INACTIVE' }),
+    );
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    expect((await db.outbox.get('t-1'))?.lastError?.message).toMatch(/operador ya no está activo/);
+  });
+
+  it('404 sin code: needs_attention con un mensaje propio de equipo u operador', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(new DomainError('Operator not found', { status: 404 }));
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    expect((await db.outbox.get('t-1'))?.lastError?.message).toMatch(/equipo o el operador/);
+  });
+
+  it('error de red: queda pending, suma un intento y el run se corta', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(new DomainError('Network Error'));
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    expect(await db.outbox.get('t-1')).toMatchObject({ status: 'pending', attempts: 1 });
+  });
+
+  it('error de red: `lastError.message` dice que se reintenta solo, no el texto de guardado de oficina', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(new DomainError('no se pudo guardar el registro'));
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    const message = 'Sin señal: se reintentará automáticamente.';
+    expect((await db.outbox.get('t-1'))?.lastError?.message).toBe(message);
+    expect(useEngineStoreForTests.getState().lastError?.message).toBe(message);
+  });
+
+  it('5xx: `lastError.message` habla del servidor, no de la señal', async () => {
+    createTrabajoExtraMock.mockRejectedValueOnce(new DomainError('boom', { status: 503 }));
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    expect((await db.outbox.get('t-1'))?.lastError?.message).toBe(
+      'El servidor no respondió bien: se reintentará automáticamente.',
+    );
+  });
+});
+
+describe('replay — invalidación al terminar', () => {
+  it('invalida las listas de hallazgos y trabajos extra', async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    createTrabajoExtraMock.mockResolvedValueOnce(trabajo());
+    await putTrabajoOp();
+
+    await syncAndSettle();
+
+    const keys = spy.mock.calls.map(([filters]) => JSON.stringify(filters?.queryKey));
+    expect(keys).toContain(JSON.stringify(HALLAZGOS_KEY));
+    expect(keys).toContain(JSON.stringify(TRABAJOS_EXTRA_KEY));
+    spy.mockRestore();
   });
 });

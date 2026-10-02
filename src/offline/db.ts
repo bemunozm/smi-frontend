@@ -1,14 +1,16 @@
 import Dexie, { type Table } from 'dexie';
 
+import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
+import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 /**
  * Base de datos offline del Módulo A (RFC "Supervisión en Terreno" §Diseño
  * → Offline). Dos tablas:
  * - `outbox`: cola de operaciones pendientes de sincronizar (abrir/cerrar
- *   tarjeta, mandar reporte de salida). Una operación TERMINADA se BORRA —
+ *   tarjeta, mandar reporte de salida, crear hallazgo / trabajo extra). Una operación TERMINADA se BORRA —
  *   no existe un estado `'done'`, ver `offline/replay.ts`.
- * - `photos`: la foto de cierre, guardada como `ArrayBuffer` (no `Blob`):
+ * - `photos`: la foto de cierre (o del hallazgo), guardada como `ArrayBuffer` (no `Blob`):
  *   el soporte de Blob en IndexedDB de Safari/iOS ha sido históricamente
  *   poco confiable, así que se evita del todo.
  *
@@ -17,7 +19,12 @@ import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } fro
  * archivo se pueda importar desde cualquier lado sin arrastrar lógica.
  */
 
-export type OutboxOpType = 'openCard' | 'closeCard' | 'sendExitReport';
+export type OutboxOpType =
+  | 'openCard'
+  | 'closeCard'
+  | 'sendExitReport'
+  | 'createHallazgo'
+  | 'createTrabajoExtra';
 
 /**
  * `'pending'`/`'pending_upload'`/`'pending_claim'`: esperando su turno en el
@@ -84,7 +91,27 @@ export interface SendExitReportOp extends OutboxBase {
   payload: SendExitReportInput;
 }
 
-export type OutboxOp = OpenCardOp | CloseCardOp | SendExitReportOp;
+export interface CreateHallazgoOp extends OutboxBase {
+  type: 'createHallazgo';
+  /** `payload.id` = `id` de la operación = el `id` que ve el backend. */
+  payload: CreateHallazgoInput;
+  /** id de la fila en `photos` — ausente cuando el hallazgo no lleva foto
+   * (es opcional). Se borra recién cuando el POST tiene éxito. */
+  photoId?: string;
+  /** Misma semántica que `CloseCardOp#tmpKey`. */
+  tmpKey?: string;
+}
+
+export interface CreateTrabajoExtraOp extends OutboxBase {
+  type: 'createTrabajoExtra';
+  payload: CreateTrabajoExtraInput;
+}
+
+export type OutboxOp = OpenCardOp | CloseCardOp | SendExitReportOp | CreateHallazgoOp | CreateTrabajoExtraOp;
+
+/** Operaciones que pueden arrastrar una foto por subir — comparten el
+ * pipeline `pending_upload` → `pending_claim` de `offline/replay.ts`. */
+export type PhotoOp = CloseCardOp | CreateHallazgoOp;
 
 export interface PhotoRecord {
   id: string;
@@ -116,11 +143,14 @@ class SmiOfflineDatabase extends Dexie {
 export const db = new SmiOfflineDatabase();
 
 /** El estado "pendiente" al que vuelve una operación al reintentarla o al
- * fallar con un error transitorio — `closeCard` depende de si ya alcanzó a
- * subir la foto (`tmpKey` presente) antes de volver a pendiente. Compartida
+ * fallar con un error transitorio — una operación con foto depende de si ya
+ * alcanzó a subirla (`tmpKey` presente) antes de volver a pendiente; sin foto
+ * (hallazgo sin adjunto, o cualquier otro tipo) es `'pending'`. Compartida
  * entre `offline/outbox.ts` (acción "Reintentar") y `offline/replay.ts`
  * (errores de red/401), para no repetir la misma regla dos veces. */
 export function pendingStatusFor(op: OutboxOp): OutboxStatus {
-  if (op.type === 'closeCard') return op.tmpKey ? 'pending_claim' : 'pending_upload';
+  if ((op.type === 'closeCard' || op.type === 'createHallazgo') && op.photoId) {
+    return op.tmpKey ? 'pending_claim' : 'pending_upload';
+  }
   return 'pending';
 }

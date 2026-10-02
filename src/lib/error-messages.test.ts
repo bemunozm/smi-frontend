@@ -35,10 +35,10 @@ describe('mensajeErrorOperacion', () => {
   });
 
   it.each([
-    ['ID_CONFLICT', 'Ya existe una tarjeta con ese identificador. Reintentá la acción.'],
+    ['ID_CONFLICT', 'Ya existe un registro con ese identificador. Descartá este registro en Sincronización y volvé a crearlo.'],
     ['INVALID_SHIFT_DATE', 'La fecha del turno no es válida — revisá la fecha y la hora del equipo.'],
     ['REPORT_RATE_LIMITED', 'Se mandaron demasiados reportes seguidos — esperá unos minutos y reintentá.'],
-    ['PHOTO_MISSING', 'Falta la foto guardada para este cierre — descartalo y volvé a cerrar la tarjeta.'],
+    ['PHOTO_MISSING', 'Falta la foto guardada de este registro — descartalo y volvé a registrarlo.'],
     ['INVALID_RESPONSE', 'Respuesta inesperada del servidor — reintentá más tarde o avisá si sigue pasando.'],
     [
       'CARD_NOT_FOUND',
@@ -48,8 +48,7 @@ describe('mensajeErrorOperacion', () => {
     expect(mensajeErrorOperacion(new DomainError('mensaje técnico', { code }))).toBe(esperado);
   });
 
-  // Anexo 3 (cierre): códigos nuevos que la revisión final pidió cubrir con
-  // mensaje amigable.
+  // Códigos de cierre de tarjeta y reporte de salida con mensaje amigable.
   it('SHIFT_CARD_CLOSE_ELSEWHERE: avisa que la tarjeta se cerró por otra vía', () => {
     const error = new DomainError('mensaje técnico', { code: 'SHIFT_CARD_CLOSE_ELSEWHERE' });
     expect(mensajeErrorOperacion(error)).toContain('se cerró por otra vía');

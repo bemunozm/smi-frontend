@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, X, XCircle } from 'lucide-react';
 
+import { useEquipment } from '../../hooks/useEquipment';
 import { usePrepareOffline } from '../../hooks/usePrepareOffline';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -10,6 +11,7 @@ import type { CloseCardOp, OutboxOp } from '../../offline/db';
 import { discardOp, retryOp } from '../../offline/outbox';
 import { useOutboxOps } from '../../offline/useOutboxOps';
 import { useSyncState } from '../../offline/replay';
+import type { Equipment } from '../../types/equipment';
 import { syncStatusPresentation, type SyncStatusTono } from '../../offline/sync-status-presentation';
 
 /**
@@ -26,7 +28,14 @@ import { syncStatusPresentation, type SyncStatusTono } from '../../offline/sync-
  * Terreno.
  */
 
-function labelOp(op: OutboxOp): string {
+/** Código del equipo desde el catálogo (el mismo que precarga "Preparar para
+ * uso sin señal") — sin él la etiqueta queda genérica en vez de esperar una
+ * request que, sin señal, no iba a llegar. */
+function codigoEquipo(equipos: Equipment[] | undefined, equipoId: string): string | undefined {
+  return equipos?.find((e) => e.id === equipoId)?.internalCode;
+}
+
+function labelOp(op: OutboxOp, equipos: Equipment[] | undefined): string {
   switch (op.type) {
     case 'openCard':
       return 'Apertura de tarjeta';
@@ -34,6 +43,14 @@ function labelOp(op: OutboxOp): string {
       return 'Cierre de tarjeta';
     case 'sendExitReport':
       return 'Reporte de salida';
+    case 'createHallazgo': {
+      const codigo = codigoEquipo(equipos, op.payload.equipoId);
+      return codigo ? `Hallazgo · ${codigo}` : 'Hallazgo';
+    }
+    case 'createTrabajoExtra': {
+      const codigo = codigoEquipo(equipos, op.payload.equipoId);
+      return codigo ? `Trabajo extra · ${codigo}` : 'Trabajo extra';
+    }
   }
 }
 
@@ -67,6 +84,7 @@ export function SyncStatus() {
   const enLinea = useOnlineStatus();
   const sync = useSyncState(user?.id);
   const ops = useOutboxOps(user?.id);
+  const { data: equipos } = useEquipment();
   const opsAtencion = ops.filter((op) => op.status === 'needs_attention');
   const { preparando, resultadoPrep, handlePreparar } = usePrepareOffline();
 
@@ -160,7 +178,7 @@ export function SyncStatus() {
                     return (
                       <div key={op.id} className="flex flex-col gap-2 rounded-2xl border border-border p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-sm font-semibold">{labelOp(op)}</span>
+                          <span className="text-sm font-semibold">{labelOp(op, equipos)}</span>
                           <Circle className="mt-1 h-2 w-2 shrink-0 fill-[var(--danger)] text-[var(--danger)]" />
                         </div>
                         <p className="m-0 text-[13px] text-[var(--danger)]">
@@ -228,7 +246,7 @@ export function SyncStatus() {
                   Antes de ir a terreno
                 </span>
                 <p className="m-0 text-[13px] text-muted-foreground">
-                  Precarga los equipos, operadores y tarjetas activas para que la pantalla abra igual sin señal.
+                  Precarga los equipos, operadores, tarjetas activas, hallazgos y trabajos para que la pantalla abra igual sin señal.
                 </p>
                 <button
                   type="button"
@@ -245,6 +263,9 @@ export function SyncStatus() {
                     <PrepItemRow ok={resultadoPrep.equipment === 'ok'}>Equipos precargados</PrepItemRow>
                     <PrepItemRow ok={resultadoPrep.operators === 'ok'}>Operadores precargados</PrepItemRow>
                     <PrepItemRow ok={resultadoPrep.shiftCards === 'ok'}>Tarjetas propias precargadas</PrepItemRow>
+                    <PrepItemRow ok={resultadoPrep.hallazgos === 'ok'}>Hallazgos precargados</PrepItemRow>
+                    <PrepItemRow ok={resultadoPrep.trabajosExtra === 'ok'}>Trabajos extra precargados</PrepItemRow>
+                    <PrepItemRow ok={resultadoPrep.horometro === 'ok'}>Equipos en turno precargados</PrepItemRow>
                     {!resultadoPrep.installed && (
                       <p className="m-0 mt-1 text-[12.5px] font-medium text-[var(--warning-soft-foreground)]">
                         Instalá la app en la pantalla de inicio: en iPad, Safari borra los datos guardados de las
