@@ -35,3 +35,13 @@ export function useMediaQuery(query: string): boolean {
 
 /** `lg` de Tailwind: desde acá el listado cabe como tabla. */
 export const DESKTOP_QUERY = '(min-width: 1024px)';
+
+/**
+ * `xl` de Tailwind: desde acá un listado administrativo se muestra como tabla
+ * con menú de acciones; por debajo (tablet horizontal de 1024 incluida) son
+ * tarjetas táctiles con hoja de acciones. Es más alto que DESKTOP_QUERY porque
+ * el kebab de una tabla es un blanco táctil chico. Los listados que resuelven
+ * esto con CSS (Operadores, Equipos) usan las clases `xl:` — mantener ambos
+ * en el mismo breakpoint.
+ */
+export const TABLE_LAYOUT_QUERY = '(min-width: 1280px)';

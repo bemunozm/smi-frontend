@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { OperadoresView } from './OperadoresView';
@@ -28,6 +28,7 @@ const OPERATORS: Operator[] = [
 let mockOperators: Operator[] = OPERATORS;
 let mockRole: Role | null = ROLES.ADMIN;
 const createMock = vi.fn();
+const updateMock = vi.fn();
 const deleteMock = vi.fn();
 const toggleMock = vi.fn();
 
@@ -38,7 +39,7 @@ vi.mock('../hooks/useCurrentUser', () => ({
 vi.mock('../hooks/useOperators', () => ({
   useOperators: () => ({ data: mockOperators, isPending: false, isError: false, error: null }),
   useCreateOperator: () => ({ mutate: createMock, isPending: false }),
-  useUpdateOperator: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateOperator: () => ({ mutate: updateMock, isPending: false }),
   useDeleteOperator: () => ({ mutate: deleteMock, isPending: false }),
   useToggleOperatorActive: () => ({ mutate: toggleMock, isPending: false }),
 }));
@@ -114,26 +115,118 @@ describe('OperadoresView', () => {
     );
   });
 
-  it('ADMIN ve la acción "Eliminar"; SUPERVISOR no (el backend la restringe a ADMIN)', () => {
-    mockRole = ROLES.ADMIN;
-    const { unmount } = renderView();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Acciones para Juan Rojas' })[0]);
-    expect(screen.getAllByText('Eliminar').length).toBeGreaterThan(0);
-    unmount();
-    cleanup();
+  // En jsdom no se aplican las clases `hidden xl:block` / `xl:hidden`, así que
+  // la tabla (kebab "Acciones para …") y las tarjetas (botón "Acciones de …")
+  // están montadas a la vez; cada pieza se ubica por su propio nombre.
+  describe('tarjeta (tablet/celular)', () => {
+    function openSheet(name: string) {
+      fireEvent.click(screen.getByRole('button', { name: `Acciones de ${name}` }));
+      return screen.findByRole('dialog');
+    }
 
-    mockRole = ROLES.SUPERVISOR;
-    renderView();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Acciones para Juan Rojas' })[0]);
-    expect(screen.queryByText('Eliminar')).toBeNull();
+    it('toda la tarjeta es un botón que abre la hoja de acciones del operador', async () => {
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+
+      expect(within(dialog).getByText('Juan Rojas')).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: 'Editar' })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: 'Desactivar' })).toBeTruthy();
+    });
+
+    it('ADMIN ve "Eliminar" en la hoja', async () => {
+      mockRole = ROLES.ADMIN;
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+
+      expect(within(dialog).getByRole('button', { name: 'Eliminar' })).toBeTruthy();
+    });
+
+    it('SUPERVISOR no ve "Eliminar" en la hoja (el backend lo restringe a ADMIN)', async () => {
+      mockRole = ROLES.SUPERVISOR;
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+
+      expect(within(dialog).getByRole('button', { name: 'Editar' })).toBeTruthy();
+      expect(within(dialog).queryByRole('button', { name: 'Eliminar' })).toBeNull();
+    });
+
+    it('un operador inactivo ofrece "Activar" y la mutación lo reactiva', async () => {
+      renderView();
+
+      const dialog = await openSheet('María Pérez');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Activar' }));
+
+      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_2', isActive: true });
+    });
+
+    it('"Desactivar" llama a la mutación directo, sin abrir un modal', async () => {
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar' }));
+
+      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_1', isActive: false });
+      expect(screen.queryByText('Guardar cambios')).toBeNull();
+    });
+
+    it('"Editar" abre el modal de edición y guarda con la mutación de update', async () => {
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Editar' }));
+
+      const name = await screen.findByDisplayValue('Juan Rojas');
+      fireEvent.change(name, { target: { value: 'Juan Rojas Soto' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+      await waitFor(() =>
+        expect(updateMock).toHaveBeenCalledWith(
+          { id: 'op_1', input: expect.objectContaining({ name: 'Juan Rojas Soto' }) },
+          expect.anything(),
+        ),
+      );
+    });
+
+    it('"Eliminar" pide confirmación antes de llamar a la mutación', async () => {
+      renderView();
+
+      const dialog = await openSheet('Juan Rojas');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Eliminar' }));
+
+      expect(await screen.findByText('¿Eliminar a Juan Rojas?')).toBeTruthy();
+      expect(deleteMock).not.toHaveBeenCalled();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }));
+
+      expect(deleteMock).toHaveBeenCalledWith('op_1', expect.anything());
+    });
   });
 
-  it('el toggle activar/desactivar llama a la mutación sin abrir un modal', () => {
-    renderView();
+  describe('fila de tabla (PC)', () => {
+    it('ADMIN ve la acción "Eliminar" en el menú; SUPERVISOR no', () => {
+      mockRole = ROLES.ADMIN;
+      const { unmount } = renderView();
+      fireEvent.click(screen.getByRole('button', { name: 'Acciones para Juan Rojas' }));
+      expect(screen.getByRole('menuitem', { name: 'Eliminar' })).toBeTruthy();
+      unmount();
+      cleanup();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Acciones para Juan Rojas' })[0]);
-    fireEvent.click(screen.getAllByText('Desactivar')[0]);
+      mockRole = ROLES.SUPERVISOR;
+      renderView();
+      fireEvent.click(screen.getByRole('button', { name: 'Acciones para Juan Rojas' }));
+      expect(screen.queryByRole('menuitem', { name: 'Eliminar' })).toBeNull();
+    });
 
-    expect(toggleMock).toHaveBeenCalledWith({ id: 'op_1', isActive: false });
+    it('el toggle activar/desactivar llama a la mutación sin abrir un modal', () => {
+      renderView();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Acciones para Juan Rojas' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+
+      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_1', isActive: false });
+    });
   });
 });

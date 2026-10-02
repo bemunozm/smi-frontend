@@ -33,7 +33,7 @@ vi.mock('../hooks/useCurrentUser', () => ({
  */
 function setViewport(size: 'phone' | 'desktop'): void {
   window.matchMedia = ((query: string) => ({
-    matches: size === 'desktop' && query.includes('1024px'),
+    matches: size === 'desktop' && query.includes('1280px'),
     media: query,
     onchange: null,
     addListener: () => {},

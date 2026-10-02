@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
-import { Pencil, PlusCircle, PowerOff, Power, Search, Trash2 } from 'lucide-react';
+import { ChevronRight, Pencil, PlusCircle, PowerOff, Power, Search, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   Button,
+  Card,
   Chip,
+  Drawer,
   Dropdown,
   FieldError,
   Input,
@@ -18,6 +20,7 @@ import {
   TextField,
 } from '@heroui/react';
 
+import { ActionTile } from '../components/ActionTile';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import {
   useCreateOperator,
@@ -311,9 +314,9 @@ function DeleteOperatorAlertDialog({
 }
 
 /**
- * Menú de acciones — Editar / Activar·Desactivar (toggle directo, sin modal)
- * / Eliminar. Se reusa tal cual en la fila de tabla (PC) y en la tarjeta
- * (tablet/celular) — mismo componente, distinto contenedor.
+ * Menú de acciones de la fila de tabla (PC) — Editar / Activar·Desactivar
+ * (toggle directo, sin modal) / Eliminar. En tablet/celular el equivalente es
+ * la hoja de acciones de `OperatorCardMobile`.
  *
  * "Eliminar" solo se ofrece a ADMIN: el backend restringe el borrado a ese
  * rol (`DELETE /api/operators/:id`, ver `OperatorsController`) — SUPERVISOR
@@ -374,21 +377,109 @@ function OperatorActionsMenu({ operator }: { operator: Operator }) {
   );
 }
 
-/** Tarjeta de operador — tablet/celular (< lg), mismo criterio responsive
- * que `EquiposView`/`EquipoCardMobile`: tabla completa en PC, tarjetas
- * apiladas debajo. */
+/**
+ * Tarjeta de operador — tablet/celular (< lg), mismo patrón que
+ * `EquipoCardMobile` (`EquiposView`): tabla en PC, tarjetas apiladas debajo, y
+ * la tarjeta ENTERA es el botón que abre una hoja de acciones inferior. En una
+ * pantalla táctil un kebab de 32 px es un blanco chico para quien opera con
+ * guantes; la hoja además muestra cada acción con su nombre escrito.
+ *
+ * Cada tarjeta es dueña de sus overlays (hoja, edición, borrado): abrir la de
+ * un operador nunca deja colgado el estado de otro. Las reglas de rol son las
+ * de `OperatorActionsMenu` (solo ADMIN elimina).
+ */
 function OperatorCardMobile({ operator }: { operator: Operator }) {
+  const { role } = useCurrentUser();
+  const canDelete = role === ROLES.ADMIN;
+  const toggleActive = useToggleOperatorActive();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  const statusChip = (
+    <Chip className="w-fit" color={operator.isActive ? 'success' : 'default'} size="sm" variant="soft">
+      {operator.isActive ? 'Activo' : 'Inactivo'}
+    </Chip>
+  );
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3.5 py-3">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="truncate text-sm font-semibold text-foreground">{operator.name}</span>
-        <span className="font-mono text-xs text-muted-foreground">{operator.rut ?? 'Sin RUT'}</span>
-        <Chip className="w-fit" color={operator.isActive ? 'success' : 'default'} size="sm" variant="soft">
-          {operator.isActive ? 'Activo' : 'Inactivo'}
-        </Chip>
-      </div>
-      <OperatorActionsMenu operator={operator} />
-    </div>
+    <>
+      <button
+        // Sin etiqueta propia el nombre accesible sería la ristra de todo lo
+        // que lleva la tarjeta; lo que hace el botón es abrir las acciones.
+        aria-label={`Acciones de ${operator.name}`}
+        className="block w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+        onClick={() => setIsSheetOpen(true)}
+        type="button"
+      >
+        <Card className="transition-colors active:bg-surface-secondary">
+          <Card.Content className="p-4">
+            <div className="flex min-h-14 items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-col items-start gap-1">
+                <span className="max-w-full truncate text-base font-semibold text-foreground">{operator.name}</span>
+                <span className="font-mono text-xs text-muted-foreground">{operator.rut ?? 'Sin RUT'}</span>
+                {statusChip}
+              </div>
+              <ChevronRight aria-hidden className="h-5 w-5 shrink-0 text-(--muted)" />
+            </div>
+          </Card.Content>
+        </Card>
+      </button>
+
+      <Drawer.Backdrop isOpen={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <Drawer.Content placement="bottom">
+          <Drawer.Dialog className="max-h-[85vh]">
+            <Drawer.Handle />
+            <Drawer.CloseTrigger />
+            <Drawer.Header>
+              <div className="flex min-w-0 flex-col gap-1">
+                <Drawer.Heading className="truncate text-lg font-semibold">{operator.name}</Drawer.Heading>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm text-muted-foreground">{operator.rut ?? 'Sin RUT'}</span>
+                  {statusChip}
+                </div>
+              </div>
+            </Drawer.Header>
+            <Drawer.Body>
+              <div className="flex flex-wrap justify-center gap-3">
+                <ActionTile
+                  icon={Pencil}
+                  label="Editar"
+                  onPress={() => {
+                    setIsSheetOpen(false);
+                    setIsEditOpen(true);
+                  }}
+                />
+                <ActionTile
+                  icon={operator.isActive ? PowerOff : Power}
+                  label={operator.isActive ? 'Desactivar' : 'Activar'}
+                  onPress={() => {
+                    setIsSheetOpen(false);
+                    toggleActive.mutate({ id: operator.id, isActive: !operator.isActive });
+                  }}
+                />
+                {canDelete ? (
+                  <ActionTile
+                    icon={Trash2}
+                    label="Eliminar"
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsDeleteOpen(true);
+                    }}
+                    tone="danger"
+                  />
+                ) : null}
+              </div>
+            </Drawer.Body>
+          </Drawer.Dialog>
+        </Drawer.Content>
+      </Drawer.Backdrop>
+
+      <EditOperatorModal isOpen={isEditOpen} operator={operator} onOpenChange={setIsEditOpen} />
+      {canDelete ? (
+        <DeleteOperatorAlertDialog isOpen={isDeleteOpen} operator={operator} onOpenChange={setIsDeleteOpen} />
+      ) : null}
+    </>
   );
 }
 
@@ -465,7 +556,7 @@ export function OperadoresView() {
 
       {!isPending && !isError && operators && operators.length > 0 ? (
         <>
-          <div className="hidden lg:block">
+          <div className="hidden xl:block">
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Operadores" className="min-w-160">
@@ -500,7 +591,7 @@ export function OperadoresView() {
             </Table>
           </div>
 
-          <div className="flex flex-col gap-3 lg:hidden">
+          <div className="flex flex-col gap-3 xl:hidden">
             {operators.map((operator) => (
               <OperatorCardMobile key={operator.id} operator={operator} />
             ))}
