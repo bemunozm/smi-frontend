@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Clock, History, Lock, Mail, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Clock, History, Lock, Mail, Pencil, User } from 'lucide-react';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -9,7 +9,10 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { contextoTurno, fechaCorta, turnoAnterior, type Turno } from '../lib/turno';
 import { useAhora } from '../hooks/useAhora';
 import { ROLES } from '../types/roles';
+import type { EntradaCambios } from '../types/cambios';
+import { diferencias } from '../lib/cambios';
 import {
+  AvisoEdicion,
   BloqueTurno,
   Boton,
   CabeceraTurno,
@@ -22,11 +25,13 @@ import {
   Filas,
   Form,
   GrupoHead,
+  HistorialCambios,
   Hint,
   Hoja,
   Input,
   Label,
   ModalTerreno,
+  Segmentado,
   Selector,
   Tabla,
   Tarjeta,
@@ -80,6 +85,10 @@ interface TarjetaTurno {
   cerradaA?: string;
   /** Lo que el supervisor anotó al cerrar; se lee en el detalle del historial. */
   observaciones?: string;
+  /** Litros de AdBlue cargados en el turno; 0 si no se cargó (R12). */
+  adblueLitros?: number;
+  /** Quién cambió qué después de cerrarla, del cambio más reciente al más viejo (R13). */
+  cambios?: EntradaCambios[];
   /** Clave de la foto del surtidor en R2 (no una URL pública). */
   fotoKey?: string;
   /** Registrada sin señal: está en el equipo, todavía no en el servidor. */
@@ -103,10 +112,21 @@ const OPERADORES = [
 ];
 
 /**
- * Supervisor de ejemplo con el que quedan las tarjetas que NO son del usuario
- * conectado — sirve para ver que el filtro por supervisor hace algo.
+ * Marcador de las tarjetas de ejemplo que NO son del usuario conectado —
+ * sirve para ver que el filtro por supervisor hace algo. Se resuelve al
+ * supervisor real del turno de la tarjeta (`SUPERVISOR_DEL_TURNO`).
  */
-const OTRO_SUPERVISOR = 'Marcela Pizarro';
+const OTRO_SUPERVISOR = '@otro';
+
+/**
+ * Hay un supervisor por turno en cargadores frontales (Acta N.° 004, punto 8).
+ * Los nombres son los reales, para que la demo en faena no muestre gente
+ * inventada.
+ */
+const SUPERVISOR_DEL_TURNO: Record<Turno, string> = {
+  DIURNO: 'Limbert Villacorta',
+  NOCTURNO: 'José Pérez',
+};
 
 /** Las tarjetas del usuario conectado llevan este marcador hasta que se sabe
  *  su nombre real (la sesión llega un tick después del primer render). */
@@ -119,10 +139,31 @@ const TARJETAS_EJEMPLO: TarjetaTurno[] = [
   { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, grupo: 'actual', estado: 'curso', supervisor: MIAS, sinSincronizar: true },
   { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, grupo: 'actual', estado: 'curso', supervisor: OTRO_SUPERVISOR, sinSincronizar: true },
   { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, grupo: 'anterior', estado: 'curso', supervisor: MIAS, arrastrada: true },
-  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48', observaciones: 'Ruido en el balde al descargar. Revisar pasadores en la mantención.' },
+  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48', observaciones: 'Ruido en el balde al descargar. Revisar pasadores en la mantención.', adblueLitros: 12, cambios: [{ id: 'ej-1', userName: 'José Pérez', createdAt: '2026-09-28T08:05:00', changes: [{ field: 'litros', label: 'Combustible', before: '168 L', after: '186 L' }] }] },
   { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:51' },
   { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, grupo: 'anterior', estado: 'cerrada', supervisor: OTRO_SUPERVISOR, cerradaA: '07:55' },
 ];
+
+/** Los datos de una tarjeta cerrada que se pueden corregir, como texto de formulario. */
+interface BorradorCerrada {
+  operador: string;
+  inicial: string;
+  final: string;
+  litros: string;
+  adblue: boolean;
+  adblueLitros: string;
+  observaciones: string;
+}
+
+/** Formulario de cierre en blanco: se usa al abrir cada tarjeta. */
+const CIERRE_VACIO = { final: '', litros: '', observaciones: '', adblue: false, adblueLitros: '' };
+
+/**
+ * Estanque de AdBlue de los cargadores SEM 3, 4, 5 y 6 (Acta N.° 004). Solo
+ * sirve para avisar de un dato fuera de escala: otros equipos pueden tener
+ * otro estanque, así que no bloquea.
+ */
+const ESTANQUE_ADBLUE_L = 30;
 
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -154,7 +195,11 @@ export function RegistroEquipoView() {
   const [cerrandoId, setCerrandoId] = useState<number | null>(null);
   const [verReporte, setVerReporte] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
+  const [detalleCerradaId, setDetalleCerradaId] = useState<number | null>(null);
+  /** Borrador de la edición de una cerrada (Acta N.° 004, R13); null si no se edita. */
+  const [edicion, setEdicion] = useState<BorradorCerrada | null>(null);
+  /** Recién guardado un cambio: el detalle confirma que se avisó al administrador. */
+  const [avisoGuardado, setAvisoGuardado] = useState(false);
   const [reporte, setReporte] = useState<EstadoReporte>('sin-enviar');
   const [reporteA, setReporteA] = useState<string | null>(null);
 
@@ -192,7 +237,7 @@ export function RegistroEquipoView() {
   const [apertura, setApertura] = useState({ equipoId: '', operador: OPERADORES[5], horometro: '' });
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
 
-  const [cierre, setCierre] = useState({ final: '', litros: '', observaciones: '' });
+  const [cierre, setCierre] = useState(CIERRE_VACIO);
 
   /**
    * Foto del surtidor, OCR y subida: se toma entero del flujo que ya construyó
@@ -218,6 +263,9 @@ export function RegistroEquipoView() {
   const finalNum = aNumero(cierre.final);
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
+  const adblueNum = aNumero(cierre.adblueLitros);
+  /** Marcó que cargó AdBlue pero no dijo cuánto: no se puede cerrar así. */
+  const faltaAdblue = cierre.adblue && (adblueNum == null || adblueNum <= 0);
 
   const agregarEquipo = () => {
     if (!equipoElegido) return;
@@ -239,14 +287,14 @@ export function RegistroEquipoView() {
 
   const abrirCierre = (id: number) => {
     setCerrandoId(id);
-    setCierre({ final: '', litros: '', observaciones: '' });
+    setCierre(CIERRE_VACIO);
     // La foto es de ESTA tarjeta: arrastrar la anterior mezclaría el respaldo
     // de un equipo con el de otro.
     foto.resetPhoto();
   };
 
   const confirmarCierre = async () => {
-    if (!cerrando || finalNum == null || finalInvalido || !foto.file) return;
+    if (!cerrando || finalNum == null || finalInvalido || faltaAdblue || !foto.file) return;
 
     // La foto se sube a R2 y lo que queda guardado es su clave, no un enlace
     // público. Si la subida falla, `upload` avisa y no se cierra la tarjeta.
@@ -263,6 +311,7 @@ export function RegistroEquipoView() {
               litros: aNumero(cierre.litros) ?? 0,
               fotoKey: storageKey,
               observaciones: cierre.observaciones,
+              adblueLitros: cierre.adblue ? (adblueNum ?? 0) : 0,
               cerradaA: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
             }
           : t,
@@ -626,7 +675,7 @@ export function RegistroEquipoView() {
         variante="contorno"
         ancho
         onClick={() => {
-          setDetalleCerrada(null);
+          abrirDetalleCerrada(null);
           setHistorialAbierto(true);
         }}
       >
@@ -651,7 +700,102 @@ export function RegistroEquipoView() {
   /** A qué turno pertenece una tarjeta, con su fecha: `DIURNO lun 28-09`. */
   const turnoDe = (t: TarjetaTurno) =>
     t.grupo === 'actual' ? `${ctx.turno} ${ctx.fechaCorta}` : `${anterior.turno} ${fechaAnterior}`;
-  const firmante = (t: TarjetaTurno) => (t.supervisor === MIAS ? supervisor : t.supervisor);
+  // Se lee de la lista y no de una copia: tras editar, el detalle muestra el
+  // dato nuevo y su historial sin tener que volver a abrirlo.
+  const detalleCerrada = tarjetas.find((t) => t.id === detalleCerradaId) ?? null;
+
+  /** Abrir o dejar el detalle siempre sale del modo edición. */
+  const abrirDetalleCerrada = (id: number | null) => {
+    setDetalleCerradaId(id);
+    setEdicion(null);
+    setAvisoGuardado(false);
+  };
+
+  const abrirEdicion = (t: TarjetaTurno) => {
+    setAvisoGuardado(false);
+    setEdicion({
+      operador: t.operador,
+      inicial: fmt(t.inicial),
+      final: fmt(t.final),
+      litros: fmt(t.litros, 0),
+      adblue: !!t.adblueLitros,
+      adblueLitros: t.adblueLitros ? fmt(t.adblueLitros, 0) : '',
+      observaciones: t.observaciones ?? '',
+    });
+  };
+
+  // Validación de la edición: las mismas reglas que al cerrar la tarjeta.
+  const edInicial = edicion ? aNumero(edicion.inicial) : null;
+  const edFinal = edicion ? aNumero(edicion.final) : null;
+  const edLitros = edicion ? aNumero(edicion.litros) : null;
+  const edAdblue = edicion ? aNumero(edicion.adblueLitros) : null;
+  const errorEdicion = !edicion
+    ? null
+    : edInicial == null || edFinal == null
+      ? 'Faltan los horómetros.'
+      : edFinal < edInicial
+        ? 'El horómetro final no puede ser menor que el inicial.'
+        : edLitros == null || edLitros < 0
+          ? 'Indicá los litros de combustible (cero si no cargó).'
+          : edicion.adblue && (edAdblue == null || edAdblue <= 0)
+            ? 'Indicá cuántos litros de AdBlue se cargaron.'
+            : null;
+
+  /**
+   * Guarda la corrección de una tarjeta cerrada (Acta N.° 004, R13): sin
+   * autorización, pero con registro de quién cambió qué. Si nada cambió de
+   * verdad no se registra nada — es la misma regla que el backend aplica a
+   * los trabajos extra. Maqueta: el aviso al administrador lo hará el
+   * servidor cuando exista el backend de turnos.
+   */
+  const guardarEdicion = () => {
+    if (!detalleCerrada || !edicion || errorEdicion) return;
+    const t = detalleCerrada;
+    const adblueNuevo = edicion.adblue ? edAdblue! : 0;
+    const litrosAdblue = (n?: number) => (n ? `${fmt(n, 0)} L` : 'No se cargó');
+    const cambios = diferencias([
+      { field: 'operador', label: 'Operador', antes: t.operador, despues: edicion.operador },
+      { field: 'inicial', label: 'Horómetro inicial', antes: `${fmt(t.inicial)} h`, despues: `${fmt(edInicial!)} h` },
+      { field: 'final', label: 'Horómetro final', antes: `${fmt(t.final)} h`, despues: `${fmt(edFinal!)} h` },
+      { field: 'litros', label: 'Combustible', antes: `${fmt(t.litros, 0)} L`, despues: `${fmt(edLitros!, 0)} L` },
+      { field: 'adblue', label: 'AdBlue', antes: litrosAdblue(t.adblueLitros), despues: litrosAdblue(adblueNuevo) },
+      { field: 'observaciones', label: 'Observaciones', antes: t.observaciones ?? '', despues: edicion.observaciones },
+    ]);
+    if (cambios.length > 0) {
+      const entrada: EntradaCambios = {
+        id: `${t.id}-${Date.now()}`,
+        userName: supervisor,
+        createdAt: new Date().toISOString(),
+        changes: cambios,
+      };
+      setTarjetas((ts) =>
+        ts.map((x) =>
+          x.id === t.id
+            ? {
+                ...x,
+                operador: edicion.operador,
+                inicial: edInicial!,
+                final: edFinal!,
+                litros: edLitros!,
+                adblueLitros: adblueNuevo,
+                observaciones: edicion.observaciones.trim() || undefined,
+                cambios: [entrada, ...(x.cambios ?? [])],
+              }
+            : x,
+        ),
+      );
+      setAvisoGuardado(true);
+    }
+    setEdicion(null);
+  };
+
+  const firmante = (t: TarjetaTurno) => {
+    if (t.supervisor === MIAS) return supervisor;
+    if (t.supervisor === OTRO_SUPERVISOR) {
+      return SUPERVISOR_DEL_TURNO[t.grupo === 'actual' ? ctx.turno : anterior.turno];
+    }
+    return t.supervisor;
+  };
 
   const listaCerradas =
     cerradas.length === 0 ? (
@@ -694,7 +838,7 @@ export function RegistroEquipoView() {
                   <span className="text-[13px] text-muted-foreground">
                     Cerrada a las <span className="tabular">{t.cerradaA}</span>
                   </span>
-                  <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
+                  <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirDetalleCerrada(t.id)}>
                     Ver detalle <ChevronRight className="h-4 w-4" />
                   </Boton>
                 </div>
@@ -704,11 +848,85 @@ export function RegistroEquipoView() {
         ))
     );
 
+  /** Corregir una cerrada (R13): los datos del cierre, con el aviso al admin arriba. */
+  const vistaEdicionCerrada = detalleCerrada && edicion && (
+    <div className="flex flex-col gap-4">
+      <AvisoEdicion />
+      <Form>
+        <Campo label="Operador">
+          <Selector
+            etiqueta="Operador"
+            valor={edicion.operador}
+            onChange={(operador) => setEdicion((e) => e && { ...e, operador })}
+            opciones={OPERADORES.map((o) => ({ valor: o, titulo: o }))}
+          />
+        </Campo>
+        <div className="grid grid-cols-2 gap-3">
+          <Campo label="Horómetro inicial" unidad="h">
+            <Input numerico value={edicion.inicial} onChange={(ev) => setEdicion((e) => e && { ...e, inicial: ev.target.value })} />
+          </Campo>
+          <Campo label="Horómetro final" unidad="h">
+            <Input numerico value={edicion.final} onChange={(ev) => setEdicion((e) => e && { ...e, final: ev.target.value })} />
+          </Campo>
+        </div>
+        <Calculado
+          label="Horas máquina"
+          valor={edInicial != null && edFinal != null && edFinal >= edInicial ? `${fmt(edFinal - edInicial)} h` : '—'}
+        />
+        <Campo label="Combustible cargado" unidad="L" hint="Cero si no cargó en el turno.">
+          <Input numerico value={edicion.litros} onChange={(ev) => setEdicion((e) => e && { ...e, litros: ev.target.value })} />
+        </Campo>
+        <div className="flex flex-col gap-1.5">
+          <Label>¿Se cargó AdBlue?</Label>
+          <Segmentado
+            etiqueta="¿Se cargó AdBlue?"
+            valor={edicion.adblue ? 'si' : 'no'}
+            onChange={(v) => setEdicion((e) => e && { ...e, adblue: v === 'si', adblueLitros: v === 'si' ? e.adblueLitros : '' })}
+            opciones={[
+              { valor: 'no', label: 'No' },
+              { valor: 'si', label: 'Sí' },
+            ]}
+          />
+        </div>
+        {edicion.adblue && (
+          <Campo label="AdBlue cargado" unidad="L">
+            <Input numerico value={edicion.adblueLitros} onChange={(ev) => setEdicion((e) => e && { ...e, adblueLitros: ev.target.value })} />
+          </Campo>
+        )}
+        <Campo label="Observaciones">
+          <Textarea
+            rows={3}
+            value={edicion.observaciones}
+            onChange={(ev) => setEdicion((e) => e && { ...e, observaciones: ev.target.value })}
+          />
+        </Campo>
+        <Hint>La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.</Hint>
+        <Boton ancho onClick={guardarEdicion} disabled={errorEdicion != null}>
+          Guardar cambios <ArrowRight className="h-[19px] w-[19px]" />
+        </Boton>
+        {errorEdicion && <p className="m-0 text-center text-[12.5px] text-muted-foreground">{errorEdicion}</p>}
+        <Boton variante="contorno" ancho onClick={() => setEdicion(null)}>
+          Cancelar
+        </Boton>
+      </Form>
+    </div>
+  );
+
   const vistaDetalleCerrada = detalleCerrada && (
     <div className="flex flex-col gap-4">
-      <Boton variante="contorno" onClick={() => setDetalleCerrada(null)} className="self-start">
-        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
-      </Boton>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Boton variante="contorno" onClick={() => abrirDetalleCerrada(null)}>
+          <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+        </Boton>
+        <Boton variante="contorno" onClick={() => abrirEdicion(detalleCerrada)}>
+          <Pencil className="h-[17px] w-[17px]" /> Editar
+        </Boton>
+      </div>
+      {avisoGuardado && (
+        <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
+          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+        </p>
+      )}
 
       <Cifras
         items={[
@@ -729,6 +947,10 @@ export function RegistroEquipoView() {
             ['Supervisor', firmante(detalleCerrada)],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
             [
+              'AdBlue',
+              detalleCerrada.adblueLitros ? `${fmt(detalleCerrada.adblueLitros, 0)} L` : 'No se cargó',
+            ],
+            [
               'Foto del surtidor',
               <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
                 <Camera className="h-4 w-4" /> Adjunta
@@ -746,6 +968,8 @@ export function RegistroEquipoView() {
           )}
         </p>
       </div>
+
+      <HistorialCambios entradas={detalleCerrada.cambios ?? []} />
     </div>
   );
 
@@ -801,6 +1025,44 @@ export function RegistroEquipoView() {
         staleQuestion="¿Es la carga de este turno?"
       />
 
+      {/*
+        AdBlue (Acta N.° 004, R12). Va aparte del combustible porque es otro
+        insumo y otro estanque, y porque casi nunca se carga en el cierre: de
+        lunes a viernes lo recargan los mantenedores. La pregunta va primero
+        y los litros solo aparecen si se cargó, así el caso común —no se
+        cargó— es un solo toque.
+      */}
+      <div className="flex flex-col gap-1.5">
+        <Label>¿Se cargó AdBlue?</Label>
+        <Segmentado
+          etiqueta="¿Se cargó AdBlue?"
+          valor={cierre.adblue ? 'si' : 'no'}
+          onChange={(v) => setCierre((c) => ({ ...c, adblue: v === 'si', adblueLitros: v === 'si' ? c.adblueLitros : '' }))}
+          opciones={[
+            { valor: 'no', label: 'No' },
+            { valor: 'si', label: 'Sí' },
+          ]}
+        />
+      </div>
+      {cierre.adblue && (
+        <Campo
+          label="AdBlue cargado"
+          requerido
+          unidad="L"
+          hint={
+            adblueNum != null && adblueNum > ESTANQUE_ADBLUE_L
+              ? `Es más de lo que cabe en un estanque de ${ESTANQUE_ADBLUE_L} L: revisá el dato.`
+              : `Los cargadores SEM 3, 4, 5 y 6 tienen estanque de ${ESTANQUE_ADBLUE_L} L y gastan cerca de 1 L por hora.`
+          }
+        >
+          <Input
+            numerico
+            value={cierre.adblueLitros}
+            onChange={(e) => setCierre((c) => ({ ...c, adblueLitros: e.target.value }))}
+          />
+        </Campo>
+      )}
+
       <Campo label="Observaciones">
         <Textarea
           rows={3}
@@ -814,12 +1076,22 @@ export function RegistroEquipoView() {
         ancho
         onClick={confirmarCierre}
         disabled={
-          !foto.file || foto.isReadingPhoto || foto.isUploadingPhoto || finalNum == null || finalInvalido
+          !foto.file ||
+          foto.isReadingPhoto ||
+          foto.isUploadingPhoto ||
+          finalNum == null ||
+          finalInvalido ||
+          faltaAdblue
         }
       >
         {foto.isUploadingPhoto ? 'Subiendo la foto…' : 'Cerrar tarjeta'}
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
+      {faltaAdblue && (
+        <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+          Indicá cuántos litros de AdBlue se cargaron.
+        </p>
+      )}
       {!foto.file && (
         <p className="m-0 text-center text-[12.5px] text-muted-foreground">
           Falta la foto del surtidor para cerrar.
@@ -910,10 +1182,12 @@ export function RegistroEquipoView() {
         abierto={historialAbierto}
         onAbiertoChange={(abierto) => {
           setHistorialAbierto(abierto);
-          if (!abierto) setDetalleCerrada(null);
+          if (!abierto) abrirDetalleCerrada(null);
         }}
         titulo={
-          detalleCerrada ? `${detalleCerrada.equipo} · ${detalleCerrada.tipo}` : 'Historial de cerradas'
+          detalleCerrada
+            ? `${edicion ? 'Editar · ' : ''}${detalleCerrada.equipo} · ${detalleCerrada.tipo}`
+            : 'Historial de cerradas'
         }
         detalle={
           detalleCerrada
@@ -921,7 +1195,7 @@ export function RegistroEquipoView() {
             : `${plural(cerradas.length, 'tarjeta cerrada', 'tarjetas cerradas')} · este turno y el anterior`
         }
       >
-        {vistaDetalleCerrada || listaCerradas}
+        {vistaEdicionCerrada || vistaDetalleCerrada || listaCerradas}
       </ModalTerreno>
 
       {verReporte && (

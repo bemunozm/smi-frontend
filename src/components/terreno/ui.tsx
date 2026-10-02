@@ -3,18 +3,21 @@ import type { ReactElement, ReactNode } from 'react';
 import {
   Button as AriaButton,
   Dialog,
+  Header,
   Heading,
   ListBox,
   ListBoxItem,
+  ListBoxSection,
   Modal,
   ModalOverlay,
   Popover,
   Select as AriaSelect,
   SelectValue,
 } from 'react-aria-components';
-import { Check, ChevronDown, Moon, Sun, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Moon, Sun, X } from 'lucide-react';
 
 import type { Turno } from '../../lib/turno';
+import type { EntradaCambios } from '../../types/cambios';
 
 /**
  * Kit visual de Terreno, según la maqueta aprobada el 23/09/2026.
@@ -355,8 +358,15 @@ export interface OpcionSelector {
   titulo: string;
   /** Lo que la acompaña en gris: `Bulldozer`. */
   detalle?: string;
-  /** Visible pero no elegible, con el motivo debajo: `Ocupado, en turno`. */
+  /** Visible pero no elegible, con el motivo debajo: `En taller`. */
   motivo?: string;
+  /** Nota debajo que informa sin bloquear: `En turno · Patricio Rojas`. */
+  aviso?: string;
+  /**
+   * Título del grupo al que pertenece. Las opciones se agrupan en el orden en
+   * que aparece cada grupo; sin grupos, la lista va de corrido.
+   */
+  grupo?: string;
 }
 
 /**
@@ -399,6 +409,40 @@ export function Selector({
 }) {
   const elegida = opciones.find((o) => o.valor === valor);
   const tab = tituloTabular ? 'tabular' : '';
+
+  const item = (o: OpcionSelector) => (
+    <ListBoxItem
+      key={o.valor}
+      id={o.valor}
+      textValue={o.detalle ? `${o.titulo} · ${o.detalle}` : o.titulo}
+      className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[focused]:bg-[#f1f3f5] data-[selected]:bg-[var(--accent-soft)] data-[selected]:text-[var(--accent-soft-foreground)]"
+    >
+      {({ isSelected }) => (
+        <>
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className={`text-[15.5px] font-semibold ${tab}`}>{o.titulo}</span>
+            {o.detalle && (
+              <span className={`text-[14.5px] ${isSelected ? '' : 'text-muted-foreground'}`}>
+                {' '}
+                · {o.detalle}
+              </span>
+            )}
+            {(o.motivo ?? o.aviso) && (
+              <span className="mt-0.5 block text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
+                {o.motivo ?? o.aviso}
+              </span>
+            )}
+          </span>
+          {isSelected && <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={2.6} aria-hidden />}
+        </>
+      )}
+    </ListBoxItem>
+  );
+
+  // Grupos en el orden en que aparecen; un grupo vacío no se dibuja.
+  const grupos = [...new Set(opciones.map((o) => o.grupo ?? ''))];
+  const agrupada = grupos.some((g) => g !== '');
+
   return (
     <AriaSelect
       id={id}
@@ -437,34 +481,16 @@ export function Selector({
         style={{ maxHeight: 'min(360px, var(--popover-max-height, 360px))' }}
       >
         <ListBox className="flex flex-col gap-0.5 outline-none">
-          {opciones.map((o) => (
-            <ListBoxItem
-              key={o.valor}
-              id={o.valor}
-              textValue={o.detalle ? `${o.titulo} · ${o.detalle}` : o.titulo}
-              className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[focused]:bg-[#f1f3f5] data-[selected]:bg-[var(--accent-soft)] data-[selected]:text-[var(--accent-soft-foreground)]"
-            >
-              {({ isSelected }) => (
-                <>
-                  <span className="min-w-0 flex-1 leading-tight">
-                    <span className={`text-[15.5px] font-semibold ${tab}`}>{o.titulo}</span>
-                    {o.detalle && (
-                      <span className={`text-[14.5px] ${isSelected ? '' : 'text-muted-foreground'}`}>
-                        {' '}
-                        · {o.detalle}
-                      </span>
-                    )}
-                    {o.motivo && (
-                      <span className="mt-0.5 block text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
-                        {o.motivo}
-                      </span>
-                    )}
-                  </span>
-                  {isSelected && <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={2.6} aria-hidden />}
-                </>
-              )}
-            </ListBoxItem>
-          ))}
+          {agrupada
+            ? grupos.map((g) => (
+                <ListBoxSection key={g} id={g} className="flex flex-col gap-0.5 not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5">
+                  <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+                    {g}
+                  </Header>
+                  {opciones.filter((o) => (o.grupo ?? '') === g).map(item)}
+                </ListBoxSection>
+              ))
+            : opciones.map(item)}
         </ListBox>
       </Popover>
     </AriaSelect>
@@ -910,5 +936,76 @@ export function Filas({ filas }: { filas: [string, ReactNode][] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/* ---------- Edición de registros enviados (Acta N.° 004, R13) ---------- */
+
+/**
+ * Lo que se le dice a quien edita algo ya enviado, siempre en el mismo
+ * lugar: arriba del formulario de edición. La edición no pide permiso, pero
+ * no es anónima — y eso tiene que estar dicho antes de tocar nada, no
+ * descubrirse en el toast después de guardar.
+ */
+export function AvisoEdicion() {
+  return (
+    <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--warning-soft)] px-3 py-2.5 text-[13px] leading-snug text-[var(--warning-soft-foreground)]">
+      <Bell className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <span>
+        Podés cambiar cualquier dato. <b>Al guardar se avisa al administrador</b> y queda registro de
+        quién cambió qué y cuándo.
+      </span>
+    </div>
+  );
+}
+
+const fechaHoraCambio = (iso: string) => {
+  const f = new Date(iso);
+  return `${f.toLocaleDateString('es-CL')} ${f.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
+/**
+ * Historial de cambios de un registro: quién, cuándo y cada dato con su
+ * valor anterior tachado y el nuevo al lado. Va al pie del detalle, debajo
+ * de lo que el registro dice hoy.
+ */
+export function HistorialCambios({ entradas, cargando }: { entradas: EntradaCambios[]; cargando?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <GrupoHead
+        titulo="Historial de cambios"
+        detalle={entradas.length ? `${entradas.length} ${entradas.length === 1 ? 'cambio' : 'cambios'}` : undefined}
+      />
+      {cargando ? (
+        <p className="m-0 text-[13px] text-muted-foreground">Cargando…</p>
+      ) : entradas.length === 0 ? (
+        <p className="m-0 rounded-2xl border border-dashed border-border px-3 py-3 text-[13px] text-muted-foreground">
+          Sin cambios desde que se registró.
+        </p>
+      ) : (
+        <ol className="m-0 flex list-none flex-col gap-2 p-0">
+          {entradas.map((e) => (
+            <li key={e.id} className="rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[13px]">
+                <b>{e.userName}</b>
+                <span className="tabular text-muted-foreground">{fechaHoraCambio(e.createdAt)}</span>
+              </div>
+              <dl className="m-0 mt-1.5 flex flex-col gap-1">
+                {e.changes.map((c) => (
+                  <div key={c.field} className="text-[13.5px] leading-snug">
+                    <dt className="text-[12px] text-muted-foreground">{c.label}</dt>
+                    <dd className="m-0">
+                      <span className="text-muted-foreground line-through">{c.before}</span>
+                      <span className="mx-1.5 text-muted-foreground" aria-label="cambió a">→</span>
+                      <b className="font-semibold">{c.after}</b>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

@@ -35,32 +35,32 @@ export interface SeccionNumerica {
 }
 
 /**
- * Totales de un turno a partir de sus secciones de camiones.
+ * Vueltas que aporta una sección al turno.
  *
  * Las vueltas de cada sección son **por camión**, no el total ya sumado: una
- * sección de 8 camiones a 6 vueltas aporta 48 al turno, no 6. Es el mismo
- * significado que tenía el campo único «Vueltas por camión» antes de abrirse
- * en tres.
+ * sección de 8 camiones a 6 vueltas aporta 48 al turno, no 6.
+ *
+ * Es un contador **por sección** y no hay un total que las sume: cada tipo de
+ * camión —internos, Mina Caleta, mineras— se cobra con su propia tarifa
+ * (Acta N.° 004, R9). Sumarlas daría una cifra que no corresponde a ninguna
+ * tarifa y que invita a facturar mal.
  *
  * Vive acá, y no en la vista, porque la regla la aplican dos lados: el
  * formulario del turno en curso y el historial de turnos pasados. Partida en
  * dos se arreglaría en uno solo el día que cambie.
  */
-export function totalesDeSecciones(secciones: readonly SeccionNumerica[]): {
-  camiones: number;
-  vueltas: number;
-} {
-  return {
-    camiones: secciones.reduce((total, s) => total + s.camiones, 0),
-    vueltas: secciones.reduce((total, s) => total + s.camiones * s.vueltas, 0),
-  };
+export function vueltasDeSeccion(s: SeccionNumerica): number {
+  return s.camiones * s.vueltas;
 }
 
-/** Los totales del formulario, cuyos campos son texto en formato es-CL. */
-export function calcularTotales(s: SeccionesCamiones): { camiones: number; vueltas: number } {
-  return totalesDeSecciones([
+/**
+ * Las tres secciones del formulario ya numéricas, en el orden de pantalla:
+ * internos, Mina Caleta, mineras. Los campos son texto en formato es-CL.
+ */
+export function seccionesDelFormulario(s: SeccionesCamiones): SeccionNumerica[] {
+  return [
     { camiones: aNumero(s.camionesInternos), vueltas: aNumero(s.vueltasInternos) },
     { camiones: aNumero(s.camionesMinaCaleta), vueltas: aNumero(s.vueltasMinaCaleta) },
     { camiones: aNumero(s.camionesMinera), vueltas: aNumero(s.vueltasMinera) },
-  ]);
+  ];
 }

@@ -93,6 +93,47 @@ describe('RegistroEquipoView', () => {
     expect(screen.getByText(/sin la mano sobre el vidrio/)).toBeTruthy();
   });
 
+  /**
+   * Acta N.° 004, R12: el cierre pregunta si se cargó AdBlue. El caso común
+   * es que no —de lunes a viernes lo cargan los mantenedores—, así que los
+   * litros solo se piden al marcar que sí, y entonces son obligatorios.
+   */
+  describe('AdBlue en el cierre', () => {
+    const abrirCierre = () => {
+      renderView('desktop');
+      fireEvent.click(screen.getAllByRole('button', { name: /^Cerrar$/ })[0]);
+    };
+
+    it('arranca en «No» y no pide litros', () => {
+      abrirCierre();
+
+      const grupo = within(screen.getByRole('group', { name: '¿Se cargó AdBlue?' }));
+      expect(grupo.getByRole('button', { name: 'No' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByLabelText(/AdBlue cargado/)).toBeNull();
+    });
+
+    it('al marcar «Sí» pide los litros y no deja cerrar sin ellos', () => {
+      abrirCierre();
+
+      const grupo = within(screen.getByRole('group', { name: '¿Se cargó AdBlue?' }));
+      fireEvent.click(grupo.getByRole('button', { name: 'Sí' }));
+
+      expect(screen.getByLabelText(/AdBlue cargado/)).toBeTruthy();
+      expect(screen.getByText('Indicá cuántos litros de AdBlue se cargaron.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('avisa si los litros superan el estanque de 30 L', () => {
+      abrirCierre();
+
+      fireEvent.click(within(screen.getByRole('group', { name: '¿Se cargó AdBlue?' })).getByRole('button', { name: 'Sí' }));
+      fireEvent.change(screen.getByLabelText(/AdBlue cargado/), { target: { value: '45' } });
+
+      expect(screen.getByText(/más de lo que cabe en un estanque de 30 L/)).toBeTruthy();
+      expect(screen.queryByText('Indicá cuántos litros de AdBlue se cargaron.')).toBeNull();
+    });
+  });
+
   /** El horómetro final no puede ser menor que el inicial. */
   it('avisa si el horómetro final es menor que el inicial', () => {
     renderView('desktop');
@@ -201,9 +242,62 @@ describe('RegistroEquipoView', () => {
       expect(ventana.getByRole('heading', { name: 'CA-011 · Cargador' })).toBeTruthy();
       expect(ventana.getByText('Jorge Pizarro')).toBeTruthy();
       expect(ventana.getByText(/Revisar pasadores/)).toBeTruthy();
+      expect(ventana.getByText('AdBlue').parentElement?.textContent).toContain('12 L');
 
       fireEvent.click(ventana.getByText('Volver al historial'));
       expect(within(screen.getByRole('dialog')).getAllByRole('button', { name: /Ver detalle/ }).length).toBe(2);
+    });
+  });
+
+  /**
+   * Acta N.° 004, R13: una tarjeta cerrada se corrige desde el historial, sin
+   * autorización pero avisando al administrador, y el detalle guarda quién
+   * cambió qué. Guardar sin tocar nada no es un cambio.
+   */
+  describe('editar una tarjeta cerrada', () => {
+    const abrirCerrada = () => {
+      renderView('desktop');
+      fireEvent.click(screen.getByRole('button', { name: /historial de cerradas/i }));
+      fireEvent.click(screen.getAllByRole('button', { name: /Ver detalle/ })[0]);
+      return () => within(screen.getByRole('dialog'));
+    };
+
+    it('muestra los cambios anteriores en el detalle', () => {
+      const ventana = abrirCerrada();
+
+      expect(ventana().getByText('Historial de cambios')).toBeTruthy();
+      expect(ventana().getByText('José Pérez')).toBeTruthy();
+    });
+
+    it('guarda la corrección, avisa y la suma al historial', () => {
+      const ventana = abrirCerrada();
+      fireEvent.click(ventana().getByRole('button', { name: /Editar/ }));
+
+      expect(ventana().getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
+      fireEvent.change(ventana().getByLabelText(/Horómetro final/), { target: { value: '12.490,0' } });
+      fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+
+      expect(ventana().getByText(/Cambio guardado. Se avisó al administrador./)).toBeTruthy();
+      expect(ventana().getByText('Historial de cambios').parentElement?.textContent).toContain('2 cambios');
+      expect(ventana().getByText('12.490,0 h')).toBeTruthy();
+    });
+
+    it('no deja guardar un final menor que el inicial', () => {
+      const ventana = abrirCerrada();
+      fireEvent.click(ventana().getByRole('button', { name: /Editar/ }));
+      fireEvent.change(ventana().getByLabelText(/Horómetro final/), { target: { value: '1' } });
+
+      expect(ventana().getByRole('button', { name: /Guardar cambios/ }).hasAttribute('disabled')).toBe(true);
+      expect(ventana().getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
+    });
+
+    it('guardar sin cambiar nada no agrega un cambio', () => {
+      const ventana = abrirCerrada();
+      fireEvent.click(ventana().getByRole('button', { name: /Editar/ }));
+      fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+
+      expect(ventana().queryByText(/Cambio guardado/)).toBeNull();
+      expect(ventana().getByText('Historial de cambios').parentElement?.textContent).toContain('1 cambio');
     });
   });
 });

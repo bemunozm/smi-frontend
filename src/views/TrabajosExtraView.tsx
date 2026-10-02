@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ArrowRight, ChevronRight, History, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil } from 'lucide-react';
 
 import {
   trabajoExtraFormSchema,
@@ -12,12 +12,19 @@ import {
   type TrabajoExtraordinario,
 } from '../types/trabajosExtra';
 import { turnoDe } from '../lib/turno';
-import { useTrabajosExtraList, useCreateTrabajoExtra } from '../hooks/useTrabajosExtra';
+import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
+import {
+  useTrabajosExtraList,
+  useCreateTrabajoExtra,
+  useUpdateTrabajoExtra,
+  useCambiosTrabajoExtra,
+} from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
+  AvisoEdicion,
   Boton,
   Calculado,
   Campo,
@@ -30,6 +37,7 @@ import {
   Filas,
   Form,
   GrupoHead,
+  HistorialCambios,
   Hint,
   Input,
   Label,
@@ -43,6 +51,7 @@ import {
   TH,
   VistaHead,
   VistaUnica,
+  type OpcionSelector,
 } from '../components/terreno/ui';
 
 const TURNOS = [
@@ -69,6 +78,12 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
     .join(', ');
 }
 
+/** Por qué un equipo no se puede elegir, según su estado en Flota. */
+const ESTADO_NO_DISPONIBLE: Record<string, string> = {
+  IN_WORKSHOP: 'En taller',
+  OUT_OF_SERVICE: 'Fuera de servicio',
+};
+
 const FAENAS = [
   { valor: 'Patillo', label: 'Patillo' },
   { valor: 'Kainita', label: 'Kainita' },
@@ -81,7 +96,14 @@ export function TrabajosExtraView() {
   const { data: lecturas = [] } = useHorometroList();
   const crear = useCreateTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
+  /** Modo edición del trabajo abierto en el detalle (Acta N.° 004, R13). */
+  const [editando, setEditando] = useState(false);
+  const actualizar = useUpdateTrabajoExtra();
+  const cambios = useCambiosTrabajoExtra(detalleId);
+  // Se lee de la lista y no de una copia: tras editar, la lista se refresca
+  // y el detalle muestra el dato nuevo sin tener que volver a abrirlo.
+  const detalle = registros.find((r) => r.id === detalleId) ?? null;
 
   /**
    * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
@@ -99,184 +121,65 @@ export function TrabajosExtraView() {
   });
 
   /**
-   * Un equipo con **turno en curso** está ocupado y no admite un trabajo
-   * extraordinario hasta que se cierre la tarjeta.
+   * Equipos **en terreno**: los que tienen un turno en curso, con el operador
+   * que lo lleva. «Turno en curso» es la misma definición que usa el backend:
+   * una lectura de horómetro sin `valorFinal`.
    *
-   * El motivo es el cobro: las horas del trabajo y las del turno se facturan
-   * por separado, y mientras el turno sigue abierto no se sabe cuáles serán
-   * sus horas, así que las del trabajo podrían quedar contadas dos veces.
-   *
-   * «Turno en curso» es la misma definición que usa el backend —una lectura
-   * de horómetro sin `valorFinal`— y ahí está la regla de verdad, porque la
-   * especificación pide registrar sin señal y sincronizar después (R4). Acá
-   * solo se evita ofrecer una opción que el servidor va a rechazar.
+   * Hasta el Acta N.° 004 un equipo en turno no se podía elegir. El cliente lo
+   * corrigió (punto 4): el trabajo extra se registra al final del turno y usa
+   * la misma máquina, que tiene tiempos en ralentí. Ahora se puede elegir, y
+   * el turno abierto queda como **aviso** —para no tener que coordinarlo por
+   * radio—, no como bloqueo.
    */
-  const ocupados = useMemo(
-    () => new Set(lecturas.filter((l) => l.valorFinal == null).map((l) => l.equipoId)),
+  const enTurno = useMemo(
+    () => new Map(lecturas.filter((l) => l.valorFinal == null).map((l) => [l.equipoId, l.operador])),
     [lecturas],
   );
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    setValue,
-    formState: { errors },
-  } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
-    resolver: zodResolver(trabajoExtraFormSchema),
-    defaultValues: vacio(),
-  });
+  /**
+   * R10: el selector separa los equipos en terreno de los disponibles. Los que
+   * están en taller o fuera de servicio quedan al final, a la vista pero sin
+   * poder elegirse, para que no parezca que desaparecieron.
+   */
+  const opcionesEquipo = useMemo((): OpcionSelector[] => {
+    const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
+      const operador = enTurno.get(e.id);
+      if (operador != null) {
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En terreno', aviso: `En turno · ${operador}` };
+      }
+      if (e.status && e.status !== 'OPERATIONAL') {
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'No disponibles', motivo: ESTADO_NO_DISPONIBLE[e.status] ?? 'No operativo' };
+      }
+      return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'Disponibles' };
+    };
+    const orden = ['En terreno', 'Disponibles', 'No disponibles'];
+    return equipos.map(opcion).sort((a, b) => orden.indexOf(a.grupo!) - orden.indexOf(b.grupo!));
+  }, [equipos, enTurno]);
 
-  const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
-  const faena = watch('faena') || 'Patillo';
-  const actividades = watch('actividades') ?? [];
-  const ini = Number(watch('horometroInicial')) || 0;
-  const fin = Number(watch('horometroFinal')) || 0;
-  const totalHoras = fin > ini ? fin - ini : null;
-
-  const onSubmit = (values: TrabajoExtraForm) =>
-    crear.mutate(values, {
-      onSuccess: () => reset(vacio()),
-    });
+  /**
+   * Al registrar, el formulario se vuelve a montar en blanco (`key` nueva) en
+   * vez de resetear campo por campo: así vuelve también el turno según la
+   * hora, y no queda nada del trabajo anterior.
+   */
+  const [formKey, setFormKey] = useState(0);
 
   const formulario = (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <Card>
-        <CardHead
-          titulo="Nuevo trabajo extraordinario"
-          bajada="Horas y respaldo del trabajo fuera de la operación habitual."
-        />
-        <Form>
-          <div className="grid grid-cols-2 gap-3">
-            {/*
-              Los ocupados se muestran **deshabilitados**, no escondidos. Si un
-              equipo desaparece de la lista el supervisor no sabe si está
-              ocupado, si lo dieron de baja o si se equivocó de pantalla;
-              verlo en gris y con el motivo al lado responde la pregunta sin
-              que tenga que ir a buscarla a otro lado.
-            */}
-            <Campo
-              label="Equipo"
-              hint={
-                errors.equipoId?.message ??
-                (ocupados.size > 0
-                  ? `${ocupados.size} ${ocupados.size === 1 ? 'equipo está' : 'equipos están'} en turno. Cerrá su tarjeta para poder cargarle un trabajo.`
-                  : undefined)
-              }
-            >
-              <Selector
-                etiqueta="Equipo"
-                tituloTabular
-                valor={watch('equipoId') ?? ''}
-                onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
-                opciones={equipos.map((e) => ({
-                  valor: e.id,
-                  titulo: e.internalCode,
-                  detalle: e.type,
-                  motivo: ocupados.has(e.id) ? 'Ocupado, en turno' : undefined,
-                }))}
-              />
-            </Campo>
-            <Campo label="Operador" hint={errors.operador?.message}>
-              <Input placeholder="Nombre y apellido" {...register('operador')} />
-            </Campo>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Faena</Label>
-            <Segmentado
-              etiqueta="Faena"
-              valor={faena}
-              onChange={(v) => setValue('faena', v)}
-              opciones={FAENAS}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Turno</Label>
-            <Segmentado
-              etiqueta="Turno"
-              valor={turno}
-              onChange={(v) => setValue('turno', v)}
-              opciones={TURNOS}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
-              <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroInicial', { valueAsNumber: true })} />
-            </Campo>
-            <Campo label="Horómetro final" unidad="h" hint={errors.horometroFinal?.message}>
-              <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroFinal', { valueAsNumber: true })} />
-            </Campo>
-          </div>
-          <Hint>Delimitan el trabajo, no el turno completo.</Hint>
-
-          <Calculado
-            label="Horas totales"
-            nota={
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-[13px] w-[13px]" />
-                Calculado · no editable
-              </span>
-            }
-            valor={totalHoras != null ? `${fmtNum(totalHoras)} h` : '—'}
-          />
-
-          {/*
-            Multi-selección con chips grandes y no un `select` múltiple: una
-            salida suele mezclar tareas, y el `select` múltiple obliga a saber
-            que hay que mantener Ctrl apretado — impensable con guantes.
-          */}
-          <div className="flex flex-col gap-1.5">
-            <Label>Actividades</Label>
-            <div className="flex flex-wrap gap-2">
-              {ACTIVIDADES.map((a) => (
-                <ChipSeleccion
-                  key={a.value}
-                  activo={actividades.includes(a.value)}
-                  onToggle={() =>
-                    setValue(
-                      'actividades',
-                      actividades.includes(a.value)
-                        ? actividades.filter((v) => v !== a.value)
-                        : [...actividades, a.value],
-                      { shouldValidate: true },
-                    )
-                  }
-                >
-                  {a.label}
-                </ChipSeleccion>
-              ))}
-            </div>
-            {errors.actividades?.message && <Hint>{errors.actividades.message}</Hint>}
-          </div>
-
-          {/* El texto aparece solo si se eligió «Otro», y es obligatorio: sin
-              él la actividad quedaría como «otro» a secas y el trabajo no se
-              podría justificar ni cobrar. */}
-          {actividades.includes('OTRO') && (
-            <Campo label="¿Cuál fue la otra actividad?" requerido hint={errors.otraActividad?.message}>
-              <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
-            </Campo>
-          )}
-
-          <Campo label="Descripción de la tarea" hint={errors.descripcion?.message}>
-            <Textarea rows={3} placeholder="Qué se hizo y dónde" {...register('descripcion')} />
-          </Campo>
-
-          <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">
-            <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
-          </Campo>
-
-          <Boton ancho type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar trabajo'}
-            <ArrowRight className="h-[19px] w-[19px]" />
-          </Boton>
-        </Form>
-      </Card>
-    </form>
+    <Card>
+      <CardHead
+        titulo="Nuevo trabajo extraordinario"
+        bajada="Horas y respaldo del trabajo fuera de la operación habitual."
+      />
+      <FormularioTrabajo
+        key={formKey}
+        inicial={vacio()}
+        equipos={equipos}
+        enTurno={enTurno}
+        opcionesEquipo={opcionesEquipo}
+        textoBoton="Registrar trabajo"
+        pendiente={crear.isPending}
+        onGuardar={(values) => crear.mutate(values, { onSuccess: () => setFormKey((k) => k + 1) })}
+      />
+    </Card>
   );
 
   const codigo = (r: TrabajoExtraordinario) => r.equipo?.internalCode ?? r.equipoId;
@@ -312,11 +215,16 @@ export function TrabajosExtraView() {
                 <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
               <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
-              <td className={`${TD} tabular text-right font-semibold`}>{fmtNum(r.totalHoras)} h</td>
+              <td className={`${TD} tabular text-right font-semibold whitespace-nowrap`}>
+                {fmtNum(horasCobrables(r.totalHoras))} h
+                {cobraMinimo(r.totalHoras) && (
+                  <div className="text-[12px] font-normal text-muted-foreground">real {fmtNum(r.totalHoras)} h</div>
+                )}
+              </td>
               <td className={`${TD} text-right`}>
                 <button
                   type="button"
-                  onClick={() => setDetalle(r)}
+                  onClick={() => setDetalleId(r.id)}
                   className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
                 >
                   Ver detalle <ChevronRight className="h-4 w-4" />
@@ -342,9 +250,14 @@ export function TrabajosExtraView() {
               <span>
                 {fmtDate(r.fecha)} · {r.turno}
               </span>
-              <span className="font-semibold text-foreground">{fmtNum(r.totalHoras)} h</span>
+              <span className="font-semibold text-foreground">
+                {fmtNum(horasCobrables(r.totalHoras))} h
+                {cobraMinimo(r.totalHoras) && (
+                  <span className="font-normal text-muted-foreground"> · real {fmtNum(r.totalHoras)} h</span>
+                )}
+              </span>
             </div>
-            <Boton variante="contorno" ancho onClick={() => setDetalle(r)}>
+            <Boton variante="contorno" ancho onClick={() => setDetalleId(r.id)}>
               Ver detalle <ChevronRight className="h-[18px] w-[18px]" />
             </Boton>
           </Tarjeta>
@@ -352,19 +265,62 @@ export function TrabajosExtraView() {
       </div>
     );
 
+  /**
+   * Editar un trabajo ya registrado (Acta N.° 004, R13): el mismo formulario
+   * del alta, con los datos guardados y el aviso de que el administrador se
+   * entera. Vive en la misma ventana que el detalle, como lista y detalle.
+   */
+  const vistaEdicion = detalle && editando && (
+    <div className="flex flex-col gap-4">
+      <AvisoEdicion />
+      <FormularioTrabajo
+        inicial={{
+          equipoId: detalle.equipoId,
+          operador: detalle.operador,
+          faena: detalle.faena,
+          turno: detalle.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+          horometroInicial: detalle.horometroInicial,
+          horometroFinal: detalle.horometroFinal,
+          actividades: detalle.actividades,
+          otraActividad: detalle.otraActividad ?? '',
+          descripcion: detalle.descripcion,
+          observaciones: detalle.observaciones ?? '',
+        }}
+        equipos={equipos}
+        enTurno={enTurno}
+        opcionesEquipo={opcionesEquipo}
+        textoBoton="Guardar cambios"
+        pendiente={actualizar.isPending}
+        onGuardar={(payload) =>
+          actualizar.mutate({ id: detalle.id, payload }, { onSuccess: () => setEditando(false) })
+        }
+        onCancelar={() => setEditando(false)}
+      />
+    </div>
+  );
+
   const vistaDetalle = detalle && (
     <div className="flex flex-col gap-4">
-      <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
-        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
-      </Boton>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Boton variante="contorno" onClick={() => setDetalleId(null)}>
+          <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+        </Boton>
+        <Boton variante="contorno" onClick={() => setEditando(true)}>
+          <Pencil className="h-[17px] w-[17px]" /> Editar
+        </Boton>
+      </div>
 
       <Cifras
         items={[
           { label: 'Horóm. inicial', valor: fmtNum(detalle.horometroInicial) },
           { label: 'Horóm. final', valor: fmtNum(detalle.horometroFinal) },
-          { label: 'Horas', valor: `${fmtNum(detalle.totalHoras)} h`, destacado: true },
+          { label: 'Horas reales', valor: `${fmtNum(detalle.totalHoras)} h` },
+          { label: 'A cobrar', valor: `${fmtNum(horasCobrables(detalle.totalHoras))} h`, destacado: true },
         ]}
       />
+      {cobraMinimo(detalle.totalHoras) && (
+        <Hint>Duró menos de {COBRO_MINIMO_HORAS} h: se cobra el mínimo de {COBRO_MINIMO_HORAS} h máquina.</Hint>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Trabajo" />
@@ -403,6 +359,8 @@ export function TrabajosExtraView() {
           </p>
         </div>
       ))}
+
+      <HistorialCambios entradas={cambios.data ?? []} cargando={cambios.isLoading} />
     </div>
   );
 
@@ -420,7 +378,7 @@ export function TrabajosExtraView() {
           variante="contorno"
           ancho
           onClick={() => {
-            setDetalle(null);
+            setDetalleId(null);
             setHistorialAbierto(true);
           }}
         >
@@ -434,17 +392,207 @@ export function TrabajosExtraView() {
         abierto={historialAbierto}
         onAbiertoChange={(abierto) => {
           setHistorialAbierto(abierto);
-          if (!abierto) setDetalle(null);
+          if (!abierto) {
+            setDetalleId(null);
+            setEditando(false);
+          }
         }}
-        titulo={detalle ? `${codigo(detalle)} · ${fmtDate(detalle.fecha)}` : 'Historial de trabajos'}
+        titulo={
+          detalle
+            ? `${editando ? 'Editar · ' : ''}${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
+            : 'Historial de trabajos'
+        }
         detalle={
           detalle
             ? `${detalle.faena} · turno ${detalle.turno} · ${detalle.operador}`
             : `Patillo y Kainita · ${registros.length} ${registros.length === 1 ? 'registro' : 'registros'}`
         }
       >
-        {vistaDetalle || lista}
+        {vistaEdicion || vistaDetalle || lista}
       </ModalTerreno>
     </>
+  );
+}
+
+/**
+ * Los campos de un trabajo extraordinario, para registrarlo y para editarlo
+ * (Acta N.° 004, R13). Es el mismo formulario en los dos casos a propósito:
+ * corregir un dato no tiene por qué verse distinto de cargarlo, y las reglas
+ * —horómetros, «Otro» con texto, cobro mínimo— no pueden quedar aplicadas en
+ * uno y en el otro no.
+ */
+function FormularioTrabajo({
+  inicial,
+  equipos,
+  enTurno,
+  opcionesEquipo,
+  textoBoton,
+  pendiente,
+  onGuardar,
+  onCancelar,
+}: {
+  inicial: Partial<TrabajoExtraFormInput>;
+  equipos: { id: string; internalCode: string }[];
+  /** Equipos con turno abierto → operador que lo lleva. */
+  enTurno: Map<string, string>;
+  opcionesEquipo: OpcionSelector[];
+  textoBoton: string;
+  pendiente: boolean;
+  onGuardar: (values: TrabajoExtraForm) => void;
+  onCancelar?: () => void;
+}) {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
+    resolver: zodResolver(trabajoExtraFormSchema),
+    defaultValues: inicial,
+  });
+
+  const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
+  const faena = watch('faena') || 'Patillo';
+  const actividades = watch('actividades') ?? [];
+  const ini = Number(watch('horometroInicial'));
+  const fin = Number(watch('horometroFinal'));
+  // Con inicial y final iguales el trabajo igual se cobra (el mínimo): por
+  // eso `>=` y no `>`. Si falta uno de los dos, todavía no hay nada que calcular.
+  const totalHoras =
+    Number.isFinite(ini) && Number.isFinite(fin) && fin >= ini ? Number((fin - ini).toFixed(2)) : null;
+
+  const equipoId = watch('equipoId') ?? '';
+  const operadorEnTurno = enTurno.get(equipoId);
+  const codigoElegido = equipos.find((e) => e.id === equipoId)?.internalCode;
+
+  return (
+    <form onSubmit={handleSubmit(onGuardar)}>
+      <Form>
+        <div className="grid grid-cols-2 gap-3">
+          <Campo
+            label="Equipo"
+            hint={
+              errors.equipoId?.message ??
+              (operadorEnTurno != null
+                ? `${codigoElegido} está en turno con ${operadorEnTurno}. Se registra igual: queda a nombre de esta máquina.`
+                : undefined)
+            }
+          >
+            <Selector
+              etiqueta="Equipo"
+              tituloTabular
+              valor={equipoId}
+              onChange={(id) => {
+                setValue('equipoId', id, { shouldValidate: true });
+                // Si el equipo está en turno, su operador es el candidato
+                // obvio; se propone solo si el campo sigue vacío.
+                const enTurnoCon = enTurno.get(id);
+                if (enTurnoCon && !watch('operador')) {
+                  setValue('operador', enTurnoCon, { shouldValidate: true });
+                }
+              }}
+              opciones={opcionesEquipo}
+            />
+          </Campo>
+          <Campo label="Operador" hint={errors.operador?.message}>
+            <Input placeholder="Nombre y apellido" {...register('operador')} />
+          </Campo>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label>Faena</Label>
+          <Segmentado etiqueta="Faena" valor={faena} onChange={(v) => setValue('faena', v)} opciones={FAENAS} />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label>Turno</Label>
+          <Segmentado etiqueta="Turno" valor={turno} onChange={(v) => setValue('turno', v)} opciones={TURNOS} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
+            <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroInicial', { valueAsNumber: true })} />
+          </Campo>
+          <Campo label="Horómetro final" unidad="h" hint={errors.horometroFinal?.message}>
+            <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroFinal', { valueAsNumber: true })} />
+          </Campo>
+        </div>
+        <Hint>Delimitan el trabajo, no el turno completo.</Hint>
+
+        {/* Lo que se muestra es lo que se COBRA: el mínimo es una hora
+            máquina (Acta N.° 004). Las horas reales van en la nota cuando
+            son menos, para que se vea por qué la cifra no calza con la
+            resta de los horómetros. */}
+        <Calculado
+          label="Horas a cobrar"
+          nota={
+            <span className="flex items-center gap-1.5">
+              <Lock className="h-[13px] w-[13px]" />
+              {totalHoras != null && cobraMinimo(totalHoras)
+                ? `Duró ${fmtNum(totalHoras)} h · mínimo ${COBRO_MINIMO_HORAS} h máquina`
+                : `Calculado · mínimo ${COBRO_MINIMO_HORAS} h máquina`}
+            </span>
+          }
+          valor={totalHoras != null ? `${fmtNum(horasCobrables(totalHoras))} h` : '—'}
+        />
+
+        {/*
+          Multi-selección con chips grandes y no un `select` múltiple: una
+          salida suele mezclar tareas, y el `select` múltiple obliga a saber
+          que hay que mantener Ctrl apretado — impensable con guantes.
+        */}
+        <div className="flex flex-col gap-1.5">
+          <Label>Actividades</Label>
+          <div className="flex flex-wrap gap-2">
+            {ACTIVIDADES.map((a) => (
+              <ChipSeleccion
+                key={a.value}
+                activo={actividades.includes(a.value)}
+                onToggle={() =>
+                  setValue(
+                    'actividades',
+                    actividades.includes(a.value)
+                      ? actividades.filter((v) => v !== a.value)
+                      : [...actividades, a.value],
+                    { shouldValidate: true },
+                  )
+                }
+              >
+                {a.label}
+              </ChipSeleccion>
+            ))}
+          </div>
+          {errors.actividades?.message && <Hint>{errors.actividades.message}</Hint>}
+        </div>
+
+        {/* El texto aparece solo si se eligió «Otro», y es obligatorio: sin
+            él la actividad quedaría como «otro» a secas y el trabajo no se
+            podría justificar ni cobrar. */}
+        {actividades.includes('OTRO') && (
+          <Campo label="¿Cuál fue la otra actividad?" requerido hint={errors.otraActividad?.message}>
+            <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
+          </Campo>
+        )}
+
+        <Campo label="Descripción de la tarea" hint={errors.descripcion?.message}>
+          <Textarea rows={3} placeholder="Qué se hizo y dónde" {...register('descripcion')} />
+        </Campo>
+
+        <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">
+          <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
+        </Campo>
+
+        <Boton ancho type="submit" disabled={pendiente}>
+          {pendiente ? 'Guardando…' : textoBoton}
+          <ArrowRight className="h-[19px] w-[19px]" />
+        </Boton>
+        {onCancelar && (
+          <Boton variante="contorno" ancho type="button" onClick={onCancelar}>
+            Cancelar
+          </Boton>
+        )}
+      </Form>
+    </form>
   );
 }
