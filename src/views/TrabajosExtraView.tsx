@@ -121,17 +121,18 @@ export function TrabajosExtraView() {
   });
 
   /**
-   * Equipos **en terreno**: los que tienen un turno en curso, con el operador
-   * que lo lleva. «Turno en curso» es la misma definición que usa el backend:
-   * una lectura de horómetro sin `valorFinal`.
+   * Equipos **en uso**: los que tienen un turno en curso, con el operador que
+   * lo lleva. «En uso» es la misma definición que usa el backend: una lectura
+   * de horómetro sin `valorFinal` — la que abre una tarjeta en Registro de
+   * equipo y se apaga al cerrarla.
    *
    * Hasta el Acta N.° 004 un equipo en turno no se podía elegir. El cliente lo
    * corrigió (punto 4): el trabajo extra se registra al final del turno y usa
    * la misma máquina, que tiene tiempos en ralentí. Ahora se puede elegir, y
-   * el turno abierto queda como **aviso** —para no tener que coordinarlo por
+   * el equipo en uso queda como **aviso** —para no tener que coordinarlo por
    * radio—, no como bloqueo.
    */
-  const enTurno = useMemo(
+  const enUso = useMemo(
     () => new Map(lecturas.filter((l) => l.valorFinal == null).map((l) => [l.equipoId, l.operador])),
     [lecturas],
   );
@@ -143,9 +144,9 @@ export function TrabajosExtraView() {
    */
   const opcionesEquipo = useMemo((): OpcionSelector[] => {
     const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
-      const operador = enTurno.get(e.id);
+      const operador = enUso.get(e.id);
       if (operador != null) {
-        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En terreno', aviso: `En turno · ${operador}` };
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En terreno', aviso: `En uso · ${operador}` };
       }
       if (e.status && e.status !== 'OPERATIONAL') {
         return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'No disponibles', motivo: ESTADO_NO_DISPONIBLE[e.status] ?? 'No operativo' };
@@ -154,7 +155,7 @@ export function TrabajosExtraView() {
     };
     const orden = ['En terreno', 'Disponibles', 'No disponibles'];
     return equipos.map(opcion).sort((a, b) => orden.indexOf(a.grupo!) - orden.indexOf(b.grupo!));
-  }, [equipos, enTurno]);
+  }, [equipos, enUso]);
 
   /**
    * Al registrar, el formulario se vuelve a montar en blanco (`key` nueva) en
@@ -173,7 +174,7 @@ export function TrabajosExtraView() {
         key={formKey}
         inicial={vacio()}
         equipos={equipos}
-        enTurno={enTurno}
+        enUso={enUso}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Registrar trabajo"
         pendiente={crear.isPending}
@@ -287,7 +288,7 @@ export function TrabajosExtraView() {
           observaciones: detalle.observaciones ?? '',
         }}
         equipos={equipos}
-        enTurno={enTurno}
+        enUso={enUso}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
         pendiente={actualizar.isPending}
@@ -424,7 +425,7 @@ export function TrabajosExtraView() {
 function FormularioTrabajo({
   inicial,
   equipos,
-  enTurno,
+  enUso,
   opcionesEquipo,
   textoBoton,
   pendiente,
@@ -432,9 +433,9 @@ function FormularioTrabajo({
   onCancelar,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
-  equipos: { id: string; internalCode: string }[];
-  /** Equipos con turno abierto → operador que lo lleva. */
-  enTurno: Map<string, string>;
+  equipos: { id: string; internalCode: string; operator?: { name: string } | null }[];
+  /** Equipos en uso (turno abierto) → operador que lo lleva. */
+  enUso: Map<string, string>;
   opcionesEquipo: OpcionSelector[];
   textoBoton: string;
   pendiente: boolean;
@@ -463,7 +464,7 @@ function FormularioTrabajo({
     Number.isFinite(ini) && Number.isFinite(fin) && fin >= ini ? Number((fin - ini).toFixed(2)) : null;
 
   const equipoId = watch('equipoId') ?? '';
-  const operadorEnTurno = enTurno.get(equipoId);
+  const operadorEnUso = enUso.get(equipoId);
   const codigoElegido = equipos.find((e) => e.id === equipoId)?.internalCode;
 
   return (
@@ -474,8 +475,8 @@ function FormularioTrabajo({
             label="Equipo"
             hint={
               errors.equipoId?.message ??
-              (operadorEnTurno != null
-                ? `${codigoElegido} está en turno con ${operadorEnTurno}. Se registra igual: queda a nombre de esta máquina.`
+              (operadorEnUso != null
+                ? `${codigoElegido} está en uso con ${operadorEnUso}. Se registra igual: queda a nombre de esta máquina.`
                 : undefined)
             }
           >
@@ -485,12 +486,15 @@ function FormularioTrabajo({
               valor={equipoId}
               onChange={(id) => {
                 setValue('equipoId', id, { shouldValidate: true });
-                // Si el equipo está en turno, su operador es el candidato
-                // obvio; se propone solo si el campo sigue vacío.
-                const enTurnoCon = enTurno.get(id);
-                if (enTurnoCon && !watch('operador')) {
-                  setValue('operador', enTurnoCon, { shouldValidate: true });
-                }
+                // El operador acompaña a la máquina: al cambiar de equipo, el
+                // campo se sincroniza con el que corresponde al elegido — el
+                // del turno abierto si está en uso, si no el asignado en
+                // Flota, y vacío si no tiene ninguno (antes quedaba pegado el
+                // operador del equipo anterior).
+                const delEquipo = enUso.get(id) ?? equipos.find((e) => e.id === id)?.operator?.name ?? '';
+                // Al vaciar no se valida: marcaría «falta el operador» recién
+                // cambiado el equipo, antes de que el supervisor pueda tipear.
+                setValue('operador', delEquipo, { shouldValidate: delEquipo !== '' });
               }}
               opciones={opcionesEquipo}
             />

@@ -116,9 +116,12 @@ describe('TrabajosExtraView', () => {
       qc.setQueryData(
         ['equipment'],
         [
-          { id: 'e1', internalCode: 'CM-003', type: 'Camión', status: 'OPERATIONAL' },
-          { id: 'e2', internalCode: 'CA-011', type: 'Cargador', status: 'OPERATIONAL' },
-          { id: 'e3', internalCode: 'EX-002', type: 'Excavadora', status: 'IN_WORKSHOP' },
+          // CM-003 no está en uso, pero tiene operador ASIGNADO en Flota.
+          { id: 'e1', internalCode: 'CM-003', type: 'Camión', status: 'OPERATIONAL', operator: { id: 'u1', name: 'Luis Contreras' } },
+          { id: 'e2', internalCode: 'CA-011', type: 'Cargador', status: 'OPERATIONAL', operator: null },
+          { id: 'e3', internalCode: 'EX-002', type: 'Excavadora', status: 'IN_WORKSHOP', operator: null },
+          // CM-040: ni turno abierto ni operador asignado.
+          { id: 'e4', internalCode: 'CM-040', type: 'Camión', status: 'OPERATIONAL', operator: null },
         ],
       );
       qc.setQueryData(['trabajos-extra'], []);
@@ -148,15 +151,15 @@ describe('TrabajosExtraView', () => {
       expect(within(disponibles).getByRole('option', { name: /CM-003/ })).toBeTruthy();
     });
 
-    it('deja elegir un equipo en turno y avisa con quién está', () => {
+    it('deja elegir un equipo en uso y avisa con quién está', () => {
       const lista = renderConTurnoAbierto();
 
-      const enTurno = lista.getByRole('option', { name: /CA-011/ });
-      expect(enTurno.getAttribute('aria-disabled')).not.toBe('true');
-      expect(enTurno.textContent).toContain('En turno · Patricio Rojas');
+      const enUso = lista.getByRole('option', { name: /CA-011/ });
+      expect(enUso.getAttribute('aria-disabled')).not.toBe('true');
+      expect(enUso.textContent).toContain('En uso · Patricio Rojas');
 
-      fireEvent.click(enTurno);
-      expect(screen.getByText(/CA-011 está en turno con Patricio Rojas/)).toBeTruthy();
+      fireEvent.click(enUso);
+      expect(screen.getByText(/CA-011 está en uso con Patricio Rojas/)).toBeTruthy();
       // Su operador se propone mientras el campo esté vacío.
       expect((screen.getByLabelText('Operador') as HTMLInputElement).value).toBe('Patricio Rojas');
     });
@@ -167,6 +170,38 @@ describe('TrabajosExtraView', () => {
       const enTaller = lista.getByRole('option', { name: /EX-002/ });
       expect(enTaller.getAttribute('aria-disabled')).toBe('true');
       expect(enTaller.textContent).toContain('En taller');
+    });
+
+    /**
+     * El operador acompaña a la máquina: al cambiar de equipo, el campo se
+     * sincroniza con el operador que corresponde al elegido — el del turno
+     * abierto si está en uso, si no el asignado en Flota, y vacío si no
+     * tiene ninguno. Antes solo se proponía con el campo vacío, y al cambiar
+     * de equipo quedaba el operador de la máquina anterior.
+     */
+    it('al cambiar de equipo, el operador pasa a ser el del equipo elegido', () => {
+      const lista = renderConTurnoAbierto();
+      const operador = () => (screen.getByLabelText('Operador') as HTMLInputElement).value;
+
+      fireEvent.click(lista.getByRole('option', { name: /CA-011/ }));
+      expect(operador()).toBe('Patricio Rojas');
+
+      // CM-003 no está en uso: manda su operador asignado en Flota.
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-003/ }));
+      expect(operador()).toBe('Luis Contreras');
+    });
+
+    it('al cambiar a un equipo sin operador, el campo queda vacío', () => {
+      const lista = renderConTurnoAbierto();
+      const operador = () => (screen.getByLabelText('Operador') as HTMLInputElement).value;
+
+      fireEvent.click(lista.getByRole('option', { name: /CA-011/ }));
+      expect(operador()).toBe('Patricio Rojas');
+
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-040/ }));
+      expect(operador()).toBe('');
     });
   });
 
