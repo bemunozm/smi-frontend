@@ -14,6 +14,7 @@ const NOTIF_TIPO_CONFIG: Record<NotificacionTipo, NotifTipoConfig> = {
   [NOTIF_TIPOS.ORDEN_COMPLETED]: { label: 'OT completada', color: 'success' },
   [NOTIF_TIPOS.INSUMO_LOW_STOCK]: { label: 'Stock bajo', color: 'danger' },
   [NOTIF_TIPOS.SHIFT_EXIT_REPORT]: { label: 'Reporte de salida', color: 'accent' },
+  [NOTIF_TIPOS.RECORD_EDITED]: { label: 'Registro corregido', color: 'warning' },
 };
 
 /**

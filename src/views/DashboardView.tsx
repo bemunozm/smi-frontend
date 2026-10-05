@@ -186,7 +186,7 @@ function KpiCardSkeleton() {
 }
 
 /**
- * KPIs de Mantenimiento (Joaquín) — único dominio que sigue en mock, ver
+ * KPIs de Mantenimiento — único dominio que sigue en mock, ver
  * `api/DashboardAPI.ts#getSummary`. Consulta propia (`useDashboardSummary()`):
  * si falla, no afecta a los KPIs reales de al lado (Flota/Inventario,
  * Hallazgos, Horas facturables), que usan sus propias queries.
@@ -232,7 +232,7 @@ function MantencionMockKpiCards() {
   );
 }
 
-/** ← Flota (Benjamín, real): `useResumenFleet()` — el backend ya agrega
+/** ← Flota (real): `useResumenFleet()` — el backend ya agrega
  * `disponibles`/`total`, no se cuenta en cliente. Query independiente: si
  * Flota cae, el resto de los KPIs sigue con normalidad. */
 function EquiposDisponiblesKpiCard() {
@@ -269,7 +269,7 @@ function EquiposDisponiblesKpiCard() {
 /**
  * Filas (ítem × bodega) cuya existencia cruzó el mínimo DE ESA BODEGA.
  *
- * Con el modelo multi-sucursal (RFC-3) no hay un "bajo mínimo" global: el mismo
+ * Con el modelo multi-sucursal no hay un "bajo mínimo" global: el mismo
  * ítem puede estar sobrado en una bodega y en falta en otra. El KPI cuenta pares
  * ítem-bodega, y la tabla los nombra con su sucursal — un aviso que no dice
  * dónde no le sirve a quien tiene que reponer.
@@ -400,7 +400,7 @@ function SummaryCards() {
 /** Dona — composición de estados de la flota (OPERATIONAL/IN_WORKSHOP/
  * OUT_OF_SERVICE). Aporta la MEZCLA de estados que la card "Equipos
  * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
- * con el resto. Datos ← Flota/Benjamín, REAL: `useResumenFleet().porEstado`
+ * con el resto. Datos ← Flota, REAL: `useResumenFleet().porEstado`
  * ya viene agregado por el backend, solo se remapea a la forma que espera el
  * `Pie` (no se cuenta en cliente). */
 function FlotaComposicionSection() {

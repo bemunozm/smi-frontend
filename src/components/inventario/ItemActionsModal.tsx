@@ -26,6 +26,9 @@ import {
   useDeleteItem,
   useTransferStock,
 } from '../../hooks/useInventory';
+import { usePermissions } from '../../hooks/usePermissions';
+import { MOVEMENT_ACTIONS, MOVEMENT_MODE_ACTIONS, type MovementMode } from '../../lib/permissions';
+import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import {
   MOVEMENT_REASON_LABELS,
@@ -54,16 +57,12 @@ import {
  */
 export type ItemAction = 'actions' | 'movement' | 'delete';
 
-/**
- * Los cuatro modos del formulario de movimiento. Van juntos a propósito: las
- * cuatro operaciones responden a la misma pregunta ("¿cuánto y en qué bodega?")
- * y separarlas en cuatro botones obligaba a saber de antemano cuál era la
- * correcta. El traspaso es el caso que más se beneficia — antes estaba escondido
- * detrás de una acción distinta pese a ser, para el bodeguero, una salida que
- * entra en otro lado.
+/*
+ * Los cuatro modos van juntos en un formulario a propósito: responden a la misma
+ * pregunta ("¿cuánto y en qué bodega?") y separarlos en cuatro botones obligaba a
+ * saber de antemano cuál era el correcto. El traspaso es, para el bodeguero, una
+ * salida que entra en otro lado.
  */
-type MovementMode = 'in' | 'out' | 'transfer' | 'count';
-
 const MODE_LABELS: Record<MovementMode, string> = {
   in: 'Entrada',
   out: 'Salida',
@@ -92,8 +91,12 @@ function MovementPanel({
   const createMovement = useCreateMovement();
   const transfer = useTransferStock();
   const adjust = useAdjustStock();
+  const { can } = usePermissions();
 
-  const [mode, setMode] = useState<MovementMode>('in');
+  const modes = (Object.keys(MOVEMENT_MODE_ACTIONS) as MovementMode[]).filter((candidate) =>
+    can(MOVEMENT_MODE_ACTIONS[candidate]),
+  );
+  const [mode, setMode] = useState<MovementMode>(modes[0] ?? 'in');
   const [branchId, setBranchId] = useState(
     defaultBranchId || branches[0]?.id || '',
   );
@@ -102,6 +105,10 @@ function MovementPanel({
   const [reason, setReason] = useState<MovementReason>('PURCHASE');
   const [documentNumber, setDocumentNumber] = useState('');
   const [notes, setNotes] = useState('');
+  // La existencia que se veía al empezar a contar: el conteo se declara contra ella,
+  // no contra la que haya cuando se confirme (si alguien mueve stock en el medio,
+  // el servidor lo detecta y rechaza el conteo).
+  const [countBase, setCountBase] = useState<{ branchId: string; quantity: number } | null>(null);
 
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
@@ -111,16 +118,17 @@ function MovementPanel({
   const destination = others.find((branch) => branch.id === destinationId);
   const there = destinationId ? quantityAt(item, destinationId) : 0;
 
-  const quantity = Number(amount);
-  const validAmount = Number.isFinite(quantity) && quantity > 0;
+  const parsedAmount = parseDecimal(amount);
+  const quantity = parsedAmount ?? 0;
+  const validAmount = parsedAmount != null && parsedAmount > 0;
   const takesStock = mode === 'out' || mode === 'transfer';
   const notEnough = takesStock && validAmount && quantity > here;
   const missingDestination = mode === 'transfer' && !destinationId;
 
   // El conteo no suma ni resta: se escribe lo que hay, y el sistema calcula la
   // diferencia. Por eso admite 0 y su validación es distinta.
-  const counted = Number(amount);
-  const validCount = Number.isFinite(counted) && counted >= 0 && amount !== '';
+  const counted = quantity;
+  const validCount = parsedAmount != null && parsedAmount >= 0;
   const difference = validCount ? counted - here : 0;
 
   const canSubmit =
@@ -165,6 +173,7 @@ function MovementPanel({
           input: {
             branchId,
             countedQuantity: counted,
+            expectedQuantity: countBase?.branchId === branchId ? countBase.quantity : here,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
           },
         },
@@ -203,15 +212,11 @@ function MovementPanel({
             label="Tipo de movimiento"
             onChange={(next) => {
               setMode(next);
-              setAmount(next === 'count' ? String(here) : '');
+              setAmount(next === 'count' ? formatDecimalInput(here) : '');
+              setCountBase(next === 'count' ? { branchId, quantity: here } : null);
               setReason(next === 'in' ? 'PURCHASE' : 'INTERVENTION');
             }}
-            options={[
-              { id: 'in', label: MODE_LABELS.in },
-              { id: 'out', label: MODE_LABELS.out },
-              { id: 'transfer', label: MODE_LABELS.transfer },
-              { id: 'count', label: MODE_LABELS.count },
-            ]}
+            options={modes.map((id) => ({ id, label: MODE_LABELS[id] }))}
             value={mode}
           />
 
@@ -461,8 +466,6 @@ export function ItemActionsModal({
   item,
   branchId,
   branches,
-  canWrite,
-  isAdmin,
   initialView,
   isOpen,
   onOpenChange,
@@ -472,8 +475,6 @@ export function ItemActionsModal({
   /** Sucursal en foco, o `ALL_BRANCHES` en el inventario general. */
   branchId: string;
   branches: Branch[];
-  canWrite: boolean;
-  isAdmin: boolean;
   /** Permite que la fila de escritorio abra directo la acción elegida. */
   initialView: ItemAction;
   isOpen: boolean;
@@ -482,6 +483,7 @@ export function ItemActionsModal({
 }) {
   const [view, setView] = useState<ItemAction>(initialView);
   const navigate = useNavigate();
+  const { can, canAny } = usePermissions();
 
   const symbol = UNIT_SYMBOLS[item.unit];
   const isAll = branchId === ALL_BRANCHES;
@@ -538,7 +540,7 @@ export function ItemActionsModal({
                     <Modal.Body>
                       <SectionLabel>Acciones</SectionLabel>
                       <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                        {isAdmin ? (
+                        {can('item.update') ? (
                           <QuickAction
                             icon={<Pencil size={ICON} />}
                             label="Editar ítem"
@@ -548,7 +550,7 @@ export function ItemActionsModal({
                             }}
                           />
                         ) : null}
-                        {canWrite ? (
+                        {canAny(MOVEMENT_ACTIONS) ? (
                           <QuickAction
                             icon={<ArrowLeftRight size={ICON} />}
                             label="Registrar movimiento"
@@ -563,7 +565,7 @@ export function ItemActionsModal({
                             void navigate(`/inventario/${item.id}`);
                           }}
                         />
-                        {isAdmin ? (
+                        {can('item.delete') ? (
                           <QuickAction
                             icon={<Trash2 size={ICON} />}
                             isDanger

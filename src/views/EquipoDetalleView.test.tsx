@@ -5,6 +5,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { EquipoDetalleView } from './EquipoDetalleView';
 import { env } from '../config/env';
+import { DomainError } from '../lib/api-error';
+import { enviado, submitWriteMock } from '../test/office-write';
 import type { EquipmentDetail } from '../types/equipment';
 
 // Rol controlable por test — decide si se monta `AsignacionForm` (acción
@@ -22,59 +24,27 @@ vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => currentUserResult,
 }));
 
-// Se mockea la capa de API (no el hook) para que las mutaciones corran de
-// verdad — mismo criterio que `EquiposView.interactions.test.tsx`: el
-// `mutate` real termina llamando a estas funciones, así que verificar sus
-// argumentos prueba el flujo completo vista → hook → API.
-const { assignMock, updateMock, updateStatusMock, removeMock } = vi.hoisted(() => ({
-  assignMock: vi.fn(),
-  updateMock: vi.fn(),
-  updateStatusMock: vi.fn(),
-  removeMock: vi.fn(),
+// Se mockea la capa de lectura de la API y el borde de la cola de escrituras
+// (`submitWrite`): las mutaciones corren de verdad y lo que se verifica es lo que
+// se ENCOLA — endpoint, params, body, precondición y archivos.
+vi.mock('../api/EquipmentAPI', () => ({
+  EquipmentAPI: { list: vi.fn(), resumen: vi.fn(), getById: vi.fn() },
 }));
 
-vi.mock('../api/EquipmentAPI', () => ({
-  EquipmentAPI: {
-    list: vi.fn(),
-    resumen: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: updateMock,
-    updateStatus: updateStatusMock,
-    remove: removeMock,
-    assign: assignMock,
-  },
-}));
+vi.mock('../offline/submit-write', async (importOriginal) =>
+  (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
+);
 
 // Sección "Documentos" (reemplaza al viejo bloque "Vencimientos" R1/R2) —
-// misma estrategia de mockear la API (no el hook), así `useEquipmentDocuments`
-// y las mutaciones de `useEquipmentDocuments.ts` corren de verdad.
-const { docListMock, docCreateMock, docUpdateMock, docRemoveMock } = vi.hoisted(() => ({
-  docListMock: vi.fn(),
-  docCreateMock: vi.fn(),
-  docUpdateMock: vi.fn(),
-  docRemoveMock: vi.fn(),
-}));
+// misma estrategia: se mockea la lectura, así `useEquipmentDocuments` corre de verdad.
+const { docListMock } = vi.hoisted(() => ({ docListMock: vi.fn() }));
 
-vi.mock('../api/EquipmentDocumentAPI', () => ({
-  EquipmentDocumentAPI: {
-    list: docListMock,
-    create: docCreateMock,
-    update: docUpdateMock,
-    remove: docRemoveMock,
-  },
-}));
+vi.mock('../api/EquipmentDocumentAPI', () => ({ EquipmentDocumentAPI: { list: docListMock } }));
 
-// Y la subida del adjunto (`DocumentFileField` → `uploadFile`) — mismo
-// criterio que `EquiposView.interactions.test.tsx` con `EquipoPhotoBanner`.
-const { uploadFileMock } = vi.hoisted(() => ({
-  uploadFileMock: vi.fn(),
-}));
-
-vi.mock('../api/UploadsAPI', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
-  return { ...actual, uploadFile: uploadFileMock };
-});
+/** Lo encolado para un endpoint, en orden. */
+function escrituras(endpoint: string): Array<Record<string, unknown>> {
+  return submitWriteMock.mock.calls.filter(([clave]) => clave === endpoint).map(([, input]) => input);
+}
 
 afterEach(() => {
   cleanup();
@@ -87,6 +57,11 @@ afterEach(() => {
 // les importa esta sección) no se queden esperando una promesa nunca resuelta.
 beforeEach(() => {
   docListMock.mockResolvedValue([]);
+  // jsdom no implementa los object URL con los que se previsualiza un archivo elegido.
+  URL.createObjectURL = vi.fn(() => 'blob:archivo-nuevo');
+  URL.revokeObjectURL = vi.fn();
+  submitWriteMock.mockReset();
+  submitWriteMock.mockImplementation(async () => enviado(null));
 });
 
 const EQUIPO_DETALLE: EquipmentDetail = {
@@ -206,7 +181,7 @@ const COMBUSTIBLES = [
   {
     id: 'c_1',
     equipoId: 'eq_1',
-    litros: 80,
+    litros: 30.75,
     tipo: 'PETROLEO',
     fotoUrl: null,
     fecha: '2026-08-04T09:00:00.000Z',
@@ -327,7 +302,8 @@ describe('EquipoDetalleView', () => {
 
     // Combustible: historial de cargas.
     expect(screen.getByText('Petróleo')).toBeTruthy();
-    expect(screen.getByText('80 L')).toBeTruthy();
+    // Hasta dos decimales: 30,75 no se redondea a 30,8.
+    expect(screen.getByText('30,75 L')).toBeTruthy();
 
     // Consumos de inventario — lee `stockMovements`/`item` (shape real del
     // backend, Inventario en inglés), no el `movimientos`/`insumo` inventado.
@@ -448,7 +424,6 @@ describe('EquipoDetalleView', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, inUse: false, operator: null, supervisor: null });
 
     renderFicha((qc) => {
       // Picker de operador — catálogo propio (`useOperators({isActive:true})`);
@@ -462,9 +437,12 @@ describe('EquipoDetalleView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Liberar' }));
 
-    await waitFor(() =>
-      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: null, supervisorId: null }),
-    );
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      body: { operatorId: null, supervisorId: null },
+      expected: { operatorId: 'u_op', supervisorId: 'u_sup' },
+    });
   });
 
   // Antes "Liberar" limpiaba los pickers a "Sin asignar" ANTES de que la
@@ -478,7 +456,7 @@ describe('EquipoDetalleView', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    assignMock.mockRejectedValue(new Error('No se pudo liberar la asignación.'));
+    submitWriteMock.mockRejectedValue(new DomainError('No se pudo liberar la asignación.', { status: 409 }));
 
     renderFicha((qc) => {
       qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
@@ -487,9 +465,7 @@ describe('EquipoDetalleView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Liberar' }));
 
-    await waitFor(() =>
-      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: null, supervisorId: null }),
-    );
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
 
     // El operador se lee del `<input>` del `OperatorPicker` (`ComboBox`, sin
     // nombre accesible propio en el trigger — su botón resuelve al `<label>`
@@ -564,7 +540,6 @@ describe('EquipoDetalleView', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, supervisor: { id: 'u_sup2', name: 'Marta Ríos' } });
 
     renderFicha((qc) => {
       qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
@@ -586,7 +561,9 @@ describe('EquipoDetalleView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
 
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { supervisorId: 'u_sup2' }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({ params: { id: 'eq_1' }, expected: { supervisorId: 'u_sup' } });
+    expect(escrituras('equipment.assign')[0]!.body).toEqual({ supervisorId: 'u_sup2' });
   });
 
   it('cambiar SOLO el operador y "Guardar asignación" manda operatorId SIN supervisorId', async () => {
@@ -596,7 +573,6 @@ describe('EquipoDetalleView', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, operator: { id: 'op_2', name: 'Ana Ruiz' } });
 
     renderFicha((qc) => {
       qc.setQueryData(
@@ -615,7 +591,9 @@ describe('EquipoDetalleView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
 
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_2' }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({ params: { id: 'eq_1' }, expected: { operatorId: 'u_op' } });
+    expect(escrituras('equipment.assign')[0]!.body).toEqual({ operatorId: 'op_2' });
   });
 
   it('sin tocar los pickers, "Guardar asignación" queda deshabilitado (el diff está vacío)', () => {
@@ -632,7 +610,7 @@ describe('EquipoDetalleView', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Guardar asignación' }).hasAttribute('disabled')).toBe(true);
-    expect(assignMock).not.toHaveBeenCalled();
+    expect(submitWriteMock).not.toHaveBeenCalled();
   });
 
   // Antes esto se decidía leyendo `inUse` (que el backend deriva de
@@ -667,14 +645,18 @@ describe('EquipoDetalleView — acciones de cabecera', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    updateStatusMock.mockResolvedValue({ ...EQUIPO_DETALLE, status: 'IN_WORKSHOP' });
 
     renderFicha();
 
     fireEvent.click(screen.getByRole('button', { name: /Cambiar estado/ }));
     fireEvent.click(await screen.findByText('En taller'));
 
-    await waitFor(() => expect(updateStatusMock).toHaveBeenCalledWith('eq_1', 'IN_WORKSHOP'));
+    await waitFor(() => expect(escrituras('equipment.status')).toHaveLength(1));
+    expect(escrituras('equipment.status')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      body: { status: 'IN_WORKSHOP' },
+      expected: { status: 'OPERATIONAL' },
+    });
   });
 
   it('deshabilita el estado actual (Operativo) en vez de ocultarlo', async () => {
@@ -705,8 +687,27 @@ describe('EquipoDetalleView — acciones de cabecera', () => {
     expect(screen.queryByRole('button', { name: /Cambiar estado/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Editar equipo' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Eliminar equipo' })).toBeNull();
-    // El botón de horómetro sigue disponible para todos los roles.
+    // El backend solo deja registrar horómetro y combustible a SUPERVISOR y
+    // ADMIN: al mantenedor ni se le ofrece (sin señal quedaría en cola y
+    // terminaría en un 403).
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar carga' })).toBeNull();
+  });
+
+  it('un SUPERVISOR registra horómetro y combustible, pero no edita ni elimina el equipo', () => {
+    currentUserResult = {
+      user: { id: 'u3', name: 'Supervisor SMI', email: 'supervisor@smi.local', role: 'SUPERVISOR' },
+      role: 'SUPERVISOR',
+      isPending: false,
+      isAuthenticated: true,
+    };
+
+    renderFicha();
+
     expect(screen.getByRole('button', { name: 'Registrar entrada' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Registrar carga' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Editar equipo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Eliminar equipo' })).toBeNull();
   });
 
   it('abre el modal de editar con los datos del equipo precargados', async () => {
@@ -733,7 +734,6 @@ describe('EquipoDetalleView — acciones de cabecera', () => {
       isPending: false,
       isAuthenticated: true,
     };
-    removeMock.mockResolvedValue({ id: 'eq_1' });
 
     renderFicha();
 
@@ -742,7 +742,8 @@ describe('EquipoDetalleView — acciones de cabecera', () => {
     const dialogo = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Eliminar' }));
 
-    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('eq_1'));
+    await waitFor(() => expect(escrituras('equipment.delete')).toHaveLength(1));
+    expect(escrituras('equipment.delete')[0]).toMatchObject({ params: { id: 'eq_1' } });
     // Tras borrar, `onDeleted` navega de vuelta a `/equipos` — la unidad que
     // se estaba viendo ya no existe, así que la ficha no puede quedarse
     // montada (`useEquipmentDetail` refetchearía un 404).
@@ -996,10 +997,8 @@ describe('EquipoDetalleView — Documentos', () => {
     expect(screen.queryByRole('button', { name: 'Eliminar documento' })).toBeNull();
   });
 
-  it('agrega un documento con archivo adjunto — sube el archivo y crea con fileKey/fileName', async () => {
+  it('agrega un documento con archivo adjunto — el archivo viaja con el guardado y solo su nombre en el body', async () => {
     docListMock.mockResolvedValueOnce([]);
-    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/seguro.pdf', url: 'https://minio.local/seguro.pdf' });
-    docCreateMock.mockResolvedValue(DOCUMENTO_VIGENTE);
 
     renderFicha();
     await screen.findByText('Esta unidad todavía no tiene documentos registrados.');
@@ -1023,24 +1022,22 @@ describe('EquipoDetalleView — Documentos', () => {
     ) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [archivo] } });
 
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(archivo));
-    await screen.findByText('Ver archivo actual');
+    await screen.findByText('poliza.pdf');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() =>
-      expect(docCreateMock).toHaveBeenCalledWith('eq_1', {
-        type: 'INSURANCE',
-        title: 'Póliza 2026',
-        fileKey: 'tmp/u1/seguro.pdf',
-        fileName: 'poliza.pdf',
-      }),
-    );
+    await waitFor(() => expect(escrituras('equipmentDocument.create')).toHaveLength(1));
+    const [creacion] = escrituras('equipmentDocument.create');
+    expect(creacion).toMatchObject({
+      params: { equipmentId: 'eq_1' },
+      body: { type: 'INSURANCE', title: 'Póliza 2026', fileName: 'poliza.pdf', id: expect.any(String) },
+      files: [{ field: 'fileKey', file: archivo }],
+    });
+    expect(creacion!.body).not.toHaveProperty('fileKey');
   });
 
   it('quita el archivo adjunto de un documento existente — PATCH manda fileKey/fileName en null', async () => {
     docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
-    docUpdateMock.mockResolvedValue({ ...DOCUMENTO_VIGENTE, fileUrl: null, fileName: null });
 
     renderFicha();
     await screen.findByText('Revisión anual');
@@ -1051,17 +1048,15 @@ describe('EquipoDetalleView — Documentos', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quitar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() =>
-      expect(docUpdateMock).toHaveBeenCalledWith(
-        'doc_1',
-        expect.objectContaining({ fileKey: null, fileName: null }),
-      ),
-    );
+    await waitFor(() => expect(escrituras('equipmentDocument.update')).toHaveLength(1));
+    expect(escrituras('equipmentDocument.update')[0]).toMatchObject({
+      params: { id: 'doc_1' },
+      body: { fileKey: null, fileName: null },
+    });
   });
 
   it('edita un documento existente — precarga sus datos y guarda con PATCH usando el id', async () => {
     docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
-    docUpdateMock.mockResolvedValue({ ...DOCUMENTO_VIGENTE, title: 'Revisión anual (renovada)' });
 
     renderFicha();
     await screen.findByText('Revisión anual');
@@ -1077,17 +1072,16 @@ describe('EquipoDetalleView — Documentos', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
-    await waitFor(() =>
-      expect(docUpdateMock).toHaveBeenCalledWith(
-        'doc_1',
-        expect.objectContaining({ title: 'Revisión anual (renovada)' }),
-      ),
-    );
+    await waitFor(() => expect(escrituras('equipmentDocument.update')).toHaveLength(1));
+    expect(escrituras('equipmentDocument.update')[0]).toMatchObject({
+      params: { id: 'doc_1' },
+      body: { title: 'Revisión anual (renovada)' },
+      expected: { title: 'Revisión anual' },
+    });
   });
 
   it('elimina un documento al confirmar el AlertDialog', async () => {
     docListMock.mockResolvedValue([DOCUMENTO_VIGENTE]);
-    docRemoveMock.mockResolvedValue({ id: 'doc_1' });
 
     renderFicha();
     await screen.findByText('Revisión anual');
@@ -1097,7 +1091,8 @@ describe('EquipoDetalleView — Documentos', () => {
     const dialogo = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Eliminar' }));
 
-    await waitFor(() => expect(docRemoveMock).toHaveBeenCalledWith('doc_1'));
+    await waitFor(() => expect(escrituras('equipmentDocument.delete')).toHaveLength(1));
+    expect(escrituras('equipmentDocument.delete')[0]).toMatchObject({ params: { id: 'doc_1' } });
   });
 });
 

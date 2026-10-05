@@ -16,15 +16,18 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { usePermissions } from '../hooks/usePermissions';
 import { useActividades, useActualizarActividad, useCrearActividad } from '../hooks/useActividades';
+import { RECURSOS_DE_ACTIVIDADES } from '../lib/pending-resources';
 import {
   ESTADO_ACTIVIDAD_LABELS,
   ORIGEN_ACTIVIDAD_LABELS,
   ORIGEN_ACTIVIDAD_OPTIONS,
   estadoActividadChipColor,
 } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import {
   CreateActividadSchema,
   ESTADO_ACTIVIDAD,
@@ -205,9 +208,10 @@ function AsignarActividadForm() {
  * hooks.
  */
 export function ActividadesView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: actividades, isPending, isError, error } = useActividades();
   const actualizarActividad = useActualizarActividad();
+  const pendientes = usePendingWrites(RECURSOS_DE_ACTIVIDADES);
 
   const stats = useMemo(() => {
     const lista = actividades ?? [];
@@ -217,7 +221,7 @@ export function ActividadesView() {
     };
   }, [actividades]);
 
-  const puedeAsignar = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const puedeAsignar = can('actividad.create');
 
   return (
     <div className="flex flex-col gap-4">
@@ -225,6 +229,8 @@ export function ActividadesView() {
         <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">Actividades</h2>
         <p className="text-sm text-muted-foreground">Asigna y da seguimiento a tareas fuera de una orden de trabajo.</p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_ACTIVIDADES} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {puedeAsignar ? (
@@ -283,7 +289,7 @@ export function ActividadesView() {
                         isSelected={actividad.estado === 'COMPLETADA'}
                         onChange={(isCompletada) => {
                           actualizarActividad.mutate({
-                            id: actividad.id,
+                            actividad,
                             input: {
                               estado: isCompletada ? ESTADO_ACTIVIDAD.COMPLETADA : ESTADO_ACTIVIDAD.PENDIENTE,
                             },
@@ -306,6 +312,7 @@ export function ActividadesView() {
                         >
                           {actividad.descripcion}
                         </p>
+                        <MarcaPendiente marca={pendientes.marcaDe('actividad', actividad.id)} />
                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>{ORIGEN_ACTIVIDAD_LABELS[actividad.origen]}</span>
                           {actividad.referencia ? <span>· {actividad.referencia}</span> : null}

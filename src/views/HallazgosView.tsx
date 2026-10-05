@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Camera, Check, Pencil } from 'lucide-react';
 
 import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/hallazgos';
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
-import { useAhora } from '../hooks/useAhora';
-import { contextoTurno } from '../lib/turno';
+import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useRegistrarHallazgo, useEditarHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
 import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
@@ -95,14 +94,13 @@ export function HallazgosView() {
   const { hallazgos } = useHallazgosProjection();
   const { registrar, isGuardando } = useRegistrarHallazgo();
 
-  /** Hallazgo que se está corrigiendo (R13); se lee de la lista para ver lo último. */
+  /** Hallazgo que se está corrigiendo; se lee de la lista para ver lo último. */
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const editando = hallazgos.find((h) => h.id === editandoId) ?? null;
 
-  // El turno del título sale del reloj, como en Registro: antes decía
-  // «DIURNO · 08–20» escrito a mano, también de noche.
-  const ahora = useAhora();
-  const turno = useMemo(() => contextoTurno(ahora), [ahora]);
+  // El mismo turno que muestra Registro de equipo, incluido el adelanto al
+  // turno siguiente.
+  const turno = useTurnoActual();
 
   const {
     register,
@@ -185,7 +183,6 @@ export function HallazgosView() {
           <FotoRespaldoField
             file={foto.file}
             isReadingPhoto={foto.isReadingPhoto}
-            isUploadingPhoto={foto.isUploadingPhoto}
             captureDate={foto.captureDate}
             onSelect={foto.handleSelectPhoto}
             onClear={foto.handleClearPhoto}
@@ -206,7 +203,7 @@ export function HallazgosView() {
             <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           {/* Dice a quién llega para que el supervisor no lo avise además
-              por radio o WhatsApp (Acta N.° 004, R11). */}
+              por radio o WhatsApp. */}
           <p className="m-0 text-center text-[12.5px] text-muted-foreground">
             Al registrarlo se avisa a los mantenedores y al administrador, en el sistema y por correo.
           </p>
@@ -376,7 +373,7 @@ export function HallazgosView() {
 }
 
 /**
- * Corregir un hallazgo ya registrado (Acta N.° 004, R13): un error humano
+ * Corregir un hallazgo ya registrado: un error humano
  * —el equipo equivocado, una prioridad mal elegida— se arregla sin pedir
  * permiso, pero con el aviso al administrador arriba y el historial de quién
  * cambió qué abajo. La foto no se toca: es el respaldo de lo que se vio.

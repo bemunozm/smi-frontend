@@ -16,7 +16,6 @@ export const horometroFormSchema = z.object({
 });
 
 export type HorometroForm = z.infer<typeof horometroFormSchema>;
-export type HorometroFormInput = z.input<typeof horometroFormSchema>;
 
 export interface RegistroHorometro {
   id: string;

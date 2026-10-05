@@ -337,8 +337,8 @@ describe('STALE_UPDATE', () => {
 });
 
 describe('tope de intentos por 5xx', () => {
-  it('a los 5 errores de servidor seguidos pasa a atención', async () => {
-    sendWriteMock.mockRejectedValue(new DomainError('boom', { status: 503 }));
+  it.each([500, 501])('a los 5 errores %i seguidos pasa a atención', async (status) => {
+    sendWriteMock.mockRejectedValue(new DomainError('boom', { status }));
     await putHttpOp({ id: 'w-1' });
 
     for (let intento = 1; intento <= 4; intento += 1) {
@@ -351,10 +351,28 @@ describe('tope de intentos por 5xx', () => {
 
     expect(await put('w-1')).toMatchObject({
       status: 'needs_attention',
-      lastError: { status: 503, message: expect.stringContaining('varias veces') },
+      lastError: { status, message: expect.stringContaining('varias veces') },
     });
     expect(sendWriteMock).toHaveBeenCalledTimes(5);
   });
+
+  it.each([502, 503, 504, 520, 524, 408, 425])(
+    'un %i (túnel o proxy caído, o una conexión lenta) NO cuenta: sigue pendiente por mucho que se repita',
+    async (status) => {
+      sendWriteMock.mockRejectedValue(new DomainError('boom', { status }));
+      await putHttpOp({ id: 'w-1' });
+
+      for (let intento = 1; intento <= 8; intento += 1) {
+        useEngineStoreForTests.setState({ lastSyncAt: null });
+        await syncAndSettle();
+      }
+
+      const op = await put('w-1');
+      expect(op).toMatchObject({ status: 'pending', attempts: 8 });
+      expect((op as HttpWriteOp).serverErrors ?? 0).toBe(0);
+      expect(sendWriteMock).toHaveBeenCalledTimes(8);
+    },
+  );
 
   it('los errores de red (sin status) no tienen tope', async () => {
     sendWriteMock.mockRejectedValue(new DomainError('Sin señal'));
@@ -620,7 +638,7 @@ describe('submitWrite', () => {
   it('siempre encola primero: con waitMs 0 devuelve queued y la operación queda en el outbox', async () => {
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 0, userId: 'u1' });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
     expect(await db.outbox.toArray()).toMatchObject([
       { type: 'httpWrite', endpoint: 'shiftCard.edit', label: 'Edición de tarjeta', expected: { valorFinal: 130 } },
     ]);
@@ -631,7 +649,7 @@ describe('submitWrite', () => {
     sendWriteMock.mockImplementationOnce(async () => {
       const [propia] = await db.outbox.toArray();
       await putHttpOp({ id: 'hija', seq: propia!.seq + 1000, dependsOn: [propia!.id], params: { id: 'card-2' } });
-      throw new DomainError('no', { code: 'HOURMETER_BELOW_INITIAL', status: 400 });
+      throw new DomainError('Horómetro final 90 por debajo del inicial 100', { code: 'HOURMETER_BELOW_INITIAL', status: 400 });
     });
     setCurrentUser('u1');
     const promesa = submitWrite('shiftCard.edit', edicion, { waitMs: 3000 });
@@ -639,7 +657,8 @@ describe('submitWrite', () => {
     await expect(promesa).rejects.toMatchObject({
       name: 'DomainError',
       code: 'HOURMETER_BELOW_INITIAL',
-      message: 'El horómetro final no puede ser menor que el inicial.',
+      // El texto del servidor (con las dos lecturas) llega tal cual al formulario.
+      message: 'Horómetro final 90 por debajo del inicial 100',
     });
     expect(await db.outbox.count()).toBe(0);
   });
@@ -651,7 +670,7 @@ describe('submitWrite', () => {
 
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 5000 });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
     expect(Date.now() - inicio).toBeLessThan(2000);
     expect(await db.outbox.count()).toBe(1);
   });
@@ -662,7 +681,7 @@ describe('submitWrite', () => {
 
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 50 });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
   });
 
   it('sin sesión ni userId: error claro y nada encolado', async () => {

@@ -8,8 +8,7 @@ import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } fro
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 /**
- * Base de datos offline (RFC "Supervisión en Terreno" §Diseño → Offline). Dos
- * tablas:
+ * Base de datos offline. Dos tablas:
  * - `outbox`: cola de operaciones pendientes de sincronizar (abrir/cerrar
  *   tarjeta, mandar reporte de salida, crear hallazgo / trabajo extra y las
  *   escrituras genéricas `httpWrite`). Una operación TERMINADA se BORRA — no
@@ -38,6 +37,20 @@ export type OutboxOpType =
 export const shiftCardEntity = (cardId: string) => `shift-card:${cardId}`;
 export const hallazgoEntity = (id: string) => `hallazgo:${id}`;
 export const trabajoExtraEntity = (id: string) => `trabajo-extra:${id}`;
+export const equipmentEntity = (id: string) => `equipment:${id}`;
+export const equipmentDocumentEntity = (id: string) => `equipment-document:${id}`;
+export const horometroEntity = (id: string) => `horometro:${id}`;
+export const combustibleEntity = (id: string) => `combustible:${id}`;
+/** Un ítem agrupa también sus movimientos, traspasos, ajustes y mínimos: todo lo
+ * que toca su existencia se serializa detrás de lo que esté retenido del ítem. */
+export const itemEntity = (id: string) => `item:${id}`;
+export const categoryEntity = (id: string) => `category:${id}`;
+export const branchEntity = (id: string) => `branch:${id}`;
+export const operatorEntity = (id: string) => `operator:${id}`;
+export const ordenEntity = (id: string) => `orden:${id}`;
+export const intervencionEntity = (id: string) => `intervencion:${id}`;
+export const actividadEntity = (id: string) => `actividad:${id}`;
+export const umbralEntity = (id: string) => `umbral:${id}`;
 
 /**
  * `'pending'`/`'pending_upload'`/`'pending_claim'`: esperando su turno en el
@@ -45,8 +58,8 @@ export const trabajoExtraEntity = (id: string) => `trabajo-extra:${id}`;
  * vuelo AHORA MISMO — evita que un segundo trigger la vuelva a tomar si el
  * primero todavía no terminó de escribir el resultado. `'needs_attention'`:
  * el servidor la rechazó por una razón de NEGOCIO (no de red) — queda
- * visible en `SyncStatus` con Reintentar/Descartar (o Sobrescribir/Descartar
- * si otra persona cambió el mismo dato).
+ * visible en la hoja de sincronización con Reintentar/Descartar (o
+ * Sobrescribir/Descartar si otra persona cambió el mismo dato).
  */
 export type OutboxStatus = 'pending' | 'pending_upload' | 'pending_claim' | 'syncing' | 'needs_attention';
 
@@ -148,7 +161,7 @@ export interface HttpWriteFile {
 
 /**
  * Escritura genérica contra un endpoint del REGISTRO tipado
- * (`offline/endpoints.ts`): nunca un método ni una URL libres. `params` arma el
+ * (`offline/endpoints/`): nunca un método ni una URL libres. `params` arma el
  * path; `body` lleva solo lo que cambió en un PATCH; `expected` viaja como
  * `X-Expected` y es la precondición por campo.
  */
@@ -159,10 +172,14 @@ export interface HttpWriteOp extends OutboxBase {
   body: JsonObject;
   expected?: JsonObject;
   files?: HttpWriteFile[];
-  /** Texto de `SyncStatus`, armado por el registro al encolar. */
+  /** Texto de la hoja de sincronización, armado por el registro al encolar. */
   label: string;
   /** Keys EXTRA a invalidar al terminar, además de las del registro. */
   invalidate?: QueryKeyName[];
+  /** El endpoint de la operación CREA su entidad (`entityKey`). Se guarda en la
+   * operación para que `opsDeCreacion` no dependa del registro de endpoints, que
+   * importa de este archivo. */
+  creates?: true;
 }
 
 export type OutboxOp =
@@ -286,10 +303,24 @@ export function dependientesDe(id: string, ops: readonly OutboxOp[]): OutboxOp[]
 }
 
 /**
+ * Lo que se descarta junto con `id`: sus dependientes, salvo el reporte de salida.
+ * El reporte cubre varias tarjetas y solo espera a las suyas para no adelantarse;
+ * si una de ellas se descarta, el reporte sigue (el servidor avisa qué tarjetas
+ * no encontró) en vez de perderse con todas las demás.
+ */
+export function arrastradasAlDescartar(id: string, ops: readonly OutboxOp[]): OutboxOp[] {
+  return dependientesDe(id, ops).filter((op) => op.type !== 'sendExitReport');
+}
+
+/**
  * Ids de las operaciones que CREAN (o abren/cierran) la entidad `entityKey`: de
- * ellas depende una edición encolada detrás. Así, descartar la creación desde
- * `SyncStatus` arrastra la edición en vez de dejarla huérfana con un 404.
+ * ellas depende una edición encolada detrás. Así, descartar la creación desde la
+ * hoja de sincronización arrastra la edición en vez de dejarla huérfana con un 404. Una
+ * `httpWrite` cuenta solo si su endpoint crea (`creates`): una edición de la
+ * misma entidad no es de la que dependa la siguiente.
  */
 export function opsDeCreacion(entityKey: string, ops: readonly OutboxOp[]): string[] {
-  return ops.filter((op) => op.entityKey === entityKey && op.type !== 'httpWrite').map((op) => op.id);
+  return ops
+    .filter((op) => op.entityKey === entityKey && (op.type !== 'httpWrite' || op.creates === true))
+    .map((op) => op.id);
 }

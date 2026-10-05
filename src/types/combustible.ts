@@ -6,10 +6,10 @@ export const combustibleFormSchema = z.object({
   litros: posNumber('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
   fotoUrl: z.string().optional(), // legacy Terreno: ruta servida por el backend (/uploads/...)
-  /** Flota (`RegistrarCargaCombustibleModal`): key `tmp/<userId>/<uuid>.<ext>`
-   * de una foto recién subida vía `uploadFile` (ver Diseño del RFC
-   * R2-storage). Aditivo a `fotoUrl` — nunca se mandan los dos juntos
-   * (`CombustibleAPI.createCombustible` los deja mutuamente excluyentes). */
+  /** Key `tmp/<userId>/<uuid>.<ext>` de la foto, que escribe el replay al
+   * subirla (la foto viaja como archivo de la escritura, ver
+   * `hooks/useCombustible.ts`). Excluyente con
+   * `fotoUrl`: el backend rechaza los dos juntos. */
   fotoKey: z.string().optional(),
   // ISO datetime — auto-rellenada en el modal desde la EXIF de la foto (o
   // "ahora" sin EXIF), editable. Opcional en el schema porque el backend cae

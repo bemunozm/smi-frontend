@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { aNumero, lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
+import { lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
 import { contextoTurno } from '../lib/turno';
 import { ROLES } from '../types/roles';
 import type { OutboxOp } from '../offline/db';
@@ -69,14 +69,11 @@ vi.mock('../lib/usePhotoCaptureFlow', () => ({
   usePhotoCaptureFlow: () => ({
     file: mockFotoFile,
     isReadingPhoto: false,
-    isUploadingPhoto: false,
     captureDate: null,
     ocr: null,
     handleSelectPhoto: vi.fn(),
     handleClearPhoto: vi.fn(),
     resetPhoto: resetPhotoMock,
-    cancelar: vi.fn(),
-    upload: vi.fn(),
   }),
 }));
 
@@ -225,16 +222,7 @@ describe('mapCardToTarjeta', () => {
   });
 });
 
-// --- aNumero / lineaEstadoCorreo ---------------------------------------------
-
-describe('aNumero', () => {
-  it('parsea formato chileno (punto de miles, coma decimal)', () => {
-    expect(aNumero('12.487,3')).toBe(12487.3);
-  });
-  it('vacío devuelve null', () => {
-    expect(aNumero('   ')).toBeNull();
-  });
-});
+// --- lineaEstadoCorreo ---------------------------------------------------------
 
 describe('lineaEstadoCorreo', () => {
   it.each([
@@ -280,6 +268,44 @@ describe('useShiftRegister', () => {
     expect(payload.shiftDate).toBe('2026-09-24');
     expect(payload.shiftType).toBe('DIURNO');
     expect(payload.id).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  describe('horómetro inicial de la apertura', () => {
+    async function conEquipo(horometro: string) {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const hook = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(hook.result.current.disponibles).toHaveLength(1));
+      act(() => {
+        hook.result.current.setApertura((a) => ({ ...a, equipoId: 'eq_1', operatorId: 'op_1', horometro }));
+      });
+      await waitFor(() => expect(hook.result.current.equipoElegido?.id).toBe('eq_1'));
+      return hook.result;
+    }
+
+    it('vacío conserva la última lectura del equipo', async () => {
+      const result = await conEquipo('');
+      expect(result.current.valorInicialApertura).toBe(4218.7);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('un texto que no es un número es un error y NO cae a la última lectura', async () => {
+      const result = await conEquipo('2.130.5');
+      expect(result.current.horometroInvalido).toBe(true);
+      expect(result.current.valorInicialApertura).toBeNull();
+    });
+
+    it('menor que la última lectura avisa (bajoUltimaLectura), pero el valor sigue siendo válido', async () => {
+      const result = await conEquipo('2.130');
+      expect(result.current.valorInicialApertura).toBe(2.13);
+      expect(result.current.bajoUltimaLectura).toBe(true);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('igual o mayor que la última lectura no avisa', async () => {
+      expect((await conEquipo('4218,7')).current.bajoUltimaLectura).toBe(false);
+      expect((await conEquipo('4300')).current.bajoUltimaLectura).toBe(false);
+    });
   });
 
   it('abrir() no hace nada sin operador elegido (guardia silenciosa)', async () => {
@@ -369,7 +395,7 @@ describe('useShiftRegister', () => {
     it('AdBlue marcado sin litros, en 0 o sobre 1000 L: no cierra', async () => {
       const { result } = await prepararCierre();
 
-      for (const litros of ['', '0', '1.001']) {
+      for (const litros of ['', '0', '1001']) {
         act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: litros })));
         await waitFor(() => expect(result.current.adBlueIncompletoCierre).toBe(true));
         await act(async () => {

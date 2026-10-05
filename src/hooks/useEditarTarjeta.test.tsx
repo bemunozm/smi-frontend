@@ -170,6 +170,23 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     expect(result.current.puedeGuardar).toBe(true);
   });
 
+  it('cerrada: dice qué falta (horómetros, litros de combustible); abierta no muestra faltante', () => {
+    const { result } = render(cerrada);
+    act(() => result.current.abrirEdicion('c1'));
+    expect(result.current.faltante).toBeNull();
+
+    act(() => result.current.setForm((f) => ({ ...f, final: '' })));
+    expect(result.current.faltante).toBe('Faltan los horómetros.');
+
+    act(() => result.current.setForm((f) => ({ ...f, final: '130', litros: '' })));
+    expect(result.current.faltante).toBe('Indicá los litros de combustible (cero si no cargó).');
+    expect(result.current.puedeGuardar).toBe(false);
+
+    act(() => result.current.setForm((f) => ({ ...f, litros: '0' })));
+    expect(result.current.faltante).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+  });
+
   it('el historial se pide solo con señal y para una tarjeta que el servidor conoce', async () => {
     const { result } = render(abierta);
     act(() => result.current.abrirEdicion('c1'));

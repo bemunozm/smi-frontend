@@ -1,6 +1,7 @@
 import {
+  arrastradasAlDescartar,
+  bySeq,
   db,
-  dependientesDe,
   hallazgoEntity,
   pendingStatusFor,
   shiftCardEntity,
@@ -11,23 +12,26 @@ import {
   type HttpWriteFile,
   type HttpWriteOp,
   type OpenCardOp,
+  opsDeCreacion,
   type OutboxOp,
   type SendExitReportOp,
 } from './db';
-import { ENDPOINTS, type EndpointKey, type HttpParams } from './endpoints';
+import { ENDPOINTS, isEndpointKey, type EndpointKey, type HttpParams } from './endpoints';
 import { compressPhoto } from './photo';
-import { requestSync } from './replay';
+import { getCurrentUserId, requestSync } from './replay';
 import { DomainError } from '../lib/api-error';
 import type { QueryKeyName } from '../lib/query-keys';
+import {
+  isAcceptedUploadType,
+  MAX_UPLOAD_BYTES,
+  UPLOAD_SIZE_ERROR_MESSAGE,
+  UPLOAD_TYPE_ERROR_MESSAGE,
+} from '../lib/upload-limits';
 import { generateUuid } from '../lib/uuid';
 import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { JsonObject } from '../types/json';
 import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
-
-/** Tope de un archivo guardado en el equipo — el mismo que acepta
- * `POST /api/files` (ver `api/UploadsAPI.ts`). */
-export const MAX_BLOB_BYTES = 8 * 1024 * 1024;
 
 function now(): number {
   return Date.now();
@@ -108,13 +112,13 @@ export async function enqueueOpenCard(userId: string, input: OpenShiftCardInput)
 }
 
 /**
- * Encola el cierre de una tarjeta. Comprime la foto (`offline/photo.ts`)
- * ANTES de abrir la transacción —la compresión no necesita ser atómica con
- * nada—, y guarda la fila de `blobs` + la operación en el outbox EN UNA
- * SOLA transacción Dexie: si el navegador se cierra a mitad de camino, o
- * existe la foto guardada Y su operación, o no existe ninguna de las dos —
- * nunca una foto huérfana sin operación que la reclame, ni una operación
- * `pending_upload` sin foto que subir.
+ * Encola el cierre de una tarjeta. Comprime la foto (`offline/photo.ts`) y la
+ * valida (tipo y tamaño que aceptará el servidor) ANTES de abrir la transacción
+ * —no necesitan ser atómicas con nada—, y guarda la fila de `blobs` + la
+ * operación en el outbox EN UNA SOLA transacción Dexie: si el navegador se
+ * cierra a mitad de camino, o existe la foto guardada Y su operación, o no
+ * existe ninguna de las dos — nunca una foto huérfana sin operación que la
+ * reclame, ni una operación `pending_upload` sin foto que subir.
  *
  * `input` es el body de cierre SIN `tmpPhotoKey` (todavía no existe — se
  * arma recién al subir la foto durante el replay). El id de la operación
@@ -133,7 +137,7 @@ export async function enqueueCloseCard(
   input: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
   photo: File,
 ): Promise<void> {
-  const compressed = await compressPhoto(photo);
+  const compressed = await prepararArchivo(photo);
   const photoId = input.closeClientId;
 
   await conCuota(() =>
@@ -170,20 +174,31 @@ export async function enqueueCloseCard(
 /**
  * Encola el reporte de salida de turno. `input.id` (uuid del cliente) es el
  * id de la operación — mismo criterio que las otras dos.
+ *
+ * El reporte `dependsOn` la apertura y el cierre de sus tarjetas que sigan en la
+ * cola: el servidor arma el PDF con lo que ya recibió, así que no puede salir
+ * por delante de ellas aunque el replay retenga una (un fallo transitorio de una
+ * subida ya no corta el resto de la cola).
  */
 export async function enqueueExitReport(userId: string, input: SendExitReportInput): Promise<void> {
-  await putOp(
-    (seq, timestamp): SendExitReportOp => ({
-      id: input.id,
-      type: 'sendExitReport',
-      v: 1,
-      userId,
-      payload: input,
-      status: 'pending',
-      attempts: 0,
-      seq,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+  await conCuota(() =>
+    db.transaction('rw', db.outbox, async () => {
+      const timestamp = now();
+      const dependsOn = await dependenciasDeCreacion(userId, input.id, input.cardIds.map(shiftCardEntity));
+      const op: SendExitReportOp = {
+        id: input.id,
+        type: 'sendExitReport',
+        v: 1,
+        userId,
+        payload: input,
+        status: 'pending',
+        attempts: 0,
+        seq: await nextSeq(),
+        ...(dependsOn.length > 0 ? { dependsOn } : {}),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await db.outbox.put(op);
     }),
   );
   requestSync();
@@ -191,7 +206,7 @@ export async function enqueueExitReport(userId: string, input: SendExitReportInp
 
 /**
  * Encola un hallazgo, con foto opcional. Mismo criterio que
- * `enqueueCloseCard`: la foto se comprime ANTES de la transacción y la fila
+ * `enqueueCloseCard`: la foto se comprime y se valida ANTES de la transacción y la fila
  * de `blobs` + la operación se escriben juntas, así nunca queda una foto
  * sin operación ni una operación `pending_upload` sin foto. El id de la foto
  * es el del hallazgo (relación 1:1). Sin foto, la operación nace `pending`.
@@ -201,7 +216,7 @@ export async function enqueueCreateHallazgo(
   input: CreateHallazgoInput,
   photo?: File,
 ): Promise<void> {
-  const compressed = photo ? await compressPhoto(photo) : undefined;
+  const compressed = photo ? await prepararArchivo(photo) : undefined;
 
   await conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
@@ -287,26 +302,21 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
   if (archivos.length > 0 && !def.carriesFiles) {
     throw new DomainError('Este endpoint no admite archivos.', { code: 'ENDPOINT_NOT_QUEUEABLE' });
   }
-  for (const { file } of archivos) {
-    if (file.size > MAX_BLOB_BYTES) throw new DomainError('El archivo supera el máximo de 8 MB.', { code: 'FILE_TOO_LARGE' });
-  }
-  const buffers = await Promise.all(archivos.map(({ file }) => file.arrayBuffer()));
+  const guardables = await Promise.all(archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })));
+
+  const entityKey = spec.entityKey ?? def.entity?.(spec.params, spec.body);
+  const claves = [...(entityKey ? [entityKey] : []), ...(def.parents?.(spec.params, spec.body) ?? [])];
 
   return conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
       const files: HttpWriteFile[] = [];
-      for (const [index, { field, file }] of archivos.entries()) {
+      for (const { field, data, mime, name } of guardables) {
         const blobId = generateUuid();
-        await db.blobs.put({
-          id: blobId,
-          data: buffers[index]!,
-          mime: file.type || 'application/octet-stream',
-          name: file.name,
-          createdAt: timestamp,
-        });
+        await db.blobs.put({ id: blobId, data, mime, name, createdAt: timestamp });
         files.push({ field, blobId });
       }
+      const dependsOn = await dependenciasDeCreacion(userId, spec.id, claves, spec.dependsOn);
       const op: HttpWriteOp = {
         id: spec.id,
         type: 'httpWrite',
@@ -319,11 +329,12 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
         ...(files.length > 0 ? { files } : {}),
         label: spec.label,
         ...(spec.invalidate ? { invalidate: spec.invalidate } : {}),
+        ...(def.creates ? { creates: true as const } : {}),
         status: files.length > 0 ? 'pending_upload' : 'pending',
         attempts: 0,
         seq: await nextSeq(),
-        ...(spec.entityKey ? { entityKey: spec.entityKey } : {}),
-        ...(spec.dependsOn && spec.dependsOn.length > 0 ? { dependsOn: spec.dependsOn } : {}),
+        ...(entityKey ? { entityKey } : {}),
+        ...(dependsOn.length > 0 ? { dependsOn } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -333,19 +344,117 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
   );
 }
 
+interface ArchivoGuardable {
+  data: ArrayBuffer;
+  mime: string;
+  name: string;
+}
+
+/**
+ * Deja el archivo listo para guardarlo en el equipo: una foto se comprime (una
+ * tablet sin señal acumula varias) y el RESULTADO se valida contra lo que el
+ * servidor va a aceptar — si la compresión falla queda el original, que puede
+ * pesar más de 8 MB o venir en un formato que el servidor no admite. Un archivo
+ * que se rechazaría al sincronizar queda atascado en la cola, así que se rechaza
+ * acá, mientras la persona todavía puede elegir otro.
+ */
+async function prepararArchivo(file: File): Promise<ArchivoGuardable> {
+  const guardable: ArchivoGuardable = file.type.startsWith('image/')
+    ? await compressPhoto(file)
+    : { data: await file.arrayBuffer(), mime: file.type || 'application/octet-stream', name: file.name };
+  if (!isAcceptedUploadType(guardable.mime)) {
+    throw new DomainError(UPLOAD_TYPE_ERROR_MESSAGE, { code: 'FILE_TYPE_NOT_ALLOWED' });
+  }
+  if (guardable.data.byteLength > MAX_UPLOAD_BYTES) {
+    throw new DomainError(UPLOAD_SIZE_ERROR_MESSAGE, { code: 'FILE_TOO_LARGE' });
+  }
+  return guardable;
+}
+
+/**
+ * Ids de las operaciones del usuario que CREAN alguna de las entidades `claves`
+ * y todavía no terminaron, más las `explicitas`: lo que se encola sobre una
+ * entidad cuya creación sigue esperando va detrás de ella (y se descarta con
+ * ella). Se lee dentro de la transacción de encolado: así una creación que
+ * termina justo ahora no deja una dependencia colgando.
+ */
+async function dependenciasDeCreacion(
+  userId: string,
+  propia: string,
+  claves: readonly string[],
+  explicitas: readonly string[] = [],
+): Promise<string[]> {
+  if (claves.length === 0) return [...new Set(explicitas)];
+  const ops = await db.outbox
+    .where('entityKey')
+    .anyOf([...claves])
+    .filter((op) => op.userId === userId && op.id !== propia)
+    .toArray();
+  const ids = claves.flatMap((clave) => opsDeCreacion(clave, ops));
+  return [...new Set([...explicitas, ...ids])];
+}
+
+/**
+ * Escrituras genéricas que la entidad `entityKey` tiene guardadas en el equipo
+ * y que el servidor todavía no vio, en el orden en que se mandarán. Excluye las
+ * que esperan una acción humana (`needs_attention`): esas no se aplicarán por sí
+ * solas, así que no se cuentan como "ya cambiado". Sin `userId` usa el de la
+ * sesión del motor, igual que `submitWrite`.
+ */
+export async function escriturasPendientes(
+  entityKey: string,
+  endpoints?: readonly EndpointKey[],
+  userId: string | null = getCurrentUserId(),
+): Promise<HttpWriteOp[]> {
+  if (!userId) return [];
+  const ops = await db.outbox.where('entityKey').equals(entityKey).toArray();
+  return ops
+    .filter(
+      (op): op is HttpWriteOp =>
+        op.type === 'httpWrite' &&
+        op.userId === userId &&
+        op.status !== 'needs_attention' &&
+        (!endpoints || endpoints.includes(op.endpoint)),
+    )
+    .sort(bySeq);
+}
+
+/**
+ * Los campos que ya están guardados en el equipo para la entidad y que la
+ * pantalla todavía no muestra (el servidor no los recibió), fusionados en orden.
+ * La base de una edición nueva es lo que se ve MÁS esto: así su precondición
+ * apunta al valor que el servidor tendrá cuando la edición anterior llegue, no
+ * al que tiene hoy, y no choca con el cambio propio que va delante.
+ */
+export async function cambiosPendientes(
+  entityKey: string,
+  endpoints: readonly EndpointKey[],
+  userId: string | null = getCurrentUserId(),
+): Promise<JsonObject> {
+  const resultado: JsonObject = {};
+  for (const op of await escriturasPendientes(entityKey, endpoints, userId)) Object.assign(resultado, op.body);
+  return resultado;
+}
+
 // --- Editar una operación ya encolada -----------------------------------------
 
 export type PatchOutcome = 'updated' | 'missing' | 'maybe-sent';
 
 /**
  * `true` si el servidor rechazó la operación de forma DEFINITIVA: un 4xx que no
- * sea 401/408/429. Solo entonces sabemos que no la aplicó. Un 5xx (incluido el
+ * sea 401/408/425/429. Solo entonces sabemos que no la aplicó. Un 5xx (incluido el
  * tope de reintentos) o una respuesta inválida pueden venir de una escritura que
  * sí se aplicó.
  */
 function fueRechazadaSinAplicar(op: OutboxOp): boolean {
   const status = op.lastError?.status;
-  return op.status === 'needs_attention' && status != null && status >= 400 && status < 500 && ![401, 408, 429].includes(status);
+  return (
+    op.status === 'needs_attention' &&
+    status != null &&
+    status >= 400 &&
+    status < 500 &&
+    ![401, 408, 425, 429].includes(status)
+  );
 }
 
 /**
@@ -418,12 +527,12 @@ export function patchCloseCardOp(
 // --- Acciones de la hoja de sincronización -------------------------------------
 
 /**
- * Reintenta una operación en `needs_attention` (acción "Reintentar" de
- * `SyncStatus`) — vuelve al estado pendiente que le corresponde y limpia el
+ * Reintenta una operación en `needs_attention` (acción "Reintentar" de la hoja
+ * de sincronización) — vuelve al estado pendiente que le corresponde y limpia el
  * último error, así no queda un mensaje viejo mientras el nuevo intento
  * está en vuelo.
  *
- * `userId` (defensa en profundidad): `SyncStatus` solo lista
+ * `userId` (defensa en profundidad): la hoja solo lista
  * las operaciones del usuario de la sesión (`useOutboxOps`), así que en la
  * UI normal `id` siempre es de ESE usuario — esto es una segunda barrera
  * por si algún día un `id` de otro usuario llega hasta acá (bug de UI, id
@@ -449,15 +558,22 @@ export async function retryOp(id: string, userId: string): Promise<void> {
 }
 
 /**
- * "Sobrescribir" (acción de `SyncStatus` para un `STALE_UPDATE`): otra persona
- * cambió el mismo dato entre que se guardó la edición y que llegó al servidor.
- * Se reenvía la MISMA operación sin la precondición (`expected`), así que gana
- * lo que escribió acá. Solo aplica a una escritura genérica.
+ * "Sobrescribir" (acción de la hoja de sincronización para un `STALE_UPDATE`):
+ * otra persona cambió el mismo dato entre que se guardó la edición y que llegó al
+ * servidor. Se reenvía la MISMA operación sin la precondición, así que gana lo
+ * que escribió acá. La precondición viaja en el header `X-Expected` (`expected`)
+ * y, en los endpoints que la llevan en el body (el conteo físico manda
+ * `expectedQuantity`), en esos campos: la entrada del registro los declara en
+ * `bodyPreconditions` y se quitan también. Solo aplica a una escritura genérica.
  */
 export async function overwriteOp(id: string, userId: string): Promise<void> {
   const op = await db.outbox.get(id);
   if (!op || op.userId !== userId || op.type !== 'httpWrite') return;
-  const sinPrecondicion: HttpWriteOp = { ...op, expected: undefined };
+  const body: JsonObject = { ...op.body };
+  if (isEndpointKey(op.endpoint)) {
+    for (const campo of ENDPOINTS[op.endpoint].bodyPreconditions ?? []) delete body[campo];
+  }
+  const sinPrecondicion: HttpWriteOp = { ...op, body, expected: undefined };
   await db.outbox.put({
     ...sinPrecondicion,
     status: pendingStatusFor(sinPrecondicion),
@@ -476,32 +592,39 @@ function blobIdsOf(op: OutboxOp): string[] {
 }
 
 /**
- * Descarta una operación (acción "Descartar" de `SyncStatus`, con
+ * Descarta una operación (acción "Descartar" de la hoja de sincronización, con
  * confirmación en la UI) — borra también sus archivos guardados, para no
- * dejar una fila huérfana en `blobs`.
+ * dejar una fila huérfana en `blobs`. No descarta una que el replay tiene en
+ * vuelo (`syncing`): el servidor puede estar aplicándola en este momento.
  *
  * Descartar arrastra con ella a todo lo que dependa de esa operación
  * (`dependsOn`, transitivo): un cierre cuya apertura falló NUNCA va a tener
- * una tarjeta que cerrar, y una edición de algo que no se creó tampoco. Se
- * borra todo (operaciones + archivos) en UNA transacción — la confirmación en
- * `SyncStatus` avisa esto explícito antes de llamar acá.
+ * una tarjeta que cerrar, y una edición de algo que no se creó tampoco. El
+ * reporte de salida es la excepción (`arrastradasAlDescartar`): sigue en la cola
+ * sin esa dependencia. Se borra todo (operaciones + archivos) en UNA
+ * transacción — la confirmación en la hoja avisa esto explícito antes de llamar acá.
  *
  * `userId`: ver el comentario de `retryOp`.
  */
 export async function discardOp(id: string, userId: string): Promise<void> {
   await db.transaction('rw', db.outbox, db.blobs, async () => {
     const op = await db.outbox.get(id);
-    if (!op || op.userId !== userId) return;
+    if (!op || op.userId !== userId || op.status === 'syncing') return;
     const propias = await db.outbox.where('userId').equals(userId).toArray();
-    const borrar = [op, ...dependientesDe(id, propias)];
+    const borrar = [op, ...arrastradasAlDescartar(id, propias)];
+    const borrarIds = new Set(borrar.map((o) => o.id));
     await db.blobs.bulkDelete(borrar.flatMap(blobIdsOf));
-    await db.outbox.bulkDelete(borrar.map((o) => o.id));
+    await db.outbox.bulkDelete([...borrarIds]);
+    for (const reporte of propias) {
+      if (reporte.type !== 'sendExitReport' || !reporte.dependsOn?.some((dep) => borrarIds.has(dep))) continue;
+      const restantes = reporte.dependsOn.filter((dep) => !borrarIds.has(dep));
+      await db.outbox.put({ ...reporte, dependsOn: restantes.length > 0 ? restantes : undefined, updatedAt: now() });
+    }
   });
 }
 
 /** Cuántas operaciones (en cualquier estado) tiene pendientes el usuario —
- * usado por el candado de `lib/logout.ts`: un logout con `count > 0` se
- * bloquea. */
+ * la confirmación de cerrar sesión avisa cuántos registros quedan sin enviar. */
 export async function countPending(userId: string): Promise<number> {
   return db.outbox.where('userId').equals(userId).count();
 }

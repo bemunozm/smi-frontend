@@ -1,20 +1,21 @@
 import { ArrowRight, Check, Lock } from 'lucide-react';
 
 import type { UseEditarTarjetaResult } from '../../hooks/useEditarTarjeta';
-import { aNumero } from '../../hooks/shift-register-helpers';
+import { parseDecimal } from '../../lib/decimal';
 import { AdBlueCampos } from './AdBlueCampos';
 import { AvisoEdicion, Boton, Calculado, Campo, Form, Hint, HistorialCambios, Input, Selector, Textarea } from './ui';
 
 function diferenciaHoras(inicial: string, final: string): number | null {
-  const a = aNumero(inicial);
-  const b = aNumero(final);
+  const a = parseDecimal(inicial);
+  const b = parseDecimal(final);
   return a == null || b == null ? null : b - a;
 }
 
 const fmt = (n: number) => n.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
- * Corregir una tarjeta de turno (Acta N.° 004, R13). Abierta: operador,
+ * Corregir una tarjeta de turno ya enviada (queda en su historial de cambios).
+ * Abierta: operador,
  * horómetro inicial y observaciones. Cerrada: además horómetro final, litros y
  * AdBlue. Los datos y las reglas viven en `useEditarTarjeta`; acá solo se dibuja.
  */
@@ -64,7 +65,7 @@ export function EditorTarjeta({
             </Campo>
             {edicion.finalInvalido && (
               <span className="text-[13px] font-semibold text-[var(--danger)]">
-                No puede ser menor que el horómetro inicial.
+                El horómetro final no puede ser menor que el inicial.
               </span>
             )}
             <Calculado
@@ -77,7 +78,7 @@ export function EditorTarjeta({
               }
               valor={horas != null ? `${fmt(horas)} h` : '—'}
             />
-            <Campo label="Combustible cargado" unidad="L">
+            <Campo label="Combustible cargado" unidad="L" hint="Cero si no cargó en el turno.">
               <Input
                 numerico
                 value={form.litros}
@@ -102,10 +103,14 @@ export function EditorTarjeta({
           />
         </Campo>
 
+        {edicion.esCerrada && (
+          <Hint>La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.</Hint>
+        )}
         <Boton ancho disabled={!edicion.puedeGuardar} onClick={() => void edicion.guardar()}>
           {edicion.isGuardando ? 'Guardando…' : 'Guardar cambios'}
           <ArrowRight className="h-[19px] w-[19px]" />
         </Boton>
+        {edicion.faltante && <p className="m-0 text-center text-[12.5px] text-muted-foreground">{edicion.faltante}</p>}
         <Boton variante="contorno" ancho onClick={edicion.cerrarEdicion}>
           {edicion.guardado ? 'Listo' : 'Cancelar'}
         </Boton>

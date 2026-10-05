@@ -5,7 +5,7 @@ import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput 
 import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
-import { fmtDate, fmtNum, fmtTime } from '../lib/format';
+import { fmtDate, fmtLitros, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
@@ -52,18 +52,16 @@ export function CombustibleView() {
     setValue('litros', litros, { shouldValidate: true }),
   );
 
-  const onSubmit = async (values: CombustibleForm) => {
-    // La foto se sube antes de crear el registro: si la subida falla, no queda
-    // una carga guardada sin su respaldo.
+  const onSubmit = (values: CombustibleForm) => {
+    // La foto viaja con la carga y se sube al sincronizar: sin señal igual queda
+    // guardada con su respaldo.
     if (!foto.file) return;
-    const fotoKey = await foto.upload(foto.file);
-    if (!fotoKey) return;
-
+    const input = { equipoId: values.equipoId, litros: values.litros, tipo: values.tipo, fecha: values.fecha };
     crear.mutate(
-      { ...values, fotoKey },
+      { input, foto: foto.file },
       {
         onSuccess: () => {
-          reset({ equipoId: '', tipo: 'PETROLEO', fotoUrl: undefined });
+          reset({ equipoId: '', tipo: 'PETROLEO' });
           foto.resetPhoto();
         },
       },
@@ -104,7 +102,6 @@ export function CombustibleView() {
         <FotoRespaldoField
           file={foto.file}
           isReadingPhoto={foto.isReadingPhoto}
-          isUploadingPhoto={foto.isUploadingPhoto}
           captureDate={foto.captureDate}
           onSelect={foto.handleSelectPhoto}
           onClear={foto.handleClearPhoto}
@@ -115,9 +112,9 @@ export function CombustibleView() {
 
         <PrimaryButton
           type="submit"
-          disabled={crear.isPending || !foto.file || foto.isReadingPhoto || foto.isUploadingPhoto}
+          disabled={crear.isPending || !foto.file || foto.isReadingPhoto}
         >
-          {foto.isUploadingPhoto ? 'Subiendo la foto…' : crear.isPending ? 'Guardando…' : 'Registrar carga'}
+          {crear.isPending ? 'Guardando…' : 'Registrar carga'}
           <ArrowRight className="h-4 w-4" />
         </PrimaryButton>
         {/* El label siempre dijo «Requerida» pero nada lo exigía: se podía
@@ -153,7 +150,7 @@ export function CombustibleView() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="tabular font-bold text-foreground">{fmtNum(r.litros)} L</div>
+                    <div className="tabular font-bold text-foreground">{fmtLitros(r.litros)} L</div>
                     <Chip tone="neutral" className="mt-1">
                       {tipoLabel[r.tipo] ?? r.tipo}
                     </Chip>
@@ -185,7 +182,7 @@ export function CombustibleView() {
                       <Miniatura fotoUrl={r.fotoUrl} />
                     </Table.Cell>
                     <Table.Cell className="tabular font-bold whitespace-nowrap text-foreground">
-                      {fmtNum(r.litros)} L
+                      {fmtLitros(r.litros)} L
                     </Table.Cell>
                     <Table.Cell>
                       <Chip tone="neutral">{tipoLabel[r.tipo] ?? r.tipo}</Chip>

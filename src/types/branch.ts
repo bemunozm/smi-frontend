@@ -27,19 +27,7 @@ export const BranchResponseSchema = z.object({
   message: z.string(),
 });
 
-export const DeleteBranchResponseSchema = z.object({
-  data: z.object({ id: z.string() }).nullable(),
-  message: z.string(),
-});
-
-// --- Formularios (RHF + zodResolver) --------------------------------------
-
-export const BranchFormSchema = z.object({
-  name: z.string().min(1, 'El nombre es obligatorio').max(80, 'Máximo 80 caracteres'),
-  address: z.string().max(200, 'Máximo 200 caracteres').or(z.literal('')),
-  isActive: z.boolean(),
-});
-export type BranchFormValues = z.infer<typeof BranchFormSchema>;
+// --- Bodies de API -------------------------------------------------------
 
 /** Body de `POST /api/branches`. */
 export interface CreateBranchInput {
@@ -51,10 +39,10 @@ export interface CreateBranchInput {
 /** Body de `PATCH /api/branches/:id`. */
 export type UpdateBranchInput = Partial<CreateBranchInput>;
 
-export function toBranchPayload(values: BranchFormValues): CreateBranchInput {
-  return {
-    name: values.name.trim(),
-    ...(values.address.trim() ? { address: values.address.trim() } : {}),
-    isActive: values.isActive,
-  };
+/** Los campos editables de una sucursal tal como los guarda el servidor: la
+ * forma de la base de una edición (una dirección vacía es `null`). */
+export interface BranchFields {
+  name: string;
+  address: string | null;
+  isActive: boolean;
 }

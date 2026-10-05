@@ -10,7 +10,7 @@ type EquipoParaHorometro = Pick<Equipment, 'id' | 'internalCode' | 'controlUnit'
  * entrada" sin turno abierto, "Registrar salida" con uno en curso. Fuente
  * única para el botón del header (`EquipoDetalleView`) y el tile de la hoja
  * de acciones móvil (`EquipoCardMobile` en `EquiposView`), antes duplicado
- * entre ambos (Fix F-MEDIA #2, review adversarial). */
+ * entre ambos. */
 export function registrarHorometroLabel(equipo: Pick<Equipment, 'openShift'>): string {
   return equipo.openShift == null ? 'Registrar entrada' : 'Registrar salida';
 }

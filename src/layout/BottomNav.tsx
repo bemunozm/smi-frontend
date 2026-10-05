@@ -28,10 +28,9 @@ const MANTENCION: PrimaryItem = { to: '/mantenimiento', label: 'Mantención', ic
 const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: ClipboardCheck };
 
 /**
- * Ítems primarios de la barra inferior, POR ROL — antes un único `PRIMARY`
- * fijo (Inicio/Equipos/Inventario/Mantención) que no calzaba con lo que cada
- * rol puede realmente ver o con dónde vive su trabajo diario (ver plan
- * "Supervisión en Terreno", sección "Roles (frontend)"):
+ * Ítems primarios de la barra inferior, POR ROL: un único set fijo
+ * (Inicio/Equipos/Inventario/Mantención) no calza con lo que cada rol puede
+ * realmente ver ni con dónde vive su trabajo diario:
  * - SUPERVISOR vive en Terreno — va primero;
  * - ADMIN/MANTENEDOR mantienen el set original.
  *

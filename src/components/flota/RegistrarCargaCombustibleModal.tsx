@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Chip, FieldError, Input, Label, ListBox, Modal, NumberField, Select, Spinner, TextField } from '@heroui/react';
+import { Button, Chip, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
+import { DecimalField } from '../DecimalField';
 import { useCreateCombustible } from '../../hooks/useCombustible';
-import type { CombustibleForm } from '../../types/combustible';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from './FotoRespaldoField';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from './modal-styles';
@@ -17,7 +17,7 @@ const TIPO_OPTIONS = [
 
 // Schema local de la UI — ver la nota equivalente en `RegistrarEntradaModal`
 // sobre por qué no se reutiliza `combustibleFormSchema` tal cual (litros
-// controlado por `NumberField` necesita `number`, no `number | undefined`).
+// controlado por `DecimalField` necesita `number`, no `number | undefined`).
 const CargaSchema = z.object({
   litros: z.number().positive('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
@@ -98,9 +98,8 @@ export function RegistrarCargaCombustibleModal({
   // Único punto de cierre: "Cancelar" y el backdrop/ESC/botón X pasan por
   // acá (mismo motivo que en `RegistrarEntradaModal`: sin limpiar, el modal
   // reutilizado filtraría foto/OCR/litros de un equipo a otro). También es
-  // el gatillo que aborta un `onSubmit` en vuelo (ver `photoFlow.cancelar`).
+  // el gatillo que limpia la foto elegida.
   const cerrar = () => {
-    photoFlow.cancelar();
     limpiarTodo();
     onOpenChange(false);
   };
@@ -116,32 +115,30 @@ export function RegistrarCargaCombustibleModal({
   const puedeGuardar =
     !!photoFlow.file &&
     !photoFlow.isReadingPhoto &&
-    !photoFlow.isUploadingPhoto &&
     !crear.isPending &&
     Number.isFinite(litros) &&
     litros > 0;
 
-  const onSubmit = async (values: CargaFormValues) => {
+  const onSubmit = (values: CargaFormValues) => {
     if (!photoFlow.file) return;
-    const fotoKey = await photoFlow.upload(photoFlow.file);
-    // `upload` devuelve `null` tanto si la subida falló (ya toasteó el
-    // error) como si el flujo se canceló mientras subía — en ambos casos no
-    // corresponde crear el registro de combustible.
-    if (fotoKey == null) return;
-
-    const payload: CombustibleForm = {
-      equipoId,
-      litros: values.litros,
-      tipo: values.tipo,
-      fotoKey,
-      fecha: new Date(values.fecha).toISOString(),
-    };
-    crear.mutate(payload, { onSuccess: cerrar });
+    // La foto viaja con el registro y se sube al sincronizar.
+    crear.mutate(
+      {
+        input: {
+          equipoId,
+          litros: values.litros,
+          tipo: values.tipo,
+          fecha: new Date(values.fecha).toISOString(),
+        },
+        foto: photoFlow.file,
+      },
+      { onSuccess: cerrar },
+    );
   };
 
   return (
     <Modal.Backdrop
-      isDismissable={!photoFlow.isUploadingPhoto && !crear.isPending}
+      isDismissable={!crear.isPending}
       isOpen={isOpen}
       onOpenChange={(open) => {
         if (!open) cerrar();
@@ -149,7 +146,7 @@ export function RegistrarCargaCombustibleModal({
     >
       <Modal.Container>
         <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_CLASS}>
-          <Modal.CloseTrigger isDisabled={photoFlow.isUploadingPhoto || crear.isPending} />
+          <Modal.CloseTrigger isDisabled={crear.isPending} />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               Registrar carga{equipoLabel ? ` · ${equipoLabel}` : ''}
@@ -166,7 +163,6 @@ export function RegistrarCargaCombustibleModal({
                 captureDate={photoFlow.captureDate}
                 file={photoFlow.file}
                 isReadingPhoto={photoFlow.isReadingPhoto}
-                isUploadingPhoto={photoFlow.isUploadingPhoto}
                 onClear={photoFlow.handleClearPhoto}
                 onSelect={(f) => void photoFlow.handleSelectPhoto(f)}
                 staleQuestion="¿es la carga actual?"
@@ -178,18 +174,14 @@ export function RegistrarCargaCombustibleModal({
                 control={control}
                 name="litros"
                 render={({ field }) => (
-                  <NumberField
-                    fullWidth
+                  <DecimalField
+                    errorMessage={errors.litros?.message}
                     isDisabled={!photoFlow.file}
                     isInvalid={!!errors.litros}
-                    minValue={0}
-                    onChange={field.onChange}
-                    value={field.value}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label>Litros</Label>
-                      {ocrLeido &&
-                        (ocrLeido.status === 'CONFIRMED' ? (
+                    label="Litros"
+                    labelAddon={
+                      ocrLeido ? (
+                        ocrLeido.status === 'CONFIRMED' ? (
                           <Chip color="success" size="sm" variant="soft">
                             Leído de la foto
                           </Chip>
@@ -201,18 +193,14 @@ export function RegistrarCargaCombustibleModal({
                           <Chip color="default" size="sm" variant="soft">
                             No se pudo leer la foto, ingresá los litros a mano
                           </Chip>
-                        ))}
-                    </div>
-                    <NumberField.Group>
-                      <NumberField.DecrementButton />
-                      <NumberField.Input
-                        onBlur={field.onBlur}
-                        placeholder={!photoFlow.file ? 'Requiere foto de respaldo' : undefined}
-                      />
-                      <NumberField.IncrementButton />
-                    </NumberField.Group>
-                    {errors.litros ? <FieldError>{errors.litros.message}</FieldError> : null}
-                  </NumberField>
+                        )
+                      ) : undefined
+                    }
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                    placeholder={!photoFlow.file ? 'Requiere foto de respaldo' : undefined}
+                    value={field.value}
+                  />
                 )}
               />
 
@@ -269,13 +257,13 @@ export function RegistrarCargaCombustibleModal({
             </form>
           </Modal.Body>
           <Modal.Footer>
-            <Button isDisabled={photoFlow.isUploadingPhoto || crear.isPending} onPress={cerrar} variant="secondary">
+            <Button isDisabled={crear.isPending} onPress={cerrar} variant="secondary">
               Cancelar
             </Button>
             <Button
               form="registrar-carga-form"
               isDisabled={!puedeGuardar}
-              isPending={crear.isPending || photoFlow.isUploadingPhoto}
+              isPending={crear.isPending}
               type="submit"
             >
               {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar carga')}

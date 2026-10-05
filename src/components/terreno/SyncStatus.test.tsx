@@ -20,6 +20,7 @@ vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discar
 let mockSyncState: SyncState = {
   pendingCount: 0,
   attentionCount: 0,
+  otherAccountCount: 0,
   syncing: false,
   authRequired: false,
   lastSyncAt: null,
@@ -133,6 +134,7 @@ afterEach(() => {
   mockSyncState = {
     pendingCount: 0,
     attentionCount: 0,
+    otherAccountCount: 0,
     syncing: false,
     authRequired: false,
     lastSyncAt: null,
@@ -188,6 +190,28 @@ describe('SyncStatus — barra (prioridad de estados)', () => {
   });
 });
 
+describe('SyncStatus — arranque sin señal con la sesión guardada', () => {
+  it('sigue contando lo que espera en la cola, no solo "Sin señal"', () => {
+    mockIsOfflineSnapshot = true;
+    mockOnline = false;
+    mockSyncState = { ...mockSyncState, pendingCount: 3 };
+
+    renderBar();
+
+    expect(screen.getByRole('button', { name: /Sin señal · sesión guardada\. 3 registros por sincronizar\./ })).toBeTruthy();
+  });
+
+  it('y lo que requiere atención', () => {
+    mockIsOfflineSnapshot = true;
+    mockOnline = false;
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+
+    renderBar();
+
+    expect(screen.getByRole('button', { name: /1 registro requiere atención\./ })).toBeTruthy();
+  });
+});
+
 describe('SyncStatus — hoja de detalle', () => {
   it('tocar la barra abre la hoja con el contador de pendientes', () => {
     mockSyncState = { ...mockSyncState, pendingCount: 4 };
@@ -195,7 +219,7 @@ describe('SyncStatus — hoja de detalle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /4 registros por sincronizar/ }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Sincronización' });
+    const dialog = screen.getByRole('dialog', { name: 'Registros sin señal' });
     expect(within(dialog).getByText('4')).toBeTruthy();
   });
 
@@ -326,7 +350,7 @@ describe('SyncStatus — un cierre cuya apertura falló', () => {
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Descartar' })[0]!);
 
     expect(screen.getByText(/Se descarta la apertura y también su cierre guardado con la foto/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
@@ -470,7 +494,7 @@ describe('SyncStatus — escrituras genéricas (httpWrite)', () => {
 
   it('un httpWrite en atención por otra razón sigue con "Reintentar"', () => {
     mockSyncState = { ...mockSyncState, attentionCount: 1 };
-    mockOps = [httpWriteOp({ lastError: { code: 'NOT_OWNER', status: 403, message: 'No podés.' } })];
+    mockOps = [httpWriteOp({ lastError: { code: 'NOT_OWNER', status: 409, message: 'No podés.' } })];
     renderBar();
     fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
 
@@ -485,7 +509,7 @@ describe('SyncStatus — escrituras genéricas (httpWrite)', () => {
     fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
 
     expect(screen.getByText(/1 cambio guardado que dependen de este/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Descartar' })[0]!);
     expect(screen.getByText(/los cambios guardados que dependen de él/)).toBeTruthy();
   });
 });

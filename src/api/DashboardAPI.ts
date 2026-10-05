@@ -22,11 +22,11 @@ function delay(ms: number): Promise<void> {
  * respectivamente). Cada campo documenta su contrato real (ver también
  * `types/dashboard.ts` y `DASHBOARD-CONTRACTS.md` en la raíz del proyecto):
  *
- * TODO(integración): `proximasMantenciones` ← Mantenimiento (Joaquín):
- *   motor preventivo por umbral de horómetro — Fase 2, no existe aún.
- * TODO(integración): `cumplimientoPreventivoPct` ← Mantenimiento (Joaquín):
- *   % de mantenciones preventivas ejecutadas dentro del umbral de horómetro
- *   — Fase 2, no existe aún.
+ * TODO(integración): `proximasMantenciones` ← Mantenimiento: motor preventivo por
+ *   umbral de horómetro, todavía no existe.
+ * TODO(integración): `cumplimientoPreventivoPct` ← Mantenimiento: % de
+ *   mantenciones preventivas ejecutadas dentro del umbral de horómetro, todavía
+ *   no existe.
  */
 async function getSummary(): Promise<DashboardSummary> {
   try {
@@ -48,7 +48,7 @@ async function getSummary(): Promise<DashboardSummary> {
 
 /**
  * TODO(integración): reemplazar por el endpoint del motor preventivo
- * (Mantenimiento, Joaquín) cuando exista — Fase 2.
+ * (Mantenimiento) cuando exista.
  */
 async function getMantencionesProximas(): Promise<MantencionProxima[]> {
   try {

@@ -129,7 +129,7 @@ export interface UseShiftProjectionResult {
 /**
  * Proyección offline-first: servidor (`tarjetasServidor`) + outbox
  * (`ops`), merge por id, MÁS los equipos disponibles para abrir una tarjeta
- * nueva (R1: operativos y sin turno abierto). Sub-hook de `useShiftRegister`.
+ * nueva (operativos y sin turno abierto). Sub-hook de `useShiftRegister`.
  */
 export function useShiftProjection({
   ctx,
@@ -184,7 +184,7 @@ export function useShiftProjection({
   const cierreCardIds = useMemo(() => new Set(opsCerrar.map((op) => op.payload.cardId)), [opsCerrar]);
 
   /**
-   * R1: solo equipos operativos y SIN turno abierto. `e.openShift` (server)
+   * Solo equipos operativos y SIN turno abierto. `e.openShift` (server)
    * sigue siendo la fuente para "ocupado por OTRO supervisor" — `GET
    * /shift-cards/mine` de un SUPERVISOR no trae las tarjetas ajenas, así que
    * un outbox local no podría reconstruir esa señal. Encima:
@@ -223,7 +223,7 @@ export function useShiftProjection({
   // mine`). Solo afecta el HINT de "ocupado": decir "CN-007 está ocupado por
   // Supervisor SMI" cuando el que mira la pantalla ES Supervisor SMI es
   // redundante — la tarjeta ya está listada a la derecha. `disponibles` los
-  // sigue excluyendo igual (R1 no distingue de quién es el turno abierto).
+  // sigue excluyendo igual (la regla no distingue de quién es el turno abierto).
   const equipoIdsConTarjetaPropiaAbierta = useMemo(
     () => new Set(tarjetasServidor.filter((c) => c.closedAt == null).map((c) => c.equipoId)),
     [tarjetasServidor],

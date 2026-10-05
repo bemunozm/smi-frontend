@@ -50,7 +50,6 @@ export const FichaTecnicaSchema = z.object({
   currentHourmeter: z.number().nullable(),
   currentMileage: z.number().nullable(),
 });
-export type FichaTecnica = z.infer<typeof FichaTecnicaSchema>;
 
 /** Contadores agregados que alimentan las tarjetas de resumen de la ficha. */
 export const ResumenFichaSchema = z.object({
@@ -63,7 +62,6 @@ export const ResumenFichaSchema = z.object({
   ordenesAbiertas: z.number(),
   actividades: z.number(),
 });
-export type ResumenFicha = z.infer<typeof ResumenFichaSchema>;
 
 export const FichaEquipoSchema = z.object({
   equipo: FichaTecnicaSchema,

@@ -49,3 +49,62 @@ export function precondicion<T extends { [K in keyof T]?: JsonValue }>(
   }
   return resultado;
 }
+
+/**
+ * La base de una edición: lo que la pantalla muestra, con lo que esa misma
+ * entidad ya tiene esperando en la cola (`offline/outbox.ts#cambiosPendientes`)
+ * por encima. Sin esto, dos ediciones seguidas sin señal del mismo campo
+ * compararían la segunda contra el valor que el servidor tiene HOY y chocarían
+ * con la primera al sincronizar (`STALE_UPDATE` contra un cambio propio).
+ *
+ * `pendientes` solo trae campos que armó una edición con la misma forma `T`, por
+ * eso el valor de cada uno es del tipo del campo.
+ */
+export function conPendientes<T extends object>(base: T, pendientes: JsonObject, campos: readonly (keyof T & string)[]): T {
+  const resultado: T = { ...base };
+  for (const campo of campos) {
+    if (!Object.hasOwn(pendientes, campo)) continue;
+    // El cuerpo guardado es JSON; el campo de `T` que lo originó es el mismo valor.
+    resultado[campo] = pendientes[campo] as T[keyof T & string];
+  }
+  return resultado;
+}
+
+/** Solo los `fields` de `source`: la base de una edición se deriva de la entidad
+ * en vez de copiarla campo por campo. */
+export function pickFields<T extends object, K extends keyof T>(source: T, fields: readonly K[]): Pick<T, K> {
+  // `Pick<T, K>` tiene justo las claves de `fields`, todas presentes en `source`.
+  return Object.fromEntries(fields.map((campo) => [campo, source[campo]])) as Pick<T, K>;
+}
+
+export interface EdicionContraBase<T> {
+  /** Solo los campos que cambiaron, con su valor nuevo: el cuerpo del PATCH. */
+  cambios: Partial<T>;
+  /** Precondición (`X-Expected`); `undefined` si no hay campos tocados. */
+  esperado: JsonObject | undefined;
+  hayCambios: boolean;
+}
+
+/**
+ * Compara el formulario con la base. Un campo que `nuevo` no trae (`undefined`)
+ * es "sin cambio"; `null` es "dejarlo vacío". Es lo que permite que un formulario
+ * que omite lo que no tocó no lo borre.
+ */
+export function edicionContraBase<T extends { [K in keyof T]?: JsonValue }>(
+  base: T,
+  nuevo: Partial<T>,
+  campos: readonly (keyof T & string)[],
+): EdicionContraBase<T> {
+  const completo: T = { ...base };
+  for (const campo of campos) {
+    const valor = nuevo[campo];
+    if (valor !== undefined) completo[campo] = valor;
+  }
+  const { cambios, esperado } = diferenciaEdicion(base, completo, campos);
+  const precondiciones = precondicion(esperado);
+  return {
+    cambios,
+    esperado: Object.keys(precondiciones).length > 0 ? precondiciones : undefined,
+    hayCambios: Object.keys(cambios).length > 0,
+  };
+}

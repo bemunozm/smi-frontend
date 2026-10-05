@@ -9,18 +9,20 @@ import {
   Input,
   Label,
   ListBox,
-  NumberField,
   Select,
   Spinner,
   TextArea,
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { DecimalField } from '../components/DecimalField';
+import { IntegerField } from '../components/IntegerField';
+import { usePermissions } from '../hooks/usePermissions';
 import { useOrdenes } from '../hooks/useOrdenes';
 import { useCrearIntervencion, useIntervenciones } from '../hooks/useIntervenciones';
+import { RECURSOS_DE_BITACORA } from '../lib/pending-resources';
 import { ESTADO_OT_LABELS, TIPO_OT_LABELS, TIPO_OT_OPTIONS } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import { CreateIntervencionSchema, TIPO_OT, type CreateIntervencionInput } from '../types/mantenimiento';
 
 function TrashIcon() {
@@ -55,7 +57,7 @@ const EMPTY_INTERVENCION: CreateIntervencionInput = {
 
 /**
  * Form de registro de intervención — RHF + `zodResolver` + `useCrearIntervencion`.
- * `insumos` es un `useFieldArray` (cantidad con stepper `NumberField`, insumo
+ * `insumos` es un `useFieldArray` (cantidad con `IntegerField`, insumo
  * como texto libre — Inventario no expone todavía un selector real, ver TODO
  * inline). El "stock antes→después" NO se calcula: el backend no decrementa
  * stock ni lo devuelve en este endpoint, así que cada fila solo muestra la
@@ -141,34 +143,26 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
           control={control}
           name="horasHombre"
           render={({ field }) => (
-            <NumberField fullWidth isDisabled={disabled} minValue={0} value={field.value} onChange={field.onChange}>
-              <Label>Horas hombre</Label>
-              <NumberField.Group>
-                <NumberField.DecrementButton />
-                <NumberField.Input onBlur={field.onBlur} />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
+            <DecimalField
+              isDisabled={disabled}
+              label="Horas hombre"
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            />
           )}
         />
         <Controller
           control={control}
           name="horometro"
           render={({ field }) => (
-            <NumberField
-              fullWidth
+            <DecimalField
               isDisabled={disabled}
-              minValue={0}
-              value={field.value ?? 0}
+              label="Horómetro"
+              onBlur={field.onBlur}
               onChange={field.onChange}
-            >
-              <Label>Horómetro</Label>
-              <NumberField.Group>
-                <NumberField.DecrementButton />
-                <NumberField.Input onBlur={field.onBlur} />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
+              value={field.value ?? 0}
+            />
           )}
         />
       </div>
@@ -224,20 +218,16 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
                   control={control}
                   name={`insumos.${index}.cantidad`}
                   render={({ field }) => (
-                    <NumberField
+                    <IntegerField
                       className="w-36"
+                      errorMessage={errors.insumos?.[index]?.cantidad?.message}
                       isDisabled={disabled}
-                      minValue={0.01}
-                      value={field.value}
+                      isInvalid={!!errors.insumos?.[index]?.cantidad}
+                      label="Cantidad"
+                      onBlur={field.onBlur}
                       onChange={field.onChange}
-                    >
-                      <Label>Cantidad</Label>
-                      <NumberField.Group>
-                        <NumberField.DecrementButton />
-                        <NumberField.Input onBlur={field.onBlur} />
-                        <NumberField.IncrementButton />
-                      </NumberField.Group>
-                    </NumberField>
+                      value={field.value ?? Number.NaN}
+                    />
                   )}
                 />
                 <div className="flex flex-col gap-1">
@@ -278,7 +268,7 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
  * bitácora (`useIntervenciones`/`useCrearIntervencion`).
  */
 export function BitacoraView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: ordenes } = useOrdenes();
   const [ordenId, setOrdenId] = useState<string | null>(null);
   const ordenSeleccionada = useMemo(
@@ -287,7 +277,7 @@ export function BitacoraView() {
   );
   const { data: intervenciones, isPending, isError, error } = useIntervenciones(ordenId ?? undefined);
 
-  const puedeRegistrar = role === ROLES.MANTENEDOR;
+  const puedeRegistrar = can('intervencion.create');
 
   return (
     <div className="flex flex-col gap-4">
@@ -299,6 +289,8 @@ export function BitacoraView() {
           Registra el trabajo realizado sobre una orden de trabajo y consulta su historial.
         </p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_BITACORA} />
 
       <Select
         className="w-full sm:max-w-md"

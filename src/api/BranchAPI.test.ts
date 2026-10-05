@@ -73,24 +73,3 @@ describe('BranchAPI.list', () => {
   });
 });
 
-describe('BranchAPI.create', () => {
-  it('postea a /api/branches y devuelve la sucursal creada', async () => {
-    postMock.mockResolvedValueOnce({ data: { data: BRANCH, message: 'Sucursal creada' } });
-
-    const result = await BranchAPI.create({ name: 'Sucursal Centro', address: 'Av. Siempre Viva 123' });
-
-    expect(postMock).toHaveBeenCalledWith(
-      '/api/branches',
-      expect.objectContaining({ name: 'Sucursal Centro' }),
-    );
-    expect(result).toEqual(BRANCH);
-  });
-
-  it('propaga el mensaje de conflicto cuando el nombre ya existe', async () => {
-    postMock.mockRejectedValueOnce(axiosErrorConMensaje('Ya existe una sucursal con ese nombre'));
-
-    await expect(BranchAPI.create({ name: 'Sucursal Centro' })).rejects.toThrow(
-      'Ya existe una sucursal con ese nombre',
-    );
-  });
-});

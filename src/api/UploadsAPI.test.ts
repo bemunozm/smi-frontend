@@ -86,6 +86,25 @@ describe('uploadFile', () => {
     },
   );
 
+  it('un archivo inválido es un rechazo de negocio (DomainError con code), no un error plano que el replay tomaría por falta de señal', async () => {
+    await expect(uploadFile(archivo(8 * 1024 * 1024 + 1))).rejects.toMatchObject({
+      name: 'DomainError',
+      code: 'FILE_TOO_LARGE',
+    });
+    await expect(uploadFile(archivo(100, 'image/heic'))).rejects.toMatchObject({
+      name: 'DomainError',
+      code: 'FILE_TYPE_NOT_ALLOWED',
+    });
+  });
+
+  it('el 413 y el 415 del servidor llegan como DomainError con su code y su status', async () => {
+    postMock.mockRejectedValueOnce(axiosErrorConStatus(413, 'File too large'));
+    await expect(uploadFile(archivo(1024))).rejects.toMatchObject({ code: 'FILE_TOO_LARGE', status: 413 });
+
+    postMock.mockRejectedValueOnce(axiosErrorConStatus(415, 'no es imagen'));
+    await expect(uploadFile(archivo(1024))).rejects.toMatchObject({ code: 'FILE_TYPE_NOT_ALLOWED', status: 415 });
+  });
+
   it('mapea un 413 del backend a un mensaje claro en español (el de Multer/Nest no lo trae)', async () => {
     postMock.mockRejectedValueOnce(axiosErrorConStatus(413, 'File too large'));
 

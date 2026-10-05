@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { toast } from '@heroui/react';
 
 import { useCambiosTarjeta } from './useShiftCards';
 import { useOnlineStatus } from './useOnlineStatus';
-import { aNumero, type TarjetaTurno } from './shift-register-helpers';
-import { diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { useQueuedMutation } from './useQueuedMutation';
+import type { TarjetaTurno } from './shift-register-helpers';
+import { formatDecimalInput, parseDecimal } from '../lib/decimal';
+import { diferenciaEdicion, precondicion, type DiffEdicion } from '../lib/edit-diff';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
-import { opsDeCreacion, shiftCardEntity, type OutboxOp } from '../offline/db';
+import type { OutboxOp } from '../offline/db';
 import { patchCloseCardOp, patchOpenCardOp } from '../offline/outbox';
-import { submitWrite } from '../offline/submit-write';
 import type { EntradaCambios } from '../types/cambios';
 import type { EditShiftCardBody } from '../types/shift';
 
@@ -24,20 +24,14 @@ export interface EdicionTarjetaState {
   observaciones: string;
 }
 
-/** Número → texto del formulario (formato chileno, sin separador de miles: es
- * lo que `aNumero` vuelve a leer). */
-function aTexto(n: number | undefined): string {
-  return n == null ? '' : n.toLocaleString('es-CL', { useGrouping: false, maximumFractionDigits: 2 });
-}
-
 function estadoInicial(t: TarjetaTurno): EdicionTarjetaState {
   return {
     operatorId: t.operatorId ?? '',
-    inicial: aTexto(t.inicial),
-    final: aTexto(t.final),
-    litros: aTexto(t.litros),
+    inicial: formatDecimalInput(t.inicial),
+    final: formatDecimalInput(t.final),
+    litros: formatDecimalInput(t.litros),
     adBlue: t.adBlue ?? false,
-    adBlueLitros: aTexto(t.adBlueLitros),
+    adBlueLitros: formatDecimalInput(t.adBlueLitros),
     observaciones: t.observaciones ?? '',
   };
 }
@@ -63,6 +57,9 @@ export interface UseEditarTarjetaResult {
   soloEnElEquipo: boolean;
   adBlue: ResultadoAdBlue;
   finalInvalido: boolean;
+  /** Qué falta para guardar una tarjeta cerrada; `null` si nada falta o si lo
+   * dice ya el propio campo (final menor que el inicial, AdBlue). */
+  faltante: string | null;
   puedeGuardar: boolean;
   guardar: () => Promise<void>;
   isGuardando: boolean;
@@ -104,8 +101,19 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const enLinea = useOnlineStatus();
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setFormState] = useState<EdicionTarjetaState>(SIN_FORM);
-  const [isGuardando, setIsGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
+  const edicion = useQueuedMutation<'shiftCard.edit', GuardarTarjetaVars>({
+    endpoint: 'shiftCard.edit',
+    waitMs: 0,
+    userId,
+    build: armarPatchDeTarjeta,
+    // El cambio se absorbió en operaciones que seguían en la cola: no hay PATCH,
+    // pero quedó guardado igual.
+    onUnchanged: avisarGuardadoEnCola,
+    errorFallback: 'No se pudo guardar el cambio en el equipo.',
+    errorMessage: (error) => mensajeErrorOperacion(error, 'No se pudo guardar el cambio en el equipo.'),
+  });
+  const isGuardando = edicion.isPending;
 
   const editando = tarjetas.find((t) => t.id === editandoId) ?? null;
   const esCerrada = editando?.estado === 'cerrada';
@@ -115,17 +123,24 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const historialDisponible = editando != null && !soloEnElEquipo && enLinea;
   const cambios = useCambiosTarjeta(editandoId, historialDisponible);
 
-  const adBlueLitros = aNumero(form.adBlueLitros);
+  const adBlueLitros = parseDecimal(form.adBlueLitros);
   const adBlue = validarAdBlue(form.adBlue, adBlueLitros, true);
-  const inicialNum = aNumero(form.inicial);
-  const finalNum = aNumero(form.final);
-  const litrosNum = aNumero(form.litros);
+  const inicialNum = parseDecimal(form.inicial);
+  const finalNum = parseDecimal(form.final);
+  const litrosNum = parseDecimal(form.litros);
   const finalInvalido = esCerrada && inicialNum != null && finalNum != null && finalNum < inicialNum;
   const incompleto =
     inicialNum == null ||
     !form.operatorId ||
     (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
+  const faltante = !esCerrada
+    ? null
+    : inicialNum == null || finalNum == null
+      ? 'Faltan los horómetros.'
+      : litrosNum == null || litrosNum < 0
+        ? 'Indicá los litros de combustible (cero si no cargó).'
+        : null;
   const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
 
   const abrirEdicion = (id: string) => {
@@ -176,51 +191,13 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
       return;
     }
 
-    setIsGuardando(true);
+    const aperturaId = opApertura?.id;
+    const cierreId = ops.find((o) => o.type === 'closeCard' && o.payload.cardId === editando.id)?.id;
     try {
-      const opCierre = ops.find((o) => o.type === 'closeCard' && o.payload.cardId === editando.id);
-      const { operatorId, valorInicial, ...deCierre } = diff.cambios;
-
-      // 1. Lo que vive en una operación todavía pendiente se edita ahí.
-      let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial });
-      if (opApertura && Object.keys(aperturaPendiente).length > 0) {
-        const resultado = await patchOpenCardOp(opApertura.id, userId, aperturaPendiente);
-        if (resultado === 'updated') aperturaPendiente = {};
-      }
-      let cierrePendiente: EditShiftCardBody = sinUndefined(deCierre);
-      if (opCierre && Object.keys(cierrePendiente).length > 0) {
-        const { adBlue: conAdBlue, adBlueLiters: litrosAdBlue, observaciones, ...resto } = cierrePendiente;
-        const resultado = await patchCloseCardOp(opCierre.id, userId, {
-          ...resto,
-          ...(conAdBlue !== undefined ? { adBlue: conAdBlue, adBlueLiters: conAdBlue ? litrosAdBlue : undefined } : {}),
-          ...(conAdBlue === undefined && litrosAdBlue !== undefined ? { adBlueLiters: litrosAdBlue } : {}),
-          ...(observaciones !== undefined ? { observaciones: observaciones || undefined } : {}),
-        });
-        if (resultado === 'updated') cierrePendiente = {};
-      }
-
-      // 2. Lo que quedó se manda como PATCH, detrás de lo que todavía esté en cola para esta tarjeta.
-      const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente };
-      const campos = Object.keys(body);
-      if (campos.length > 0) {
-        await submitWrite(
-          'shiftCard.edit',
-          {
-            params: { id: editando.id },
-            body,
-            expected: precondicion(diff.esperado, campos),
-            entityKey: shiftCardEntity(editando.id),
-            dependsOn: opsDeCreacion(shiftCardEntity(editando.id), ops),
-          },
-          { waitMs: 0, userId },
-        );
-      }
-      avisarGuardadoEnCola();
+      await edicion.mutateAsync({ tarjetaId: editando.id, userId, diff, aperturaId, cierreId });
       setGuardado(true);
-    } catch (error: unknown) {
-      toast.danger(mensajeErrorOperacion(error, 'No se pudo guardar el cambio en el equipo.'));
-    } finally {
-      setIsGuardando(false);
+    } catch {
+      // `useQueuedMutation` ya avisó el error; la hoja queda abierta.
     }
   };
 
@@ -235,6 +212,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     soloEnElEquipo,
     adBlue,
     finalInvalido,
+    faltante,
     puedeGuardar,
     guardar,
     isGuardando,
@@ -243,6 +221,48 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     cargandoCambios: cambios.isLoading,
     historialDisponible,
   };
+}
+
+interface GuardarTarjetaVars {
+  tarjetaId: string;
+  userId: string;
+  diff: DiffEdicion<EditShiftCardBody>;
+  /** Operación `openCard` de esta tarjeta que todavía está en la cola. */
+  aperturaId: string | undefined;
+  /** Operación `closeCard` de esta tarjeta que todavía está en la cola. */
+  cierreId: string | undefined;
+}
+
+/**
+ * Lo que vive en una operación de apertura o cierre todavía pendiente se edita
+ * ahí (el servidor nunca vio el dato viejo); lo que queda se manda como `PATCH`
+ * con solo los campos tocados y su precondición. La cola ya lo pone detrás de lo
+ * que siga pendiente para esta tarjeta.
+ */
+async function armarPatchDeTarjeta({ tarjetaId, userId, diff, aperturaId, cierreId }: GuardarTarjetaVars) {
+  const { operatorId, valorInicial, ...deCierre } = diff.cambios;
+
+  let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial });
+  if (aperturaId && Object.keys(aperturaPendiente).length > 0) {
+    const resultado = await patchOpenCardOp(aperturaId, userId, aperturaPendiente);
+    if (resultado === 'updated') aperturaPendiente = {};
+  }
+  let cierrePendiente: EditShiftCardBody = sinUndefined(deCierre);
+  if (cierreId && Object.keys(cierrePendiente).length > 0) {
+    const { adBlue: conAdBlue, adBlueLiters: litrosAdBlue, observaciones, ...resto } = cierrePendiente;
+    const resultado = await patchCloseCardOp(cierreId, userId, {
+      ...resto,
+      ...(conAdBlue !== undefined ? { adBlue: conAdBlue, adBlueLiters: conAdBlue ? litrosAdBlue : undefined } : {}),
+      ...(conAdBlue === undefined && litrosAdBlue !== undefined ? { adBlueLiters: litrosAdBlue } : {}),
+      ...(observaciones !== undefined ? { observaciones: observaciones || undefined } : {}),
+    });
+    if (resultado === 'updated') cierrePendiente = {};
+  }
+
+  const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente };
+  const campos = Object.keys(body);
+  if (campos.length === 0) return null;
+  return { params: { id: tarjetaId }, body, expected: precondicion(diff.esperado, campos) };
 }
 
 /** Lo que la pantalla muestra HOY de la tarjeta (servidor + pendientes): la

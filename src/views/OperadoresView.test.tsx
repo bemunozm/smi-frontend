@@ -159,7 +159,7 @@ describe('OperadoresView', () => {
       const dialog = await openSheet('María Pérez');
       fireEvent.click(within(dialog).getByRole('button', { name: 'Activar' }));
 
-      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_2', isActive: true });
+      expect(toggleMock).toHaveBeenCalledWith({ operator: OPERATORS[1], isActive: true });
     });
 
     it('"Desactivar" llama a la mutación directo, sin abrir un modal', async () => {
@@ -168,7 +168,7 @@ describe('OperadoresView', () => {
       const dialog = await openSheet('Juan Rojas');
       fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar' }));
 
-      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_1', isActive: false });
+      expect(toggleMock).toHaveBeenCalledWith({ operator: OPERATORS[0], isActive: false });
       expect(screen.queryByText('Guardar cambios')).toBeNull();
     });
 
@@ -184,7 +184,7 @@ describe('OperadoresView', () => {
 
       await waitFor(() =>
         expect(updateMock).toHaveBeenCalledWith(
-          { id: 'op_1', input: expect.objectContaining({ name: 'Juan Rojas Soto' }) },
+          { operator: OPERATORS[0], input: expect.objectContaining({ name: 'Juan Rojas Soto' }) },
           expect.anything(),
         ),
       );
@@ -226,7 +226,7 @@ describe('OperadoresView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Acciones para Juan Rojas' }));
       fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
 
-      expect(toggleMock).toHaveBeenCalledWith({ id: 'op_1', isActive: false });
+      expect(toggleMock).toHaveBeenCalledWith({ operator: OPERATORS[0], isActive: false });
     });
   });
 });

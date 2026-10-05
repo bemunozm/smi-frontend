@@ -1,5 +1,16 @@
 import { queryClient } from '../lib/query-client';
-import { EQUIPMENT_KEY, HALLAZGOS_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
+import {
+  ACTIVIDADES_KEY,
+  BRANCHES_KEY,
+  EQUIPMENT_DOCUMENTS_KEY,
+  EQUIPMENT_KEY,
+  HALLAZGOS_KEY,
+  INVENTORY_KEY,
+  OPERATORS_KEY,
+  ORDENES_KEY,
+  SHIFT_CARDS_MINE_KEY,
+  TRABAJOS_EXTRA_KEY,
+} from '../lib/query-keys';
 import type { Equipment } from '../types/equipment';
 import type { Hallazgo } from '../types/hallazgos';
 import type { ShiftCardResponse } from '../types/shift';
@@ -8,7 +19,7 @@ import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 /**
  * Escrituras en el caché de TanStack Query tras sincronizar una operación: el
  * registro recién confirmado aparece sin esperar el refetch. Viven acá (no en
- * `replay.ts`) porque el registro de endpoints (`offline/endpoints.ts`) las
+ * `replay.ts`) porque el registro de endpoints (`offline/endpoints/`) las
  * necesita también, y `replay.ts` importa de él.
  */
 
@@ -58,8 +69,50 @@ export function applyTrabajoExtraToCache(trabajo: TrabajoExtraordinario): void {
 
 // --- Lecturas para armar etiquetas ------------------------------------------
 
+type Registro = Record<string, unknown>;
+
+function esRegistro(valor: unknown): valor is Registro {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
+}
+
+/** Busca un registro por `id` en TODAS las listas cacheadas bajo `key` (cada
+ * combinación de filtros cachea la suya). */
+function registroCacheado(key: readonly string[], id: string): Registro | undefined {
+  for (const [, data] of queryClient.getQueriesData<unknown>({ queryKey: key })) {
+    if (!Array.isArray(data)) continue;
+    const encontrado = data.find((fila: unknown) => esRegistro(fila) && fila.id === id);
+    if (esRegistro(encontrado)) return encontrado;
+  }
+  return undefined;
+}
+
+/** Qué lista cacheada y qué campo dan el nombre legible de cada entidad. */
+const NOMBRE_CACHEADO = {
+  equipment: { key: EQUIPMENT_KEY, campo: 'internalCode' },
+  item: { key: [...INVENTORY_KEY, 'items'], campo: 'name' },
+  category: { key: [...INVENTORY_KEY, 'categories'], campo: 'name' },
+  branch: { key: BRANCHES_KEY, campo: 'name' },
+  operator: { key: OPERATORS_KEY, campo: 'name' },
+  orden: { key: ORDENES_KEY, campo: 'titulo' },
+  actividad: { key: ACTIVIDADES_KEY, campo: 'descripcion' },
+  document: { key: EQUIPMENT_DOCUMENTS_KEY, campo: 'title' },
+} as const;
+
+export type NombreCacheable = keyof typeof NOMBRE_CACHEADO;
+
+/**
+ * Nombre legible de una entidad ya cacheada (código del equipo, nombre del
+ * ítem…) para la etiqueta de una operación encolada sin señal: leer el caché no
+ * necesita red, y sin él la etiqueta queda genérica.
+ */
+export function cachedName(kind: NombreCacheable, id: string): string | undefined {
+  const { key, campo } = NOMBRE_CACHEADO[kind];
+  const valor = registroCacheado(key, id)?.[campo];
+  return typeof valor === 'string' && valor.length > 0 ? valor : undefined;
+}
+
 /** Código del equipo de una tarjeta, hallazgo o trabajo ya cacheado — para la
- * etiqueta de `SyncStatus` de una operación que se encola sin señal. */
+ * etiqueta de la hoja de sincronización de una operación que se encola sin señal. */
 export function cachedEquipoCode(kind: 'shift-card' | 'hallazgo' | 'trabajo-extra', id: string): string | undefined {
   if (kind === 'shift-card') {
     return queryClient.getQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY)?.find((c) => c.id === id)?.equipo

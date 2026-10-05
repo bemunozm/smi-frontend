@@ -59,15 +59,14 @@ describe('toCreateEquipmentDocumentPayload', () => {
     });
   });
 
-  it('manda fileKey + fileName cuando el usuario adjuntó un archivo', () => {
+  it('manda solo fileName cuando el usuario adjuntó un archivo (el archivo viaja aparte)', () => {
     const payload = toCreateEquipmentDocumentPayload(
       { type: 'INSURANCE', title: '', expiryDate: '', notes: '' },
-      { key: 'tmp/u1/poliza.pdf', name: 'Póliza Seguro.pdf' },
+      new File(['x'], 'Póliza Seguro.pdf', { type: 'application/pdf' }),
     );
 
     expect(payload).toEqual({
       type: 'INSURANCE',
-      fileKey: 'tmp/u1/poliza.pdf',
       fileName: 'Póliza Seguro.pdf',
     });
   });
@@ -108,34 +107,10 @@ describe('toUpdateEquipmentDocumentPayload', () => {
     });
   });
 
-  // `fileKey`/`fileName` son tri-state — igual criterio que `photoKey` en
-  // `types/equipment.test.ts`: sin tocarlo, el PATCH no debe pisar el
-  // archivo ya guardado.
-  describe('fileKey/fileName (tri-state)', () => {
-    const base = { type: 'OTHER' as const, title: '', expiryDate: '', notes: '' };
+  it('el archivo no va en este body: lo recibe aparte el hook', () => {
+    const payload = toUpdateEquipmentDocumentPayload({ type: 'OTHER', title: '', expiryDate: '', notes: '' });
 
-    it('sin segundo argumento, omite fileKey y fileName por completo (sin cambios)', () => {
-      const payload = toUpdateEquipmentDocumentPayload(base);
-
-      expect('fileKey' in payload).toBe(false);
-      expect('fileName' in payload).toBe(false);
-    });
-
-    it('con {key: null, name: null}, los manda para quitar el archivo', () => {
-      const payload = toUpdateEquipmentDocumentPayload(base, { key: null, name: null });
-
-      expect(payload.fileKey).toBeNull();
-      expect(payload.fileName).toBeNull();
-    });
-
-    it('con {key, name}, manda el archivo nuevo', () => {
-      const payload = toUpdateEquipmentDocumentPayload(base, {
-        key: 'tmp/u1/nuevo.pdf',
-        name: 'Certificado.pdf',
-      });
-
-      expect(payload.fileKey).toBe('tmp/u1/nuevo.pdf');
-      expect(payload.fileName).toBe('Certificado.pdf');
-    });
+    expect('fileKey' in payload).toBe(false);
+    expect('fileName' in payload).toBe(false);
   });
 });

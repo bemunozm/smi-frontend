@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useSession } from '../lib/auth-client';
+import { markSessionEnded } from '../lib/cache-owner';
+import { useSessionClosed } from '../lib/pending-signout';
 import { clearSessionSnapshot, readSessionSnapshot, saveSessionSnapshot } from '../lib/session-snapshot';
 import { isRole, type Role } from '../types/roles';
 
@@ -26,9 +28,7 @@ export interface CurrentUser {
 }
 
 /** Cuánto se espera a que `get-session` conteste antes de recurrir al
- * snapshot local — ver plan "Supervisión en Terreno", sección "Offline →
- * Arranque en frío": "usado solo ante error de red o `get-session` de más de
- * 4 s". */
+ * snapshot local: solo ante error de red o un `get-session` de más de 4 s. */
 const PENDING_FALLBACK_MS = 4000;
 
 /** `error.status` solo existe (como `number`) cuando Better Auth alcanzó a
@@ -74,10 +74,11 @@ function toOfflineUser(snapshot: NonNullable<ReturnType<typeof readSessionSnapsh
  * `lib/session-snapshot.ts`): si `get-session` falla por red o tarda más de
  * `PENDING_FALLBACK_MS`, y hay un snapshot de una sesión anterior, la UI
  * puede seguir renderizando en vez de rebotar a `/login` (bug que hacía
- * inutilizable el Módulo A de Terreno sin señal).
+ * inutilizable Terreno sin señal).
  */
 export function useCurrentUser(): CurrentUser {
   const { data: session, isPending, error } = useSession();
+  const sessionClosed = useSessionClosed();
   const rawRole = session?.user.role;
 
   const [pendingTooLong, setPendingTooLong] = useState(false);
@@ -104,7 +105,7 @@ export function useCurrentUser(): CurrentUser {
   // Persiste el snapshot ante TODA sesión confirmada por el servidor — la
   // única escritura de este archivo (ver `lib/session-snapshot.ts`).
   useEffect(() => {
-    if (!session?.user) return;
+    if (sessionClosed || !session?.user) return;
     saveSessionSnapshot({
       userId: session.user.id,
       name: session.user.name,
@@ -112,7 +113,7 @@ export function useCurrentUser(): CurrentUser {
       role: isRole(session.user.role) ? session.user.role : null,
       savedAt: Date.now(),
     });
-  }, [session]);
+  }, [session, sessionClosed]);
 
   // Un 401 real (el servidor SÍ contestó, y dice "esta sesión ya no vale")
   // invalida también el fallback offline — distinto de un error de red, que
@@ -120,8 +121,16 @@ export function useCurrentUser(): CurrentUser {
   useEffect(() => {
     if (hasHttpStatus(error) && error.status === 401) {
       clearSessionSnapshot();
+      // Las cachés que quedaron eran de esa sesión: el próximo inicio las purga.
+      markSessionEnded();
     }
   }, [error]);
+
+  // La persona salió (o falta cerrar la sesión en el servidor): ni la sesión que Better
+  // Auth todavía tenga en memoria ni el snapshot valen (`lib/pending-signout.ts`).
+  if (sessionClosed) {
+    return { user: null, role: null, isPending: false, isAuthenticated: false, isOfflineSnapshot: false };
+  }
 
   if (session?.user) {
     return {

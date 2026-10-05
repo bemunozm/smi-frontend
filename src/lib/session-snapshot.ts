@@ -6,8 +6,7 @@ const STORAGE_KEY = 'smi-session-snapshot';
 
 /**
  * Snapshot mínimo de la sesión, guardado en `localStorage` — lo único que
- * sobrevive un arranque en frío sin señal (ver `hooks/useCurrentUser.ts` y el
- * RFC "Supervisión en Terreno", sección "Offline → Arranque en frío").
+ * sobrevive un arranque en frío sin señal (ver `hooks/useCurrentUser.ts`).
  *
  * NUNCA reemplaza la cookie de sesión ni otorga acceso al servidor: el
  * backend sigue exigiéndola para cualquier petición real. Solo existe para

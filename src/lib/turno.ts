@@ -123,8 +123,7 @@ export function turnoAnterior(turno: Turno, fecha: Date): { turno: Turno; fecha:
 
 /**
  * El turno inmediatamente SIGUIENTE — espejo de `turnoAnterior`. Lo usa el
- * selector "actual / siguiente" de Registro de equipo (RFC "Supervisión en
- * Terreno" §Diseño): a las 07:30 el reloj todavía propone el NOCTURNO de
+ * selector "actual / siguiente" de Registro de equipo: a las 07:30 el reloj todavía propone el NOCTURNO de
  * anoche, pero el supervisor ya está empezando el DIURNO de hoy — el
  * selector le permite adelantarse UN turno sin esperar a las 08:00.
  */

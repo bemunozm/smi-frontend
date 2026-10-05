@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
-  const apiOrigin = new URL(env.VITE_API_URL || 'http://localhost:3000').origin
+  const apiOrigin = new URL(env.VITE_API_URL || 'http://localhost:3003').origin
   // Mismo default que el backend (`DEFAULT_DEV_STORAGE_BUCKET`,
   // `smi-backend/src/common/config/env.ts`) — el nombre del bucket es parte
   // del PATH público (`/<bucket>/...`, ver `STORAGE_PUBLIC_ENDPOINT`), así
@@ -24,18 +24,14 @@ export default defineConfig(({ mode }) => {
   // fuente completo (`/patrón/flags`), sin depender de scope externo.
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const escapedOrigin = escapeRegExp(apiOrigin)
-  // Restringido al prefijo `/api` (revisión QA, prep túnel): antes matcheaba
-  // CUALQUIER GET del origen de la API salvo `/api/auth/*` — inofensivo
-  // mientras la API y el front vivían en orígenes distintos, pero en modo
-  // mismo-origen (`preview.proxy`, abajo: API y storage bajo el MISMO host
-  // del túnel) esto capturaría también las rutas de la app (`/inicio`, etc.)
-  // y los objetos de `/smi-files/*` — ambos servidos por Workbox como si
-  // fueran lecturas de la API. El global prefix de Nest es `/api`
-  // (`smi-backend/src/app.setup.ts#setGlobalPrefix`). El lookahead ya no
-  // excluye `/uploads/*`: el backend retiró esa ruta en la Fase 3 (RFC
-  // "Supervisión en Terreno" §Cierre de R2: "retirar `src/uploads/*`") —
-  // junto con la regla `smi-uploads` dedicada que vivía en `runtimeCaching`
-  // (abajo).
+  // Restringido al prefijo `/api`: en modo mismo-origen (`preview.proxy`, abajo: API
+  // y storage bajo el MISMO host del túnel) un patrón que matcheara cualquier GET
+  // del origen capturaría también las rutas de la app (`/inicio`, etc.) y los
+  // objetos de `/smi-files/*`, servidos por Workbox como si fueran lecturas de la
+  // API. El global prefix de Nest es `/api`
+  // (`smi-backend/src/app.setup.ts#setGlobalPrefix`). Se excluye `/api/auth/*`
+  // (sesión Better Auth: nunca se cachea). El backend ya no sirve `/uploads/*`:
+  // los adjuntos van por URL firmada.
   const apiReadPattern = new RegExp(`^${escapedOrigin}/api/(?!auth/).*`)
 
   // Solo para la prueba en tablet detrás de un túnel HTTPS único (ver
@@ -47,6 +43,16 @@ export default defineConfig(({ mode }) => {
   // cross-origin distinto y el flujo completo (login, outbox, descarga de
   // PDF) tiene que probarse bajo un solo origen, igual que en producción.
   const previewProxyEnabled = env.VITE_PREVIEW_PROXY === 'true'
+  // A dónde reenvía `vite preview`: el backend de SMI (:3003 en esta máquina, donde
+  // :3000-:3002 son de otros proyectos) y el storage S3 (MinIO en :9000).
+  const previewApiTarget = env.VITE_PREVIEW_API_TARGET || 'http://localhost:3003'
+  const previewStorageTarget = env.VITE_PREVIEW_STORAGE_TARGET || 'http://localhost:9000'
+  // Hosts que `vite preview` acepta (lista separada por comas): el subdominio del
+  // quick tunnel cambia en cada arranque de `cloudflared`.
+  const previewAllowedHosts = (env.VITE_PREVIEW_ALLOWED_HOSTS || '.trycloudflare.com')
+    .split(',')
+    .map((host) => host.trim())
+    .filter(Boolean)
 
   return {
     plugins: [
@@ -92,41 +98,37 @@ export default defineConfig(({ mode }) => {
         // `clientsClaim: true`: el SW nuevo toma control de las pestañas YA
         // abiertas apenas termina de activarse, en vez de esperar a que se
         // cierren y vuelvan a abrir — clave para el arranque en frío sin
-        // señal (RFC "Supervisión en Terreno" §Diseño → Offline): una
-        // tablet que se dejó preparada el día anterior (ver
-        // `components/terreno/SyncStatus.tsx`, "Preparar para uso sin
-        // señal") debe quedar servida por el SW más reciente desde el
-        // primer load, sin depender de un cierre manual de la app.
-        // `registerType: 'prompt'` (abajo, sin tocar) sigue pidiendo
-        // confirmación antes de ACTIVAR una versión nueva — `clientsClaim`
-        // solo cambia qué pasa una vez que esa activación ya ocurrió.
+        // señal: una tablet que se dejó preparada el día anterior (ver
+        // `components/sync/PrepChecklist.tsx`, "Preparar para uso sin señal")
+        // debe quedar servida por el SW más reciente desde el primer load, sin
+        // depender de un cierre manual de la app.
+        // `registerType: 'prompt'` (arriba) sigue pidiendo confirmación antes de
+        // ACTIVAR una versión nueva — `clientsClaim` solo cambia qué pasa una
+        // vez que esa activación ya ocurrió.
         workbox: {
           clientsClaim: true,
-          // Default de Workbox: 2 MiB. El bundle principal ya lo supera
-          // (Dexie, Fase 5 offline, sumado a lo que ya traía la app) — sin
-          // subir esto, `vite build` FALLA (Workbox se niega a precachear un
-          // archivo más grande que el límite) y la app queda sin su propio
-          // código en el precache, es decir, sin poder arrancar en frío sin
-          // señal — justo lo que esta fase tiene que garantizar. 3 MiB deja
-          // margen sin dejar de ser una señal si el bundle sigue creciendo.
-          // Partir el bundle (code-splitting por ruta) es el arreglo de raíz
-          // pendiente — fuera del alcance de esta fase.
+          // Default de Workbox: 2 MiB. El bundle principal ya lo supera (Dexie
+          // sumado a lo que ya traía la app) — sin subir esto, `vite build` FALLA
+          // (Workbox se niega a precachear un archivo más grande que el límite) y
+          // la app queda sin su propio código en el precache, es decir, sin poder
+          // arrancar en frío sin señal. 3 MiB deja margen sin dejar de ser una
+          // señal si el bundle sigue creciendo. Partir el bundle (code-splitting
+          // por ruta) es el arreglo de raíz pendiente.
           maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,svg,woff2,woff,png,ico}'],
           navigateFallback: '/index.html',
           // `/smi-files` (o el bucket que `VITE_STORAGE_BUCKET` indique):
           // sin este denylist, la navegación de descarga del PDF (redirect
           // 302 de `GET /api/shift-reports/:id/file` a la URL firmada,
-          // MISMO origen en modo túnel — ver `preview.proxy` arriba) caería
+          // MISMO origen en modo túnel — ver `preview.proxy` abajo) caería
           // en `NavigationRoute` y Workbox serviría `index.html` en vez de
           // dejar pasar la redirección al archivo real.
           navigateFallbackDenylist: [/^\/api/, new RegExp(`^/${escapeRegExp(storageBucketPath)}`)],
           runtimeCaching: [
             {
               // Archivos firmados de Flota (foto de equipo, documento, foto de
-              // carga de combustible — R2/MinIO, ver Diseño del RFC
-              // R2-storage, sección "PWA"). Va ANTES de la regla genérica de
-              // imágenes cross-origin de abajo: objetos firmados son
+              // carga de combustible — R2/MinIO). Va ANTES de la regla genérica
+              // de imágenes cross-origin de abajo: objetos firmados son
               // inmutables (key = uuid), así que se cachean con la key SIN el
               // query — la firma cambia cada `TTL/2` pero el contenido no.
               //
@@ -145,12 +147,12 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'smi-signed-files',
                 cacheableResponse: { statuses: [200] },
                 // 7 días (no 30): son archivos PRIVADOS de Flota (foto de
-                // equipo, documento, foto de carga) — un logout ya los borra
-                // de Cache Storage a propósito (ver `lib/logout.ts`,
-                // SEGURIDAD M1 del review QA), pero esta ventana más corta
-                // acota la exposición residual para el caso en que el
-                // navegador nunca llegue a correr ese logout (cierre
-                // abrupto, storage no evictado, etc.).
+                // equipo, documento, foto de carga) — el cierre de sesión y el
+                // cambio de usuario ya los borran de Cache Storage a propósito
+                // (ver `lib/session-data.ts`), pero esta ventana más corta acota
+                // la exposición residual para el caso en que el navegador nunca
+                // llegue a correr esa limpieza (cierre abrupto, storage no
+                // evictado, etc.).
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
                 plugins: [
                   {
@@ -164,10 +166,7 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              // Imágenes en general (cualquier origen). La regla dedicada a
-              // `/uploads/*` (`smi-uploads`) se retiró acá: el backend dejó
-              // de servir esa ruta en la Fase 3 (RFC "Supervisión en
-              // Terreno" §Cierre de R2) — los adjuntos de Flota van todos
+              // Imágenes en general (cualquier origen). Los adjuntos de Flota van
               // por `smi-signed-files`, arriba.
               urlPattern: ({ request }) => request.destination === 'image',
               handler: 'CacheFirst',
@@ -183,6 +182,13 @@ export default defineConfig(({ mode }) => {
               // `NetworkFirst` con timeout corto: prioriza datos frescos,
               // cae a caché ante conexión intermitente en terreno sin colgar
               // la UI esperando la red.
+              //
+              // El nombre del cache se repite en `src/offline/api-cache.ts`: tras
+              // sincronizar, el replay borra de acá las listas que cambiaron antes de
+              // refrescarlas. Con `networkTimeoutSeconds`, si el refetch tarda más
+              // que el plazo Workbox responde con la copia vieja (anterior a lo
+              // recién sincronizado) y la app la toma por dato fresco; sin copia, el
+              // SW espera a la red.
               urlPattern: apiReadPattern,
               method: 'GET',
               handler: 'NetworkFirst',
@@ -190,10 +196,9 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'smi-api',
                 networkTimeoutSeconds: 10,
                 cacheableResponse: { statuses: [200] },
-                // 72 h (antes 24): una tablet "preparada" (`SyncStatus`, ver
-                // el plan "Supervisión en Terreno" §Diseño → Offline) puede
-                // quedar lista el jueves para una prueba del sábado — 24 h
-                // la dejaba fría para el arranque en frío del fin de semana.
+                // 72 h (antes 24): una tablet "preparada" puede quedar lista el
+                // jueves para una prueba del sábado — 24 h la dejaba fría para el
+                // arranque en frío del fin de semana.
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 72 },
               },
             },
@@ -215,10 +220,10 @@ export default defineConfig(({ mode }) => {
             // Tunnel (`https://<algo>.trycloudflare.com`, distinto en cada
             // `cloudflared tunnel --url ...`) — Vite rechaza cualquier Host
             // header que no esté en esta lista por defecto.
-            allowedHosts: ['.trycloudflare.com'],
+            allowedHosts: previewAllowedHosts,
             proxy: {
               '/api': {
-                target: 'http://localhost:3001',
+                target: previewApiTarget,
                 // `changeOrigin: false`: preserva el Host header original
                 // (el del túnel) al reenviar al backend — el backend valida
                 // origen/cookies contra `FRONTEND_URL`/`BETTER_AUTH_URL`,
@@ -226,7 +231,7 @@ export default defineConfig(({ mode }) => {
                 changeOrigin: false,
               },
               [`/${storageBucketPath}`]: {
-                target: 'http://localhost:9000',
+                target: previewStorageTarget,
                 // `changeOrigin: false` acá es OBLIGATORIO, no solo prolijo:
                 // la firma SigV4 de la URL cubre el Host que el backend usó
                 // al firmar (`STORAGE_PUBLIC_ENDPOINT` = origen del túnel,

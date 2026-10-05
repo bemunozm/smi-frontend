@@ -1,3 +1,5 @@
+import type { MarcaPendiente as Marca } from '../../hooks/usePendingWrites';
+import { MarcaPendiente } from '../sync/MarcaPendiente';
 import { ChevronRight } from 'lucide-react';
 
 import {
@@ -28,10 +30,12 @@ import {
  */
 export function ItemCard({
   item,
+  marca,
   branchId,
   onOpen,
 }: {
   item: InventoryItem;
+  marca: Marca | null;
   branchId: string;
   onOpen: () => void;
 }) {
@@ -61,6 +65,8 @@ export function ItemCard({
         </div>
         <ChevronRight className="shrink-0 text-muted-foreground" size={20} />
       </div>
+
+      <MarcaPendiente marca={marca} />
 
       <div className="mt-1.5 text-sm text-muted-foreground">
         {item.name}

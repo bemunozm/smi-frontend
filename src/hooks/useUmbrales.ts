@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { UmbralesAPI } from '../api/MantenimientoAPI';
+import { UMBRALES_KEY as UMBRALES_QUERY_KEY } from '../lib/query-keys';
 import type { CreateUmbralInput } from '../types/mantenimiento';
-
-const UMBRALES_QUERY_KEY = ['umbrales'] as const;
+import { useQueuedCreate } from './useQueuedMutation';
 
 export function useUmbrales() {
   return useQuery({
@@ -14,16 +14,14 @@ export function useUmbrales() {
 }
 
 export function useCrearUmbral() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CreateUmbralInput) => UmbralesAPI.create(input),
-    onSuccess: (umbral) => {
-      void queryClient.invalidateQueries({ queryKey: UMBRALES_QUERY_KEY });
-      toast.success('Umbral creado', { description: `${umbral.tipoEquipo} · ${umbral.tipoMantencion}` });
+  return useQueuedCreate<'umbral.create', CreateUmbralInput>({
+    endpoint: 'umbral.create',
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
+    onSent: (umbral, input) => {
+      toast.success('Umbral creado', {
+        description: `${umbral?.tipoEquipo ?? input.tipoEquipo} · ${umbral?.tipoMantencion ?? input.tipoMantencion}`,
+      });
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo crear el umbral.');
-    },
+    errorFallback: 'No se pudo crear el umbral.',
   });
 }

@@ -3,9 +3,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { TriangleAlert } from 'lucide-react';
-import { Button, Chip, FieldError, Label, Modal, NumberField, Spinner } from '@heroui/react';
+import { Button, Chip, Modal, Spinner } from '@heroui/react';
 
+import { DecimalField } from '../DecimalField';
 import { useCerrarHorometro } from '../../hooks/useHorometro';
+import { usePermissions } from '../../hooks/usePermissions';
 import type { CerrarHorometroInput } from '../../types/horometro';
 import type { ControlUnit, OpenShift } from '../../types/equipment';
 import { controlUnitSuffix, turnoLabel } from '../../config/flota-colors';
@@ -23,7 +25,7 @@ const VALOR_FINAL_LABEL: Record<ControlUnit, string> = {
 
 // Schema local de la UI — ver la nota equivalente en `RegistrarEntradaModal`
 // sobre por qué no se reutiliza un schema de `types/` tal cual (el
-// `NumberField` necesita `number`, no `number | undefined`). La validación
+// `DecimalField` necesita `number`, no `number | undefined`). La validación
 // cruzada contra `openShift.valorInicial` (el backend rechaza con 400 si
 // `valorFinal < valorInicial`) no puede vivir en ESTE schema porque
 // `valorInicial` no es un campo del form — se hace a mano en `puedeGuardar`
@@ -61,7 +63,7 @@ interface RegistrarSalidaModalProps {
  * el toast de error de `useCerrarHorometro`.
  *
  * Si `openShift.shiftId` no es `null`, esta tarjeta es del Registro de turno
- * (RFC "Supervisión en Terreno") — cerrarla desde acá no pasa por ese flujo
+ * — cerrarla desde acá no pasa por ese flujo
  * (no pide litros ni foto del surtidor) y, si el supervisor tiene un cierre
  * guardado sin señal para la misma tarjeta, ese cierre queda rechazado al
  * sincronizar (`ALREADY_CLOSED`/`SHIFT_CARD_CLOSE_ELSEWHERE`, ver
@@ -76,6 +78,10 @@ export function RegistrarSalidaModal({
   onOpenChange,
 }: RegistrarSalidaModalProps) {
   const cerrarTurno = useCerrarHorometro();
+  const { canCloseShiftCardFromFleet } = usePermissions();
+  // La tarjeta de un turno de Registro de turno solo la cierra el administrador
+  // desde Flota: al resto el servidor le responde siempre 409.
+  const cierreEnTerreno = openShift.shiftId != null && !canCloseShiftCardFromFleet;
   const unitSuffix = controlUnitSuffix(controlUnit);
 
   // Ver el comentario equivalente en `RegistrarEntradaModal`.
@@ -108,7 +114,7 @@ export function RegistrarSalidaModal({
   const usoValido = tieneLectura && valorFinal >= openShift.valorInicial;
   const uso = tieneLectura ? valorFinal - openShift.valorInicial : null;
 
-  const puedeGuardar = !cerrarTurno.isPending && tieneLectura && usoValido;
+  const puedeGuardar = !cerrarTurno.isPending && tieneLectura && usoValido && !cierreEnTerreno;
 
   const onSubmit = (values: SalidaFormValues) => {
     const payload: CerrarHorometroInput = {
@@ -173,38 +179,29 @@ export function RegistrarSalidaModal({
                 control={control}
                 name="valorFinal"
                 render={({ field }) => (
-                  <NumberField
-                    fullWidth
+                  <DecimalField
+                    errorMessage={
+                      errors.valorFinal?.message ??
+                      (tieneLectura && !usoValido
+                        ? `La lectura final no puede ser menor que la inicial (${NUMERO.format(openShift.valorInicial)} ${unitSuffix}).`
+                        : undefined)
+                    }
                     isInvalid={!!errors.valorFinal || (tieneLectura && !usoValido)}
-                    minValue={0}
-                    onChange={field.onChange}
-                    value={field.value}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label>{VALOR_FINAL_LABEL[controlUnit]}</Label>
-                      {/* Preview en vivo del uso del turno — verde mientras
-                         sea válido (≥ lectura inicial), rojo apenas deja de
-                         serlo: mismo umbral que valida el backend. */}
-                      {uso != null && (
+                    label={VALOR_FINAL_LABEL[controlUnit]}
+                    /* Preview en vivo del uso del turno — verde mientras sea
+                       válido (≥ lectura inicial), rojo apenas deja de serlo:
+                       mismo umbral que valida el backend. */
+                    labelAddon={
+                      uso != null ? (
                         <Chip color={usoValido ? 'success' : 'danger'} size="sm" variant="soft">
                           Uso: {usoValido ? NUMERO.format(uso) : '—'} {unitSuffix}
                         </Chip>
-                      )}
-                    </div>
-                    <NumberField.Group>
-                      <NumberField.DecrementButton />
-                      <NumberField.Input onBlur={field.onBlur} />
-                      <NumberField.IncrementButton />
-                    </NumberField.Group>
-                    {errors.valorFinal ? (
-                      <FieldError>{errors.valorFinal.message}</FieldError>
-                    ) : tieneLectura && !usoValido ? (
-                      <FieldError>
-                        La lectura final no puede ser menor que la inicial ({NUMERO.format(openShift.valorInicial)}{' '}
-                        {unitSuffix}).
-                      </FieldError>
-                    ) : null}
-                  </NumberField>
+                      ) : undefined
+                    }
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                    value={field.value}
+                  />
                 )}
               />
 
@@ -212,25 +209,17 @@ export function RegistrarSalidaModal({
                 control={control}
                 name="nivelCombustible"
                 render={({ field }) => (
-                  <NumberField
-                    fullWidth
+                  <DecimalField
+                    errorMessage={errors.nivelCombustible?.message}
                     isInvalid={!!errors.nivelCombustible}
-                    maxValue={100}
-                    minValue={0}
+                    label="Nivel de combustible (%, opcional)"
+                    onBlur={field.onBlur}
                     onChange={(value) => {
                       field.onChange(value);
                       setNivelTouched(true);
                     }}
-                    value={field.value}
-                  >
-                    <Label>Nivel de combustible (%, opcional)</Label>
-                    <NumberField.Group>
-                      <NumberField.DecrementButton />
-                      <NumberField.Input onBlur={field.onBlur} />
-                      <NumberField.IncrementButton />
-                    </NumberField.Group>
-                    {errors.nivelCombustible ? <FieldError>{errors.nivelCombustible.message}</FieldError> : null}
-                  </NumberField>
+                    value={field.value ?? 0}
+                  />
                 )}
               />
 
@@ -238,8 +227,9 @@ export function RegistrarSalidaModal({
                 <div className="flex items-start gap-2.5 rounded-xl bg-[var(--warning-soft)] px-3.5 py-3 text-[13px] text-[var(--warning-soft-foreground)]">
                   <TriangleAlert className="mt-0.5 h-[18px] w-[18px] shrink-0" />
                   <span>
-                    Esta tarjeta es del Registro de turno. Cerrarla acá no registra litros ni la foto del surtidor, y
-                    si el supervisor tiene el cierre guardado sin señal, ese cierre quedará rechazado.
+                    {cierreEnTerreno
+                      ? 'Esta tarjeta es del Registro de turno: la cierra el supervisor desde Terreno, con los litros y la foto del surtidor. Desde acá solo la puede cerrar el administrador.'
+                      : 'Esta tarjeta es del Registro de turno. Cerrarla acá no registra litros ni la foto del surtidor, y si el supervisor tiene el cierre guardado sin señal, ese cierre quedará rechazado.'}
                   </span>
                 </div>
               )}

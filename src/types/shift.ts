@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { CONTROL_UNIT } from './equipment';
 
 /**
- * Contrato de tarjetas de turno del Módulo A (`POST/GET /api/shift-cards`,
- * backend `src/shifts/*`, RFC "Supervisión en Terreno").
+ * Contrato de tarjetas de turno (`POST/GET /api/shift-cards`, backend
+ * `src/shifts/*`).
  * Mismo vocabulario que `lib/turno.ts#Turno`, redeclarado acá porque este
  * archivo modela el contrato HTTP, no la lógica de reloj.
  */
@@ -26,7 +26,6 @@ const ShiftCardShiftSchema = z.object({
   type: z.string(),
   exitReports: z.array(ShiftCardExitReportSchema),
 });
-export type ShiftCardShift = z.infer<typeof ShiftCardShiftSchema>;
 
 /**
  * Forma pública de una tarjeta de turno — LA MISMA en `open`, `close` y
@@ -136,12 +135,10 @@ export type EditShiftCardBody = {
 
 /**
  * Contrato del reporte de salida de turno (`POST /api/shift-reports`). Se
- * manda vía el outbox offline (RFC "Supervisión en Terreno" §Diseño →
- * Offline, `offline/outbox.ts#enqueueExitReport`), nunca directo desde la
- * vista.
+ * manda vía el outbox offline (`offline/outbox.ts#enqueueExitReport`), nunca
+ * directo desde la vista.
  */
 export const EMAIL_STATUSES = ['PENDING', 'SENT', 'FAILED', 'SKIPPED'] as const;
-export type EmailStatus = (typeof EMAIL_STATUSES)[number];
 
 /** Body de `POST /api/shift-reports`. `id` es el UUID v4 generado en el
  * CLIENTE — idempotencia, igual criterio que `OpenShiftCardInput#id`. */
@@ -167,8 +164,7 @@ export const ShiftReportResponseSchema = z.object({
   createdAt: z.string(),
   emailStatus: z.enum(EMAIL_STATUSES),
   /** Ids del body que no se encontraron al generar el PDF — el reporte
-   * igual se genera con las que sí existen (ver Diseño del RFC, `POST
-   * /api/shift-reports`). */
+   * igual se genera con las que sí existen (`POST /api/shift-reports`). */
   missingCardIds: z.array(z.string()),
 });
 export type ShiftReportResponse = z.infer<typeof ShiftReportResponseSchema>;

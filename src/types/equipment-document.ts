@@ -53,31 +53,17 @@ export const EquipmentDocumentListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const EquipmentDocumentResponseSchema = z.object({
-  data: EquipmentDocumentSchema,
-  message: z.string(),
-});
-
-/** A diferencia de `DeleteEquipmentResponseSchema` (que admite `data: null`
- * cuando el backend rechaza el borrado por historial asociado), el borrado de
- * un documento no tiene ese caso de conflicto — el contrato siempre trae
- * `{ id }`. */
-export const DeleteEquipmentDocumentResponseSchema = z.object({
-  data: z.object({ id: z.string() }),
-  message: z.string(),
-});
-
 // --- Bodies de API -----------------------------------------------------------
 
 /** Body de `POST /api/equipment/:equipmentId/documents` — solo `type` es
- * obligatorio. `fileKey`/`fileName` viajan juntos (siempre los dos, o
- * ninguno) — ver `toCreateEquipmentDocumentPayload`. */
+ * obligatorio. El archivo NO va en el body: es un `File` que se guarda en el
+ * equipo y se sube al sincronizar (el replay escribe `fileKey`); acá viaja solo
+ * su `fileName` — ver `toCreateEquipmentDocumentPayload`. */
 export interface CreateEquipmentDocumentInput {
   type: EquipmentDocumentType;
   title?: string;
   /** `YYYY-MM-DD`, opcional. */
   expiryDate?: string;
-  fileKey?: string;
   fileName?: string;
   notes?: string;
 }
@@ -86,15 +72,14 @@ export interface CreateEquipmentDocumentInput {
  * opcionales; `title`/`expiryDate`/`notes` aceptan `null` explícito para
  * limpiarlos (`type` es opcional pero NUNCA nullable).
  *
- * `fileKey`/`fileName` son TRI-STATE y viajan siempre juntos (ver
- * `toUpdateEquipmentDocumentPayload`): omitidos = sin cambio de archivo,
- * `null` = quitarlo, string = archivo nuevo — chequeado con `=== undefined`,
- * nunca con `in`. */
+ * Archivo, TRI-STATE (ver `toUpdateEquipmentDocumentPayload`): omitido = sin
+ * cambio, `fileKey`/`fileName` en `null` = quitarlo, uno nuevo = `fileName` en el
+ * body y el `File` aparte. */
 export interface UpdateEquipmentDocumentInput {
   type?: EquipmentDocumentType;
   title?: string | null;
   expiryDate?: string | null;
-  fileKey?: string | null;
+  fileKey?: null;
   fileName?: string | null;
   notes?: string | null;
 }
@@ -121,28 +106,19 @@ export const EquipmentDocumentFormSchema = z.object({
 });
 export type EquipmentDocumentFormValues = z.infer<typeof EquipmentDocumentFormSchema>;
 
-/** `key`/`name` del archivo recién subido (`uploadFile`, ver
- * `DocumentFileField` en `EquipmentDocumentModal`) — vive FUERA del form de
- * RHF (estado aparte en el modal, mismo criterio que `photoKey` en
- * `types/equipment.ts`), así que los builders de payload lo reciben aparte. */
-export interface EquipmentDocumentFileChange {
-  key: string;
-  name: string;
-}
-
 /** Convierte los valores del formulario al body de CREAR (`POST`). Omite la
  * clave cuando el campo viene vacío — mismo criterio que
  * `toEquipmentPayload` (`types/equipment.ts`). `file` solo llega informado
  * cuando el usuario adjuntó un archivo nuevo. */
 export function toCreateEquipmentDocumentPayload(
   values: EquipmentDocumentFormValues,
-  file?: EquipmentDocumentFileChange,
+  file?: File,
 ): CreateEquipmentDocumentInput {
   return {
     type: values.type,
     ...(values.title.trim() ? { title: values.title.trim() } : {}),
     ...(values.expiryDate ? { expiryDate: values.expiryDate } : {}),
-    ...(file ? { fileKey: file.key, fileName: file.name } : {}),
+    ...(file ? { fileName: file.name } : {}),
     ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
   };
 }
@@ -153,19 +129,15 @@ export function toCreateEquipmentDocumentPayload(
  * forma de limpiar un título/vencimiento/nota ya guardado (mismo criterio
  * que `toUpdateEquipmentPayload`).
  *
- * `fileChange` es tri-state: `undefined` (default) OMITE `fileKey`/`fileName`
- * — sin cambio de archivo —, `{key: null, name: null}` los manda para
- * quitarlo, `{key, name}` manda el archivo nuevo.
+ * El archivo no va acá: `useUpdateEquipmentDocument` lo recibe aparte (`file`).
  */
 export function toUpdateEquipmentDocumentPayload(
   values: EquipmentDocumentFormValues,
-  fileChange?: { key: string | null; name: string | null },
-): UpdateEquipmentDocumentInput {
+): Omit<UpdateEquipmentDocumentInput, 'fileKey' | 'fileName'> {
   return {
     type: values.type,
     title: values.title.trim() ? values.title.trim() : null,
     expiryDate: values.expiryDate ? values.expiryDate : null,
-    ...(fileChange ? { fileKey: fileChange.key, fileName: fileChange.name } : {}),
     notes: values.notes.trim() ? values.notes.trim() : null,
   };
 }

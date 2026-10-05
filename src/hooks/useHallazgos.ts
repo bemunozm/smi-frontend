@@ -4,15 +4,13 @@ import { toast } from '@heroui/react';
 
 import { listHallazgos, listCambiosHallazgo, type CorreccionHallazgo } from '../api/HallazgosAPI';
 import { useCurrentUser } from './useCurrentUser';
-import { diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { useQueuedMutation } from './useQueuedMutation';
+import { edicionContraBase } from '../lib/edit-diff';
 import { HALLAZGOS_KEY } from '../lib/query-keys';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
-import { hallazgoEntity, opsDeCreacion } from '../offline/db';
-import { useOutboxOps } from '../offline/useOutboxOps';
 import { enqueueCreateHallazgo } from '../offline/outbox';
-import { submitWrite } from '../offline/submit-write';
 import type { Hallazgo, HallazgoForm } from '../types/hallazgos';
 
 const cambiosKey = (id: string) => [...HALLAZGOS_KEY, id, 'cambios'];
@@ -76,46 +74,40 @@ export interface UseEditarHallazgoResult {
 
 const CAMPOS_HALLAZGO = ['equipoId', 'descripcion', 'prioridad', 'estado'] as const;
 
-/** Corrección de un hallazgo (R13) por la cola: el aviso al administrador sale
- * cuando el servidor la recibe, no al guardar. */
+/** Corrección de un hallazgo ya enviado por la cola: el aviso al administrador
+ * sale cuando el servidor la recibe, no al guardar. */
 export function useEditarHallazgo(): UseEditarHallazgoResult {
   const { user } = useCurrentUser();
-  const ops = useOutboxOps(user?.id);
-  const [isGuardando, setIsGuardando] = useState(false);
+  const edicion = useQueuedMutation<'hallazgo.edit', { original: Hallazgo; corregido: CorreccionHallazgo }>({
+    endpoint: 'hallazgo.edit',
+    waitMs: 0,
+    userId: user?.id,
+    build: ({ original, corregido }) => {
+      const base: CorreccionHallazgo = {
+        equipoId: original.equipoId,
+        descripcion: original.descripcion,
+        prioridad: original.prioridad,
+        estado: original.estado,
+      };
+      const cambio = edicionContraBase(base, corregido, CAMPOS_HALLAZGO);
+      if (!cambio.hayCambios) return null;
+      return { params: { id: original.id }, body: cambio.cambios, expected: cambio.esperado };
+    },
+    errorFallback: 'No se pudo guardar el cambio en el equipo.',
+    errorMessage: (error) => mensajeErrorOperacion(error, 'No se pudo guardar el cambio en el equipo.'),
+  });
 
   const guardar = async (original: Hallazgo, corregido: CorreccionHallazgo): Promise<boolean> => {
-    const base: CorreccionHallazgo = {
-      equipoId: original.equipoId,
-      descripcion: original.descripcion,
-      prioridad: original.prioridad,
-      estado: original.estado,
-    };
-    const diff = diferenciaEdicion(base, corregido, CAMPOS_HALLAZGO);
-    if (Object.keys(diff.cambios).length === 0) return true;
-    setIsGuardando(true);
     try {
-      await submitWrite(
-        'hallazgo.edit',
-        {
-          params: { id: original.id },
-          body: diff.cambios,
-          expected: precondicion(diff.esperado),
-          entityKey: hallazgoEntity(original.id),
-          dependsOn: opsDeCreacion(hallazgoEntity(original.id), ops),
-        },
-        { waitMs: 0, userId: user?.id },
-      );
-      avisarGuardadoEnCola();
+      await edicion.mutateAsync({ original, corregido });
       return true;
-    } catch (error: unknown) {
-      toast.danger(mensajeErrorOperacion(error, 'No se pudo guardar el cambio en el equipo.'));
+    } catch {
+      // `useQueuedMutation` ya avisó el error.
       return false;
-    } finally {
-      setIsGuardando(false);
     }
   };
 
-  return { guardar, isGuardando };
+  return { guardar, isGuardando: edicion.isPending };
 }
 
 export function useCambiosHallazgo(id: string | null) {
