@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Clock, History, Lock, Mail, Pencil, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, History, Lock, Mail, Pencil, User } from 'lucide-react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { useCerrarHorometro, useCreateHorometro, useHorometroList } from '../hooks/useHorometro';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { contextoTurno, fechaCorta, turnoAnterior, type Turno } from '../lib/turno';
 import { useAhora } from '../hooks/useAhora';
-import { ROLES } from '../types/roles';
 import type { EntradaCambios } from '../types/cambios';
 import { diferencias } from '../lib/cambios';
 import {
@@ -40,6 +40,7 @@ import {
   TH,
   VistaHead,
   VistaSplit,
+  type OpcionSelector,
 } from '../components/terreno/ui';
 
 /**
@@ -54,11 +55,18 @@ import {
  * cliente describió en la reunión, con la falla de cargadores que se supo recién
  * al turno siguiente. Por eso el botón no está escondido al final del formulario.
  *
- * ⚠️ MAQUETA PARCIAL. El catálogo de equipos SÍ es real (sale de
- * `useEquipment()` y se filtra por estado operativo, que es la regla R1). Las
- * tarjetas del turno son de ejemplo: el modelo `turno` + `registro_equipo_turno`
- * no existe todavía, ni el reporte de salida en PDF. Nada de lo que se registra
- * acá se guarda.
+ * ⚠️ MAQUETA PARCIAL. El catálogo de equipos es real (`useEquipment()`,
+ * filtrado por estado operativo — regla R1) y las tarjetas EN CURSO también:
+ * se derivan de las lecturas de horómetro ABIERTAS del servidor, y abrir o
+ * cerrar una tarjeta registra la entrada/salida allá — esa lectura abierta es
+ * la señal «En uso» que leen Flota y el selector de Trabajos extraordinarios.
+ * Acá ya no hay tarjetas de ejemplo.
+ *
+ * Las CERRADAS del historial también derivan del servidor (este turno y el
+ * anterior). Lo que sigue en memoria de la sesión: los extras del cierre
+ * (litros, foto, AdBlue, observaciones), las correcciones (R13) y el reporte
+ * de salida en PDF. Eso llega con el modelo real `turno` +
+ * `registro_equipo_turno`.
  */
 
 type Estado = 'curso' | 'cerrada';
@@ -67,7 +75,8 @@ type Estado = 'curso' | 'cerrada';
 type Grupo = 'actual' | 'anterior';
 
 interface TarjetaTurno {
-  id: number;
+  /** Id del `RegistroHorometro` del servidor del que deriva la tarjeta. */
+  id: string;
   equipo: string;
   tipo: string;
   operador: string;
@@ -77,11 +86,12 @@ interface TarjetaTurno {
   grupo: Grupo;
   estado: Estado;
   /**
-   * Quién abrió la tarjeta. Un supervisor ve las suyas; el administrador ve
-   * todas. En faena hay más de un supervisor por turno y mezclarlas hace que
-   * cada uno tenga que buscar las propias en una lista que no es suya.
+   * Quién cerró la tarjeta (el usuario de la sesión al cerrar). El modelo
+   * real `registro_equipo_turno` guardará también quién la ABRIÓ y con eso
+   * vuelve R4 (cada supervisor ve solo las suyas): la lectura de horómetro
+   * todavía no lo registra, así que por ahora las abiertas se ven todas.
    */
-  supervisor: string;
+  supervisor?: string;
   cerradaA?: string;
   /** Lo que el supervisor anotó al cerrar; se lee en el detalle del historial. */
   observaciones?: string;
@@ -91,8 +101,6 @@ interface TarjetaTurno {
   cambios?: EntradaCambios[];
   /** Clave de la foto del surtidor en R2 (no una URL pública). */
   fotoKey?: string;
-  /** Registrada sin señal: está en el equipo, todavía no en el servidor. */
-  sinSincronizar?: boolean;
   /** Quedó abierta al terminar el turno anterior — ver la nota de Q5. */
   arrastrada?: boolean;
 }
@@ -111,39 +119,6 @@ const OPERADORES = [
   'Felipe Gallardo',
 ];
 
-/**
- * Marcador de las tarjetas de ejemplo que NO son del usuario conectado —
- * sirve para ver que el filtro por supervisor hace algo. Se resuelve al
- * supervisor real del turno de la tarjeta (`SUPERVISOR_DEL_TURNO`).
- */
-const OTRO_SUPERVISOR = '@otro';
-
-/**
- * Hay un supervisor por turno en cargadores frontales (Acta N.° 004, punto 8).
- * Los nombres son los reales, para que la demo en faena no muestre gente
- * inventada.
- */
-const SUPERVISOR_DEL_TURNO: Record<Turno, string> = {
-  DIURNO: 'Limbert Villacorta',
-  NOCTURNO: 'José Pérez',
-};
-
-/** Las tarjetas del usuario conectado llevan este marcador hasta que se sabe
- *  su nombre real (la sesión llega un tick después del primer render). */
-const MIAS = '@yo';
-
-const TARJETAS_EJEMPLO: TarjetaTurno[] = [
-  { id: 1, equipo: 'CA-011', tipo: 'Cargador', operador: 'Patricio Rojas', inicial: 12487.3, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 2, equipo: 'PE-004', tipo: 'Perforadora', operador: 'Luis Contreras', inicial: 8412.6, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 3, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Marcelo Soto', inicial: 6105.0, grupo: 'actual', estado: 'curso', supervisor: MIAS },
-  { id: 4, equipo: 'CM-015', tipo: 'Camión', operador: 'Cristian Araya', inicial: 21330.4, grupo: 'actual', estado: 'curso', supervisor: MIAS, sinSincronizar: true },
-  { id: 5, equipo: 'CM-021', tipo: 'Camión', operador: 'Héctor Villalobos', inicial: 19876.2, grupo: 'actual', estado: 'curso', supervisor: OTRO_SUPERVISOR, sinSincronizar: true },
-  { id: 9, equipo: 'CA-007', tipo: 'Cargador', operador: 'Felipe Gallardo', inicial: 9940.5, grupo: 'anterior', estado: 'curso', supervisor: MIAS, arrastrada: true },
-  { id: 6, equipo: 'CA-011', tipo: 'Cargador', operador: 'Jorge Pizarro', inicial: 12475.8, final: 12487.3, litros: 186, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:48', observaciones: 'Ruido en el balde al descargar. Revisar pasadores en la mantención.', adblueLitros: 12, cambios: [{ id: 'ej-1', userName: 'José Pérez', createdAt: '2026-09-28T08:05:00', changes: [{ field: 'litros', label: 'Combustible', before: '168 L', after: '186 L' }] }] },
-  { id: 7, equipo: 'EX-002', tipo: 'Excavadora', operador: 'Rubén Carrasco', inicial: 6094.1, final: 6105.0, litros: 164, grupo: 'anterior', estado: 'cerrada', supervisor: MIAS, cerradaA: '07:51' },
-  { id: 8, equipo: 'CM-015', tipo: 'Camión', operador: 'Mauricio Olivares', inicial: 21319.2, final: 21330.4, litros: 95, grupo: 'anterior', estado: 'cerrada', supervisor: OTRO_SUPERVISOR, cerradaA: '07:55' },
-];
-
 /** Los datos de una tarjeta cerrada que se pueden corregir, como texto de formulario. */
 interface BorradorCerrada {
   operador: string;
@@ -157,6 +132,13 @@ interface BorradorCerrada {
 
 /** Formulario de cierre en blanco: se usa al abrir cada tarjeta. */
 const CIERRE_VACIO = { final: '', litros: '', observaciones: '', adblue: false, adblueLitros: '' };
+
+/** Por qué un equipo no se puede abrir, según su estado en Flota — mismo
+ *  texto que el selector de Trabajos extraordinarios. */
+const ESTADO_NO_DISPONIBLE: Record<string, string> = {
+  IN_WORKSHOP: 'En taller',
+  OUT_OF_SERVICE: 'Fuera de servicio',
+};
 
 /**
  * Estanque de AdBlue de los cargadores SEM 3, 4, 5 y 6 (Acta N.° 004). Solo
@@ -186,16 +168,13 @@ export function RegistroEquipoView() {
   const ctx = useMemo(() => contextoTurno(ahora), [ahora]);
   const anterior = useMemo(() => turnoAnterior(ctx.turno, ctx.fecha), [ctx]);
 
-  const { user, role } = useCurrentUser();
+  const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
-  /** El administrador ve el turno completo; un supervisor, solo lo suyo. */
-  const veTodo = role === ROLES.ADMIN;
 
-  const [tarjetas, setTarjetas] = useState(TARJETAS_EJEMPLO);
-  const [cerrandoId, setCerrandoId] = useState<number | null>(null);
+  const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const [verReporte, setVerReporte] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalleCerradaId, setDetalleCerradaId] = useState<number | null>(null);
+  const [detalleCerradaId, setDetalleCerradaId] = useState<string | null>(null);
   /** Borrador de la edición de una cerrada (Acta N.° 004, R13); null si no se edita. */
   const [edicion, setEdicion] = useState<BorradorCerrada | null>(null);
   /** Recién guardado un cambio: el detalle confirma que se avisó al administrador. */
@@ -203,39 +182,140 @@ export function RegistroEquipoView() {
   const [reporte, setReporte] = useState<EstadoReporte>('sin-enviar');
   const [reporteA, setReporteA] = useState<string | null>(null);
 
-  const esMia = (t: TarjetaTurno) => t.supervisor === MIAS || t.supervisor === supervisor;
   /**
-   * R4: el supervisor trabaja sobre sus tarjetas abiertas. Las de otros
-   * supervisores no le sirven —no puede cerrarlas— y le agrandan la lista
-   * justo cuando está apurado cerrando turno.
+   * Extras del cierre y correcciones (R13) de ESTA sesión, por id de lectura:
+   * litros, foto, AdBlue, observaciones y el historial de cambios todavía no
+   * tienen dónde guardarse en el servidor (llegan con el modelo
+   * `registro_equipo_turno`), así que se superponen en memoria sobre lo que
+   * el servidor SÍ guarda de cada cierre (horómetros y hora de salida).
    */
-  const visibles = useMemo(
-    () => (veTodo ? tarjetas : tarjetas.filter(esMia)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tarjetas, veTodo, supervisor],
-  );
+  const [cierresLocales, setCierresLocales] = useState<Record<string, TarjetaTurno>>({});
 
-  const abiertas = visibles.filter((t) => t.estado === 'curso');
-  const cerradas = visibles.filter((t) => t.estado === 'cerrada');
+  const { data: lecturas = [] } = useHorometroList();
+
+  /** Mismo turno OPERATIVO: igual turno e igual fecha operativa. */
+  const mismoTurno = (a: { turno: Turno; fecha: Date }, b: { turno: Turno; fecha: Date }) =>
+    a.turno === b.turno && a.fecha.toDateString() === b.fecha.toDateString();
+
+  /**
+   * Tarjetas EN CURSO: derivadas de las lecturas de horómetro ABIERTAS del
+   * servidor (`valorFinal == null`) — la misma señal que marca «En uso» en
+   * Flota y en Trabajos extraordinarios. Acá ya no hay tarjetas de ejemplo:
+   * lo que se ve abierto existe de verdad, en cualquier navegador.
+   *
+   * La tarjeta pertenece al turno en que se ABRIÓ (`contextoTurno` de su
+   * fecha); si no es el turno en curso, va al bloque del anterior como
+   * arrastrada (Q5). R4 (cada supervisor ve solo las suyas) queda pendiente
+   * del modelo real: la lectura no registra quién la abrió.
+   */
+  const abiertas = useMemo<TarjetaTurno[]>(() => {
+    const porId = new Map(equipos.map((e) => [e.id, e]));
+    // `cierresLocales` cubre la ventana entre cerrar y el refetch: el
+    // servidor todavía la devuelve abierta, pero acá ya está cerrada.
+    return lecturas
+      .filter((l) => l.valorFinal == null && !cierresLocales[l.id])
+      .map((l) => {
+        const abierta = contextoTurno(new Date(l.fecha));
+        const deEsteTurno = mismoTurno(abierta, ctx);
+        return {
+          id: l.id,
+          equipo: l.equipo?.internalCode ?? porId.get(l.equipoId)?.internalCode ?? l.equipoId,
+          tipo: porId.get(l.equipoId)?.type ?? '',
+          operador: l.operador,
+          inicial: l.valorInicial,
+          grupo: deEsteTurno ? ('actual' as const) : ('anterior' as const),
+          estado: 'curso' as const,
+          arrastrada: deEsteTurno ? undefined : true,
+        };
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lecturas, equipos, ctx, cierresLocales]);
+
+  /**
+   * Tarjetas CERRADAS: también derivan del servidor (lecturas con
+   * `valorFinal`), acotadas a este turno y el anterior — el alcance del
+   * historial. Encima se funden los extras de la sesión (`cierresLocales`):
+   * un cierre hecho en otra sesión u otro navegador muestra igual sus
+   * horómetros y hora de salida, con litros y foto en «—».
+   */
+  const cerradas = useMemo<TarjetaTurno[]>(() => {
+    const porId = new Map(equipos.map((e) => [e.id, e]));
+    const hora = (iso: string) =>
+      new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    const porLectura = new Map<string, TarjetaTurno>();
+    for (const l of lecturas) {
+      if (l.valorFinal == null) continue;
+      const abierta = contextoTurno(new Date(l.fecha));
+      const grupo = mismoTurno(abierta, ctx)
+        ? ('actual' as const)
+        : mismoTurno(abierta, anterior)
+          ? ('anterior' as const)
+          : null;
+      if (!grupo) continue;
+      porLectura.set(l.id, {
+        id: l.id,
+        equipo: l.equipo?.internalCode ?? porId.get(l.equipoId)?.internalCode ?? l.equipoId,
+        tipo: porId.get(l.equipoId)?.type ?? '',
+        operador: l.operador,
+        inicial: l.valorInicial,
+        final: l.valorFinal,
+        grupo,
+        estado: 'cerrada' as const,
+        cerradaA: l.fechaSalida ? hora(l.fechaSalida) : undefined,
+      });
+    }
+    // Lo local gana: trae litros/foto/correcciones que el servidor no guarda
+    // todavía, y muestra el cierre recién hecho antes del refetch.
+    for (const [id, local] of Object.entries(cierresLocales)) {
+      porLectura.set(id, { ...porLectura.get(id), ...local });
+    }
+    return [...porLectura.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lecturas, equipos, ctx, anterior, cierresLocales]);
+
   const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
   const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
   /** Las del turno en curso: son las que entran en el reporte de salida. */
   const enCurso = abiertasActual;
 
   /**
-   * R1: solo equipos operativos. Los que están en taller o fuera de servicio no
-   * aparecen — y tampoco los que ya tienen una tarjeta abierta en este turno,
-   * porque un equipo no sale dos veces a la vez.
+   * R1: solo equipos operativos. Los que están en taller o fuera de servicio
+   * no aparecen — y tampoco los que ya tienen un turno abierto (de este turno
+   * o arrastrado): el backend lo rechazaría igual, pero acá ni se ofrece.
    */
   const disponibles = useMemo(() => {
-    const ocupados = new Set(enCurso.map((t) => t.equipo));
+    const ocupados = new Set(abiertas.map((t) => t.equipo));
     return equipos.filter((e) => e.status === 'OPERATIONAL' && !ocupados.has(e.internalCode));
-  }, [equipos, enCurso]);
+  }, [equipos, abiertas]);
 
-  const enTaller = equipos.filter((e) => e.status !== 'OPERATIONAL');
+  /**
+   * Misma lógica que el selector de Trabajos extraordinarios (R10): los
+   * equipos en uso y los no operativos se muestran agrupados, a la vista pero
+   * sin poder elegirse — que no parezca que desaparecieron. La diferencia es
+   * que acá el equipo EN USO también se bloquea: un equipo no sale dos veces,
+   * mientras que en Trabajos extra se puede elegir con aviso.
+   */
+  const opcionesEquipo = useMemo((): OpcionSelector[] => {
+    const operadorDe = new Map(abiertas.map((t) => [t.equipo, t.operador]));
+    const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
+      const operador = operadorDe.get(e.internalCode);
+      if (operador != null) {
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En uso', motivo: `En uso · ${operador}` };
+      }
+      if (e.status !== 'OPERATIONAL') {
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'No disponibles', motivo: ESTADO_NO_DISPONIBLE[e.status] ?? 'No operativo' };
+      }
+      return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'Disponibles' };
+    };
+    const orden = ['Disponibles', 'En uso', 'No disponibles'];
+    return equipos.map(opcion).sort((a, b) => orden.indexOf(a.grupo!) - orden.indexOf(b.grupo!));
+  }, [equipos, abiertas]);
 
   const [apertura, setApertura] = useState({ equipoId: '', operador: OPERADORES[5], horometro: '' });
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
+
+  const crearLectura = useCreateHorometro();
+  const cerrarLectura = useCerrarHorometro();
 
   const [cierre, setCierre] = useState(CIERRE_VACIO);
 
@@ -259,7 +339,7 @@ export function RegistroEquipoView() {
     setCierre((c) => ({ ...c, litros: fmt(litros) })),
   );
 
-  const cerrando = tarjetas.find((t) => t.id === cerrandoId) ?? null;
+  const cerrando = abiertas.find((t) => t.id === cerrandoId) ?? null;
   const finalNum = aNumero(cierre.final);
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
@@ -267,25 +347,24 @@ export function RegistroEquipoView() {
   /** Marcó que cargó AdBlue pero no dijo cuánto: no se puede cerrar así. */
   const faltaAdblue = cierre.adblue && (adblueNum == null || adblueNum <= 0);
 
+  /**
+   * Abrir la tarjeta registra la ENTRADA de horómetro en el servidor (misma
+   * API que usa Flota): esa lectura abierta es lo que marca el equipo
+   * «En uso» en el selector de Trabajos extraordinarios. La tarjeta aparece
+   * sola cuando la invalidación refresca las lecturas — si el servidor
+   * rechaza (p. ej. el equipo ya tiene un turno abierto), el hook ya avisó y
+   * acá no queda nada a medias.
+   */
   const agregarEquipo = () => {
     if (!equipoElegido) return;
-    setTarjetas((t) => [
-      {
-        id: Math.max(0, ...t.map((x) => x.id)) + 1,
-        equipo: equipoElegido.internalCode,
-        tipo: equipoElegido.type,
-        operador: apertura.operador,
-        inicial: aNumero(apertura.horometro) ?? equipoElegido.currentHourmeter ?? 0,
-        grupo: 'actual',
-        estado: 'curso',
-        supervisor,
-      },
-      ...t,
-    ]);
-    setApertura((a) => ({ ...a, equipoId: '', horometro: '' }));
+    const valorInicial = aNumero(apertura.horometro) ?? equipoElegido.currentHourmeter ?? 0;
+    crearLectura.mutate(
+      { equipoId: equipoElegido.id, operador: apertura.operador, turno: ctx.turno, valorInicial },
+      { onSuccess: () => setApertura((a) => ({ ...a, equipoId: '', horometro: '' })) },
+    );
   };
 
-  const abrirCierre = (id: number) => {
+  const abrirCierre = (id: string) => {
     setCerrandoId(id);
     setCierre(CIERRE_VACIO);
     // La foto es de ESTA tarjeta: arrastrar la anterior mezclaría el respaldo
@@ -301,11 +380,19 @@ export function RegistroEquipoView() {
     const storageKey = await foto.upload(foto.file);
     if (!storageKey) return;
 
-    setTarjetas((ts) =>
-      ts.map((t) =>
-        t.id === cerrando.id
-          ? {
-              ...t,
+    // La SALIDA se registra en el servidor primero: eso apaga la señal
+    // «En uso» de Trabajos extraordinarios y Flota. Si falla, el hook ya
+    // avisó y la tarjeta sigue abierta para reintentar. Los extras del
+    // cierre (litros, foto, observaciones, AdBlue) pasan al historial en
+    // memoria — ver el comentario de `cerradas`.
+    cerrarLectura.mutate(
+      { id: cerrando.id, payload: { valorFinal: finalNum } },
+      {
+        onSuccess: () => {
+          setCierresLocales((m) => ({
+            ...m,
+            [cerrando.id]: {
+              ...cerrando,
               estado: 'cerrada',
               final: finalNum,
               litros: aNumero(cierre.litros) ?? 0,
@@ -313,11 +400,13 @@ export function RegistroEquipoView() {
               observaciones: cierre.observaciones,
               adblueLitros: cierre.adblue ? (adblueNum ?? 0) : 0,
               cerradaA: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-            }
-          : t,
-      ),
+              supervisor,
+            },
+          }));
+          setCerrandoId(null);
+        },
+      },
     );
-    setCerrandoId(null);
   };
 
   // --- Apertura -------------------------------------------------------------
@@ -331,11 +420,7 @@ export function RegistroEquipoView() {
         <Form>
           <Campo
             label="Equipo"
-            hint={
-              enTaller.length > 0
-                ? `Solo equipos operativos. ${enTaller.length === 1 ? `${enTaller[0].internalCode} no aparece porque no está operativo.` : `${enTaller.length} equipos no aparecen porque no están operativos.`}`
-                : 'Solo equipos operativos.'
-            }
+            hint="Un equipo en uso o no operativo se muestra, pero no se puede abrir."
           >
             <Selector
               etiqueta="Equipo"
@@ -343,13 +428,15 @@ export function RegistroEquipoView() {
               valor={equipoElegido?.id ?? ''}
               onChange={(id) => {
                 const eq = disponibles.find((x) => x.id === id);
+                // Grupos «En uso» y «No disponibles»: se ven, no se abren.
+                if (!eq) return;
                 setApertura((a) => ({
                   ...a,
                   equipoId: id,
-                  horometro: eq?.currentHourmeter != null ? fmt(eq.currentHourmeter) : '',
+                  horometro: eq.currentHourmeter != null ? fmt(eq.currentHourmeter) : '',
                 }));
               }}
-              opciones={disponibles.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+              opciones={opcionesEquipo}
             />
           </Campo>
 
@@ -392,8 +479,9 @@ export function RegistroEquipoView() {
             <b>{supervisor}</b>.
           </Hint>
 
-          <Boton ancho onClick={agregarEquipo}>
-            Agregar equipo <ArrowRight className="h-[19px] w-[19px]" />
+          <Boton ancho onClick={agregarEquipo} disabled={crearLectura.isPending}>
+            {crearLectura.isPending ? 'Registrando entrada…' : 'Agregar equipo'}{' '}
+            <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
         </Form>
       )}
@@ -530,12 +618,6 @@ export function RegistroEquipoView() {
             Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
         )}
-        {t.sinSincronizar && (
-          <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
-            <Clock className="h-[15px] w-[15px]" />
-            Guardada en el equipo · falta sincronizar
-          </div>
-        )}
         {t.arrastrada && (
           <Hint>
             Quedó en curso al terminar el turno anterior. Falta definir con el cliente si sigue abierta, se cierra sola
@@ -555,15 +637,7 @@ export function RegistroEquipoView() {
             <b className="tabular block text-[15px] font-semibold">{t.equipo}</b>
             <span className="text-[12.5px] text-muted-foreground">{t.tipo}</span>
           </td>
-          <td className={TD}>
-            {t.operador}
-            {t.sinSincronizar && (
-              <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
-                <Clock className="h-[15px] w-[15px]" />
-                Sin sincronizar
-              </div>
-            )}
-          </td>
+          <td className={TD}>{t.operador}</td>
           <td className={`${TD} tabular text-right`}>{fmt(t.inicial)}</td>
           <td className={`${TD} tabular text-right`}>{fmt(t.final)}</td>
           <td className={`${TD} tabular text-right font-semibold`}>{cerrada ? fmt(t.final! - t.inicial) : '—'}</td>
@@ -683,12 +757,7 @@ export function RegistroEquipoView() {
         <span className="tabular font-medium text-muted-foreground">· {cerradas.length}</span>
       </Boton>
 
-      {bloque(
-        ctx.turno,
-        ctx.fechaCorta,
-        abiertasActual,
-        veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tenés tarjetas abiertas en este turno.',
-      )}
+      {bloque(ctx.turno, ctx.fechaCorta, abiertasActual, 'Sin tarjetas abiertas en este turno.')}
 
       {abiertasAnterior.length > 0 &&
         bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
@@ -702,10 +771,10 @@ export function RegistroEquipoView() {
     t.grupo === 'actual' ? `${ctx.turno} ${ctx.fechaCorta}` : `${anterior.turno} ${fechaAnterior}`;
   // Se lee de la lista y no de una copia: tras editar, el detalle muestra el
   // dato nuevo y su historial sin tener que volver a abrirlo.
-  const detalleCerrada = tarjetas.find((t) => t.id === detalleCerradaId) ?? null;
+  const detalleCerrada = cerradas.find((t) => t.id === detalleCerradaId) ?? null;
 
   /** Abrir o dejar el detalle siempre sale del modo edición. */
-  const abrirDetalleCerrada = (id: number | null) => {
+  const abrirDetalleCerrada = (id: string | null) => {
     setDetalleCerradaId(id);
     setEdicion(null);
     setAvisoGuardado(false);
@@ -717,7 +786,9 @@ export function RegistroEquipoView() {
       operador: t.operador,
       inicial: fmt(t.inicial),
       final: fmt(t.final),
-      litros: fmt(t.litros, 0),
+      // Un cierre de otra sesión no trae litros (el servidor aún no los
+      // guarda): el campo arranca vacío en vez de con el «—» de display.
+      litros: t.litros != null ? fmt(t.litros, 0) : '',
       adblue: !!t.adblueLitros,
       adblueLitros: t.adblueLitros ? fmt(t.adblueLitros, 0) : '',
       observaciones: t.observaciones ?? '',
@@ -768,33 +839,25 @@ export function RegistroEquipoView() {
         createdAt: new Date().toISOString(),
         changes: cambios,
       };
-      setTarjetas((ts) =>
-        ts.map((x) =>
-          x.id === t.id
-            ? {
-                ...x,
-                operador: edicion.operador,
-                inicial: edInicial!,
-                final: edFinal!,
-                litros: edLitros!,
-                adblueLitros: adblueNuevo,
-                observaciones: edicion.observaciones.trim() || undefined,
-                cambios: [entrada, ...(x.cambios ?? [])],
-              }
-            : x,
-        ),
-      );
+      // La corrección vive en los extras de la sesión: `t` ya es la tarjeta
+      // fundida (base del servidor + extras previos), así que no se pierde
+      // nada de lo corregido antes.
+      setCierresLocales((m) => ({
+        ...m,
+        [t.id]: {
+          ...t,
+          operador: edicion.operador,
+          inicial: edInicial!,
+          final: edFinal!,
+          litros: edLitros!,
+          adblueLitros: adblueNuevo,
+          observaciones: edicion.observaciones.trim() || undefined,
+          cambios: [entrada, ...(t.cambios ?? [])],
+        },
+      }));
       setAvisoGuardado(true);
     }
     setEdicion(null);
-  };
-
-  const firmante = (t: TarjetaTurno) => {
-    if (t.supervisor === MIAS) return supervisor;
-    if (t.supervisor === OTRO_SUPERVISOR) {
-      return SUPERVISOR_DEL_TURNO[t.grupo === 'actual' ? ctx.turno : anterior.turno];
-    }
-    return t.supervisor;
   };
 
   const listaCerradas =
@@ -944,7 +1007,7 @@ export function RegistroEquipoView() {
             ['Equipo', `${detalleCerrada.equipo} · ${detalleCerrada.tipo}`],
             ['Operador', detalleCerrada.operador],
             ['Turno', turnoDe(detalleCerrada)],
-            ['Supervisor', firmante(detalleCerrada)],
+            ['Supervisor', detalleCerrada.supervisor ?? '—'],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
             [
               'AdBlue',
@@ -1079,6 +1142,7 @@ export function RegistroEquipoView() {
           !foto.file ||
           foto.isReadingPhoto ||
           foto.isUploadingPhoto ||
+          cerrarLectura.isPending ||
           finalNum == null ||
           finalInvalido ||
           faltaAdblue
