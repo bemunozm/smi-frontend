@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { logout } from './logout';
 import { db } from '../offline/db';
+import { isServerSignOutPending } from './pending-signout';
 
 // `vi.hoisted` porque `vi.mock` se "hoistea" arriba de los imports.
-const { signOutMock, clearMock } = vi.hoisted(() => ({
+const { signOutMock, clearMock, cancelMock } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
   clearMock: vi.fn(),
+  cancelMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./auth-client', () => ({
@@ -15,7 +17,10 @@ vi.mock('./auth-client', () => ({
 }));
 
 vi.mock('./query-client', () => ({
-  queryClient: { clear: (...args: unknown[]) => clearMock(...args) },
+  queryClient: {
+    clear: (...args: unknown[]) => clearMock(...args),
+    cancelQueries: () => cancelMock(),
+  },
 }));
 
 beforeEach(async () => {
@@ -108,6 +113,61 @@ describe('logout', () => {
     await logout(vi.fn());
 
     expect(window.localStorage.getItem('smi-cache-owner')).toBeNull();
+  });
+
+  it('cancela las queries en vuelo antes de cerrar la sesión en el servidor', async () => {
+    const orden: string[] = [];
+    cancelMock.mockImplementation(async () => {
+      orden.push('cancel');
+    });
+    signOutMock.mockImplementation(async () => {
+      orden.push('signOut');
+    });
+
+    await logout(vi.fn());
+
+    expect(orden.slice(0, 2)).toEqual(['cancel', 'signOut']);
+  });
+
+  describe('sin señal (signOut no llega al servidor)', () => {
+    it.each([
+      ['lanza', () => signOutMock.mockRejectedValue(new TypeError('Failed to fetch'))],
+      ['devuelve un error sin respuesta', () => signOutMock.mockResolvedValue({ data: null, error: { status: 0 } })],
+    ])('%s: cierra igual en el equipo, deja la marca de cierre pendiente y va al login', async (_caso, preparar) => {
+      preparar();
+      window.localStorage.setItem('smi-cache-owner', JSON.stringify('u1'));
+      window.localStorage.setItem('smi-session-snapshot', JSON.stringify({ userId: 'u1' }));
+      const navigate = vi.fn();
+
+      await logout(navigate);
+
+      expect(isServerSignOutPending()).toBe(true);
+      expect(clearMock).toHaveBeenCalledTimes(1);
+      expect(window.localStorage.getItem('smi-session-snapshot')).toBeNull();
+      expect(window.localStorage.getItem('smi-cache-owner')).toBeNull();
+      expect(navigate).toHaveBeenCalledWith('/login', { replace: true });
+    });
+
+    it('un 401 del servidor (ya no había sesión) cuenta como cerrado: sin marca', async () => {
+      signOutMock.mockResolvedValue({ data: null, error: { status: 401 } });
+
+      await logout(vi.fn());
+
+      expect(isServerSignOutPending()).toBe(false);
+    });
+
+    it('la cola sigue intacta', async () => {
+      signOutMock.mockRejectedValue(new TypeError('Failed to fetch'));
+      const now = Date.now();
+      await db.outbox.put({
+        id: 'op-1', type: 'sendExitReport', v: 1, userId: 'u1', status: 'pending', attempts: 0, seq: now,
+        createdAt: now, updatedAt: now, payload: { id: 'op-1', cardIds: [] },
+      } as never);
+
+      await logout(vi.fn());
+
+      expect(await db.outbox.count()).toBe(1);
+    });
   });
 
   it('con registros sin enviar, cierra sesión igual y NO toca la cola del equipo', async () => {

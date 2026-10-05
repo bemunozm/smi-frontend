@@ -22,7 +22,10 @@ const PRIVATE_CACHE_PREFIX = 'smi-';
  * sesión que no es la dueña de las cachés (`reconcileCacheOwner`).
  */
 export async function purgeSessionData(): Promise<void> {
+  // Lo que sigue en vuelo o reintentándose saldría después de invalidar la sesión.
+  const cancelled = queryClient.cancelQueries();
   queryClient.clear();
+  await cancelled;
   if (typeof caches === 'undefined') return;
   try {
     const nombres = await caches.keys();

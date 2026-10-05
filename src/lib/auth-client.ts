@@ -2,6 +2,19 @@ import { createAuthClient } from 'better-auth/react';
 import { adminClient } from 'better-auth/client/plugins';
 
 import { env } from '../config/env';
+import { isServerSignOutPending } from './pending-signout';
+
+/** `get-session` mientras falta cerrar la sesión en el servidor: no se manda. Se
+ * responde "sin sesión" localmente, porque la cookie (aún válida) la reabriría. */
+function sessionGate(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = input instanceof Request ? input.url : String(input);
+  if (isServerSignOutPending() && url.includes('/get-session')) {
+    return Promise.resolve(
+      new Response('null', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+  }
+  return fetch(input, init);
+}
 
 /**
  * Cliente de Better Auth — ÚNICA fuente de verdad de la sesión en el
@@ -17,6 +30,7 @@ import { env } from '../config/env';
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   plugins: [adminClient()],
+  fetchOptions: { customFetchImpl: sessionGate },
 });
 
 export const { useSession, signIn, signOut } = authClient;

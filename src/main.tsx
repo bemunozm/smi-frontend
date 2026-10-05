@@ -4,7 +4,10 @@ import { RouterProvider } from 'react-router-dom';
 
 import './index.css';
 import { AppProviders } from './context/AppProviders';
+import { startSignOutRevocation } from './lib/server-signout';
 import { router } from './routes';
+
+startSignOutRevocation();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

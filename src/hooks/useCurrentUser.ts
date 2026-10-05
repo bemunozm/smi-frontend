@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useSession } from '../lib/auth-client';
 import { markSessionEnded } from '../lib/cache-owner';
+import { useServerSignOutPending } from '../lib/pending-signout';
 import { clearSessionSnapshot, readSessionSnapshot, saveSessionSnapshot } from '../lib/session-snapshot';
 import { isRole, type Role } from '../types/roles';
 
@@ -77,6 +78,7 @@ function toOfflineUser(snapshot: NonNullable<ReturnType<typeof readSessionSnapsh
  */
 export function useCurrentUser(): CurrentUser {
   const { data: session, isPending, error } = useSession();
+  const signOutPending = useServerSignOutPending();
   const rawRole = session?.user.role;
 
   const [pendingTooLong, setPendingTooLong] = useState(false);
@@ -123,6 +125,12 @@ export function useCurrentUser(): CurrentUser {
       markSessionEnded();
     }
   }, [error]);
+
+  // Falta cerrar la sesión en el servidor: la cookie sigue viva, así que ni la
+  // sesión que devuelva el servidor ni el snapshot valen (`lib/pending-signout.ts`).
+  if (signOutPending) {
+    return { user: null, role: null, isPending: false, isAuthenticated: false, isOfflineSnapshot: false };
+  }
 
   if (session?.user) {
     return {

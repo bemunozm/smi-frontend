@@ -1,7 +1,8 @@
-import { signOut } from './auth-client';
 import { clearCacheOwner } from './cache-owner';
 import { clearSessionSnapshot } from './session-snapshot';
+import { signOutOrDefer } from './server-signout';
 import { purgeSessionData } from './session-data';
+import { queryClient } from './query-client';
 
 type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
 
@@ -24,9 +25,17 @@ type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
  * Orden: `signOut()` primero (invalida la cookie de sesión en el backend antes de
  * tocar nada del cliente), recién después se limpia el estado local y se navega —
  * así ninguna pantalla intermedia llega a pintar con datos del usuario que se fue.
+ *
+ * Sin conexión `signOut()` no llega al servidor y el cierre se completa igual en el
+ * equipo, con una marca de "cierre pendiente" (`lib/pending-signout.ts`): la cookie de
+ * sesión es `HttpOnly`, el JavaScript no puede borrarla, y por eso la revocación se
+ * difiere hasta que haya señal. Mientras esté la marca la app trata al usuario como
+ * desconectado y no consulta la sesión.
  */
 export async function logout(navigate: NavigateFn): Promise<void> {
-  await signOut();
+  // Las queries en vuelo o por reintentar saldrían con la cookie ya invalidada (401).
+  await queryClient.cancelQueries();
+  await signOutOrDefer();
   // El snapshot offline (`lib/session-snapshot.ts`) es lo que le permite a
   // `useCurrentUser` seguir mostrando una sesión sin señal — un logout
   // explícito tiene que invalidarlo, si no el próximo arranque en frío sin
