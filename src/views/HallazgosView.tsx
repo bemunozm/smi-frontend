@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Camera, Check, Pencil } from 'lucide-react';
 
 import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/hallazgos';
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
-import { useAhora } from '../hooks/useAhora';
-import { contextoTurno } from '../lib/turno';
+import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useRegistrarHallazgo, useEditarHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
 import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
@@ -99,10 +98,9 @@ export function HallazgosView() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const editando = hallazgos.find((h) => h.id === editandoId) ?? null;
 
-  // El turno del título sale del reloj, como en Registro: antes decía
-  // «DIURNO · 08–20» escrito a mano, también de noche.
-  const ahora = useAhora();
-  const turno = useMemo(() => contextoTurno(ahora), [ahora]);
+  // El mismo turno que muestra Registro de equipo, incluido el adelanto al
+  // turno siguiente.
+  const turno = useTurnoActual();
 
   const {
     register,

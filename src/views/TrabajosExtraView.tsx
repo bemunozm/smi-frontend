@@ -10,7 +10,7 @@ import {
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
-import { turnoDe } from '../lib/turno';
+import { useTurnoActual } from '../hooks/useTurnoActual';
 import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
@@ -126,16 +126,17 @@ export function TrabajosExtraView() {
       : undefined;
 
   /**
-   * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
-   * regla que Registro de equipo), no siempre en DIURNO: de noche el valor
-   * por defecto quedaba mal y había que acordarse de cambiarlo. Sigue siendo
-   * editable, porque un trabajo se puede cargar después de terminado.
+   * El turno arranca en el vigente de Terreno (`useTurnoActual`: el mismo que
+   * muestra Registro de equipo, con su adelanto al turno siguiente), no siempre
+   * en DIURNO. Sigue siendo editable, porque un trabajo se puede cargar después
+   * de terminado.
    */
+  const turnoActual = useTurnoActual();
   const vacio = (): Partial<TrabajoExtraFormInput> => ({
     equipoId: '',
     operatorId: '',
     faena: 'Patillo',
-    turno: turnoDe(new Date()),
+    turno: turnoActual.turno,
     actividades: [],
     otraActividad: '',
   });
