@@ -3,21 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { listMock, createMock, updateMock, removeMock } = vi.hoisted(() => ({
-  listMock: vi.fn(),
-  createMock: vi.fn(),
-  updateMock: vi.fn(),
-  removeMock: vi.fn(),
-}));
+const { listMock } = vi.hoisted(() => ({ listMock: vi.fn() }));
 
-vi.mock('../api/EquipmentDocumentAPI', () => ({
-  EquipmentDocumentAPI: {
-    list: listMock,
-    create: createMock,
-    update: updateMock,
-    remove: removeMock,
-  },
-}));
+vi.mock('../api/EquipmentDocumentAPI', () => ({ EquipmentDocumentAPI: { list: listMock } }));
+
+// Las escrituras van por la cola: se prueba lo que se encola (ver `test/office-write.ts`).
+vi.mock('../offline/submit-write', async (importOriginal) =>
+  (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
+);
 
 // El hook llama a `toast.success`/`toast.danger` — no importa la UI real de
 // HeroUI acá, solo que la función exista y no reviente el test.
@@ -25,6 +18,9 @@ vi.mock('@heroui/react', () => ({
   toast: { success: vi.fn(), danger: vi.fn() },
 }));
 
+import { toast } from '@heroui/react';
+import { encolado, enviado, submitWriteMock, ultimaEscritura } from '../test/office-write';
+import type { EquipmentDocument } from '../types/equipment-document';
 import {
   useCreateEquipmentDocument,
   useDeleteEquipmentDocument,
@@ -34,7 +30,7 @@ import {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 const DOCUMENTO = {
@@ -44,6 +40,7 @@ const DOCUMENTO = {
   title: 'Revisión anual',
   expiryDate: '2026-12-01T00:00:00.000Z',
   fileUrl: '/uploads/rt.pdf',
+  fileName: 'rt.pdf',
   notes: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -79,61 +76,106 @@ describe('useEquipmentDocuments', () => {
   });
 });
 
+const DOC = DOCUMENTO as unknown as EquipmentDocument;
+
+function wrapperNuevo() {
+  return withQueryClient(new QueryClient());
+}
+
 describe('useCreateEquipmentDocument', () => {
-  it('crea el documento e invalida la lista de ESTE equipo Y el árbol ["equipment"]', async () => {
-    createMock.mockResolvedValueOnce(DOCUMENTO);
-    const queryClient = new QueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+  it('encola equipmentDocument.create con el id del cliente y el archivo como adjunto', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado(DOC));
+    const archivo = new File(['x'], 'poliza.pdf', { type: 'application/pdf' });
+    const { result } = renderHook(() => useCreateEquipmentDocument('eq_1'), { wrapper: wrapperNuevo() });
 
-    const { result } = renderHook(() => useCreateEquipmentDocument('eq_1'), {
-      wrapper: withQueryClient(queryClient),
-    });
-
-    result.current.mutate({ type: 'TECHNICAL_INSPECTION' });
+    result.current.mutate({ input: { type: 'INSURANCE', fileName: 'poliza.pdf' }, file: archivo });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(createMock).toHaveBeenCalledWith('eq_1', { type: 'TECHNICAL_INSPECTION' });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment-documents', 'eq_1'] });
-    // El badge `documentsAlert` del listado/ficha se deriva de los
-    // documentos — sin esta invalidación quedaría desactualizado.
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment'] });
+    const { endpoint, input } = ultimaEscritura();
+    expect(endpoint).toBe('equipmentDocument.create');
+    expect(input).toMatchObject({
+      params: { equipmentId: 'eq_1' },
+      body: { type: 'INSURANCE', fileName: 'poliza.pdf', id: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+      files: [{ field: 'fileKey', file: archivo }],
+    });
+    expect(toast.success).toHaveBeenCalledWith('Documento creado');
+  });
+
+  it('sin archivo no manda files; en cola avisa que quedó guardado en el equipo', async () => {
+    submitWriteMock.mockResolvedValueOnce(encolado());
+    const { result } = renderHook(() => useCreateEquipmentDocument('eq_1'), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ input: { type: 'OTHER' } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(ultimaEscritura().input.files).toBeUndefined();
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Guardado'));
   });
 });
 
 describe('useUpdateEquipmentDocument', () => {
-  it('llama a EquipmentDocumentAPI.update con el id y el body, e invalida ambos árboles', async () => {
-    updateMock.mockResolvedValueOnce({ ...DOCUMENTO, title: 'Revisión anual (renovada)' });
-    const queryClient = new QueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+  const input = { type: 'TECHNICAL_INSPECTION' as const, title: 'Revisión 2027', expiryDate: '2026-12-01', notes: null };
 
-    const { result } = renderHook(() => useUpdateEquipmentDocument('eq_1'), {
-      wrapper: withQueryClient(queryClient),
-    });
+  it('manda solo lo tocado, con la base como precondición (la fecha como YYYY-MM-DD)', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado(DOC));
+    const { result } = renderHook(() => useUpdateEquipmentDocument(), { wrapper: wrapperNuevo() });
 
-    result.current.mutate({ id: 'doc_1', input: { title: 'Revisión anual (renovada)' } });
+    result.current.mutate({ documento: DOC, input });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(updateMock).toHaveBeenCalledWith('doc_1', { title: 'Revisión anual (renovada)' });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment-documents', 'eq_1'] });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment'] });
+    const { endpoint, input: encolado_ } = ultimaEscritura();
+    expect(endpoint).toBe('equipmentDocument.update');
+    expect(encolado_).toMatchObject({
+      params: { id: 'doc_1' },
+      body: { title: 'Revisión 2027' },
+      expected: { title: 'Revisión anual' },
+    });
+    expect(encolado_.files).toBeUndefined();
+    expect(toast.success).toHaveBeenCalledWith('Documento actualizado');
+  });
+
+  it('un archivo nuevo viaja como adjunto con su nombre; quitarlo manda fileKey y fileName en null', async () => {
+    submitWriteMock.mockResolvedValue(enviado(DOC));
+    const { result } = renderHook(() => useUpdateEquipmentDocument(), { wrapper: wrapperNuevo() });
+    const archivo = new File(['x'], 'nuevo.pdf', { type: 'application/pdf' });
+
+    result.current.mutate({ documento: DOC, input: { ...input, title: 'Revisión anual' }, file: archivo });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(ultimaEscritura().input).toMatchObject({
+      body: { fileName: 'nuevo.pdf' },
+      expected: { fileName: 'rt.pdf' },
+      files: [{ field: 'fileKey', file: archivo }],
+    });
+    // La key del archivo no es parte de la precondición.
+    expect(ultimaEscritura().input.expected).not.toHaveProperty('fileKey');
+
+    result.current.mutate({ documento: DOC, input: { ...input, title: 'Revisión anual' }, file: null });
+    await waitFor(() => expect(submitWriteMock).toHaveBeenCalledTimes(2));
+    expect(ultimaEscritura().input).toMatchObject({ body: { fileKey: null, fileName: null } });
+  });
+
+  it('sin cambios no encola nada', async () => {
+    const { result } = renderHook(() => useUpdateEquipmentDocument(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ documento: DOC, input: { ...input, title: 'Revisión anual' } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(submitWriteMock).not.toHaveBeenCalled();
   });
 });
 
 describe('useDeleteEquipmentDocument', () => {
-  it('elimina el documento e invalida ambos árboles', async () => {
-    removeMock.mockResolvedValueOnce(undefined);
-    const queryClient = new QueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    const { result } = renderHook(() => useDeleteEquipmentDocument('eq_1'), {
-      wrapper: withQueryClient(queryClient),
-    });
+  it('encola equipmentDocument.delete con el id', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado(true));
+    const { result } = renderHook(() => useDeleteEquipmentDocument(), { wrapper: wrapperNuevo() });
 
     result.current.mutate('doc_1');
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(removeMock).toHaveBeenCalledWith('doc_1');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment-documents', 'eq_1'] });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['equipment'] });
+    expect(ultimaEscritura()).toMatchObject({
+      endpoint: 'equipmentDocument.delete',
+      input: { params: { id: 'doc_1' } },
+    });
+    expect(toast.success).toHaveBeenCalledWith('Documento eliminado');
   });
 });

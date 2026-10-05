@@ -21,11 +21,6 @@ vi.mock('../../hooks/useEquipmentDocuments', () => ({
   useUpdateEquipmentDocument: () => ({ mutate: updateMutateMock, isPending: false }),
 }));
 
-const uploadFileMock = vi.fn();
-vi.mock('../../api/UploadsAPI', () => ({
-  uploadFile: (...args: unknown[]) => uploadFileMock(...args),
-}));
-
 afterEach(cleanup);
 
 const DOCUMENTO: EquipmentDocument = {
@@ -62,8 +57,6 @@ function subirArchivo() {
 }
 
 beforeEach(() => {
-  uploadFileMock.mockReset();
-  uploadFileMock.mockResolvedValue({ key: 'tmp/u1/nuevo.pdf', url: 'https://minio.local/nuevo.pdf' });
   createMutateMock.mockReset();
   updateMutateMock.mockReset();
 });
@@ -90,7 +83,6 @@ describe('EquipmentDocumentModal — un refetch en segundo plano no pisa una sub
     const { rerender, qc } = renderModal(DOCUMENTO);
 
     subirArchivo();
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
     await waitFor(() => expect(screen.getByText('nuevo.pdf')).toBeTruthy());
 
     fireEvent.change(screen.getByLabelText('Título (opcional)'), {
@@ -110,7 +102,7 @@ describe('EquipmentDocumentModal — un refetch en segundo plano no pisa una sub
       </QueryClientProvider>,
     );
 
-    // Ni el archivo pendiente ni el texto editado se perdieron.
+    // Ni el archivo elegido ni el texto editado se perdieron.
     expect(screen.getByText('nuevo.pdf')).toBeTruthy();
     expect(screen.queryByText('revision-tecnica.pdf')).toBeNull();
     expect((screen.getByLabelText('Título (opcional)') as HTMLInputElement).value).toBe(
@@ -118,12 +110,16 @@ describe('EquipmentDocumentModal — un refetch en segundo plano no pisa una sub
     );
 
     // Y viajan de verdad en el submit — confirma que `fileState` no se limpió
-    // por el refetch.
+    // por el refetch. El archivo va aparte del body: se sube al sincronizar.
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(updateMutateMock).toHaveBeenCalledTimes(1));
-    const [{ input }] = updateMutateMock.mock.calls[0] as [{ input: Record<string, unknown> }];
-    expect(input.fileKey).toBe('tmp/u1/nuevo.pdf');
+    const [{ input, file, documento }] = updateMutateMock.mock.calls[0] as [
+      { input: Record<string, unknown>; file: File | null | undefined; documento: EquipmentDocument },
+    ];
+    expect(file).toBe(FILE);
+    expect(documento).toBe(documentoRefetched);
+    expect('fileKey' in input).toBe(false);
     expect(input.title).toBe('Título editado sin guardar');
   });
 });
@@ -133,7 +129,6 @@ describe('EquipmentDocumentModal — cerrar y reabrir de verdad sí resetea', ()
     const { rerender, qc } = renderModal(DOCUMENTO);
 
     subirArchivo();
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
     await waitFor(() => expect(screen.getByText('nuevo.pdf')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('Título (opcional)'), {
       target: { value: 'Título editado sin guardar' },
@@ -153,5 +148,40 @@ describe('EquipmentDocumentModal — cerrar y reabrir de verdad sí resetea', ()
     expect((screen.getByLabelText('Título (opcional)') as HTMLInputElement).value).toBe(DOCUMENTO.title);
     expect(screen.getByText('revision-tecnica.pdf')).toBeTruthy();
     expect(screen.queryByText('nuevo.pdf')).toBeNull();
+  });
+});
+
+describe('EquipmentDocumentModal — el archivo viaja con el guardado', () => {
+  it('al crear, el File va aparte del body y solo su nombre en el input', async () => {
+    renderModal(null);
+
+    subirArchivo();
+    await waitFor(() => expect(screen.getByText('nuevo.pdf')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(createMutateMock).toHaveBeenCalledTimes(1));
+    const [{ input, file }] = createMutateMock.mock.calls[0] as [{ input: Record<string, unknown>; file: File }];
+    expect(file).toBe(FILE);
+    expect(input).toMatchObject({ type: 'TECHNICAL_INSPECTION', fileName: 'nuevo.pdf' });
+    expect('fileKey' in input).toBe(false);
+  });
+
+  it('quitar el archivo de un documento guardado manda file: null', async () => {
+    renderModal(DOCUMENTO);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(updateMutateMock).toHaveBeenCalledTimes(1));
+    expect((updateMutateMock.mock.calls[0] as [{ file: unknown }])[0].file).toBeNull();
+  });
+
+  it('un formato que el servidor rechazaría se avisa al elegirlo y no se guarda', () => {
+    renderModal(null);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { files: [new File(['x'], 'datos.zip', { type: 'application/zip' })] } });
+
+    expect(screen.queryByText('datos.zip')).toBeNull();
   });
 });

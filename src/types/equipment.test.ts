@@ -76,7 +76,7 @@ describe('toEquipmentPayload', () => {
     expect('photoKey' in payload).toBe(false);
   });
 
-  it('omite photoKey cuando no se subió ninguna foto (undefined)', () => {
+  it('nunca lleva photoKey: la foto viaja como archivo, no en el body', () => {
     const payload = toEquipmentPayload({
       internalCode: 'CM-003',
       licensePlate: '',
@@ -91,26 +91,6 @@ describe('toEquipmentPayload', () => {
     });
 
     expect('photoKey' in payload).toBe(false);
-  });
-
-  it('manda photoKey cuando el usuario subió una foto nueva', () => {
-    const payload = toEquipmentPayload(
-      {
-        internalCode: 'CM-004',
-        licensePlate: '',
-        equipmentClass: 'HEAVY',
-        type: 'Camión',
-        brand: 'Volvo',
-        model: 'FMX',
-        year: '',
-        controlUnit: 'KM',
-        status: 'IN_WORKSHOP',
-        homeBranchId: '',
-      },
-      'tmp/u1/abc.jpg',
-    );
-
-    expect(payload.photoKey).toBe('tmp/u1/abc.jpg');
   });
 });
 
@@ -153,34 +133,7 @@ describe('toUpdateEquipmentPayload', () => {
     expect(payload.homeBranchId).toBe('branch_1');
   });
 
-  // `photoKey` es el único campo TRI-STATE del builder (ver Diseño del RFC
-  // R2-storage): a diferencia de patente/año/sucursal (que SIEMPRE se
-  // mandan, `null` si vienen vacíos), acá "sin cambios" tiene que OMITIR la
-  // clave — nunca mandar `null` por default — para no pisar la foto ya
-  // guardada en cada PATCH que no la toca.
-  describe('photoKey (tri-state)', () => {
-    it('sin segundo argumento, omite photoKey por completo (sin cambios)', () => {
-      const payload = toUpdateEquipmentPayload(valido);
-
-      expect('photoKey' in payload).toBe(false);
-    });
-
-    it('con undefined explícito, sigue omitiendo photoKey', () => {
-      const payload = toUpdateEquipmentPayload(valido, undefined);
-
-      expect('photoKey' in payload).toBe(false);
-    });
-
-    it('con null, manda photoKey: null (quitar la foto)', () => {
-      const payload = toUpdateEquipmentPayload(valido, null);
-
-      expect(payload.photoKey).toBeNull();
-    });
-
-    it('con una key, manda photoKey con esa key (foto nueva)', () => {
-      const payload = toUpdateEquipmentPayload(valido, 'tmp/u1/nueva.jpg');
-
-      expect(payload.photoKey).toBe('tmp/u1/nueva.jpg');
-    });
+  it('nunca lleva photoKey: la foto viaja como archivo y quitarla la pide el hook', () => {
+    expect('photoKey' in toUpdateEquipmentPayload(valido)).toBe(false);
   });
 });

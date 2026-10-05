@@ -10,11 +10,6 @@ vi.mock('../../hooks/useCombustible', () => ({
   useCreateCombustible: () => ({ mutate: mutateMock, isPending }),
 }));
 
-const uploadFileMock = vi.fn();
-vi.mock('../../api/UploadsAPI', () => ({
-  uploadFile: (...args: unknown[]) => uploadFileMock(...args),
-}));
-
 const readCaptureDateMock = vi.fn();
 vi.mock('../../lib/photo-reading', async () => {
   const actual = await vi.importActual<typeof import('../../lib/photo-reading')>('../../lib/photo-reading');
@@ -53,12 +48,10 @@ describe('RegistrarCargaCombustibleModal', () => {
   beforeEach(() => {
     mutateMock.mockReset();
     isPending = false;
-    uploadFileMock.mockReset();
     readCaptureDateMock.mockReset();
     fuelReadingOcrMock.mockReset();
     readCaptureDateMock.mockResolvedValue(null);
     fuelReadingOcrMock.mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 });
-    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/surtidor.jpg', url: 'https://minio.local/surtidor.jpg' });
   });
 
   it('el botón guardar está deshabilitado mientras no haya foto', () => {
@@ -103,7 +96,7 @@ describe('RegistrarCargaCombustibleModal', () => {
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
     const [payload] = mutateMock.mock.calls[0];
-    expect(payload.litros).toBe(80.5);
+    expect(payload.input.litros).toBe(80.5);
   });
 
   it('UNREADABLE (value: null): no autorrellena, muestra el aviso neutro y el campo queda editable a mano', async () => {
@@ -147,7 +140,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     expect(guardar.hasAttribute('disabled')).toBe(true);
   });
 
-  it('sube la foto y guarda con el payload esperado (incluye fotoKey, no fotoUrl)', async () => {
+  it('guarda con la foto como archivo del registro (no la sube al elegirla ni al guardar)', async () => {
     fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
     readCaptureDateMock.mockResolvedValue(null);
 
@@ -161,17 +154,14 @@ describe('RegistrarCargaCombustibleModal', () => {
     await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
     fireEvent.click(guardar);
 
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
 
-    const [payload, options] = mutateMock.mock.calls[0];
-    expect(payload).toMatchObject({
-      equipoId: 'eq_1',
-      litros: 80,
-      tipo: 'PETROLEO',
-      fotoKey: 'tmp/u1/surtidor.jpg',
-    });
-    expect('fotoUrl' in payload).toBe(false);
+    const [vars, options] = mutateMock.mock.calls[0];
+    expect(vars.input).toMatchObject({ equipoId: 'eq_1', litros: 80, tipo: 'PETROLEO' });
+    expect(vars.foto).toBe(FILE);
+    // La key de la foto la escribe el replay al subirla: no viaja en el body.
+    expect('fotoKey' in vars.input).toBe(false);
+    expect('fotoUrl' in vars.input).toBe(false);
 
     options.onSuccess();
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -231,46 +221,7 @@ describe('RegistrarCargaCombustibleModal', () => {
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
     const [payload] = mutateMock.mock.calls[0];
-    expect(payload.fecha).toBe(new Date(localValue).toISOString());
-  });
-
-  it('si la subida de la foto falla, no llama al hook de creación', async () => {
-    fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
-    readCaptureDateMock.mockResolvedValue(null);
-    uploadFileMock.mockRejectedValue(new Error('network error'));
-
-    renderModal();
-    subirFoto();
-    await waitFor(() => expect(fuelReadingOcrMock).toHaveBeenCalled());
-
-    const guardar = screen.getByRole('button', { name: 'Registrar carga' });
-    await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
-    fireEvent.click(guardar);
-
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalled());
-    expect(mutateMock).not.toHaveBeenCalled();
-  });
-
-  it('mientras la foto está subiendo, Cancelar (y el botón X) quedan deshabilitados', async () => {
-    fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
-    readCaptureDateMock.mockResolvedValue(null);
-    // Sube "para siempre" dentro del test — lo que importa es el estado
-    // mientras la promesa sigue pendiente, no su resolución.
-    uploadFileMock.mockImplementation(() => new Promise(() => {}));
-
-    renderModal();
-    subirFoto();
-    await waitFor(() => expect(fuelReadingOcrMock).toHaveBeenCalled());
-
-    const guardar = screen.getByRole('button', { name: 'Registrar carga' });
-    await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
-    fireEvent.click(guardar);
-
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalled());
-    const cancelar = screen.getByRole('button', { name: 'Cancelar' });
-    await waitFor(() => expect(cancelar.hasAttribute('disabled')).toBe(true));
-    // El botón Guardar también queda bloqueado (evita doble submit mientras sube).
-    expect(guardar.hasAttribute('disabled')).toBe(true);
+    expect(payload.input.fecha).toBe(new Date(localValue).toISOString());
   });
 
   it('mientras la mutación está pendiente, Guardar y Cancelar quedan deshabilitados', async () => {

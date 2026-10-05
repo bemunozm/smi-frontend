@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -175,7 +176,7 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   const huboCambio = Object.keys(assignmentDiff).length > 0;
 
   const guardar = () => {
-    assignEquipment.mutate({ id: equipo.id, input: assignmentDiff });
+    assignEquipment.mutate({ equipo, input: assignmentDiff });
   };
 
   const liberar = () => {
@@ -187,7 +188,7 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
     // props no cambian si la request falla. Al tener éxito, `onSuccess`
     // invalida la ficha y ese mismo efecto resincroniza los pickers con la
     // asignación real (ya vacía).
-    assignEquipment.mutate({ id: equipo.id, input: { operatorId: null, supervisorId: null } });
+    assignEquipment.mutate({ equipo, input: { operatorId: null, supervisorId: null } });
   };
 
   return (
@@ -325,7 +326,7 @@ function DocumentoItemRow({
  */
 function DocumentsCard({ equipoId, puedeGestionar }: { equipoId: string; puedeGestionar: boolean }) {
   const { data: documentos, isPending, isError } = useEquipmentDocuments(equipoId);
-  const deleteDocument = useDeleteEquipmentDocument(equipoId);
+  const deleteDocument = useDeleteEquipmentDocument();
   const [modalDoc, setModalDoc] = useState<EquipmentDocument | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState<EquipmentDocument | null>(null);
@@ -691,6 +692,8 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
  * `/equipos/:id/ficha`); acá solo se muestra un adelanto (ver
  * `ActividadReciente`).
  */
+const RECURSOS_DE_FICHA_EQUIPO = ['equipment', 'equipmentDocument', 'horometro', 'combustible'] as const;
+
 export function EquipoDetalleView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -796,6 +799,8 @@ export function EquipoDetalleView() {
         ← SMI · Flota
       </Link>
 
+      <PendientesStrip recursos={RECURSOS_DE_FICHA_EQUIPO} />
+
       {/* Cabecera: foto + código/estado + subtítulo, acciones a la derecha
          (calca la cabecera de FichaEquipoClientePC.dc.html: Cambiar estado,
          Registrar lectura, Editar equipo, Eliminar equipo — "Ver
@@ -835,7 +840,7 @@ export function EquipoDetalleView() {
                 <Dropdown.Menu
                   disabledKeys={[equipo.status]}
                   onAction={(key) => {
-                    updateStatus.mutate({ id: equipo.id, status: String(key) as EquipmentStatus });
+                    updateStatus.mutate({ equipo, status: String(key) as EquipmentStatus });
                   }}
                 >
                   {EQUIPMENT_STATUS.map((opcionEstado) => (

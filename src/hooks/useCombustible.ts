@@ -1,29 +1,36 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from '@heroui/react';
-import { listCombustible, createCombustible } from '../api/CombustibleAPI';
-
-const KEY = ['combustible'];
+import { useQuery } from '@tanstack/react-query';
+import { listCombustible } from '../api/CombustibleAPI';
+import { COMBUSTIBLE_KEY as KEY } from '../lib/query-keys';
+import { generateUuid } from '../lib/uuid';
+import type { CombustibleForm } from '../types/combustible';
+import { useOfficeMutation } from './useOfficeMutation';
 
 export function useCombustibleList() {
   return useQuery({ queryKey: KEY, queryFn: listCombustible });
 }
 
+export interface CreateCombustibleVars {
+  input: Omit<CombustibleForm, 'fotoUrl' | 'fotoKey'>;
+  /** Foto del surtidor (obligatoria): se guarda en el equipo y se sube al
+   * sincronizar, no al elegirla — sin señal no habría cómo. */
+  foto: File;
+}
+
+/**
+ * Registrar una carga de combustible por la cola. La foto viaja como archivo de
+ * la operación; si la subida o el POST fallan por falta de señal, todo se
+ * reintenta solo. El replay refresca la lista y `['equipment']` (último nivel y
+ * contadores de la ficha).
+ */
 export function useCreateCombustible() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: createCombustible,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY });
-      // Mismo fix que `useCreateHorometro`: sin esto, el "último nivel" y los
-      // contadores de la ficha (`['equipment', id]`) no se refrescaban tras
-      // registrar una carga.
-      qc.invalidateQueries({ queryKey: ['equipment'] });
-    },
-    // La foto ya se subió (`uploadImage`) antes de llegar acá — si el POST de
-    // combustible falla, sin este aviso queda una foto huérfana en
-    // `/uploads` y el usuario cree que la carga se registró.
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo registrar la carga de combustible.');
-    },
+  return useOfficeMutation<'combustible.create', CreateCombustibleVars>({
+    endpoint: 'combustible.create',
+    build: ({ input, foto }) => ({
+      params: {},
+      body: { ...input, id: generateUuid() },
+      files: [{ field: 'fotoKey', file: foto }],
+    }),
+    onSent: () => undefined,
+    errorFallback: 'No se pudo registrar la carga de combustible.',
   });
 }

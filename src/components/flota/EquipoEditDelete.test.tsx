@@ -44,11 +44,6 @@ vi.mock('../../hooks/useOperators', () => ({
   useOperators: () => ({ data: [], isPending: false }),
 }));
 
-const uploadFileMock = vi.fn();
-vi.mock('../../api/UploadsAPI', () => ({
-  uploadFile: (...args: unknown[]) => uploadFileMock(...args),
-}));
-
 afterEach(cleanup);
 
 const EQUIPO: Equipment = {
@@ -95,8 +90,9 @@ function subirFoto() {
 }
 
 beforeEach(() => {
-  uploadFileMock.mockReset();
-  uploadFileMock.mockResolvedValue({ key: 'tmp/u1/nueva.jpg', url: 'https://minio.local/nueva.jpg' });
+  // jsdom no implementa los object URL con los que el banner previsualiza la foto elegida.
+  URL.createObjectURL = vi.fn(() => 'blob:foto-nueva');
+  URL.revokeObjectURL = vi.fn();
   updateMutateAsyncMock.mockReset().mockResolvedValue(EQUIPO);
   assignMutateAsyncMock.mockReset().mockResolvedValue(EQUIPO);
 });
@@ -106,10 +102,7 @@ describe('EditEquipoModal — un refetch en segundo plano no pisa una subida pen
     const { rerender, qc } = renderModal(EQUIPO);
 
     subirFoto();
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
-    await waitFor(() =>
-      expect(screen.getByAltText('Foto del equipo').getAttribute('src')).toBe('https://minio.local/nueva.jpg'),
-    );
+    await waitFor(() => expect(screen.getByAltText('Foto del equipo').getAttribute('src')).toBe('blob:foto-nueva'));
 
     fireEvent.change(screen.getByLabelText('Modelo'), { target: { value: '336 Next Gen' } });
     expect((screen.getByLabelText('Modelo') as HTMLInputElement).value).toBe('336 Next Gen');
@@ -125,17 +118,21 @@ describe('EditEquipoModal — un refetch en segundo plano no pisa una subida pen
     );
 
     // Ni la foto pendiente ni el texto editado se perdieron.
-    expect(screen.getByAltText('Foto del equipo').getAttribute('src')).toBe('https://minio.local/nueva.jpg');
+    expect(screen.getByAltText('Foto del equipo').getAttribute('src')).toBe('blob:foto-nueva');
     expect((screen.getByLabelText('Modelo') as HTMLInputElement).value).toBe('336 Next Gen');
 
-    // Y viajan de verdad en el submit — confirma que `photoKey` no se limpió
-    // por el refetch (antes: `setPhotoKey(undefined)` corría en cada cambio
-    // de referencia de `equipo` mientras el modal seguía abierto).
+    // Y viajan de verdad en el submit — confirma que la foto no se limpió por el
+    // refetch (antes se reseteaba en cada cambio de referencia de `equipo`
+    // mientras el modal seguía abierto). Viaja como archivo, no como key.
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() => expect(updateMutateAsyncMock).toHaveBeenCalledTimes(1));
-    const [{ input }] = updateMutateAsyncMock.mock.calls[0] as [{ input: Record<string, unknown> }];
-    expect(input.photoKey).toBe('tmp/u1/nueva.jpg');
+    const [{ input, photo, quitarFoto }] = updateMutateAsyncMock.mock.calls[0] as [
+      { input: Record<string, unknown>; photo: File | null; quitarFoto: boolean },
+    ];
+    expect(photo).toBe(FILE);
+    expect(quitarFoto).toBe(false);
+    expect('photoKey' in input).toBe(false);
     expect(input.model).toBe('336 Next Gen');
   });
 });
@@ -145,7 +142,6 @@ describe('EditEquipoModal — cerrar y reabrir de verdad sí resetea', () => {
     const { rerender, qc } = renderModal(EQUIPO);
 
     subirFoto();
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(FILE));
     await waitFor(() => expect(screen.getByAltText('Foto del equipo')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('Modelo'), { target: { value: '336 Next Gen' } });
 

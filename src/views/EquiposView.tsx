@@ -31,11 +31,14 @@ import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-st
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { StatusChip } from '../components/flota/StatusChip';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { equipmentEntity } from '../offline/db';
 import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
 import {
-  useAssignEquipment,
   useCreateEquipment,
   useEquipment,
   useResumenFleet,
@@ -56,6 +59,7 @@ import {
   EquipmentFormSchema,
   EQUIPMENT_STATUS,
   toEquipmentPayload,
+  type AssignEquipmentInput,
   type ControlUnit,
   type Equipment,
   type EquipmentClass,
@@ -222,18 +226,23 @@ interface CreateEquipoModalProps {
  * abrir el MISMO modal, así que el trigger vive afuera — mismo criterio que
  * `EditEquipoModal`/`DeleteEquipoAlertDialog`, que ya son controlados.
  */
+/** La asignación elegida al crear; `undefined` si no se eligió a nadie. */
+function asignacionInicial(operatorId: string, supervisorId: string): AssignEquipmentInput | undefined {
+  const operator = idDesdeSentinel(operatorId);
+  const supervisor = idDesdeSentinel(supervisorId);
+  if (!operator && !supervisor) return undefined;
+  return { operatorId: operator, supervisorId: supervisor };
+}
+
 function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
   const createEquipment = useCreateEquipment();
-  const assignEquipment = useAssignEquipment();
   const [operatorId, setOperatorId] = useState(SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(SIN_ASIGNAR);
-  // "Dirty key" de la foto — mismo patrón que `EditEquipoModal`
-  // (`EquipoEditDelete.tsx`): vive fuera del form de RHF, `null` cuando el
-  // usuario adjunta y después quita la foto antes de crear (el builder de
-  // creación lo trata igual que "sin foto", ver `toEquipmentPayload`).
+  // Foto elegida — mismo patrón que `EditEquipoModal` (`EquipoEditDelete.tsx`):
+  // vive fuera del form de RHF, `null` si no hay (o si la quitó antes de crear).
   // `photoResetKey` fuerza el remount del banner al reabrir (el modal queda
   // montado entre aperturas, ver el `useEffect` de abajo).
-  const [photoKey, setPhotoKey] = useState<string | null | undefined>(undefined);
+  const [photo, setPhoto] = useState<File | null>(null);
   const [photoResetKey, setPhotoResetKey] = useState(0);
   const {
     control,
@@ -254,7 +263,7 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
       reset(DEFAULT_FORM_VALUES);
       setOperatorId(SIN_ASIGNAR);
       setSupervisorId(SIN_ASIGNAR);
-      setPhotoKey(undefined);
+      setPhoto(null);
       setPhotoResetKey((n) => n + 1);
     }
   }, [isOpen, reset]);
@@ -265,27 +274,22 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
         <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_WIDE_CLASS}>
           {({ close }) => {
             const onSubmit = (values: EquipmentFormValues): void => {
-              createEquipment.mutate(toEquipmentPayload(values, photoKey ?? undefined), {
-                onSuccess: (equipment) => {
-                  const operatorIdFinal = idDesdeSentinel(operatorId);
-                  const supervisorIdFinal = idDesdeSentinel(supervisorId);
-                  if (operatorIdFinal || supervisorIdFinal) {
-                    assignEquipment.mutate({
-                      id: equipment.id,
-                      input: { operatorId: operatorIdFinal, supervisorId: supervisorIdFinal },
-                    });
-                  }
-                  // El reset al reabrir (arriba) deja el form limpio para la
-                  // próxima vez — no hace falta duplicarlo acá.
-                  close();
+              createEquipment.mutate(
+                {
+                  input: toEquipmentPayload(values),
+                  photo,
+                  asignacion: asignacionInicial(operatorId, supervisorId),
                 },
-              });
+                // El reset al reabrir (arriba) deja el form limpio para la
+                // próxima vez — no hace falta duplicarlo acá.
+                { onSuccess: close },
+              );
             };
 
             return (
               <>
                 <Modal.CloseTrigger />
-                <EquipoPhotoBanner key={photoResetKey} onKeyChange={setPhotoKey} savedPhotoUrl={null} />
+                <EquipoPhotoBanner key={photoResetKey} onPhotoChange={setPhoto} savedPhotoUrl={null} />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
                     Nuevo equipo
@@ -369,7 +373,7 @@ function EquipoActionsMenu({
               if (clave === 'delete') return setIsDeleteOpen(true);
               if (clave.startsWith('status:')) {
                 updateStatus.mutate({
-                  id: equipo.id,
+                  equipo,
                   status: clave.slice('status:'.length) as EquipmentStatus,
                 });
               }
@@ -436,8 +440,10 @@ function EquipoCardMobile({
   sucursalPorId,
   puedeEditarFicha,
   puedeCambiarEstado,
+  marca,
 }: {
   equipo: Equipment;
+  marca: Marca | null;
   sucursalPorId: Map<string, string>;
   puedeEditarFicha: boolean;
   puedeCambiarEstado: boolean;
@@ -478,6 +484,7 @@ function EquipoCardMobile({
                         {identidad.patenteDestacada}
                       </span>
                     ) : null}
+                    <MarcaPendiente marca={marca} />
                     <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
                       {equipmentStatusLabel(equipo.status)}
                     </StatusChip>
@@ -575,7 +582,7 @@ function EquipoCardMobile({
                           variant="outline"
                           onPress={() =>
                             updateStatus.mutate(
-                              { id: equipo.id, status: opcionEstado },
+                              { equipo, status: opcionEstado },
                               { onSuccess: () => setIsSheetOpen(false) },
                             )
                           }
@@ -655,6 +662,9 @@ function EquipoCardMobile({
 
 const TODOS = '__todos__';
 
+/** Escrituras que esta pantalla muestra como pendientes (ver `usePendingWrites`). */
+const RECURSOS_DE_FLOTA = ['equipment', 'equipmentDocument', 'horometro', 'combustible'] as const;
+
 export function EquiposView() {
   const { user, role } = useCurrentUser();
   const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
@@ -689,6 +699,7 @@ export function EquiposView() {
   // Trade-off aceptado: un equipo homed a una sucursal ya INACTIVA no aparece
   // en el filtro ni encuentra su nombre acá — cae al fallback '—'.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
+  const pendientes = usePendingWrites(RECURSOS_DE_FLOTA);
   const sucursalPorId = useMemo(
     () => new Map((sucursalesActivas ?? []).map((sucursal) => [sucursal.id, sucursal.name])),
     [sucursalesActivas],
@@ -717,6 +728,8 @@ export function EquiposView() {
           </Button>
         ) : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_FLOTA} />
 
       <ResumenFlota />
 
@@ -884,6 +897,7 @@ export function EquiposView() {
                               ) : null}
                               <span className="mt-0.5 block text-sm text-foreground">{identidad.marcaModelo}</span>
                               <span className="mt-0.5 block text-xs text-(--muted)">{claseTipoAnio(equipo)}</span>
+                              <MarcaPendiente marca={pendientes.marcaDe(equipmentEntity(equipo.id))} />
                             </Link>
                           </Table.Cell>
                           <Table.Cell>
@@ -941,6 +955,7 @@ export function EquiposView() {
               <EquipoCardMobile
                 equipo={equipo}
                 key={equipo.id}
+                marca={pendientes.marcaDe(equipmentEntity(equipo.id))}
                 puedeCambiarEstado={puedeCambiarEstado}
                 puedeEditarFicha={puedeEditarFicha}
                 sucursalPorId={sucursalPorId}
