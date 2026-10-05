@@ -3,16 +3,20 @@ import { toast } from '@heroui/react';
 
 import { aNumero, type TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
+import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { generateUuid } from '../lib/uuid';
 import { usePhotoCaptureFlow, type UsePhotoCaptureFlowResult } from '../lib/usePhotoCaptureFlow';
 
 export interface CierreState {
   final: string;
   litros: string;
+  /** ¿Cargó AdBlue en el turno? */
+  adBlue: boolean;
+  adBlueLitros: string;
   observaciones: string;
 }
 
-const DEFAULT_CIERRE: CierreState = { final: '', litros: '', observaciones: '' };
+const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' };
 
 export interface UseCierreFormParams {
   tarjetas: TarjetaTurno[];
@@ -30,6 +34,10 @@ export interface UseCierreFormResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
+  adBlueCierre: ResultadoAdBlue;
+  /** `true` si se marcó AdBlue y los litros todavía no sirven. */
+  adBlueIncompletoCierre: boolean;
   isCerrando: boolean;
   foto: UsePhotoCaptureFlowResult;
 }
@@ -61,6 +69,10 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
 
+  const adBlueLitrosNum = aNumero(cierre.adBlueLitros);
+  const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
+  const adBlueIncompletoCierre = adBlueIncompleto(cierre.adBlue, adBlueLitrosNum);
+
   const [isCerrando, setIsCerrando] = useState(false);
 
   const abrirCierre = (id: string) => {
@@ -72,7 +84,7 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
   };
 
   const cerrar = async () => {
-    if (!cerrando || finalNum == null || finalInvalido || !foto.file || isCerrando) return;
+    if (!cerrando || finalNum == null || finalInvalido || adBlueIncompletoCierre || !foto.file || isCerrando) return;
     if (!userId) return;
 
     setIsCerrando(true);
@@ -84,6 +96,8 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
           closeClientId: generateUuid(),
           valorFinal: finalNum,
           fuelLiters: aNumero(cierre.litros) ?? 0,
+          adBlue: cierre.adBlue,
+          ...(cierre.adBlue ? { adBlueLiters: adBlueCierre.litros ?? undefined } : {}),
           observaciones: cierre.observaciones.trim() || undefined,
           capturedAt: new Date().toISOString(),
           photoCapturedAt: foto.captureDate ? foto.captureDate.toISOString() : undefined,
@@ -99,5 +113,5 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

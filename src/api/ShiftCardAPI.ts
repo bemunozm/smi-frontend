@@ -2,6 +2,7 @@ import type { AxiosRequestConfig } from 'axios';
 
 import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
+import { EntradaCambiosListResponseSchema, type EntradaCambios } from '../types/cambios';
 import {
   ShiftCardListResponseSchema,
   ShiftCardWrapperSchema,
@@ -65,7 +66,18 @@ async function listMine(): Promise<ShiftCardResponse[]> {
   }
 }
 
+/** Quién cambió qué de una tarjeta, del cambio más reciente al más viejo. */
+async function listChanges(id: string): Promise<EntradaCambios[]> {
+  try {
+    const response = await axiosInstance.get(`/api/shift-cards/${encodeURIComponent(id)}/changes`);
+    return EntradaCambiosListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cargar el historial de cambios.');
+  }
+}
+
 export const ShiftCardAPI = {
+  listChanges,
   openCard,
   closeCard,
   listMine,

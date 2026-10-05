@@ -65,6 +65,8 @@ function baseCard(overrides: Partial<ShiftCardResponse> = {}): ShiftCardResponse
     fuelLiters: null,
     pumpPhotoUrl: null,
     observaciones: null,
+    adBlue: false,
+    adBlueLiters: null,
     belowPreviousReading: false,
     fecha: '2026-09-24T09:00:00.000Z',
     fechaSalida: null,
@@ -83,6 +85,7 @@ function putOpenOp(overrides: Partial<OpenCardOp> = {}): Promise<string> {
     status: 'pending',
     attempts: 0,
     createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 'card-1',
@@ -107,7 +110,9 @@ function putCloseOp(overrides: Partial<CloseCardOp> = {}): Promise<string> {
     status: 'pending_upload',
     attempts: 0,
     photoId: 'close-1',
+    dependsOn: ['card-1'],
     createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
     updatedAt: Date.now(),
     payload: {
       cardId: 'card-1',
@@ -127,6 +132,7 @@ function putReportOp(overrides: Partial<SendExitReportOp> = {}): Promise<string>
     status: 'pending',
     attempts: 0,
     createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 'report-1',
@@ -141,12 +147,12 @@ function putReportOp(overrides: Partial<SendExitReportOp> = {}): Promise<string>
 }
 
 async function putPhoto(id = 'close-1') {
-  await db.photos.put({ id, data: new Uint8Array([1, 2, 3]).buffer, mime: 'image/jpeg', name: 'x.jpg', createdAt: Date.now() });
+  await db.blobs.put({ id, data: new Uint8Array([1, 2, 3]).buffer, mime: 'image/jpeg', name: 'x.jpg', createdAt: Date.now() });
 }
 
 beforeEach(async () => {
   await db.outbox.clear();
-  await db.photos.clear();
+  await db.blobs.clear();
   queryClient.clear();
   resetReplayEngineForTests();
 });
@@ -310,7 +316,7 @@ describe('replay — cierre de tarjeta', () => {
       expect.anything(),
     );
     expect(await db.outbox.get('close-1')).toBeUndefined();
-    expect(await db.photos.get('close-1')).toBeUndefined();
+    expect(await db.blobs.get('close-1')).toBeUndefined();
   });
 
   it('TMP_KEY_EXPIRED: limpia la key, vuelve a pending_upload y RESUBE una vez en el mismo run', async () => {
@@ -690,6 +696,7 @@ function putHallazgoOp(overrides: Partial<CreateHallazgoOp> = {}): Promise<strin
     status: 'pending',
     attempts: 0,
     createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 'h-1',
@@ -733,6 +740,7 @@ function putTrabajoOp(overrides: Partial<CreateTrabajoExtraOp> = {}): Promise<st
     status: 'pending',
     attempts: 0,
     createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 't-1',
@@ -808,7 +816,7 @@ describe('replay — hallazgo', () => {
       expect.anything(),
     );
     expect(await db.outbox.get('h-1')).toBeUndefined();
-    expect(await db.photos.get('h-1')).toBeUndefined();
+    expect(await db.blobs.get('h-1')).toBeUndefined();
   });
 
   it('TMP_KEY_EXPIRED: limpia la key, RESUBE una vez en el mismo run y reclama la nueva', async () => {
@@ -833,7 +841,7 @@ describe('replay — hallazgo', () => {
       expect.anything(),
     );
     expect(await db.outbox.get('h-1')).toBeUndefined();
-    expect(await db.photos.get('h-1')).toBeUndefined();
+    expect(await db.blobs.get('h-1')).toBeUndefined();
   });
 
   it('error de red tras subir la foto: queda pending_claim CON la tmpKey (no resube en el próximo run)', async () => {
@@ -846,7 +854,7 @@ describe('replay — hallazgo', () => {
 
     const op = await db.outbox.get('h-1');
     expect(op).toMatchObject({ status: 'pending_claim', tmpKey: 'tmp/u1/hallazgo.jpg', attempts: 1 });
-    expect(await db.photos.get('h-1')).toBeTruthy();
+    expect(await db.blobs.get('h-1')).toBeTruthy();
   });
 
   it('error de red al subir la foto: sigue pending_upload y no llama al POST', async () => {
@@ -876,7 +884,7 @@ describe('replay — hallazgo', () => {
     const op = await db.outbox.get('h-1');
     expect(op?.status).toBe('needs_attention');
     expect(op?.lastError).toMatchObject({ code: 'ID_CONFLICT' });
-    expect(await db.photos.get('h-1')).toBeTruthy();
+    expect(await db.blobs.get('h-1')).toBeTruthy();
     expect(await db.outbox.get('h-2')).toBeUndefined();
   });
 

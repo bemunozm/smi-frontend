@@ -14,7 +14,7 @@ import { turnoDe } from '../lib/turno';
 import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
-  useUpdateTrabajoExtra,
+  useEditarTrabajoExtra,
   useCambiosTrabajoExtra,
 } from '../hooks/useTrabajosExtra';
 import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
@@ -87,6 +87,8 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
 
 /** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+/** Un cambio anterior del mismo trabajo espera una acción: encadenar otro encima lo dejaría trabado. */
+const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
 
 /** Por qué un equipo no se puede elegir, según su estado en Flota. */
 const ESTADO_NO_DISPONIBLE: Record<string, string> = {
@@ -110,13 +112,18 @@ export function TrabajosExtraView() {
   const [detalleId, setDetalleId] = useState<string | null>(null);
   /** Modo edición del trabajo abierto en el detalle (Acta N.° 004, R13). */
   const [editando, setEditando] = useState(false);
-  const actualizar = useUpdateTrabajoExtra();
+  const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarTrabajoExtra();
   // Se lee de la lista y no de una copia: tras editar, la lista se refresca
   // y el detalle muestra el dato nuevo sin tener que volver a abrirlo. Un
   // trabajo pendiente de sincronizar solo existe en el equipo: no tiene
   // historial de cambios en el servidor ni se puede editar todavía.
   const detalle = registros.find((r) => r.id === detalleId) ?? null;
   const cambios = useCambiosTrabajoExtra(detalle?.sinSincronizar ? null : detalleId);
+  const motivoSinEdicion = detalle?.sinSincronizar
+    ? MOTIVO_SIN_SINCRONIZAR
+    : detalle?.edicionRequiereAtencion
+      ? MOTIVO_EDICION_ATENCION
+      : undefined;
 
   /**
    * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
@@ -240,6 +247,7 @@ export function TrabajosExtraView() {
               <td className={`${TD} whitespace-nowrap`}>
                 {r.operador}
                 {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+                {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
               </td>
               <td className={`${TD} tabular text-right font-semibold whitespace-nowrap`}>
                 {fmtNum(horasCobrables(r.totalHoras))} h
@@ -273,6 +281,7 @@ export function TrabajosExtraView() {
             </div>
             <Chip tono="info">{etiquetaActividades(r)}</Chip>
             {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+                {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
             <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
               <span>
                 {fmtDate(r.fecha)} · {r.turno}
@@ -318,10 +327,10 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
-        pendiente={actualizar.isPending}
-        onGuardar={(payload) =>
-          actualizar.mutate({ id: detalle.id, payload }, { onSuccess: () => setEditando(false) })
-        }
+        pendiente={isActualizando}
+        onGuardar={async (payload) => {
+          if (await guardarCambio(detalle, payload)) setEditando(false);
+        }}
         onCancelar={() => setEditando(false)}
       />
     </div>
@@ -335,8 +344,8 @@ export function TrabajosExtraView() {
         </Boton>
         <Boton
           variante="contorno"
-          disabled={detalle.sinSincronizar}
-          title={detalle.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : undefined}
+          disabled={motivoSinEdicion != null}
+          title={motivoSinEdicion}
           onClick={() => setEditando(true)}
         >
           <Pencil className="h-[17px] w-[17px]" /> Editar
@@ -348,6 +357,10 @@ export function TrabajosExtraView() {
           <Hint>{MOTIVO_SIN_SINCRONIZAR}</Hint>
         </>
       )}
+      {detalle.edicionSinSincronizar && (
+        <MarcaSinSincronizar edicion requiereAtencion={detalle.edicionRequiereAtencion} />
+      )}
+      {detalle.edicionRequiereAtencion && <Hint>{MOTIVO_EDICION_ATENCION}</Hint>}
 
       <Cifras
         items={[

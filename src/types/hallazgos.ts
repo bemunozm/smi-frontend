@@ -46,3 +46,23 @@ export interface Hallazgo {
   fecha: string;
   equipo?: { internalCode: string };
 }
+
+/** Forma de un hallazgo en las respuestas del servidor. */
+export const HallazgoSchema = z.object({
+  id: z.string(),
+  equipoId: z.string(),
+  descripcion: z.string(),
+  prioridad: z.string(),
+  estado: z.string(),
+  fotoUrl: z.string().nullable(),
+  fecha: z.string(),
+  equipo: z.object({ internalCode: z.string() }).optional(),
+});
+
+/** `PATCH /api/hallazgos/:id`: solo los campos que cambiaron (la foto no se edita). */
+export type EditHallazgoBody = {
+  equipoId?: string;
+  descripcion?: string;
+  prioridad?: string;
+  estado?: string;
+};

@@ -25,31 +25,13 @@ export async function createHallazgo(payload: CreateHallazgoBody, config?: Axios
   }
 }
 
-/** Lo que se puede corregir de un hallazgo ya registrado (R13). La foto no. */
+/** Lo que se puede corregir de un hallazgo ya registrado (R13). La foto no. La
+ * corrección viaja por la cola (`offline/endpoints.ts#hallazgo.edit`). */
 export interface CorreccionHallazgo {
   equipoId: string;
   descripcion: string;
   prioridad: string;
   estado: string;
-}
-
-/**
- * Corrige un hallazgo ya registrado (Acta N.° 004, R13). El servidor guarda
- * qué cambió y avisa al administrador.
- */
-export async function updateHallazgo({
-  id,
-  payload,
-}: {
-  id: string;
-  payload: CorreccionHallazgo;
-}): Promise<Hallazgo> {
-  try {
-    const res = await api.patch<ApiResponse<Hallazgo>>(`/api/hallazgos/${id}`, payload);
-    return res.data.data;
-  } catch (error) {
-    throw toDomainError(error, 'No se pudo guardar el cambio.');
-  }
 }
 
 /** Quién cambió qué de un hallazgo, del cambio más reciente al más viejo. */

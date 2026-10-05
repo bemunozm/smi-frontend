@@ -85,3 +85,25 @@ export interface TrabajoExtraordinario {
   fecha: string;
   equipo?: { internalCode: string };
 }
+
+/** Forma de un trabajo extraordinario en las respuestas del servidor. */
+export const TrabajoExtraordinarioSchema = z.object({
+  id: z.string(),
+  equipoId: z.string(),
+  operatorId: z.string().nullable(),
+  operador: z.string(),
+  faena: z.string(),
+  turno: z.string(),
+  horometroInicial: z.number(),
+  horometroFinal: z.number(),
+  totalHoras: z.number(),
+  actividades: z.array(z.string()),
+  otraActividad: z.string().nullable(),
+  descripcion: z.string(),
+  observaciones: z.string().nullable(),
+  fecha: z.string(),
+  equipo: z.object({ internalCode: z.string() }).optional(),
+});
+
+/** `PATCH /api/trabajos-extra/:id`: solo los campos que cambiaron. */
+export type EditTrabajoExtraBody = Partial<TrabajoExtraForm>;

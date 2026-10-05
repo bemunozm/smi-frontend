@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { proyectarTrabajosExtra } from './useTrabajosExtraProjection';
-import type { CreateTrabajoExtraOp } from '../offline/db';
+import type { CreateTrabajoExtraOp, HttpWriteOp } from '../offline/db';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
@@ -42,6 +42,7 @@ function op(
     status: 'pending',
     attempts: 0,
     createdAt: 1,
+    seq: 1,
     updatedAt: 1,
     payload: {
       id,
@@ -126,5 +127,67 @@ describe('proyectarTrabajosExtra', () => {
 
     expect(t).toMatchObject({ requiereAtencion: true, operador: 'Operador' });
     expect(t!.equipo).toBeUndefined();
+  });
+});
+
+function edicion(id: string, body: HttpWriteOp['body'], overrides: Partial<HttpWriteOp> = {}): HttpWriteOp {
+  return {
+    id: `e-${id}`,
+    type: 'httpWrite',
+    v: 1,
+    userId: 'u1',
+    status: 'pending',
+    attempts: 0,
+    createdAt: 1,
+    seq: 1,
+    updatedAt: 1,
+    endpoint: 'trabajoExtra.edit',
+    params: { id },
+    body,
+    label: 'Edición de trabajo extra',
+    ...overrides,
+  };
+}
+
+describe('proyectarTrabajosExtra — ediciones pendientes', () => {
+  it('superpone el cambio, recalcula totalHoras y marca "edición sin sincronizar"', () => {
+    const [t] = proyectarTrabajosExtra(
+      [servidor('t-1')],
+      [edicion('t-1', { horometroFinal: 4.5, operatorId: 'op-1', observaciones: ' nota ' })],
+      EQUIPOS,
+      OPERADORES,
+    );
+
+    expect(t).toMatchObject({
+      horometroFinal: 4.5,
+      totalHoras: 3.5,
+      operador: 'Rodrigo Paredes',
+      observaciones: 'nota',
+      descripcion: 'Del servidor',
+      edicionSinSincronizar: true,
+    });
+    expect(t!.sinSincronizar).toBeUndefined();
+  });
+
+  it('vaciar un texto opcional lo deja en null; las actividades se reemplazan', () => {
+    const [t] = proyectarTrabajosExtra(
+      [{ ...servidor('t-1'), observaciones: 'algo' }],
+      [edicion('t-1', { observaciones: '', actividades: ['LIMPIEZA_CANCHA'], otraActividad: '' })],
+      EQUIPOS,
+      OPERADORES,
+    );
+
+    expect(t).toMatchObject({ observaciones: null, otraActividad: null, actividades: ['LIMPIEZA_CANCHA'] });
+  });
+
+  it('una edición en atención lo marca', () => {
+    const [t] = proyectarTrabajosExtra(
+      [servidor('t-1')],
+      [edicion('t-1', { faena: 'Patillo' }, { status: 'needs_attention' })],
+      EQUIPOS,
+      OPERADORES,
+    );
+
+    expect(t).toMatchObject({ faena: 'Patillo', edicionRequiereAtencion: true });
   });
 });

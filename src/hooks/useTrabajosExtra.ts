@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { listTrabajosExtra, updateTrabajoExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
+import { listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { DomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
+import { opsDeCreacion, trabajoExtraEntity } from '../offline/db';
+import { useOutboxOps } from '../offline/useOutboxOps';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
-import type { TrabajoExtraForm } from '../types/trabajosExtra';
+import { submitWrite } from '../offline/submit-write';
+import { diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
 
@@ -75,23 +79,80 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
   return { registrar, isGuardando };
 }
 
-/**
- * Edición de un trabajo ya registrado (R13). El aviso lo dice explícito: que
- * el administrador se entera es parte de la regla, no un detalle técnico.
- */
-export function useUpdateTrabajoExtra() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: updateTrabajoExtra,
-    onSuccess: (_data, { id }) => {
-      void qc.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
-      void qc.invalidateQueries({ queryKey: cambiosKey(id) });
-      toast.success('Cambio guardado. Se avisó al administrador.');
-    },
-    onError: (error: unknown) => {
-      toast.danger(mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio.'));
-    },
-  });
+export interface UseEditarTrabajoExtraResult {
+  /** Encola solo los campos que cambiaron respecto de `original` (lo que la
+   * pantalla muestra hoy, con las ediciones pendientes ya aplicadas), con su
+   * precondición. `true` si quedó guardado. */
+  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraForm) => Promise<boolean>;
+  isGuardando: boolean;
+}
+
+const CAMPOS_TRABAJO = [
+  'equipoId',
+  'operatorId',
+  'faena',
+  'turno',
+  'horometroInicial',
+  'horometroFinal',
+  'actividades',
+  'otraActividad',
+  'descripcion',
+  'observaciones',
+] as const;
+
+/** Edición de un trabajo ya registrado (R13) por la cola. El administrador se
+ * entera cuando el servidor la recibe, no al guardar. */
+export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
+  const { user } = useCurrentUser();
+  const ops = useOutboxOps(user?.id);
+  const [isGuardando, setIsGuardando] = useState(false);
+
+  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraForm): Promise<boolean> => {
+    // Un texto opcional vacío y uno ausente son lo mismo: sin esto, abrir y
+    // guardar sin tocar nada marcaría `observaciones` como cambiada.
+    const base: TrabajoExtraForm = {
+      equipoId: original.equipoId,
+      operatorId: original.operatorId ?? '',
+      faena: original.faena,
+      turno: original.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+      horometroInicial: original.horometroInicial,
+      horometroFinal: original.horometroFinal,
+      actividades: original.actividades,
+      otraActividad: original.otraActividad ?? '',
+      descripcion: original.descripcion,
+      observaciones: original.observaciones ?? '',
+    };
+    const nuevo: TrabajoExtraForm = {
+      ...corregido,
+      otraActividad: corregido.otraActividad ?? '',
+      observaciones: corregido.observaciones ?? '',
+    };
+    const diff = diferenciaEdicion(base, nuevo, CAMPOS_TRABAJO);
+    if (Object.keys(diff.cambios).length === 0) return true;
+    setIsGuardando(true);
+    try {
+      await submitWrite(
+        'trabajoExtra.edit',
+        {
+          params: { id: original.id },
+          body: diff.cambios,
+          expected: precondicion(diff.esperado),
+          entityKey: trabajoExtraEntity(original.id),
+          dependsOn: opsDeCreacion(trabajoExtraEntity(original.id), ops),
+        },
+        { waitMs: 0, userId: user?.id },
+      );
+      avisarGuardadoEnCola();
+      return true;
+    } catch (error: unknown) {
+      toast.danger(mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'));
+      return false;
+    } finally {
+      setIsGuardando(false);
+    }
+  };
+
+  return { guardar, isGuardando };
 }
 
 export function useCambiosTrabajoExtra(id: string | null) {

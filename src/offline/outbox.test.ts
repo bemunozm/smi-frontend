@@ -35,7 +35,7 @@ function photoFile(): File {
 
 beforeEach(async () => {
   await db.outbox.clear();
-  await db.photos.clear();
+  await db.blobs.clear();
 });
 
 afterEach(() => {
@@ -78,7 +78,7 @@ describe('enqueueCloseCard', () => {
     // `tmpPhotoKey` NO viaja en el payload guardado — todavía no existe.
     expect('tmpPhotoKey' in op.payload.input).toBe(false);
 
-    const photo = await db.photos.get('close-1');
+    const photo = await db.blobs.get('close-1');
     expect(photo).toBeTruthy();
     expect(photo!.mime).toBe('image/jpeg');
     expect(requestSyncMock).toHaveBeenCalledTimes(1);
@@ -92,7 +92,7 @@ describe('enqueueCloseCard', () => {
       photoFile(),
     );
 
-    const [op, photo] = await Promise.all([db.outbox.get('close-2'), db.photos.get('close-2')]);
+    const [op, photo] = await Promise.all([db.outbox.get('close-2'), db.blobs.get('close-2')]);
     expect(op).toBeTruthy();
     expect(photo).toBeTruthy();
   });
@@ -126,7 +126,7 @@ describe('discardOp', () => {
     await discardOp('close-3', 'u1');
 
     expect(await db.outbox.get('close-3')).toBeUndefined();
-    expect(await db.photos.get('close-3')).toBeUndefined();
+    expect(await db.blobs.get('close-3')).toBeUndefined();
   });
 
   it('sin foto (apertura), solo borra la operación', async () => {
@@ -166,7 +166,7 @@ describe('discardOp', () => {
 
       expect(await db.outbox.get('card-1')).toBeUndefined();
       expect(await db.outbox.get('close-1')).toBeUndefined();
-      expect(await db.photos.get('close-1')).toBeUndefined();
+      expect(await db.blobs.get('close-1')).toBeUndefined();
     });
 
     it('no toca un closeCard de OTRA cardId', async () => {
@@ -181,7 +181,7 @@ describe('discardOp', () => {
       await discardOp('card-1', 'u1');
 
       expect(await db.outbox.get('close-ajeno')).toBeTruthy();
-      expect(await db.photos.get('close-ajeno')).toBeTruthy();
+      expect(await db.blobs.get('close-ajeno')).toBeTruthy();
     });
 
     it('descartar un closeCard (no una apertura) no toca ninguna otra operación', async () => {
@@ -214,6 +214,7 @@ describe('retryOp', () => {
       attempts: 1,
       lastError: { message: 'boom' },
       createdAt: Date.now(),
+      seq: Date.now(),
       updatedAt: Date.now(),
     });
 
@@ -252,6 +253,7 @@ describe('retryOp', () => {
       attempts: 1,
       lastError: { message: 'boom' },
       createdAt: Date.now(),
+      seq: Date.now(),
       updatedAt: Date.now(),
     });
 
@@ -325,7 +327,7 @@ describe('enqueueCreateHallazgo', () => {
     // `fotoKey` no existe todavía: se arma recién al subir la foto en el replay.
     if (op?.type !== 'createHallazgo') throw new Error('setup inválido');
     expect('fotoKey' in op.payload).toBe(false);
-    expect(await db.photos.get('h-1')).toBeTruthy();
+    expect(await db.blobs.get('h-1')).toBeTruthy();
     expect(requestSyncMock).toHaveBeenCalledTimes(1);
   });
 
@@ -335,7 +337,7 @@ describe('enqueueCreateHallazgo', () => {
     const op = await db.outbox.get('h-1');
     expect(op?.status).toBe('pending');
     expect(op && 'photoId' in op ? op.photoId : undefined).toBeUndefined();
-    expect(await db.photos.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
     expect(requestSyncMock).toHaveBeenCalledTimes(1);
   });
 });
@@ -363,7 +365,7 @@ describe('discardOp / retryOp — hallazgo y trabajo extra', () => {
     await discardOp('h-1', 'u1');
 
     expect(await db.outbox.get('h-1')).toBeUndefined();
-    expect(await db.photos.get('h-1')).toBeUndefined();
+    expect(await db.blobs.get('h-1')).toBeUndefined();
   });
 
   it('descartar un hallazgo sin foto o un trabajo extra solo borra la operación', async () => {

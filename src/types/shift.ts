@@ -54,6 +54,11 @@ export const ShiftCardResponseSchema = z.object({
   /** `valorFinal − valorInicial`, `null` si la tarjeta sigue abierta. */
   horasMaquina: z.number().nullable(),
   fuelLiters: z.number().nullable(),
+  /** AdBlue cargado en el turno. `default` cubre respuestas guardadas por el
+   * Service Worker antes de que el servidor las incluyera. */
+  adBlue: z.boolean().default(false),
+  /** Litros de AdBlue — `null` si no se cargó. */
+  adBlueLiters: z.number().nullable().default(null),
   /** URL firmada, nunca la key cruda. `null` mientras la tarjeta sigue
    * abierta (o en datos legacy sin foto). */
   pumpPhotoUrl: z.string().nullable(),
@@ -102,12 +107,32 @@ export interface CloseShiftCardInput {
   /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` (ver
    * `api/UploadsAPI.ts#uploadFile`). */
   tmpPhotoKey: string;
+  /** AdBlue cargado en el turno. Opcional: un cierre ya encolado antes de que
+   * existiera el campo sigue siendo válido. */
+  adBlue?: boolean;
+  /** Litros de AdBlue (> 0 y ≤ 1000) — obligatorios cuando `adBlue` es `true`. */
+  adBlueLiters?: number;
   observaciones?: string;
   /** Hora del DISPOSITIVO al cerrar la tarjeta. */
   capturedAt: string;
   /** Hora del DISPOSITIVO al tomar la foto, si difiere de `capturedAt`. */
   photoCapturedAt?: string;
 }
+
+/**
+ * Body de `PATCH /api/shift-cards/:id`: solo los campos que cambiaron. Los
+ * de cierre (`valorFinal`, `fuelLiters`, `adBlue`, `adBlueLiters`) solo
+ * aplican a una tarjeta ya cerrada (si no, 409 `CARD_NOT_CLOSED`).
+ */
+export type EditShiftCardBody = {
+  operatorId?: string;
+  valorInicial?: number;
+  valorFinal?: number;
+  fuelLiters?: number;
+  adBlue?: boolean;
+  adBlueLiters?: number;
+  observaciones?: string;
+};
 
 /**
  * Contrato del reporte de salida de turno (`POST /api/shift-reports`). Se

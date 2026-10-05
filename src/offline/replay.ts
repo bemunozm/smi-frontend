@@ -3,28 +3,30 @@ import { create } from 'zustand';
 import type { AxiosRequestConfig } from 'axios';
 
 import {
+  bySeq,
   db,
   pendingStatusFor,
   type CloseCardOp,
   type CreateHallazgoOp,
+  type HttpWriteOp,
   type OutboxLastError,
   type OutboxOp,
   type PhotoOp,
 } from './db';
+import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache } from './cache-upserts';
+import { ENDPOINTS, isEndpointKey } from './endpoints';
 import { useOutboxOps } from './useOutboxOps';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import { createHallazgo } from '../api/HallazgosAPI';
 import { createTrabajoExtra } from '../api/TrabajosExtraAPI';
 import { uploadFile } from '../api/UploadsAPI';
+import { sendWrite } from '../api/WriteAPI';
 import { DomainError, toDomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { queryClient } from '../lib/query-client';
-import { EQUIPMENT_KEY, HALLAZGOS_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
-import type { Equipment } from '../types/equipment';
-import type { Hallazgo } from '../types/hallazgos';
+import { QUERY_KEYS, SHIFT_CARDS_MINE_KEY, type QueryKeyName } from '../lib/query-keys';
 import type { ShiftCardResponse, ShiftReportResponse } from '../types/shift';
-import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
 /**
  * Motor de sincronización del outbox offline (RFC "Supervisión en Terreno"
@@ -39,6 +41,10 @@ const JSON_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 60_000;
 const SYNC_INTERVAL_MS = 45_000;
 const REPLAY_LOCK_NAME = 'smi-outbox-replay';
+/** Cuántos 5xx seguidos de UNA operación se reintentan solos antes de pedir
+ * atención. Los errores de red (sin `status`) NO tienen tope: sin señal no hay
+ * nada roto, solo que esperar. */
+const MAX_SERVER_ERROR_ATTEMPTS = 5;
 
 // --- Estado observable para la UI (`SyncStatus`) ----------------------------
 
@@ -122,6 +128,50 @@ export function useSyncState(userId: string | null | undefined): SyncState {
   };
 }
 
+// --- Quien espera el resultado de una operación ----------------------------
+
+/** Cómo terminó una operación para quien la está esperando (`submitWrite`). */
+export type WriteOutcome =
+  | { kind: 'sent'; data: unknown }
+  /** El servidor la rechazó por una razón de negocio. */
+  | { kind: 'business'; error: DomainError }
+  /** No se resolvió ahora (sin señal, error transitorio, tiempo agotado): sigue
+   * en la cola y se manda sola. */
+  | { kind: 'queued' };
+
+interface Waiter {
+  resolve: (outcome: WriteOutcome) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const waiters = new Map<string, Waiter>();
+
+/** Resuelve (y quita) a quien espera la operación `opId`, si hay alguien. */
+function settleWaiter(opId: string, outcome: WriteOutcome): void {
+  const waiter = waiters.get(opId);
+  if (!waiter) return;
+  clearTimeout(waiter.timer);
+  waiters.delete(opId);
+  waiter.resolve(outcome);
+}
+
+/**
+ * Registra a quien espera el resultado de la operación `opId` hasta `waitMs`.
+ * Se registra ANTES de encolar: así el resultado no puede llegar antes que el
+ * que lo espera. Al vencer el plazo (o al cancelar) resuelve `queued` — la
+ * operación sigue en la cola, esperar solo era una cortesía para el que mira.
+ */
+export function waitForOutcome(
+  opId: string,
+  waitMs: number,
+): { promise: Promise<WriteOutcome>; cancel: () => void } {
+  const promise = new Promise<WriteOutcome>((resolve) => {
+    const timer = setTimeout(() => settleWaiter(opId, { kind: 'queued' }), waitMs);
+    waiters.set(opId, { resolve, timer });
+  });
+  return { promise, cancel: () => settleWaiter(opId, { kind: 'queued' }) };
+}
+
 // --- Candado anti-concurrencia ----------------------------------------------
 
 /** Respaldo cuando `navigator.locks` no existe (Safari viejo, o el entorno
@@ -193,6 +243,11 @@ let syncScheduled = false;
 export function setCurrentUser(userId: string | null): void {
   currentUserId = userId;
   if (userId) requestSync();
+}
+
+/** El usuario de la sesión activa para el motor — `submitWrite` encola a su nombre. */
+export function getCurrentUserId(): string | null {
+  return currentUserId;
 }
 
 /**
@@ -275,50 +330,6 @@ function replayConfig(timeoutMs: number): AxiosRequestConfig {
   return { timeout: timeoutMs, headers: { 'X-Client-Time': new Date().toISOString() } };
 }
 
-function applyCardToCache(card: ShiftCardResponse): void {
-  queryClient.setQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY, (old) => {
-    const list = old ?? [];
-    const index = list.findIndex((c) => c.id === card.id);
-    if (index === -1) return [...list, card];
-    const next = list.slice();
-    next[index] = card;
-    return next;
-  });
-}
-
-/** Upsert por `id` al frente de la lista (el servidor las entrega de la más
- * nueva a la más vieja) — el registro recién sincronizado aparece sin esperar
- * el refetch. */
-function upsertFirst<T extends { id: string }>(list: T[] | undefined, item: T): T[] {
-  const current = list ?? [];
-  const index = current.findIndex((x) => x.id === item.id);
-  if (index === -1) return [item, ...current];
-  const next = current.slice();
-  next[index] = item;
-  return next;
-}
-
-/** Si el servidor no incluyó `equipo` en la respuesta, lo completa desde el
- * catálogo ya cacheado: sin esto la fila recién sincronizada mostraría el
- * `equipoId` crudo hasta que llegue el refetch. */
-function withEquipo<T extends { equipoId: string; equipo?: { internalCode: string } }>(record: T): T {
-  if (record.equipo) return record;
-  const internalCode = queryClient
-    .getQueryData<Equipment[]>(EQUIPMENT_KEY)
-    ?.find((e) => e.id === record.equipoId)?.internalCode;
-  return internalCode ? { ...record, equipo: { internalCode } } : record;
-}
-
-function applyHallazgoToCache(hallazgo: Hallazgo): void {
-  const completo = withEquipo(hallazgo);
-  queryClient.setQueryData<Hallazgo[]>(HALLAZGOS_KEY, (old) => upsertFirst(old, completo));
-}
-
-function applyTrabajoExtraToCache(trabajo: TrabajoExtraordinario): void {
-  const completo = withEquipo(trabajo);
-  queryClient.setQueryData<TrabajoExtraordinario[]>(TRABAJOS_EXTRA_KEY, (old) => upsertFirst(old, completo));
-}
-
 /** Upsert del reporte en `shift.exitReports` de cada tarjeta incluida —
  * evita esperar el próximo refetch para que "Reporte de salida" pase a
  * 'enviado' (mismo criterio de "nunca parpadea" que `applyCardToCache`). */
@@ -374,12 +385,18 @@ function applyReportToCache(cardIds: readonly string[], report: ShiftReportRespo
  * negocio, `needs_attention`. Un 429 SIN ese code (rate-limit genérico de
  * otro endpoint) sigue tratándose como transitorio.
  */
-function classify(error: DomainError): 'auth' | 'business' | 'transient' {
-  if (error.code === 'PHOTO_MISSING' || error.code === 'INVALID_RESPONSE') return 'business';
+function classify(error: DomainError, op: OutboxOp): 'auth' | 'business' | 'transient' {
+  if (error.code === 'PHOTO_MISSING' || error.code === 'INVALID_RESPONSE' || error.code === 'ENDPOINT_NOT_QUEUEABLE') {
+    return 'business';
+  }
   if (error.status === 401) return 'auth';
   if (error.status === 429 && error.code === 'REPORT_RATE_LIMITED') return 'business';
   if (error.status == null) return 'transient';
-  if (error.status >= 500 || error.status === 429) return 'transient';
+  // Un 5xx que se repite no es "el servidor está ocupado": la operación misma
+  // lo rompe, y reintentarla para siempre trabaría la cola entera detrás de
+  // ella. Los 429 y los errores de red NO se cuentan.
+  if (error.status >= 500) return (op.serverErrors ?? 0) + 1 >= MAX_SERVER_ERROR_ATTEMPTS ? 'business' : 'transient';
+  if (error.status === 429) return 'transient';
   return 'business';
 }
 
@@ -409,27 +426,35 @@ function transientMessage(error: DomainError): string {
  */
 async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutcome> {
   const domainError = error instanceof DomainError ? error : toDomainError(error, 'No se pudo sincronizar.');
-  const kind = classify(domainError);
+  const kind = classify(domainError, op);
   const notFoundMessage = domainError.status === 404 && !domainError.code ? NOT_FOUND_MESSAGES[op.type] : undefined;
-  const lastError: OutboxLastError = {
-    code: domainError.code,
-    status: domainError.status,
-    message:
-      notFoundMessage ?? (kind === 'transient' ? transientMessage(domainError) : mensajeErrorOperacion(domainError)),
-  };
+  const serverFailed = (domainError.status ?? 0) >= 500;
+  const message =
+    notFoundMessage ??
+    (kind === 'transient'
+      ? transientMessage(domainError)
+      : serverFailed
+        ? 'El servidor falló varias veces seguidas con este registro. Reintentá más tarde o descartalo.'
+        : mensajeErrorOperacion(domainError));
+  const lastError: OutboxLastError = { code: domainError.code, status: domainError.status, message };
 
   // `put()` (reemplazo completo) en vez de `update()`: el `UpdateSpec` de
   // Dexie tipa por `keyof` de la UNIÓN `OutboxOp` — solo deja tocar las
-  // claves comunes a los tres tipos de operación. Con `put({ ...op, ... })`
+  // claves comunes a todos los tipos de operación. Con `put({ ...op, ... })`
   // no hay esa limitación.
   if (kind === 'auth') {
     await db.outbox.put({ ...op, status: pendingStatusFor(op), updatedAt: Date.now() });
     useEngineStore.setState({ authRequired: true });
+    settleWaiter(op.id, { kind: 'queued' });
     return 'auth-required';
   }
 
   if (kind === 'business') {
     await db.outbox.put({ ...op, status: 'needs_attention', lastError, updatedAt: Date.now() });
+    settleWaiter(op.id, {
+      kind: 'business',
+      error: new DomainError(message, { code: domainError.code, status: domainError.status }),
+    });
     return 'continue';
   }
 
@@ -437,10 +462,12 @@ async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutco
     ...op,
     status: pendingStatusFor(op),
     attempts: op.attempts + 1,
+    ...(serverFailed ? { serverErrors: (op.serverErrors ?? 0) + 1 } : {}),
     lastError,
     updatedAt: Date.now(),
   });
   useEngineStore.setState({ lastError });
+  settleWaiter(op.id, { kind: 'queued' });
   return 'stop';
 }
 
@@ -449,7 +476,7 @@ async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutco
  * deja la operación en `pending_claim` con la `tmpKey` resultante.
  */
 async function uploadOpPhoto(op: PhotoOp, photoId: string, missingMessage: string): Promise<string> {
-  const photoRow = await db.photos.get(photoId);
+  const photoRow = await db.blobs.get(photoId);
   if (!photoRow) {
     // No debería pasar (se guardan en la misma transacción que la
     // operación, ver `offline/outbox.ts`) — si pasa, es un error de negocio:
@@ -461,7 +488,11 @@ async function uploadOpPhoto(op: PhotoOp, photoId: string, missingMessage: strin
   }
   const file = new File([photoRow.data], photoRow.name, { type: photoRow.mime });
   const uploaded = await uploadFile(file, replayConfig(UPLOAD_TIMEOUT_MS));
-  await db.outbox.put({ ...op, tmpKey: uploaded.key, status: 'pending_claim', updatedAt: Date.now() });
+  // Sin tocar `status`: sigue `syncing` mientras la request está en vuelo, así
+  // una edición del payload (`offline/outbox.ts#patchOp`) sabe que no puede
+  // cambiarla ahora. Si el POST falla, `handleOpError` la deja en
+  // `pending_claim` porque ya hay `tmpKey`.
+  await db.outbox.put({ ...op, tmpKey: uploaded.key, updatedAt: Date.now() });
   return uploaded.key;
 }
 
@@ -488,7 +519,7 @@ async function processPhotoOp<T extends PhotoOp>(
   if (!tmpKey && currentOp.photoId) {
     try {
       tmpKey = await uploadOpPhoto(currentOp, currentOp.photoId, missingPhotoMessage);
-      currentOp = { ...currentOp, tmpKey, status: 'pending_claim' } as T;
+      currentOp = { ...currentOp, tmpKey } as T;
     } catch (error) {
       return handleOpError(currentOp, error);
     }
@@ -496,7 +527,7 @@ async function processPhotoOp<T extends PhotoOp>(
 
   try {
     await send(currentOp, tmpKey);
-    if (currentOp.photoId) await db.photos.delete(currentOp.photoId);
+    if (currentOp.photoId) await db.blobs.delete(currentOp.photoId);
     await db.outbox.delete(currentOp.id);
     return 'continue';
   } catch (error) {
@@ -506,7 +537,7 @@ async function processPhotoOp<T extends PhotoOp>(
       // mismo run, no en el próximo trigger (si volviera a expirar en el
       // segundo intento, algo más grave está pasando y se trata como
       // cualquier otro error de negocio).
-      const cleared = { ...currentOp, tmpKey: undefined, status: 'pending_upload' } as T;
+      const cleared = { ...currentOp, tmpKey: undefined } as T;
       await db.outbox.put({ ...cleared, updatedAt: Date.now() });
       return processPhotoOp(cleared, missingPhotoMessage, send, false);
     }
@@ -548,11 +579,116 @@ function processCreateHallazgo(op: CreateHallazgoOp): Promise<ProcessOutcome> {
   );
 }
 
-async function processOp(op: OutboxOp): Promise<ProcessOutcome> {
-  await db.outbox.put({ ...op, status: 'syncing', updatedAt: Date.now() });
+/** Invalida las keys con nombre — una sola vez cada una. */
+function invalidateNamed(names: readonly QueryKeyName[]): void {
+  for (const name of new Set(names)) void queryClient.invalidateQueries({ queryKey: QUERY_KEYS[name] });
+}
+
+/**
+ * Procesador GENÉRICO de `httpWrite`: sube los archivos pendientes (guardando
+ * cada `tmpKey` apenas existe, para no resubirlos si el POST falla), manda la
+ * request que describe el REGISTRO con `X-Expected` + `X-Client-Time`, escribe
+ * el resultado en el caché, invalida las keys con nombre y avisa a quien
+ * espera. Un `TMP_KEY_EXPIRED` limpia las keys y resube UNA vez.
+ */
+async function processHttpWrite(op: HttpWriteOp, allowExpiredRetry = true): Promise<ProcessOutcome> {
+  if (!isEndpointKey(op.endpoint)) {
+    return handleOpError(
+      op,
+      new DomainError('Esta operación guardada no es compatible con esta versión de la app. Descartala.', {
+        code: 'ENDPOINT_NOT_QUEUEABLE',
+      }),
+    );
+  }
+  const def = ENDPOINTS[op.endpoint];
+  // `current` (no `op`) es lo que se pasa a `handleOpError`: ver el comentario
+  // de `processPhotoOp` — pasar la operación vieja borraría las keys ya subidas.
+  let current = op;
+
+  try {
+    for (const file of current.files ?? []) {
+      if (file.tmpKey) continue;
+      const row = await db.blobs.get(file.blobId);
+      if (!row) {
+        throw new DomainError('Falta un archivo guardado en el equipo — descartá este registro y volvé a cargarlo.', {
+          code: 'PHOTO_MISSING',
+        });
+      }
+      const uploaded = await uploadFile(
+        new File([row.data], row.name, { type: row.mime }),
+        replayConfig(UPLOAD_TIMEOUT_MS),
+      );
+      current = {
+        ...current,
+        files: (current.files ?? []).map((f) => (f.blobId === file.blobId ? { ...f, tmpKey: uploaded.key } : f)),
+        updatedAt: Date.now(),
+      };
+      await db.outbox.put(current);
+    }
+
+    const body = { ...current.body };
+    for (const file of current.files ?? []) body[file.field] = file.tmpKey;
+    const headers: Record<string, string> = { 'X-Client-Time': new Date().toISOString() };
+    // Los valores base pueden traer texto libre (observaciones con "—", comillas
+    // tipográficas, emojis) y un header HTTP solo admite Latin-1: el servidor lo
+    // decodifica con `decodeURIComponent` + `JSON.parse`. Único lugar donde se
+    // arma este header.
+    if (current.expected) headers['X-Expected'] = encodeURIComponent(JSON.stringify(current.expected));
+
+    const raw = await sendWrite({
+      method: def.method,
+      url: def.path(current.params),
+      body,
+      headers,
+      timeout: JSON_TIMEOUT_MS,
+      failMessage: def.failMessage,
+    });
+    def.applyResponse(raw);
+    return await finishHttpWrite(current, def.invalidate, raw);
+  } catch (error) {
+    if (error instanceof DomainError) {
+      if (allowExpiredRetry && error.code === 'TMP_KEY_EXPIRED' && (current.files?.length ?? 0) > 0) {
+        const cleared: HttpWriteOp = {
+          ...current,
+          files: (current.files ?? []).map((f) => ({ field: f.field, blobId: f.blobId })),
+          updatedAt: Date.now(),
+        };
+        await db.outbox.put(cleared);
+        return processHttpWrite(cleared, false);
+      }
+      // Un DELETE cuyo recurso ya no existe: eso era justo lo que se quería.
+      if (error.status === 404 && def.notFoundIsDone) {
+        return finishHttpWrite(current, def.invalidate, undefined);
+      }
+    }
+    return handleOpError(current, error);
+  }
+}
+
+async function finishHttpWrite(
+  op: HttpWriteOp,
+  invalidate: readonly QueryKeyName[],
+  data: unknown,
+): Promise<ProcessOutcome> {
+  await db.blobs.bulkDelete((op.files ?? []).map((f) => f.blobId));
+  await db.outbox.delete(op.id);
+  invalidateNamed([...invalidate, ...(op.invalidate ?? [])]);
+  settleWaiter(op.id, { kind: 'sent', data });
+  return 'continue';
+}
+
+async function processOp(queued: OutboxOp): Promise<ProcessOutcome> {
+  // `dispatched` queda grabado desde acá: a partir de este punto la operación
+  // puede haber llegado al servidor (timeout tras el commit, app matada a
+  // mitad de la request), así que ya no se puede editar su payload en el lugar
+  // (`offline/outbox.ts#patchOp`). Es ESTE objeto el que baja a todo lo que
+  // reescribe la operación, para que la marca sobreviva a `handleOpError`.
+  const op: OutboxOp = { ...queued, status: 'syncing', dispatched: true, updatedAt: Date.now() };
+  await db.outbox.put(op);
 
   if (op.type === 'closeCard') return processCloseCard(op);
   if (op.type === 'createHallazgo') return processCreateHallazgo(op);
+  if (op.type === 'httpWrite') return processHttpWrite(op);
 
   try {
     if (op.type === 'openCard') {
@@ -570,34 +706,38 @@ async function processOp(op: OutboxOp): Promise<ProcessOutcome> {
   }
 }
 
-/** La siguiente operación pendiente del usuario, FIFO por `createdAt` —
- * excluye `needs_attention` (espera una acción humana, no un reintento
- * automático), `syncing` (ya la está procesando ESTE mismo run; no debería
- * verse porque el run es secuencial, pero queda como guarda), y cualquier
- * `closeCard` cuyo `openCard` (misma `cardId`, ver `blockedCardIds` abajo)
- * esté en `needs_attention` (un cierre cuya apertura falló): mandarlo igual
- * solo le garantiza al backend un 404
- * `CARD_NOT_FOUND` (esa tarjeta nunca llegó a existir) y, si el supervisor
- * lo descarta ahí, pierde la foto/los litros sin necesidad — con la
- * apertura resuelta (reintentada con éxito, o descartada — ver
- * `discardOp` en `offline/outbox.ts`, que arrastra este cierre con ella) el
- * cierre vuelve a quedar disponible solo. NO cambia su `status`: sigue
- * `pending_upload`/`pending_claim` esperando su turno, el orden FIFO del
- * resto de la cola no se altera. */
+/** La siguiente operación pendiente del usuario, FIFO por `seq` — excluye
+ * `needs_attention` (espera una acción humana) y `syncing`, y retiene las que
+ * dependen de una retenida (ver el recorrido abajo). */
 async function nextPendingOp(userId: string): Promise<OutboxOp | undefined> {
-  const ops = await db.outbox
-    .where('[userId+createdAt]')
-    .between([userId, -Infinity], [userId, Infinity])
-    .toArray();
-  const blockedCardIds = new Set(
-    ops.filter((op) => op.type === 'openCard' && op.status === 'needs_attention').map((op) => op.id),
-  );
-  return ops.find(
-    (op) =>
-      op.status !== 'needs_attention' &&
-      op.status !== 'syncing' &&
-      !(op.type === 'closeCard' && blockedCardIds.has(op.payload.cardId)),
-  );
+  const ops = (
+    await db.outbox.where('[userId+seq]').between([userId, -Infinity], [userId, Infinity]).toArray()
+  ).sort(bySeq);
+  // Recorrido FIFO con dos conjuntos de "retenidos": las operaciones que
+  // esperan una acción humana (`needs_attention`) o que están bloqueadas por
+  // otra, y las entidades que tocan. Una operación posterior se retiene si
+  // `dependsOn` apunta a una retenida (transitivo, porque el recorrido sigue el
+  // orden) o si actúa sobre una entidad con una operación anterior retenida:
+  // mandarla igual aplicaría un cambio sobre algo que nunca llegó, o se
+  // saltaría el orden entre dos ediciones del mismo dato. NO cambia su
+  // `status` ni altera el orden del resto de la cola.
+  const heldIds = new Set<string>();
+  const heldKeys = new Set<string>();
+  for (const op of ops) {
+    const attention = op.status === 'needs_attention';
+    const blocked =
+      !attention &&
+      ((op.dependsOn ?? []).some((id) => heldIds.has(id)) || (op.entityKey != null && heldKeys.has(op.entityKey)));
+    if (attention || blocked) {
+      heldIds.add(op.id);
+      if (op.entityKey) heldKeys.add(op.entityKey);
+      continue;
+    }
+    // `syncing`: ya la está procesando ESTE mismo run (no debería verse porque
+    // el run es secuencial, pero queda como guarda).
+    if (op.status !== 'syncing') return op;
+  }
+  return undefined;
 }
 
 /**
@@ -620,7 +760,7 @@ async function nextPendingOp(userId: string): Promise<OutboxOp | undefined> {
  */
 async function resetStuckSyncingOps(userId: string): Promise<void> {
   const stuck = await db.outbox
-    .where('[userId+createdAt]')
+    .where('[userId+seq]')
     .between([userId, -Infinity], [userId, Infinity])
     .and((op) => op.status === 'syncing')
     .toArray();
@@ -662,10 +802,7 @@ async function runReplay(userId: string): Promise<void> {
     }));
 
     if (processedAny) {
-      void queryClient.invalidateQueries({ queryKey: SHIFT_CARDS_MINE_KEY });
-      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
-      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
-      void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
+      invalidateNamed(['shiftCardsMine', 'equipment', 'hallazgos', 'trabajosExtra']);
     }
   } finally {
     useEngineStore.setState({ syncing: false });

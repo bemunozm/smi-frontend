@@ -22,9 +22,14 @@ export interface TarjetaTurno {
   equipo: string;
   tipo: string;
   operador: string;
+  /** `null` en tarjetas anteriores al catálogo de operadores. */
+  operatorId?: string | null;
   inicial: number;
   final?: number;
   litros?: number;
+  /** AdBlue cargado al cierre. */
+  adBlue?: boolean;
+  adBlueLitros?: number;
   grupo: Grupo;
   estado: Estado;
   /** Quién abrió la tarjeta — un supervisor ve las suyas, el administrador
@@ -39,6 +44,12 @@ export interface TarjetaTurno {
    * todavía no confirmada por el servidor (existe una operación en el
    * outbox para ella, ver `offline/useOutboxOps.ts`). */
   sinSincronizar?: boolean;
+  /** Tiene una edición guardada en el equipo que el servidor todavía no
+   * confirmó (ver `offline/endpoints.ts#shiftCard.edit`). */
+  edicionSinSincronizar?: boolean;
+  /** Una edición suya espera una acción en `SyncStatus` (p. ej. otra persona
+   * cambió el mismo dato): no se encadena otra encima. */
+  edicionRequiereAtencion?: boolean;
   /** Quedó abierta al terminar el turno anterior — ver la nota Q5 del plan
    * (todavía sin decidir con el cliente quién la cierra). */
   arrastrada?: boolean;
@@ -84,9 +95,12 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
     equipo: card.equipo.internalCode,
     tipo: card.equipo.type,
     operador: card.operatorName,
+    operatorId: card.operatorId,
     inicial: card.valorInicial,
     final: card.valorFinal ?? undefined,
     litros: card.fuelLiters ?? undefined,
+    adBlue: card.adBlue,
+    adBlueLitros: card.adBlueLiters ?? undefined,
     grupo,
     estado,
     supervisor: card.supervisorName ?? 'Sin identificar',

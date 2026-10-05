@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useCurrentUser } from './useCurrentUser';
 import { useEquipment } from './useEquipment';
 import { useHallazgosList } from './useHallazgos';
-import type { CreateHallazgoOp, OutboxOp } from '../offline/db';
+import type { CreateHallazgoOp, HttpWriteOp, OutboxOp } from '../offline/db';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import type { Equipment } from '../types/equipment';
 import type { Hallazgo } from '../types/hallazgos';
@@ -18,6 +18,10 @@ export interface HallazgoProyectado extends Hallazgo {
   requiereAtencion?: boolean;
   /** Lleva una foto guardada en el equipo que todavía no se subió. */
   fotoPendiente?: boolean;
+  /** Tiene una edición guardada en el equipo que el servidor todavía no confirmó. */
+  edicionSinSincronizar?: boolean;
+  /** Esa edición espera una acción en `SyncStatus` — no se encadena otra encima. */
+  edicionRequiereAtencion?: boolean;
 }
 
 function mapOpToHallazgo(op: CreateHallazgoOp, equipos: Equipment[]): HallazgoProyectado {
@@ -57,7 +61,40 @@ export function proyectarHallazgos(
     .filter((op): op is CreateHallazgoOp => op.type === 'createHallazgo' && !idsServidor.has(op.id))
     .map((op) => mapOpToHallazgo(op, equipos))
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
-  return [...pendientes, ...servidor];
+  const lista: HallazgoProyectado[] = [...pendientes, ...servidor];
+  const ediciones = ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'hallazgo.edit');
+  return ediciones.length === 0 ? lista : aplicarEdiciones(lista, ediciones, equipos);
+}
+
+const texto = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+
+/** Superpone las ediciones pendientes (en orden `seq`: la última gana) sobre los
+ * hallazgos que ya existen en el servidor. */
+function aplicarEdiciones(
+  lista: HallazgoProyectado[],
+  ediciones: HttpWriteOp[],
+  equipos: Equipment[],
+): HallazgoProyectado[] {
+  return lista.map((h) => {
+    if (h.sinSincronizar) return h;
+    const propias = ediciones.filter((op) => op.params.id === h.id);
+    if (propias.length === 0) return h;
+    let editado: HallazgoProyectado = { ...h, edicionSinSincronizar: true };
+    for (const op of propias) {
+      const equipoId = texto(op.body.equipoId);
+      const equipo = equipoId ? equipos.find((e) => e.id === equipoId) : undefined;
+      editado = {
+        ...editado,
+        equipoId: equipoId ?? editado.equipoId,
+        ...(equipoId ? { equipo: equipo ? { internalCode: equipo.internalCode } : undefined } : {}),
+        descripcion: texto(op.body.descripcion) ?? editado.descripcion,
+        prioridad: texto(op.body.prioridad) ?? editado.prioridad,
+        estado: texto(op.body.estado) ?? editado.estado,
+        edicionRequiereAtencion: editado.edicionRequiereAtencion || op.status === 'needs_attention',
+      };
+    }
+    return editado;
+  });
 }
 
 export function useHallazgosProjection(): { hallazgos: HallazgoProyectado[] } {

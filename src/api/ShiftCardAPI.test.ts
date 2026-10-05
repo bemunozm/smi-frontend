@@ -36,6 +36,8 @@ const CARD = {
   fuelLiters: null,
   pumpPhotoUrl: null,
   observaciones: null,
+  adBlue: false,
+  adBlueLiters: null,
   belowPreviousReading: false,
   fecha: '2026-09-24T08:00:00.000Z',
   fechaSalida: null,

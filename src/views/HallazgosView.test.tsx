@@ -23,12 +23,10 @@ vi.mock('../hooks/useCurrentUser', () => ({
 
 import { db } from '../offline/db';
 import { HallazgosView } from './HallazgosView';
-import { updateHallazgo } from '../api/HallazgosAPI';
 
-/** La corrección y el historial de cambios van al servidor; acá se simulan. */
+/** El historial de cambios viene del servidor; acá se simula. La corrección va por la cola. */
 vi.mock('../api/HallazgosAPI', async (original) => ({
   ...(await original<typeof import('../api/HallazgosAPI')>()),
-  updateHallazgo: vi.fn(async ({ id }: { id: string }) => ({ id })),
   listCambiosHallazgo: vi.fn(async () => [
     {
       id: 'c1',
@@ -74,7 +72,7 @@ function renderView(size: 'phone' | 'desktop' = 'phone') {
 
 beforeEach(async () => {
   await db.outbox.clear();
-  await db.photos.clear();
+  await db.blobs.clear();
   URL.createObjectURL = vi.fn(() => 'blob:preview');
   URL.revokeObjectURL = vi.fn();
 });
@@ -159,7 +157,7 @@ describe('HallazgosView', () => {
     expect(op.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(op.type === 'createHallazgo' && op.payload.id).toBe(op.id);
     expect(op.type === 'createHallazgo' && Date.parse(op.payload.capturedAt)).not.toBeNaN();
-    expect(await db.photos.count()).toBe(1);
+    expect(await db.blobs.count()).toBe(1);
 
     expect(uploadFileMock).not.toHaveBeenCalled();
     expect(fuelReadingOcrMock).not.toHaveBeenCalled();
@@ -189,7 +187,7 @@ describe('HallazgosView', () => {
 
     await waitFor(() => expect(screen.getByText('Sin sincronizar')).toBeTruthy());
     expect((await db.outbox.toArray())[0]).toMatchObject({ status: 'pending' });
-    expect(await db.photos.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
     expect(screen.queryByText('Foto pendiente de subir')).toBeNull();
   });
 
@@ -254,18 +252,32 @@ describe('HallazgosView', () => {
       expect(await ventana.findByText('José Pérez')).toBeTruthy();
     });
 
-    it('guarda la corrección con el registro completo', async () => {
+    it('guarda la corrección en la cola con solo lo que cambió y su precondición', async () => {
       const ventana = abrirEdicion('desktop');
 
       fireEvent.click(within(ventana.getByRole('group', { name: 'Nivel de prioridad' })).getByRole('button', { name: 'CRÍTICA' }));
       fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
 
-      await waitFor(() => expect(updateHallazgo).toHaveBeenCalled());
-      expect(vi.mocked(updateHallazgo).mock.calls[0][0]).toEqual({
-        id: 'h1',
-        payload: { equipoId: 'e1', descripcion: 'Fuga de aceite hidráulico', prioridad: 'CRITICA', estado: 'ABIERTO' },
-      });
-      expect(await ventana.findByText(/Cambio guardado. Se avisó al administrador./)).toBeTruthy();
+      await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+      expect(await db.outbox.toArray()).toMatchObject([
+        {
+          type: 'httpWrite',
+          endpoint: 'hallazgo.edit',
+          params: { id: 'h1' },
+          body: { prioridad: 'CRITICA' },
+          expected: { prioridad: 'ALTA' },
+          entityKey: 'hallazgo:h1',
+        },
+      ]);
+      expect(await ventana.findByText(/Cambio guardado en el equipo/)).toBeTruthy();
+    });
+
+    it('marca la fila con "Edición sin sincronizar" y muestra el valor nuevo', async () => {
+      const ventana = abrirEdicion('desktop');
+      fireEvent.click(within(ventana.getByRole('group', { name: 'Nivel de prioridad' })).getByRole('button', { name: 'CRÍTICA' }));
+      fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
+
+      expect(await screen.findByText('Edición sin sincronizar')).toBeTruthy();
     });
 
     it('no deja guardar sin descripción', () => {
