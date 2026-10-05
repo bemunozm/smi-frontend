@@ -705,7 +705,7 @@ export function RegistroEquipoView() {
             ['Turno', turnoDe(detalleCerrada)],
             ['Supervisor', detalleCerrada.supervisor],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
-            ['AdBlue', detalleCerrada.adBlue ? `Sí · ${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No cargó'],
+            ['AdBlue', detalleCerrada.adBlue ? `${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No se cargó'],
             [
               'Foto del surtidor',
               <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">

@@ -120,6 +120,7 @@ const EDICION_INACTIVA: UseShiftRegisterResult['edicion'] = {
   soloEnElEquipo: false,
   adBlue: { litros: null, error: null, aviso: null },
   finalInvalido: false,
+  faltante: null,
   puedeGuardar: false,
   guardar: vi.fn(),
   isGuardando: false,
@@ -558,7 +559,7 @@ describe('RegistroEquipoView', () => {
   describe('AdBlue en el cierre', () => {
     it('muestra el selector Sí/No y los litros solo cuando se marca que cargó', () => {
       const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
-      expect(screen.getByRole('group', { name: '¿Cargó AdBlue en el turno?' })).toBeTruthy();
+      expect(screen.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
       expect(screen.queryByLabelText(/AdBlue cargado/)).toBeNull();
       unmount();
 
@@ -570,10 +571,10 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByLabelText(/AdBlue cargado/)).toBeTruthy();
     });
 
-    it('marcar "Sí cargó" avisa al estado del formulario', () => {
+    it('marcar "Sí" avisa al estado del formulario', () => {
       renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Sí cargó' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sí' }));
 
       expect(setCierre).toHaveBeenCalled();
       const actualizar = setCierre.mock.calls[0]![0] as (c: { adBlue: boolean }) => { adBlue: boolean };
@@ -585,13 +586,30 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '' },
-        adBlueCierre: { litros: 45, error: null, aviso: 'x' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
         finalNum: 12500,
         foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
       });
 
-      expect(screen.getByRole('status').textContent).toMatch(/más de 30 L de AdBlue/);
+      expect(screen.getByRole('status').textContent).toMatch(/Es más de lo que cabe en un estanque de 30 L: revisá el dato/);
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('con AdBlue marcado explica el estanque de 30 L; el aviso de exceso reemplaza esa nota', () => {
+      const conAdBlue = { final: '', litros: '', adBlue: true, adBlueLitros: '12', observaciones: '' };
+      const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, cierre: conAdBlue });
+      expect(
+        screen.getByText('Los cargadores SEM 3, 4, 5 y 6 tienen estanque de 30 L y gastan cerca de 1 L por hora.'),
+      ).toBeTruthy();
+      unmount();
+
+      renderView('desktop', {
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
+        cierre: { ...conAdBlue, adBlueLitros: '45' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
+      });
+      expect(screen.queryByText(/gastan cerca de 1 L por hora/)).toBeNull();
     });
 
     it('AdBlue marcado sin litros válidos deshabilita el cierre y muestra el error', () => {
@@ -599,13 +617,13 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '', observaciones: '' },
-        adBlueCierre: { litros: null, error: 'Indicá cuántos litros de AdBlue cargó.', aviso: null },
+        adBlueCierre: { litros: null, error: 'Indicá cuántos litros de AdBlue se cargaron.', aviso: null },
         adBlueIncompletoCierre: true,
         finalNum: 12500,
         foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
       });
 
-      expect(screen.getByText('Indicá cuántos litros de AdBlue cargó.')).toBeTruthy();
+      expect(screen.getByText('Indicá cuántos litros de AdBlue se cargaron.')).toBeTruthy();
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
 
@@ -616,7 +634,7 @@ describe('RegistroEquipoView', () => {
       });
 
       const ventana = within(screen.getByRole('dialog'));
-      expect(ventana.getByText('Sí · 12,5 L')).toBeTruthy();
+      expect(ventana.getByText('12,5 L')).toBeTruthy();
     });
 
     it('los litros de AdBlue y de combustible no se redondean al entero, ni en el historial ni en el detalle', () => {
@@ -715,12 +733,32 @@ describe('RegistroEquipoView', () => {
       expect(within(screen.getByRole('dialog')).getByText(/historial de cambios necesita señal/)).toBeTruthy();
     });
 
+    it('el editor de una cerrada aclara que la foto no se cambia y qué falta para guardar', () => {
+      renderView('desktop', {
+        edicion: {
+          ...EDICION_INACTIVA,
+          editando: TARJETA_CERRADA,
+          esCerrada: true,
+          finalInvalido: true,
+          faltante: 'Indicá los litros de combustible (cero si no cargó).',
+          form: { operatorId: 'op_1', inicial: '12487,3', final: '12480', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+        },
+      });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.')).toBeTruthy();
+      expect(ventana.getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
+      expect(ventana.getByText('Indicá los litros de combustible (cero si no cargó).')).toBeTruthy();
+      expect(ventana.getByText('Cero si no cargó en el turno.')).toBeTruthy();
+      expect(ventana.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
+    });
+
     it('una tarjeta abierta no muestra horómetro final, litros ni AdBlue en el editor', () => {
       renderView('desktop', { edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA } });
 
       const ventana = within(screen.getByRole('dialog'));
       expect(ventana.queryByLabelText(/Horómetro final/)).toBeNull();
-      expect(ventana.queryByRole('group', { name: '¿Cargó AdBlue en el turno?' })).toBeNull();
+      expect(ventana.queryByRole('group', { name: '¿Se cargó AdBlue?' })).toBeNull();
       expect(ventana.getByLabelText(/Observaciones/)).toBeTruthy();
     });
   });

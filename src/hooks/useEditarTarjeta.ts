@@ -57,6 +57,9 @@ export interface UseEditarTarjetaResult {
   soloEnElEquipo: boolean;
   adBlue: ResultadoAdBlue;
   finalInvalido: boolean;
+  /** Qué falta para guardar una tarjeta cerrada; `null` si nada falta o si lo
+   * dice ya el propio campo (final menor que el inicial, AdBlue). */
+  faltante: string | null;
   puedeGuardar: boolean;
   guardar: () => Promise<void>;
   isGuardando: boolean;
@@ -131,6 +134,13 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     !form.operatorId ||
     (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
+  const faltante = !esCerrada
+    ? null
+    : inicialNum == null || finalNum == null
+      ? 'Faltan los horómetros.'
+      : litrosNum == null || litrosNum < 0
+        ? 'Indicá los litros de combustible (cero si no cargó).'
+        : null;
   const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
 
   const abrirEdicion = (id: string) => {
@@ -202,6 +212,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     soloEnElEquipo,
     adBlue,
     finalInvalido,
+    faltante,
     puedeGuardar,
     guardar,
     isGuardando,
