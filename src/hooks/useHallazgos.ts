@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { listHallazgos } from '../api/HallazgosAPI';
+import { listHallazgos, updateHallazgo, listCambiosHallazgo } from '../api/HallazgosAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { HALLAZGOS_KEY } from '../lib/query-keys';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
 import { enqueueCreateHallazgo } from '../offline/outbox';
 import type { HallazgoForm } from '../types/hallazgos';
+
+const cambiosKey = (id: string) => [...HALLAZGOS_KEY, id, 'cambios'];
 
 export function useHallazgosList() {
   return useQuery({ queryKey: HALLAZGOS_KEY, queryFn: listHallazgos });
@@ -57,4 +60,28 @@ export function useRegistrarHallazgo(): UseRegistrarHallazgoResult {
   };
 
   return { registrar, isGuardando };
+}
+
+/** Corrección de un hallazgo (R13): el aviso dice que el administrador se entera. */
+export function useUpdateHallazgo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateHallazgo,
+    onSuccess: (_data, { id }) => {
+      void qc.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+      void qc.invalidateQueries({ queryKey: cambiosKey(id) });
+      toast.success('Cambio guardado. Se avisó al administrador.');
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo guardar el cambio.'));
+    },
+  });
+}
+
+export function useCambiosHallazgo(id: string | null) {
+  return useQuery({
+    queryKey: cambiosKey(id ?? ''),
+    queryFn: () => listCambiosHallazgo(id!),
+    enabled: id != null,
+  });
 }

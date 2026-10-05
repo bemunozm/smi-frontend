@@ -24,8 +24,8 @@ export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
 export const HALLAZGOS_KEY = ['hallazgos'] as const;
 export const TRABAJOS_EXTRA_KEY = ['trabajos-extra'] as const;
 
-/** Lecturas de horómetro: de ahí sale la pista "equipo ocupado" de Trabajos
- * extra, que `hooks/usePrepareOffline.ts` precarga. */
+/** Lecturas de horómetro (`hooks/useHorometro.ts`), que `hooks/usePrepareOffline.ts`
+ * precarga para el arranque en frío sin señal. */
 export const HOROMETRO_KEY = ['horometro'] as const;
 
 /** Raíz del árbol de equipos; la lista sin filtros (catálogo completo) vive

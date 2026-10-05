@@ -1,9 +1,13 @@
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Camera } from 'lucide-react';
+import { ArrowRight, Camera, Check, Pencil } from 'lucide-react';
 
-import { hallazgoFormSchema, type HallazgoForm } from '../types/hallazgos';
-import { useRegistrarHallazgo } from '../hooks/useHallazgos';
+import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/hallazgos';
+import type { CorreccionHallazgo } from '../api/HallazgosAPI';
+import { useAhora } from '../hooks/useAhora';
+import { contextoTurno } from '../lib/turno';
+import { useRegistrarHallazgo, useUpdateHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
 import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -14,6 +18,7 @@ import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
   Automatico,
   Automaticos,
+  AvisoEdicion,
   Boton,
   Campo,
   Card,
@@ -23,7 +28,10 @@ import {
   ChipEstado,
   Form,
   GrupoHead,
+  HistorialCambios,
   Label,
+  ModalTerreno,
+  Segmentado,
   Selector,
   Tabla,
   Tarjeta,
@@ -67,6 +75,9 @@ const estadoColor: Record<string, string> = {
   EN_PROCESO: '#1a3a9c',
   CERRADO: '#156237',
 };
+/** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
+const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+
 const estadoLabel: Record<string, string> = {
   ABIERTO: 'ABIERTO',
   EN_PROCESO: 'EN PROCESO',
@@ -78,6 +89,15 @@ export function HallazgosView() {
   const { data: equipos = [] } = useEquipment();
   const { hallazgos } = useHallazgosProjection();
   const { registrar, isGuardando } = useRegistrarHallazgo();
+
+  /** Hallazgo que se está corrigiendo (R13); se lee de la lista para ver lo último. */
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const editando = hallazgos.find((h) => h.id === editandoId) ?? null;
+
+  // El turno del título sale del reloj, como en Registro: antes decía
+  // «DIURNO · 08–20» escrito a mano, también de noche.
+  const ahora = useAhora();
+  const turno = useMemo(() => contextoTurno(ahora), [ahora]);
 
   const {
     register,
@@ -180,6 +200,11 @@ export function HallazgosView() {
             {isGuardando ? 'Guardando…' : 'Registrar hallazgo'}
             <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
+          {/* Dice a quién llega para que el supervisor no lo avise además
+              por radio o WhatsApp (Acta N.° 004, R11). */}
+          <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+            Al registrarlo se avisa a los mantenedores y al administrador, en el sistema y por correo.
+          </p>
         </Form>
       </Card>
     </form>
@@ -200,6 +225,9 @@ export function HallazgosView() {
             <th className={TH}>Descripción</th>
             <th className={TH}>Foto</th>
             <th className={TH}>Estado</th>
+            <th className={TH}>
+              <span className="sr-only">Editar</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -233,6 +261,18 @@ export function HallazgosView() {
                 <ChipEstado color={estadoColor[h.estado] ?? '#353c46'}>
                   {estadoLabel[h.estado] ?? h.estado}
                 </ChipEstado>
+              </td>
+              <td className={`${TD} text-right`}>
+                <Boton
+                  variante="contorno"
+                  className="!min-h-10 !px-3 !text-[13.5px]"
+                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${h.sinSincronizar ? `. ${MOTIVO_SIN_SINCRONIZAR}` : ''}`}
+                  title={h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : undefined}
+                  disabled={h.sinSincronizar}
+                  onClick={() => setEditandoId(h.id)}
+                >
+                  <Pencil className="h-4 w-4" /> Editar
+                </Boton>
               </td>
             </tr>
           ))}
@@ -272,6 +312,19 @@ export function HallazgosView() {
                   {estadoLabel[h.estado] ?? h.estado}
                 </ChipEstado>
               </div>
+              <Boton
+                variante="contorno"
+                ancho
+                className="!min-h-11 !text-[14.5px]"
+                aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                disabled={h.sinSincronizar}
+                onClick={() => setEditandoId(h.id)}
+              >
+                <Pencil className="h-4 w-4" /> Editar
+              </Boton>
+              {h.sinSincronizar && (
+                <p className="m-0 text-center text-[12.5px] text-muted-foreground">{MOTIVO_SIN_SINCRONIZAR}</p>
+              )}
             </Tarjeta>
           ))}
         </div>
@@ -285,11 +338,123 @@ export function HallazgosView() {
         contexto={
           <>
             <ChipContexto>Faena Patillo</ChipContexto>
-            <ChipContexto>DIURNO · 08–20</ChipContexto>
+            <ChipContexto>{turno.etiqueta}</ChipContexto>
           </>
         }
       />
       <VistaSplit formulario={formulario} historial={historial} />
+
+      <ModalTerreno
+        abierto={editando != null}
+        onAbiertoChange={(abierto) => !abierto && setEditandoId(null)}
+        titulo={editando ? `Editar · hallazgo de ${editando.equipo?.internalCode ?? editando.equipoId}` : ''}
+        detalle={editando ? `Registrado el ${fmtDate(editando.fecha)} a las ${fmtTime(editando.fecha)}` : undefined}
+      >
+        {/* `key`: al abrir otro hallazgo el formulario arranca con sus datos. */}
+        {editando && (
+          <EditorHallazgo
+            key={editando.id}
+            hallazgo={editando}
+            equipos={equipos}
+            onCerrar={() => setEditandoId(null)}
+          />
+        )}
+      </ModalTerreno>
     </>
+  );
+}
+
+/**
+ * Corregir un hallazgo ya registrado (Acta N.° 004, R13): un error humano
+ * —el equipo equivocado, una prioridad mal elegida— se arregla sin pedir
+ * permiso, pero con el aviso al administrador arriba y el historial de quién
+ * cambió qué abajo. La foto no se toca: es el respaldo de lo que se vio.
+ */
+function EditorHallazgo({
+  hallazgo,
+  equipos,
+  onCerrar,
+}: {
+  hallazgo: Hallazgo;
+  equipos: { id: string; internalCode: string; type: string }[];
+  onCerrar: () => void;
+}) {
+  const actualizar = useUpdateHallazgo();
+  const cambios = useCambiosHallazgo(hallazgo.id);
+  const [form, setForm] = useState<CorreccionHallazgo>({
+    equipoId: hallazgo.equipoId,
+    descripcion: hallazgo.descripcion,
+    prioridad: hallazgo.prioridad,
+    estado: hallazgo.estado,
+  });
+  const [guardado, setGuardado] = useState(false);
+  const descripcionCorta = form.descripcion.trim().length < 3;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {guardado && (
+        <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
+          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+        </p>
+      )}
+      <AvisoEdicion />
+      <Form>
+        <Campo label="Equipo">
+          <Selector
+            etiqueta="Equipo"
+            tituloTabular
+            valor={form.equipoId}
+            onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
+            opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+          />
+        </Campo>
+        <div className="flex flex-col gap-1.5">
+          <Label>Nivel de prioridad</Label>
+          <Segmentado
+            etiqueta="Nivel de prioridad"
+            valor={form.prioridad}
+            onChange={(prioridad) => setForm((f) => ({ ...f, prioridad }))}
+            opciones={PRIORIDADES}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>Estado</Label>
+          <Segmentado
+            etiqueta="Estado"
+            valor={form.estado}
+            onChange={(estado) => setForm((f) => ({ ...f, estado }))}
+            opciones={Object.entries(estadoLabel).map(([valor, label]) => ({
+              valor,
+              label,
+              colorActivo: estadoColor[valor],
+            }))}
+          />
+        </div>
+        <Campo label="Descripción" hint={descripcionCorta ? 'Describí el hallazgo.' : undefined}>
+          <Textarea
+            rows={3}
+            value={form.descripcion}
+            onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+          />
+        </Campo>
+        <Boton
+          ancho
+          disabled={actualizar.isPending || descripcionCorta}
+          onClick={() =>
+            actualizar.mutate(
+              { id: hallazgo.id, payload: { ...form, descripcion: form.descripcion.trim() } },
+              { onSuccess: () => setGuardado(true) },
+            )
+          }
+        >
+          {actualizar.isPending ? 'Guardando…' : 'Guardar cambios'}
+          <ArrowRight className="h-[19px] w-[19px]" />
+        </Boton>
+        <Boton variante="contorno" ancho onClick={onCerrar}>
+          {guardado ? 'Listo' : 'Cancelar'}
+        </Boton>
+      </Form>
+      <HistorialCambios entradas={cambios.data ?? []} cargando={cambios.isLoading} />
+    </div>
   );
 }

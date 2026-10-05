@@ -21,6 +21,7 @@ const OPEN_SHIFT: OpenShift = {
   id: 'h_abierto',
   valorInicial: 5,
   operador: 'Ana Rojas',
+  operatorId: 'op_1',
   turno: 'DIURNO',
   fecha: '2026-09-15T08:00:00.000Z',
   supervisorName: 'Marcela Pizarro',

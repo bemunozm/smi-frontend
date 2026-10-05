@@ -930,19 +930,6 @@ describe('replay — trabajo extra', () => {
     expect(cache?.[0]?.equipo).toEqual({ internalCode: 'EX-005' });
   });
 
-  it('400 EQUIPMENT_ON_SHIFT: needs_attention con el texto amigable', async () => {
-    createTrabajoExtraMock.mockRejectedValueOnce(
-      new DomainError('Equipment has an open shift', { status: 400, code: 'EQUIPMENT_ON_SHIFT' }),
-    );
-    await putTrabajoOp();
-
-    await syncAndSettle();
-
-    const op = await db.outbox.get('t-1');
-    expect(op?.status).toBe('needs_attention');
-    expect(op?.lastError?.message).toMatch(/turno abierto/);
-  });
-
   it('409 OPERATOR_INACTIVE: needs_attention con el texto del operador inactivo', async () => {
     createTrabajoExtraMock.mockRejectedValueOnce(
       new DomainError('inactive', { status: 409, code: 'OPERATOR_INACTIVE' }),

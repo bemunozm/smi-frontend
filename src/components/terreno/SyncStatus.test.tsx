@@ -338,7 +338,7 @@ describe('SyncStatus — etiquetas de hallazgos y trabajos extra', () => {
       userId: 'u1',
       status: 'needs_attention',
       attempts: 1,
-      lastError: { message: 'Rechazado por el servidor', code: 'EQUIPMENT_ON_SHIFT' },
+      lastError: { message: 'Rechazado por el servidor', code: 'OPERATOR_INACTIVE' },
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ...op,

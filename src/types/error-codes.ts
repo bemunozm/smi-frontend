@@ -23,7 +23,6 @@ export const ERROR_CODES = [
   'REPORT_RATE_LIMITED',
   'OPERATOR_IN_USE',
   'OPERATOR_INACTIVE',
-  'EQUIPMENT_ON_SHIFT',
   // Códigos SOLO del cliente — nunca los manda el backend.
   'PHOTO_MISSING',
   'INVALID_RESPONSE',

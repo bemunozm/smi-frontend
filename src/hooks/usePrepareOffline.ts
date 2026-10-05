@@ -30,8 +30,7 @@ export interface PrepResult {
   shiftCards: PrepItemResult;
   hallazgos: PrepItemResult;
   trabajosExtra: PrepItemResult;
-  /** Lecturas de horómetro: de ahí sale la pista "equipo ocupado" de
-   * Trabajos extra. */
+  /** Lecturas de horómetro, para el arranque en frío sin señal. */
   horometro: PrepItemResult;
   installed: boolean;
 }

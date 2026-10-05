@@ -6,7 +6,9 @@ export const ACTIVIDADES = [
   { value: 'LIMPIEZA_CANCHA', label: 'Limpieza de cancha' },
   { value: 'SOLTAR_MATERIAL', label: 'Soltar material' },
   { value: 'LIMPIEZA_SILOS', label: 'Limpieza de silos' },
-  { value: 'HACER_PETRIL', label: 'Hacer petril' },
+  // «Pretil», no «petril» (Acta N.° 004, punto 3). Solo cambia la etiqueta:
+  // el valor guardado en la base sigue siendo `HACER_PETRIL`.
+  { value: 'HACER_PETRIL', label: 'Hacer pretil' },
   { value: 'ARREGLO_CANCHA', label: 'Arreglo cancha' },
   // Válvula de escape para la tarea que no estaba en la lista. El texto va en
   // `otraActividad`; el servidor lo exige cuando se elige esta opción.

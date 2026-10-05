@@ -177,6 +177,7 @@ describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
         id: 'h_abierto',
         valorInicial: 1200,
         operador: 'Carlos Núñez',
+        operatorId: 'op_1',
         turno: 'DIURNO',
         fecha: '2026-08-06T08:00:00.000Z',
         supervisorName: 'Marcela Pizarro',
