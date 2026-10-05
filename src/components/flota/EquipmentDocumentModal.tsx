@@ -58,8 +58,7 @@ function DocumentFileField({
    * (`GET /api/equipment/documents/:id/file`, mismo patrón que
    * `EquipoDetalleView.tsx`), NO la URL firmada cruda de la respuesta del
    * listado: firma una URL RECIÉN generada en cada click, así que sirve
-   * aunque la pestaña lleve horas abierta (ver Diseño del RFC R2-storage,
-   * "Contrato de la API — Documentos"). `null` si el documento no tiene adjunto. */
+   * aunque la pestaña lleve horas abierta. `null` si el documento no tiene adjunto. */
   savedFileHref: string | null;
   savedFileName: string | null;
   fileState: FileState;
@@ -186,7 +185,7 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   // CUALQUIER cambio de referencia de `document` mientras el modal seguía
   // abierto (el refetch de arriba), lo que pisaba en silencio un archivo
   // recién subido (`fileState`, tri-state fuera del form de RHF —
-  // `keepDirtyValues` no lo protege) y su preview (review QA). El re-sync de
+  // `keepDirtyValues` no lo protege) y su preview. El re-sync de
   // los CAMPOS del form mientras el modal sigue abierto ahora lo cubre
   // `keepDirtyValues` de arriba; acá solo queda "abrir de verdad", que sigue
   // necesitando el `reset` imperativo: sin él, cancelar sin guardar y reabrir

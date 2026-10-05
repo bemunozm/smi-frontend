@@ -5,8 +5,7 @@ const STORAGE_PREFIX = 'smi-shift-register-turno:';
 
 /**
  * Preferencia "adelantar al turno siguiente" del selector de Registro de
- * equipo (ver `hooks/useShiftRegister.ts` y el RFC "Supervisión en Terreno"
- * §Diseño: "Selector de turno actual/siguiente"), persistida POR USUARIO en
+ * equipo (ver `hooks/useShiftRegister.ts`), persistida POR USUARIO en
  * `localStorage` — mismo patrón que `lib/session-snapshot.ts`.
  *
  * Solo guarda el (turno, fecha) NATURAL del reloj en el momento en que el

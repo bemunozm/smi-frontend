@@ -20,7 +20,7 @@ const EnvelopeSchema = z.looseObject({ data: z.unknown() });
 
 /**
  * Único punto por el que el replay manda una escritura genérica (`httpWrite`).
- * El método y la URL los arma el REGISTRO tipado (`offline/endpoints.ts`), nunca
+ * El método y la URL los arma el REGISTRO tipado (`offline/endpoints/`), nunca
  * la operación guardada. Devuelve el `data` de la envoltura `{ data, message }`
  * sin validarlo — cada endpoint del registro sabe qué forma esperar.
  */

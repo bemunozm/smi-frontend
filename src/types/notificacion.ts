@@ -12,8 +12,8 @@ export const NOTIF_TIPOS = {
   ORDEN_ASSIGNED: 'orden.assigned',
   ORDEN_COMPLETED: 'orden.completed',
   INSUMO_LOW_STOCK: 'insumo.low-stock',
-  /** Reporte de salida de turno del Módulo A (RFC "Supervisión en Terreno"
-   * §Backend, `POST /api/shift-reports`) — `data: { reportId, shiftId }`. */
+  /** Reporte de salida de turno (`POST /api/shift-reports`) —
+   * `data: { reportId, shiftId }`. */
   SHIFT_EXIT_REPORT: 'shift.exit-report',
 } as const;
 

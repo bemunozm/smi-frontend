@@ -1,10 +1,44 @@
 import { useMemo } from 'react';
 
-import type { HttpWriteOp } from '../offline/db';
+import type { EndpointResource } from '../lib/pending-resources';
+import {
+  actividadEntity,
+  branchEntity,
+  categoryEntity,
+  combustibleEntity,
+  equipmentDocumentEntity,
+  equipmentEntity,
+  horometroEntity,
+  intervencionEntity,
+  itemEntity,
+  operatorEntity,
+  ordenEntity,
+  umbralEntity,
+  type HttpWriteOp,
+} from '../offline/db';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useCurrentUser } from './useCurrentUser';
 
 export type MarcaPendiente = 'pendiente' | 'atencion';
+
+/** La clave de entidad de cada tipo de fila, tal como la arma la cola. Las
+ * pantallas piden la marca por tipo e id: el formato de la clave no sale de acá. */
+const ENTITY_KEYS = {
+  equipment: equipmentEntity,
+  equipmentDocument: equipmentDocumentEntity,
+  horometro: horometroEntity,
+  combustible: combustibleEntity,
+  item: itemEntity,
+  category: categoryEntity,
+  branch: branchEntity,
+  operator: operatorEntity,
+  orden: ordenEntity,
+  intervencion: intervencionEntity,
+  actividad: actividadEntity,
+  umbral: umbralEntity,
+} as const satisfies Partial<Record<EndpointResource, (id: string) => string>>;
+
+export type PendingEntity = keyof typeof ENTITY_KEYS;
 
 export interface PendingWrites {
   /** Escrituras de oficina del usuario que el servidor todavía no confirmó, en el
@@ -15,20 +49,20 @@ export interface PendingWrites {
   /** Las que el servidor rechazó y esperan una acción (`needs_attention`). */
   atencion: number;
   /** Cómo marcar la fila de una entidad: `null` si no tiene nada esperando. */
-  marcaDe: (entityKey: string) => MarcaPendiente | null;
+  marcaDe: (entity: PendingEntity, id: string) => MarcaPendiente | null;
 }
 
 const SIN_OPS: HttpWriteOp[] = [];
 
 /**
  * Lo que oficina tiene guardado en el equipo sin sincronizar, en vivo, filtrado
- * por `recursos`: la parte de la clave de endpoint antes del punto
- * (`'equipment'`, `'item'`, `'orden'`…). Sin filtro, todo. Es lo que impide que
- * alguien vuelva a crear algo que no ve en la lista: las listas de oficina NO
- * muestran filas optimistas, así que lo pendiente se enseña aparte
- * (`PendientesStrip`) y en la fila de la entidad que ya existe (`marcaDe`).
+ * por `recursos` (la familia de la escritura: `'equipment'`, `'item'`,
+ * `'orden'`…). Sin filtro, todo. Es lo que impide que alguien vuelva a crear algo
+ * que no ve en la lista: las listas de oficina NO muestran filas optimistas, así
+ * que lo pendiente se enseña aparte (`PendientesStrip`) y en la fila de la
+ * entidad que ya existe (`marcaDe`).
  */
-export function usePendingWrites(recursos?: readonly string[]): PendingWrites {
+export function usePendingWrites(recursos?: readonly EndpointResource[]): PendingWrites {
   const { user } = useCurrentUser();
   const todas = useOutboxOps(user?.id);
   // El filtro llega como literal nuevo en cada render: se compara por contenido.
@@ -52,7 +86,7 @@ export function usePendingWrites(recursos?: readonly string[]): PendingWrites {
       ops: ops.length > 0 ? ops : SIN_OPS,
       pendientes: ops.length - atencion,
       atencion,
-      marcaDe: (entityKey) => porEntidad.get(entityKey) ?? null,
+      marcaDe: (entity, id) => porEntidad.get(ENTITY_KEYS[entity](id)) ?? null,
     };
   }, [todas, clave]);
 }

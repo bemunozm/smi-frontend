@@ -9,8 +9,7 @@
 /**
  * Tarjetas propias del Módulo A — la misma URL estable (`GET
  * /api/shift-cards/mine`) que expone el backend, cacheada offline (Workbox
- * `smi-api`, ver `vite.config.ts`) para el arranque en frío sin señal (RFC
- * "Supervisión en Terreno" §Diseño → Offline). La usan `hooks/useShiftCards.ts`
+ * `smi-api`, ver `vite.config.ts`) para el arranque en frío sin señal. La usan `hooks/useShiftCards.ts`
  * (la query), `hooks/usePrepareOffline.ts` (precarga) y `offline/replay.ts`
  * (upsert en caché tras cada operación sincronizada).
  */
@@ -55,12 +54,16 @@ export const ORDENES_KEY = ['ordenes'] as const;
 export const INTERVENCIONES_KEY = ['intervenciones'] as const;
 export const ACTIVIDADES_KEY = ['actividades'] as const;
 export const UMBRALES_KEY = ['umbrales'] as const;
+/** Bandeja de notificaciones y su contador de no leídas: las usa
+ * `hooks/useNotificaciones.ts` y la precarga de `hooks/usePrepareOffline.ts`. */
+export const NOTIFICACIONES_KEY = ['notificaciones'] as const;
+export const NOTIFICACIONES_UNREAD_KEY = ['notificaciones', 'unread'] as const;
 
 /**
  * Nombres de las keys que una operación del outbox puede invalidar al
  * terminar. La operación persiste el NOMBRE, no el arreglo: así una key que se
  * reorganice más adelante no deja operaciones viejas apuntando a una que ya no
- * existe (ver `offline/endpoints.ts` y `offline/replay.ts`).
+ * existe (ver `offline/endpoints/` y `offline/replay.ts`).
  */
 export const QUERY_KEYS = {
   shiftCards: SHIFT_CARDS_KEY,

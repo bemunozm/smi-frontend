@@ -686,8 +686,27 @@ describe('EquipoDetalleView — acciones de cabecera', () => {
     expect(screen.queryByRole('button', { name: /Cambiar estado/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Editar equipo' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Eliminar equipo' })).toBeNull();
-    // El botón de horómetro sigue disponible para todos los roles.
+    // El backend solo deja registrar horómetro y combustible a SUPERVISOR y
+    // ADMIN: al mantenedor ni se le ofrece (sin señal quedaría en cola y
+    // terminaría en un 403).
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar carga' })).toBeNull();
+  });
+
+  it('un SUPERVISOR registra horómetro y combustible, pero no edita ni elimina el equipo', () => {
+    currentUserResult = {
+      user: { id: 'u3', name: 'Supervisor SMI', email: 'supervisor@smi.local', role: 'SUPERVISOR' },
+      role: 'SUPERVISOR',
+      isPending: false,
+      isAuthenticated: true,
+    };
+
+    renderFicha();
+
     expect(screen.getByRole('button', { name: 'Registrar entrada' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Registrar carga' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Editar equipo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Eliminar equipo' })).toBeNull();
   });
 
   it('abre el modal de editar con los datos del equipo precargados', async () => {

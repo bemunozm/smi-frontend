@@ -1,4 +1,3 @@
-import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
@@ -17,11 +16,13 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { DecimalField } from '../components/DecimalField';
+import { usePermissions } from '../hooks/usePermissions';
 import { useOrdenes } from '../hooks/useOrdenes';
 import { useCrearIntervencion, useIntervenciones } from '../hooks/useIntervenciones';
+import { RECURSOS_DE_BITACORA } from '../lib/pending-resources';
 import { ESTADO_OT_LABELS, TIPO_OT_LABELS, TIPO_OT_OPTIONS } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import { CreateIntervencionSchema, TIPO_OT, type CreateIntervencionInput } from '../types/mantenimiento';
 
 function TrashIcon() {
@@ -142,34 +143,26 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
           control={control}
           name="horasHombre"
           render={({ field }) => (
-            <NumberField fullWidth isDisabled={disabled} minValue={0} value={field.value} onChange={field.onChange}>
-              <Label>Horas hombre</Label>
-              <NumberField.Group>
-                <NumberField.DecrementButton />
-                <NumberField.Input onBlur={field.onBlur} />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
+            <DecimalField
+              isDisabled={disabled}
+              label="Horas hombre"
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              value={field.value}
+            />
           )}
         />
         <Controller
           control={control}
           name="horometro"
           render={({ field }) => (
-            <NumberField
-              fullWidth
+            <DecimalField
               isDisabled={disabled}
-              minValue={0}
-              value={field.value ?? 0}
+              label="Horómetro"
+              onBlur={field.onBlur}
               onChange={field.onChange}
-            >
-              <Label>Horómetro</Label>
-              <NumberField.Group>
-                <NumberField.DecrementButton />
-                <NumberField.Input onBlur={field.onBlur} />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
+              value={field.value ?? 0}
+            />
           )}
         />
       </div>
@@ -227,8 +220,9 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
                   render={({ field }) => (
                     <NumberField
                       className="w-36"
+                      formatOptions={{ maximumFractionDigits: 0 }}
                       isDisabled={disabled}
-                      minValue={0.01}
+                      minValue={1}
                       value={field.value}
                       onChange={field.onChange}
                     >
@@ -278,10 +272,8 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
  * trabajo desde la lista real (`useOrdenes`) y luego se carga/registra su
  * bitácora (`useIntervenciones`/`useCrearIntervencion`).
  */
-const RECURSOS_DE_BITACORA = ['intervencion'] as const;
-
 export function BitacoraView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: ordenes } = useOrdenes();
   const [ordenId, setOrdenId] = useState<string | null>(null);
   const ordenSeleccionada = useMemo(
@@ -290,7 +282,7 @@ export function BitacoraView() {
   );
   const { data: intervenciones, isPending, isError, error } = useIntervenciones(ordenId ?? undefined);
 
-  const puedeRegistrar = role === ROLES.MANTENEDOR;
+  const puedeRegistrar = can('intervencion.create');
 
   return (
     <div className="flex flex-col gap-4">

@@ -25,8 +25,9 @@ export async function createHallazgo(payload: CreateHallazgoBody, config?: Axios
   }
 }
 
-/** Lo que se puede corregir de un hallazgo ya registrado (R13). La foto no. La
- * corrección viaja por la cola (`offline/endpoints.ts#hallazgo.edit`). */
+/** Lo que se puede corregir de un hallazgo ya registrado: un registro enviado se
+ * corrige sin autorización y queda en su historial de cambios. La foto no. La
+ * corrección viaja por la cola (`offline/endpoints#hallazgo.edit`). */
 export interface CorreccionHallazgo {
   equipoId: string;
   descripcion: string;

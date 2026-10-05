@@ -1,7 +1,7 @@
 /**
  * Cobro de un trabajo extraordinario.
  *
- * Acta N.° 004 (28/09/2026), punto 4: por regla se cobra un **mínimo de una
+ * Por regla se cobra un **mínimo de una
  * hora máquina**, aunque la tarea tome minutos. El horómetro marca décimas de
  * hora, así que una tarea corta puede leerse 0,2 h o incluso 0,0 h, y lo que
  * se cobra sigue siendo una hora.

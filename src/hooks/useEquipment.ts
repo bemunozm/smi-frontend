@@ -3,13 +3,13 @@ import { toast } from '@heroui/react';
 
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
 import { DomainError } from '../lib/api-error';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { pickFields, precondicion } from '../lib/edit-diff';
 import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { EQUIPMENT_KEY } from '../lib/query-keys';
+import { buildQueuedEdit, pendingBase } from '../lib/queued-edit';
 import { generateUuid } from '../lib/uuid';
 import { equipmentEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type { SubmitWriteResult } from '../offline/submit-write';
 import type {
   AssignEquipmentInput,
@@ -18,7 +18,7 @@ import type {
   EquipmentStatus,
   UpdateEquipmentInput,
 } from '../types/equipment';
-import { useOfficeMutation, writeOffice } from './useOfficeMutation';
+import { useQueuedDelete, useQueuedMutation, writeQueued } from './useQueuedMutation';
 
 // La key vive en `lib/query-keys.ts` (la comparte `offline/replay.ts`, que no
 // puede importar de `hooks/`); se re-exporta para los consumidores existentes.
@@ -93,20 +93,6 @@ const CAMPOS_DE_EQUIPO = [
   'homeBranchId',
 ] as const satisfies readonly (keyof CamposDeEquipo)[];
 
-function camposDeEquipo(equipo: Equipment): CamposDeEquipo {
-  return {
-    licensePlate: equipo.licensePlate,
-    equipmentClass: equipo.equipmentClass,
-    type: equipo.type,
-    brand: equipo.brand,
-    model: equipo.model,
-    year: equipo.year,
-    controlUnit: equipo.controlUnit,
-    status: equipo.status,
-    homeBranchId: equipo.homeBranchId,
-  };
-}
-
 export interface CreateEquipmentVars {
   input: CreateEquipmentInput;
   /** Foto del equipo: se guarda en el equipo y se sube al sincronizar. */
@@ -130,14 +116,14 @@ export function useCreateEquipment() {
   return useMutation<CreateEquipmentResult, Error, CreateEquipmentVars>({
     mutationFn: async ({ input, photo, asignacion }) => {
       const id = generateUuid();
-      const creada = await writeOffice('equipment.create', {
+      const creada = await writeQueued('equipment.create', {
         params: {},
         body: { ...input, id },
         ...(photo ? { files: [{ field: 'photoKey', file: photo }] } : {}),
       });
       if (!asignacion || Object.keys(asignacion).length === 0) return { creada, asignada: null };
       try {
-        const asignada = await writeOffice('equipment.assign', {
+        const asignada = await writeQueued('equipment.assign', {
           params: { id },
           body: asignacion,
           // Un equipo recién creado no tiene a nadie asignado.
@@ -176,22 +162,28 @@ export interface UpdateEquipmentVars {
   quitarFoto?: boolean;
 }
 
+/** Arma la edición de un equipo contra su base; `null` si no hay nada que mandar. */
+async function edicionDeEquipo({ equipo, input, photo, quitarFoto }: UpdateEquipmentVars) {
+  const edicion = await buildQueuedEdit<CamposDeEquipo>({
+    entity: equipmentEntity(equipo.id),
+    ops: ESCRITURAS_DE_CAMPOS,
+    base: pickFields(equipo, CAMPOS_DE_EQUIPO),
+    next: input,
+    fields: CAMPOS_DE_EQUIPO,
+  });
+  if (!edicion.hayCambios && !photo && !quitarFoto) return null;
+  return {
+    params: { id: equipo.id },
+    body: { ...edicion.cambios, ...(quitarFoto ? { photoKey: null } : {}) },
+    expected: edicion.esperado,
+    ...(photo ? { files: [{ field: 'photoKey', file: photo }] } : {}),
+  };
+}
+
 export function useUpdateEquipment() {
-  return useOfficeMutation<'equipment.update', UpdateEquipmentVars>({
+  return useQueuedMutation<'equipment.update', UpdateEquipmentVars>({
     endpoint: 'equipment.update',
-    build: async ({ equipo, input, photo, quitarFoto }) => {
-      const pendiente = await cambiosPendientes(equipmentEntity(equipo.id), ESCRITURAS_DE_CAMPOS);
-      const base = conPendientes(camposDeEquipo(equipo), pendiente, CAMPOS_DE_EQUIPO);
-      const { cambios, esperado } = diferenciaEdicion(base, input, CAMPOS_DE_EQUIPO);
-      if (Object.keys(cambios).length === 0 && !photo && !quitarFoto) return null;
-      const precondiciones = precondicion(esperado);
-      return {
-        params: { id: equipo.id },
-        body: { ...cambios, ...(quitarFoto ? { photoKey: null } : {}) },
-        ...(Object.keys(precondiciones).length > 0 ? { expected: precondiciones } : {}),
-        ...(photo ? { files: [{ field: 'photoKey', file: photo }] } : {}),
-      };
-    },
+    build: edicionDeEquipo,
     onSent: (data, { equipo }) => {
       toast.success('Equipo actualizado', { description: data?.internalCode ?? equipo.internalCode });
     },
@@ -205,11 +197,15 @@ export interface UpdateEquipmentStatusVars {
 }
 
 export function useUpdateEquipmentStatus() {
-  return useOfficeMutation<'equipment.status', UpdateEquipmentStatusVars>({
+  return useQueuedMutation<'equipment.status', UpdateEquipmentStatusVars>({
     endpoint: 'equipment.status',
     build: async ({ equipo, status }) => {
-      const pendiente = await cambiosPendientes(equipmentEntity(equipo.id), ESCRITURAS_DE_CAMPOS);
-      const base = conPendientes({ status: equipo.status }, pendiente, ['status']);
+      const base = await pendingBase({
+        entity: equipmentEntity(equipo.id),
+        ops: ESCRITURAS_DE_CAMPOS,
+        base: { status: equipo.status },
+        fields: ['status'],
+      });
       return {
         params: { id: equipo.id },
         body: { status },
@@ -235,22 +231,25 @@ export interface AssignEquipmentVars {
  * el backend (gate de rol propio) y porque `EquipoActionsMenu`/`CamposEquipo`
  * la disparan de forma independiente al resto del formulario.
  */
+/** Arma la asignación contra la que el equipo tendrá cuando lo ya guardado llegue. */
+async function asignacionDeEquipo({ equipo, input }: AssignEquipmentVars) {
+  const base = await pendingBase({
+    entity: equipmentEntity(equipo.id),
+    ops: ['equipment.assign'],
+    base: { operatorId: equipo.operator?.id ?? null, supervisorId: equipo.supervisor?.id ?? null },
+    fields: ['operatorId', 'supervisorId'],
+  });
+  return {
+    params: { id: equipo.id },
+    body: input,
+    expected: precondicion(base, Object.keys(input)),
+  };
+}
+
 export function useAssignEquipment() {
-  return useOfficeMutation<'equipment.assign', AssignEquipmentVars>({
+  return useQueuedMutation<'equipment.assign', AssignEquipmentVars>({
     endpoint: 'equipment.assign',
-    build: async ({ equipo, input }) => {
-      const pendiente = await cambiosPendientes(equipmentEntity(equipo.id), ['equipment.assign']);
-      const base = conPendientes(
-        { operatorId: equipo.operator?.id ?? null, supervisorId: equipo.supervisor?.id ?? null },
-        pendiente,
-        ['operatorId', 'supervisorId'],
-      );
-      return {
-        params: { id: equipo.id },
-        body: input,
-        expected: precondicion(base, Object.keys(input)),
-      };
-    },
+    build: asignacionDeEquipo,
     onSent: (data, { equipo }) => {
       toast.success('Asignación actualizada', { description: data?.internalCode ?? equipo.internalCode });
     },
@@ -259,16 +258,60 @@ export function useAssignEquipment() {
   });
 }
 
-export function useDeleteEquipment() {
-  return useOfficeMutation<'equipment.delete', string>({
-    endpoint: 'equipment.delete',
-    build: (id) => ({ params: { id }, body: {} }),
-    onSent: () => {
-      toast.success('Equipo eliminado');
+export interface SaveEquipmentVars extends UpdateEquipmentVars {
+  /** Lo que cambió de la asignación (`buildAssignmentDiff`); vacío si no cambió. */
+  asignacion: AssignEquipmentInput;
+}
+
+interface SaveEquipmentResult {
+  actualizada: SubmitWriteResult<'equipment.update'> | null;
+  asignada: SubmitWriteResult<'equipment.assign'> | null;
+  /** La asignación falló (p. ej. el operador ya no está activo); la ficha ya quedó guardada. */
+  errorAsignacion: unknown;
+}
+
+/**
+ * Guarda la ficha de un equipo y, si cambió, su asignación. Son dos endpoints
+ * (gate de rol propio cada uno): la asignación solo se intenta si la ficha se
+ * guardó, y si falla la ficha queda guardada y el aviso lo dice; quien llama no
+ * debe cerrar el formulario mientras `errorAsignacion` esté, para que se vea el
+ * error y se pueda reintentar.
+ */
+export function useSaveEquipment() {
+  return useMutation<SaveEquipmentResult, Error, SaveEquipmentVars>({
+    mutationFn: async ({ asignacion, ...vars }) => {
+      const edicion = await edicionDeEquipo(vars);
+      const actualizada = edicion ? await writeQueued('equipment.update', edicion) : null;
+      if (Object.keys(asignacion).length === 0) return { actualizada, asignada: null, errorAsignacion: null };
+      try {
+        const cambio = await asignacionDeEquipo({ equipo: vars.equipo, input: asignacion });
+        return { actualizada, asignada: await writeQueued('equipment.assign', cambio), errorAsignacion: null };
+      } catch (error: unknown) {
+        return { actualizada, asignada: null, errorAsignacion: error };
+      }
     },
-    // El backend rechaza con 409 y un mensaje que explica por qué (tiene
-    // historial) y qué hacer en su lugar (pasarlo a "Fuera de servicio").
-    // Ese texto llega tal cual acá — no hay que reescribirlo.
+    onSuccess: ({ actualizada, asignada, errorAsignacion }, { equipo }) => {
+      if (actualizada?.status === 'sent') {
+        toast.success('Equipo actualizado', { description: actualizada.data?.internalCode ?? equipo.internalCode });
+      }
+      if (asignada?.status === 'sent') {
+        toast.success('Asignación actualizada', { description: asignada.data?.internalCode ?? equipo.internalCode });
+      }
+      if (actualizada?.status === 'queued' || asignada?.status === 'queued') avisarGuardadoEnCola();
+      if (errorAsignacion !== null) toast.danger(mensajeErrorAsignacion(errorAsignacion));
+    },
+    onError: (error) => {
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo actualizar el equipo.'));
+    },
+  });
+}
+
+export function useDeleteEquipment() {
+  // El backend rechaza con 409 y un mensaje que explica por qué (tiene
+  // historial) y qué hacer en su lugar (pasarlo a "Fuera de servicio").
+  return useQueuedDelete({
+    endpoint: 'equipment.delete',
+    sentMessage: 'Equipo eliminado',
     errorFallback: 'No se pudo eliminar el equipo.',
   });
 }

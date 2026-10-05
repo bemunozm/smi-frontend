@@ -36,7 +36,6 @@ export const ORIGEN_OT = {
   HALLAZGO: 'HALLAZGO',
 } as const;
 export type OrigenOT = (typeof ORIGEN_OT)[keyof typeof ORIGEN_OT];
-export const ORIGENES_OT: readonly OrigenOT[] = Object.values(ORIGEN_OT);
 
 export const PRIORIDAD_OT = {
   BAJA: 'BAJA',
@@ -113,16 +112,6 @@ export const OrdenTrabajoResponseSchema = z.object({
 });
 
 /**
- * `PATCH /ordenes/:ordenId/tareas/:tareaId` → `{ data: Tarea, message }`.
- * El backend devuelve SOLO la tarea actualizada (no la OT completa); igual
- * `useToggleTarea` invalida `['ordenes']`, que es la fuente de verdad.
- */
-export const TareaResponseSchema = z.object({
-  data: TareaSchema,
-  message: z.string(),
-});
-
-/**
  * `POST /api/mantenimiento/ordenes` body (ADMIN/SUPERVISOR). `equipoId` y
  * `asignadoAId` son texto libre a propósito: Flota (selector de equipo) e
  * Inventario/Usuarios (selector de asignado) no exponen todavía un endpoint
@@ -139,10 +128,12 @@ export const CreateOrdenSchema = z.object({
 });
 export type CreateOrdenInput = z.infer<typeof CreateOrdenSchema>;
 
-/** `PATCH /api/mantenimiento/ordenes/:id` body — parcial, el form solo cambia `estado`. */
+/** `PATCH /api/mantenimiento/ordenes/:id` body — parcial. Un campo omitido es
+ * "sin cambio"; `asignadoAId: null` desasigna la orden (el DTO del backend acepta
+ * `null` en un campo opcional). */
 export const UpdateOrdenSchema = z.object({
   estado: z.enum(ESTADO_OT).optional(),
-  asignadoAId: z.string().optional(),
+  asignadoAId: z.string().nullable().optional(),
   prioridad: z.enum(PRIORIDAD_OT).optional(),
   titulo: z.string().optional(),
 });
@@ -152,7 +143,6 @@ export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 export const ToggleTareaSchema = z.object({
   hecha: z.boolean(),
 });
-export type ToggleTareaInput = z.infer<typeof ToggleTareaSchema>;
 
 // ---------------------------------------------------------------------------
 // Intervención (bitácora de una OT)
@@ -169,7 +159,6 @@ export const InsumoUsadoSchema = z.object({
   insumoId: z.string(),
   cantidad: z.number(),
 });
-export type InsumoUsado = z.infer<typeof InsumoUsadoSchema>;
 
 export const IntervencionSchema = z.object({
   id: z.string(),
@@ -189,11 +178,6 @@ export const IntervencionListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const IntervencionResponseSchema = z.object({
-  data: IntervencionSchema,
-  message: z.string(),
-});
-
 /**
  * `POST /api/mantenimiento/ordenes/:id/intervenciones` body (MANTENEDOR).
  * `insumoId` es texto libre — Inventario no expone todavía un selector de
@@ -201,9 +185,9 @@ export const IntervencionResponseSchema = z.object({
  */
 export const CreateIntervencionInsumoSchema = z.object({
   insumoId: z.string().min(1, 'El insumo es obligatorio'),
-  cantidad: z.number().min(0.01, 'La cantidad debe ser mayor a 0'),
+  // El backend valida `@IsInt() @Min(1)`.
+  cantidad: z.number().int('La cantidad debe ser un número entero').min(1, 'La cantidad debe ser mayor a 0'),
 });
-export type CreateIntervencionInsumoInput = z.infer<typeof CreateIntervencionInsumoSchema>;
 
 export const CreateIntervencionSchema = z.object({
   tipo: z.enum(TIPO_OT),
@@ -231,16 +215,12 @@ export const UmbralListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const UmbralResponseSchema = z.object({
-  data: UmbralSchema,
-  message: z.string(),
-});
-
 /** `POST /api/mantenimiento/umbrales` body (ADMIN). */
 export const CreateUmbralSchema = z.object({
   tipoEquipo: z.string().min(1, 'El tipo de equipo es obligatorio'),
   tipoMantencion: z.string().min(1, 'El tipo de mantención es obligatorio'),
-  umbralHoras: z.number().min(1, 'El umbral debe ser mayor a 0'),
+  // El backend valida `@IsInt()`.
+  umbralHoras: z.number().int('El umbral debe ser un número entero').min(1, 'El umbral debe ser mayor a 0'),
 });
 export type CreateUmbralInput = z.infer<typeof CreateUmbralSchema>;
 
@@ -264,11 +244,6 @@ export type Actividad = z.infer<typeof ActividadSchema>;
 
 export const ActividadListResponseSchema = z.object({
   data: z.array(ActividadSchema),
-  message: z.string(),
-});
-
-export const ActividadResponseSchema = z.object({
-  data: ActividadSchema,
   message: z.string(),
 });
 

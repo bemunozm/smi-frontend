@@ -25,6 +25,7 @@ import {
 import { useBranches } from '../hooks/useBranches';
 import { useMovements } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { RECURSOS_DE_MOVIMIENTOS } from '../lib/pending-resources';
 import type { Branch } from '../types/branch';
 import {
   MOVEMENT_REASON_LABELS,
@@ -132,8 +133,6 @@ function MovementCard({ movement }: { movement: StockMovement }) {
     </div>
   );
 }
-
-const RECURSOS_DE_MOVIMIENTOS = ['movement', 'stock', 'item'] as const;
 
 export function MovimientosView() {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);

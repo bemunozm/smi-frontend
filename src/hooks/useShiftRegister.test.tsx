@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { aNumero, lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
+import { lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
 import { contextoTurno } from '../lib/turno';
 import { ROLES } from '../types/roles';
 import type { OutboxOp } from '../offline/db';
@@ -69,14 +69,11 @@ vi.mock('../lib/usePhotoCaptureFlow', () => ({
   usePhotoCaptureFlow: () => ({
     file: mockFotoFile,
     isReadingPhoto: false,
-    isUploadingPhoto: false,
     captureDate: null,
     ocr: null,
     handleSelectPhoto: vi.fn(),
     handleClearPhoto: vi.fn(),
     resetPhoto: resetPhotoMock,
-    cancelar: vi.fn(),
-    upload: vi.fn(),
   }),
 }));
 
@@ -225,16 +222,7 @@ describe('mapCardToTarjeta', () => {
   });
 });
 
-// --- aNumero / lineaEstadoCorreo ---------------------------------------------
-
-describe('aNumero', () => {
-  it('parsea formato chileno (punto de miles, coma decimal)', () => {
-    expect(aNumero('12.487,3')).toBe(12487.3);
-  });
-  it('vacío devuelve null', () => {
-    expect(aNumero('   ')).toBeNull();
-  });
-});
+// --- lineaEstadoCorreo ---------------------------------------------------------
 
 describe('lineaEstadoCorreo', () => {
   it.each([
@@ -369,7 +357,7 @@ describe('useShiftRegister', () => {
     it('AdBlue marcado sin litros, en 0 o sobre 1000 L: no cierra', async () => {
       const { result } = await prepararCierre();
 
-      for (const litros of ['', '0', '1.001']) {
+      for (const litros of ['', '0', '1001']) {
         act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: litros })));
         await waitFor(() => expect(result.current.adBlueIncompletoCierre).toBe(true));
         await act(async () => {

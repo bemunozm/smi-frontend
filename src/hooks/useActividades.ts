@@ -2,13 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { ActividadesAPI } from '../api/MantenimientoAPI';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
 import { ACTIVIDADES_KEY as ACTIVIDADES_QUERY_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
+import { buildQueuedEdit } from '../lib/queued-edit';
 import { actividadEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type { Actividad, CreateActividadInput, UpdateActividadInput } from '../types/mantenimiento';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedMutation } from './useQueuedMutation';
 
 export function useActividades() {
   return useQuery({
@@ -18,9 +16,9 @@ export function useActividades() {
 }
 
 export function useCrearActividad() {
-  return useOfficeMutation<'actividad.create', CreateActividadInput>({
+  return useQueuedCreate<'actividad.create', CreateActividadInput>({
     endpoint: 'actividad.create',
-    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
     onSent: () => {
       toast.success('Actividad asignada');
     },
@@ -35,14 +33,18 @@ export interface ActualizarActividadVars {
 }
 
 export function useActualizarActividad() {
-  return useOfficeMutation<'actividad.update', ActualizarActividadVars>({
+  return useQueuedMutation<'actividad.update', ActualizarActividadVars>({
     endpoint: 'actividad.update',
     build: async ({ actividad, input }) => {
-      const pendiente = await cambiosPendientes(actividadEntity(actividad.id), ['actividad.update']);
-      const base = conPendientes<UpdateActividadInput>({ estado: actividad.estado }, pendiente, ['estado']);
-      const { cambios, esperado } = diferenciaEdicion(base, input, ['estado']);
-      if (Object.keys(cambios).length === 0) return null;
-      return { params: { id: actividad.id }, body: cambios, expected: precondicion(esperado) };
+      const edicion = await buildQueuedEdit<UpdateActividadInput>({
+        entity: actividadEntity(actividad.id),
+        ops: ['actividad.update'],
+        base: { estado: actividad.estado },
+        next: input,
+        fields: ['estado'],
+      });
+      if (!edicion.hayCambios) return null;
+      return { params: { id: actividad.id }, body: edicion.cambios, expected: edicion.esperado };
     },
     onSent: () => {
       toast.success('Actividad actualizada');

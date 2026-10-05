@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+import { parseDecimal } from '../lib/decimal';
+
 /**
  * Contrato del dominio Inventario (`/api/inventory/items`,
- * `/api/inventory/movements`) — RFC-3, modelo en inglés.
+ * `/api/inventory/movements`), modelo en inglés.
  *
  * El cambio de fondo respecto del contrato anterior: el ítem ya NO trae un
  * saldo propio. Trae `stocks[]`, una fila por bodega donde tiene existencia, y
@@ -105,21 +107,11 @@ export const ItemListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const ItemResponseSchema = z.object({
-  data: InventoryItemSchema,
-  message: z.string(),
-});
-
 export const KardexResponseSchema = z.object({
   data: z.object({
     item: InventoryItemSchema,
     movements: z.array(StockMovementSchema),
   }),
-  message: z.string(),
-});
-
-export const MovementResponseSchema = z.object({
-  data: StockMovementSchema,
   message: z.string(),
 });
 
@@ -135,11 +127,6 @@ export const AdjustResultSchema = z.object({
 });
 export type AdjustResult = z.infer<typeof AdjustResultSchema>;
 
-export const AdjustResponseSchema = z.object({
-  data: AdjustResultSchema,
-  message: z.string(),
-});
-
 /** Traspaso: el asiento de salida y el de entrada, con los nombres de las bodegas.
  * Un reenvío del mismo `id` devuelve lo mismo. */
 export const TransferResultSchema = z.object({
@@ -150,11 +137,6 @@ export const TransferResultSchema = z.object({
   destinationBranchName: z.string(),
 });
 export type TransferResult = z.infer<typeof TransferResultSchema>;
-
-export const DeleteItemResponseSchema = z.object({
-  data: z.object({ id: z.string() }).nullable(),
-  message: z.string(),
-});
 
 // --- Lecturas derivadas ----------------------------------------------------
 
@@ -289,7 +271,7 @@ const quantityField = (message: string) =>
   z
     .string()
     .min(1, message)
-    .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+    .refine((value) => (parseDecimal(value) ?? -1) >= 0, {
       message: 'Ingresa un número válido',
     });
 
@@ -356,7 +338,7 @@ export function toCreateItemPayload(
   values: ItemFormValues,
   branchId: string,
 ): CreateItemInput {
-  const initialQuantity = Number(values.initialQuantity);
+  const initialQuantity = parseDecimal(values.initialQuantity) ?? 0;
   return {
     sku: values.sku.trim().toUpperCase(),
     ...toCardPayload(values),
@@ -392,26 +374,3 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     isActive: item.isActive,
   };
 }
-
-export const MovementFormSchema = z.object({
-  quantity: quantityField('La cantidad es obligatoria').refine(
-    (value) => Number(value) > 0,
-    { message: 'La cantidad debe ser mayor a 0' },
-  ),
-  reason: z.enum(MOVEMENT_REASONS),
-  equipmentId: z.string(),
-  documentNumber: z.string().max(60, 'Máximo 60 caracteres').or(z.literal('')),
-  notes: z.string().max(240).or(z.literal('')),
-});
-export type MovementFormValues = z.infer<typeof MovementFormSchema>;
-
-export const MinimumFormSchema = z.object({
-  minimumQuantity: quantityField('Ingresa el mínimo'),
-});
-export type MinimumFormValues = z.infer<typeof MinimumFormSchema>;
-
-export const AdjustFormSchema = z.object({
-  countedQuantity: quantityField('Ingresa la cantidad contada'),
-  notes: z.string().max(240).or(z.literal('')),
-});
-export type AdjustFormValues = z.infer<typeof AdjustFormSchema>;

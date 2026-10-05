@@ -25,7 +25,7 @@ import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
 import { useUsers } from '../hooks/useUsers';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
 import { OperatorPicker } from '../components/operators/OperatorPicker';
 import {
   controlUnitLabel,
@@ -52,6 +52,7 @@ import { StatusChip } from '../components/flota/StatusChip';
 import { DeleteEquipoAlertDialog, EditEquipoModal } from '../components/flota/EquipoEditDelete';
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
 import { buildAssignmentDiff, SIN_ASIGNAR } from '../lib/equipment-assignment';
+import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
 
@@ -183,7 +184,7 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
     // No se limpia el estado local de forma optimista: el `onError` de
     // `useAssignEquipment` solo toastea (no invalida), así que si la
     // mutación fallaba los pickers quedaban mostrando "Sin asignar" mientras
-    // el server mantenía la asignación (Fix 3, review QA) — el `useEffect`
+    // el server mantenía la asignación — el `useEffect`
     // de arriba está keyed en `equipo.operator?.id`/`supervisor?.id`, y esos
     // props no cambian si la request falla. Al tener éxito, `onSuccess`
     // invalida la ficha y ese mismo efecto resincroniza los pickers con la
@@ -227,7 +228,7 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
       <div className="flex shrink-0 gap-2">
         {/* `equipo.operator || equipo.supervisor` (no `equipo.inUse`, que el
            backend deriva de `!!operator`): si solo hay supervisor asignado
-           (sin operador) igual hay que poder liberarlo (Fix 4, review QA). */}
+           (sin operador) igual hay que poder liberarlo. */}
         {equipo.operator || equipo.supervisor ? (
           <Button isDisabled={assignEquipment.isPending} onPress={liberar} size="sm" variant="secondary">
             Liberar
@@ -245,7 +246,7 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
  * la izquierda (con chip de vigencia y caption), link "Ver / descargar" si
  * tiene archivo adjunto, acciones editar/borrar a la derecha (gateadas a
  * SUPERVISOR/ADMIN, mismo criterio que crear). Reemplaza a `DocumentoRow`
- * (R1/R2 fijos) — ahora la unidad puede tener cualquier cantidad de
+ * (solo revisión técnica y seguro) — ahora la unidad puede tener cualquier cantidad de
  * documentos, de cualquiera de los 5 tipos (`EquipmentDocumentType`). */
 function DocumentoItemRow({
   documento,
@@ -261,8 +262,7 @@ function DocumentoItemRow({
   // `fileUrl` (firmada, del listado) solo dice SI hay archivo adjunto — el
   // link usa el endpoint de redirect 302 (`GET .../documents/:id/file`), que
   // firma una URL RECIÉN generada en cada click: a diferencia de `fileUrl`,
-  // sirve aunque la pestaña lleve horas abierta (ver Diseño del RFC
-  // R2-storage, "Contrato de la API — Documentos").
+  // sirve aunque la pestaña lleve horas abierta.
   const href = documento.fileUrl ? `${env.apiUrl}/api/equipment/documents/${documento.id}/file` : null;
 
   return (
@@ -319,7 +319,7 @@ function DocumentoItemRow({
  * "Documentos" — lista libre de documentos del equipo (revisión técnica,
  * seguro, permiso de circulación, certificaciones, otros), cerca de "Datos de
  * la unidad" (misma jerarquía de `Card`, sin anidar otra card adentro).
- * Reemplaza a `VencimientosCard` (R1/R2 fijos, solo lectura): ahora
+ * Reemplaza a `VencimientosCard` (solo revisión técnica y seguro, solo lectura): ahora
  * SUPERVISOR/ADMIN pueden agregar/editar/borrar documentos directamente desde
  * acá — ya no se editan desde "Editar equipo" (ver `EquipoEditDelete.tsx`,
  * que perdió esos 2 campos).
@@ -448,7 +448,7 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
   // Antes esto se decidía leyendo `equipo.inUse` (que el backend deriva de
   // `!!operator`): un equipo con supervisor asignado pero SIN operador
   // mostraba "Disponible" y el supervisor desaparecía de la ficha, aunque el
-  // picker de editar lo mostraba preseleccionado (Fix 4, review QA). Ahora
+  // picker de editar lo mostraba preseleccionado. Ahora
   // se decide por presencia real de cualquiera de los dos, y el título
   // distingue "En uso" (hay operador) de "Supervisado" (solo supervisor).
   const tieneAsignacion = Boolean(equipo.operator || equipo.supervisor);
@@ -456,7 +456,7 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
   // `equipoEstadoUsoLabel` (`flota-colors.ts`): antes, sin asignación, acá
   // se mostraba siempre "Disponible" IGNORANDO `equipo.status`, mientras el
   // listado ya distinguía "Disponible"/"Detenido" — mismo equipo, dos
-  // textos contradictorios (Fix F-ALTA, review adversarial).
+  // textos contradictorios.
   const estadoLabel = equipoEstadoUsoLabel(equipo);
 
   return (
@@ -523,7 +523,7 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
 }
 
 /**
- * Repuestos compatibles es dominio Compatibilidad (Joaquín, `PartCompatibility`
+ * Repuestos compatibles es dominio Compatibilidad (`PartCompatibility`
  * en `smi-backend/prisma/schema.prisma`): el modelo ya existe en la BD, pero
  * todavía no hay service/controller que lo exponga (`GET /api/equipment/:id`
  * no trae repuestos). Se deja la sección en su lugar del layout con un
@@ -692,21 +692,18 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
  * `/equipos/:id/ficha`); acá solo se muestra un adelanto (ver
  * `ActividadReciente`).
  */
-const RECURSOS_DE_FICHA_EQUIPO = ['equipment', 'equipmentDocument', 'horometro', 'combustible'] as const;
-
 export function EquipoDetalleView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
-  const { role } = useCurrentUser();
-  // `PATCH /equipment/:id/assignment` y `/status` solo los autoriza el
-  // backend a ADMIN y SUPERVISOR — mismo gate que `updateStatus` en
-  // `EquiposView`. Editar/eliminar la ficha completa (`EditEquipoModal`/
-  // `DeleteEquipoAlertDialog`) es ADMIN únicamente, igual que `puedeEditarFicha`
-  // en `EquiposView`.
-  const puedeAsignar = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
-  const puedeCambiarEstado = puedeAsignar;
-  const puedeEditarFicha = role === ROLES.ADMIN;
+  const { can, canAny } = usePermissions();
+  const puedeAsignar = can('equipment.assign');
+  const puedeCambiarEstado = can('equipment.status');
+  const puedeEditar = can('equipment.update');
+  const puedeEliminar = can('equipment.delete');
+  const puedeGestionarDocumentos = can('equipmentDocument.create');
+  const puedeRegistrarHorometro = canAny(['horometro.create', 'horometro.close']);
+  const puedeRegistrarCombustible = can('combustible.create');
   const updateStatus = useUpdateEquipmentStatus();
 
   // `useHorometroList`/`useCombustibleList` no aceptan `equipoId` — traen el
@@ -799,7 +796,7 @@ export function EquipoDetalleView() {
         ← SMI · Flota
       </Link>
 
-      <PendientesStrip recursos={RECURSOS_DE_FICHA_EQUIPO} />
+      <PendientesStrip recursos={RECURSOS_DE_FLOTA} />
 
       {/* Cabecera: foto + código/estado + subtítulo, acciones a la derecha
          (calca la cabecera de FichaEquipoClientePC.dc.html: Cambiar estado,
@@ -857,18 +854,20 @@ export function EquipoDetalleView() {
             </Dropdown>
           ) : null}
 
-          <Button onPress={() => setIsShiftModalOpen(true)} size="sm" variant="secondary">
-            {registrarHorometroLabel(equipo)}
-          </Button>
+          {puedeRegistrarHorometro ? (
+            <Button onPress={() => setIsShiftModalOpen(true)} size="sm" variant="secondary">
+              {registrarHorometroLabel(equipo)}
+            </Button>
+          ) : null}
 
-          {puedeEditarFicha ? (
+          {puedeEditar ? (
             <Button onPress={() => setIsEditOpen(true)} size="sm">
               <Pencil className="h-4 w-4" />
               Editar equipo
             </Button>
           ) : null}
 
-          {puedeEditarFicha ? (
+          {puedeEliminar ? (
             <Button
               aria-label="Eliminar equipo"
               isIconOnly
@@ -964,11 +963,11 @@ export function EquipoDetalleView() {
             </Card.Content>
           </Card>
 
-          <DocumentsCard equipoId={equipo.id} puedeGestionar={puedeAsignar} />
+          <DocumentsCard equipoId={equipo.id} puedeGestionar={puedeGestionarDocumentos} />
 
           {/* Combustible: nivel actual (barra, mismo umbral de color que
              `FuelGauge`) + historial de cargas. El botón abre el flujo
-             foto→OCR→EXIF (`RegistrarCargaCombustibleModal`, Fase B). */}
+             foto→OCR→EXIF (`RegistrarCargaCombustibleModal`). */}
           <Card>
             <Card.Header>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -978,9 +977,11 @@ export function EquipoDetalleView() {
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     {combustibleAsc ? 'Más antiguo primero' : 'Más reciente primero'}
                   </Button>
-                  <Button onPress={() => setIsCargaOpen(true)} size="sm" variant="secondary">
-                    Registrar carga
-                  </Button>
+                  {puedeRegistrarCombustible ? (
+                    <Button onPress={() => setIsCargaOpen(true)} size="sm" variant="secondary">
+                      Registrar carga
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </Card.Header>

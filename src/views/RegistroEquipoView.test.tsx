@@ -176,14 +176,11 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     foto: {
       file: null,
       isReadingPhoto: false,
-      isUploadingPhoto: false,
       captureDate: null,
       ocr: null,
       handleSelectPhoto: vi.fn(),
       handleClearPhoto: vi.fn(),
       resetPhoto: vi.fn(),
-      cancelar: vi.fn(),
-      upload: vi.fn(),
     },
     verReporte: false,
     setVerReporte,
@@ -298,14 +295,11 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-        isUploadingPhoto: false,
-        captureDate: null,
+          captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
         resetPhoto: vi.fn(),
-        cancelar: vi.fn(),
-        upload: vi.fn(),
       },
       finalNum: 12500,
     });
@@ -358,14 +352,11 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-        isUploadingPhoto: false,
-        captureDate: null,
+          captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
         resetPhoto: vi.fn(),
-        cancelar: vi.fn(),
-        upload: vi.fn(),
       },
     });
 
@@ -529,7 +520,7 @@ describe('RegistroEquipoView', () => {
     });
   });
 
-  describe('AdBlue en el cierre (Acta N.° 004)', () => {
+  describe('AdBlue en el cierre', () => {
     it('muestra el selector Sí/No y los litros solo cuando se marca que cargó', () => {
       const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
       expect(screen.getByRole('group', { name: '¿Cargó AdBlue en el turno?' })).toBeTruthy();
@@ -586,15 +577,45 @@ describe('RegistroEquipoView', () => {
     it('el detalle de una cerrada muestra el AdBlue', () => {
       renderView('desktop', {
         historialAbierto: true,
-        detalleCerrada: { ...TARJETA_CERRADA, adBlue: true, adBlueLitros: 12 },
+        detalleCerrada: { ...TARJETA_CERRADA, adBlue: true, adBlueLitros: 12.5 },
       });
 
       const ventana = within(screen.getByRole('dialog'));
-      expect(ventana.getByText('Sí · 12,0 L')).toBeTruthy();
+      expect(ventana.getByText('Sí · 12,5 L')).toBeTruthy();
+    });
+
+    it('los litros de AdBlue y de combustible no se redondean al entero, ni en el historial ni en el detalle', () => {
+      const tarjeta = { ...TARJETA_CERRADA, litros: 164.25, adBlue: true, adBlueLitros: 12.5 };
+      const { unmount } = renderView('phone', { historialAbierto: true, cerradas: [tarjeta] });
+
+      let ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('12,5')).toBeTruthy();
+      expect(ventana.getByText('164,25')).toBeTruthy();
+      unmount();
+
+      renderView('desktop', { historialAbierto: true, cerradas: [tarjeta] });
+      ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('12,5')).toBeTruthy();
+      expect(ventana.getByText('164,25')).toBeTruthy();
+    });
+
+    it('una tarjeta cerrada sin señal muestra "Sin sincronizar" en el historial y en su detalle', () => {
+      const sinEnviar = { ...TARJETA_CERRADA, sinSincronizar: true };
+      const { unmount } = renderView('phone', { historialAbierto: true, cerradas: [sinEnviar] });
+      expect(within(screen.getByRole('dialog')).getByText('Sin sincronizar')).toBeTruthy();
+      unmount();
+
+      renderView('phone', { historialAbierto: true, cerradas: [sinEnviar], detalleCerrada: sinEnviar });
+      expect(within(screen.getByRole('dialog')).getByText('Sin sincronizar')).toBeTruthy();
+    });
+
+    it('una tarjeta cerrada ya confirmada no lleva la marca', () => {
+      renderView('phone', { historialAbierto: true });
+      expect(within(screen.getByRole('dialog')).queryByText('Sin sincronizar')).toBeNull();
     });
   });
 
-  describe('Editar tarjeta (Acta N.° 004, R13)', () => {
+  describe('Editar una tarjeta ya enviada', () => {
     it('cada tarjeta, abierta o cerrada, ofrece Editar y lo avisa al hook', () => {
       renderView('phone', { historialAbierto: false });
 

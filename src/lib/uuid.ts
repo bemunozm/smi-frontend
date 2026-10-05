@@ -1,9 +1,7 @@
 /**
  * UUID v4 para el `id` (apertura) / `closeClientId` (cierre) de una tarjeta
- * de turno — lo genera el CLIENTE porque es la clave de idempotencia (ver
- * plan "Supervisión en Terreno" §Diseño: "permite que 'abrir tarjeta' sea
- * idempotente sin ida y vuelta al servidor antes de poder escribir, clave
- * para el flujo offline").
+ * de turno — lo genera el CLIENTE porque es la clave de idempotencia: con él abrir una tarjeta es
+ * idempotente sin ida y vuelta al servidor, clave para escribir sin señal.
  *
  * `crypto.randomUUID()` (Web Crypto) solo existe en un CONTEXTO SEGURO
  * (HTTPS o `localhost`) — en el túnel HTTP temporal a la tablet de faena

@@ -21,7 +21,7 @@ import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { fmtTime, plural } from '../lib/format';
+import { fmtDecimales, fmtTime, plural } from '../lib/format';
 import { fechaCorta, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
@@ -52,7 +52,7 @@ import {
 } from '../components/terreno/ui';
 
 /**
- * Registro de equipo — Módulo A de la especificación del 21/09/2026.
+ * Registro de equipo (Módulo A de la especificación).
  *
  * Fusiona lo que hoy son dos pantallas sueltas, Horómetro y Combustible, en una
  * sola tarjeta por equipo: se abre al empezar el turno con el horómetro inicial
@@ -63,7 +63,7 @@ import {
  * cliente describió en la reunión, con la falla de cargadores que se supo recién
  * al turno siguiente. Por eso el botón no está escondido al final del formulario.
  *
- * Conectada de punta a punta (RFC "Supervisión en Terreno", Fases 4b+5): el
+ * Conectada de punta a punta: el
  * catálogo de equipos/operadores, las tarjetas de turno (apertura/cierre) y
  * el reporte de salida en PDF salen todos de `useShiftRegister()` — online
  * y sin señal por igual, vía el outbox de Dexie (`offline/outbox.ts`/
@@ -73,6 +73,10 @@ import {
 
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+/** Litros de combustible o AdBlue: hasta dos decimales, sin forzar ceros (12,5 se
+ * ve `12,5`, no `13`). */
+const fmtLitros = (n: number | undefined) => (n == null ? '—' : fmtDecimales(n, 2));
 
 export function RegistroEquipoView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -413,7 +417,7 @@ export function RegistroEquipoView() {
             { label: 'Inicial', valor: fmt(t.inicial) },
             { label: 'Final', valor: fmt(t.final) },
             { label: 'Horas', valor: cerrada ? fmt(t.final! - t.inicial) : '—', destacado: true },
-            { label: 'Litros', valor: t.litros != null ? fmt(t.litros, 0) : '—' },
+            { label: 'Litros', valor: fmtLitros(t.litros) },
           ]}
         />
         {cerrada ? (
@@ -469,7 +473,7 @@ export function RegistroEquipoView() {
           <td className={`${TD} tabular text-right`}>{fmt(t.inicial)}</td>
           <td className={`${TD} tabular text-right`}>{fmt(t.final)}</td>
           <td className={`${TD} tabular text-right font-semibold`}>{cerrada ? fmt(t.final! - t.inicial) : '—'}</td>
-          <td className={`${TD} tabular text-right`}>{t.litros != null ? fmt(t.litros, 0) : '—'}</td>
+          <td className={`${TD} tabular text-right`}>{fmtLitros(t.litros)}</td>
           <td className={TD}>
             {cerrada ? <Camera className="h-4 w-4 text-[var(--success-soft-foreground)]" /> : <span className="text-[#9aa2ad]">—</span>}
           </td>
@@ -565,7 +569,7 @@ export function RegistroEquipoView() {
     );
 
   /**
-   * R4: la lista es la de tarjetas ABIERTAS. Las cerradas ya no piden nada al
+   * La lista es la de tarjetas ABIERTAS. Las cerradas ya no piden nada al
    * supervisor y son las que más crecen —al final de un turno son todas—, así
    * que viven detrás de un botón en vez de empujar hacia abajo lo único sobre
    * lo que todavía hay que actuar.
@@ -639,10 +643,11 @@ export function RegistroEquipoView() {
                     { label: 'Inicial', valor: fmt(t.inicial) },
                     { label: 'Final', valor: fmt(t.final) },
                     { label: 'Horas', valor: fmt(t.final! - t.inicial), destacado: true },
-                    { label: 'Litros', valor: fmt(t.litros, 0) },
-                    { label: 'AdBlue', valor: t.adBlue ? fmt(t.adBlueLitros, 0) : '—' },
+                    { label: 'Litros', valor: fmtLitros(t.litros) },
+                    { label: 'AdBlue', valor: t.adBlue ? fmtLitros(t.adBlueLitros) : '—' },
                   ]}
                 />
+                {t.sinSincronizar && <MarcaSinSincronizar />}
                 {t.edicionSinSincronizar && (
                   <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />
                 )}
@@ -671,6 +676,7 @@ export function RegistroEquipoView() {
         </Boton>
         {botonEditar(detalleCerrada, false)}
       </div>
+      {detalleCerrada.sinSincronizar && <MarcaSinSincronizar />}
       {detalleCerrada.edicionSinSincronizar && (
         <MarcaSinSincronizar edicion requiereAtencion={detalleCerrada.edicionRequiereAtencion} />
       )}
@@ -680,8 +686,8 @@ export function RegistroEquipoView() {
           { label: 'Inicial', valor: fmt(detalleCerrada.inicial) },
           { label: 'Final', valor: fmt(detalleCerrada.final) },
           { label: 'Horas', valor: fmt(detalleCerrada.final! - detalleCerrada.inicial), destacado: true },
-          { label: 'Litros', valor: fmt(detalleCerrada.litros, 0) },
-          { label: 'AdBlue', valor: detalleCerrada.adBlue ? fmt(detalleCerrada.adBlueLitros, 0) : '—' },
+          { label: 'Litros', valor: fmtLitros(detalleCerrada.litros) },
+          { label: 'AdBlue', valor: detalleCerrada.adBlue ? fmtLitros(detalleCerrada.adBlueLitros) : '—' },
         ]}
       />
 
@@ -694,7 +700,7 @@ export function RegistroEquipoView() {
             ['Turno', turnoDe(detalleCerrada)],
             ['Supervisor', detalleCerrada.supervisor],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
-            ['AdBlue', detalleCerrada.adBlue ? `Sí · ${fmt(detalleCerrada.adBlueLitros, 1)} L` : 'No cargó'],
+            ['AdBlue', detalleCerrada.adBlue ? `Sí · ${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No cargó'],
             [
               'Foto del surtidor',
               <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
@@ -774,7 +780,6 @@ export function RegistroEquipoView() {
       <FotoRespaldoField
         file={foto.file}
         isReadingPhoto={foto.isReadingPhoto}
-        isUploadingPhoto={foto.isUploadingPhoto}
         captureDate={foto.captureDate}
         onSelect={foto.handleSelectPhoto}
         onClear={foto.handleClearPhoto}
@@ -798,14 +803,13 @@ export function RegistroEquipoView() {
         disabled={
           !foto.file ||
           foto.isReadingPhoto ||
-          foto.isUploadingPhoto ||
           isCerrando ||
           finalNum == null ||
           finalInvalido ||
           adBlueIncompletoCierre
         }
       >
-        {foto.isUploadingPhoto ? 'Subiendo la foto…' : isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
+        {isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       {!foto.file && (
@@ -828,8 +832,7 @@ export function RegistroEquipoView() {
         supervisor={supervisor}
         extra={
           <>
-            {/* Selector turno actual/siguiente (RFC "Supervisión en
-                Terreno" §Diseño): a las 07:30 el reloj todavía propone el
+            {/* Selector turno actual/siguiente: a las 07:30 el reloj todavía propone el
                 NOCTURNO de anoche, pero el supervisor ya está empezando el
                 DIURNO de hoy — este botón deja adelantarse UN turno sin
                 esperar a las 08:00. Solo visible cerca del cambio de turno

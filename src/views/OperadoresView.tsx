@@ -1,7 +1,3 @@
-import { MarcaPendiente } from '../components/sync/MarcaPendiente';
-import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
-import { operatorEntity } from '../offline/db';
-import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -24,8 +20,12 @@ import {
   TextField,
 } from '@heroui/react';
 
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { ActionTile } from '../components/ActionTile';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
+import { RECURSOS_DE_OPERADORES } from '../lib/pending-resources';
 import {
   useCreateOperator,
   useDeleteOperator,
@@ -33,7 +33,6 @@ import {
   useToggleOperatorActive,
   useUpdateOperator,
 } from '../hooks/useOperators';
-import { ROLES } from '../types/roles';
 import {
   OperatorFormSchema,
   toCreateOperatorPayload,
@@ -329,8 +328,8 @@ function DeleteOperatorAlertDialog({
  * `config/nav-items.ts`).
  */
 function OperatorActionsMenu({ operator }: { operator: Operator }) {
-  const { role } = useCurrentUser();
-  const canDelete = role === ROLES.ADMIN;
+  const { can } = usePermissions();
+  const canDelete = can('operator.delete');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const toggleActive = useToggleOperatorActive();
@@ -393,8 +392,8 @@ function OperatorActionsMenu({ operator }: { operator: Operator }) {
  * de `OperatorActionsMenu` (solo ADMIN elimina).
  */
 function OperatorCardMobile({ operator, marca }: { operator: Operator; marca: Marca | null }) {
-  const { role } = useCurrentUser();
-  const canDelete = role === ROLES.ADMIN;
+  const { can } = usePermissions();
+  const canDelete = can('operator.delete');
   const toggleActive = useToggleOperatorActive();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -494,8 +493,6 @@ function OperatorCardMobile({ operator, marca }: { operator: Operator; marca: Ma
  * crear/editar con RHF+Zod+`useMutation` + activar/desactivar + borrado con
  * confirmación, responsive (tabla en PC, tarjetas en tablet/celular).
  */
-const RECURSOS_DE_OPERADORES = ['operator'] as const;
-
 export function OperadoresView() {
   const [q, setQ] = useState('');
   const [showInactive, setShowInactive] = useState(false);
@@ -582,7 +579,7 @@ export function OperadoresView() {
                         <Table.Row>
                           <Table.Cell>
                             {operator.name}
-                            <MarcaPendiente marca={pendientes.marcaDe(operatorEntity(operator.id))} />
+                            <MarcaPendiente marca={pendientes.marcaDe('operator', operator.id)} />
                           </Table.Cell>
                           <Table.Cell className="font-mono text-sm">{operator.rut ?? '—'}</Table.Cell>
                           <Table.Cell>
@@ -606,7 +603,7 @@ export function OperadoresView() {
 
           <div className="flex flex-col gap-3 xl:hidden">
             {operators.map((operator) => (
-              <OperatorCardMobile key={operator.id} marca={pendientes.marcaDe(operatorEntity(operator.id))} operator={operator} />
+              <OperatorCardMobile key={operator.id} marca={pendientes.marcaDe('operator', operator.id)} operator={operator} />
             ))}
           </div>
         </>

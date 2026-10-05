@@ -18,7 +18,7 @@ import {
 
 import { OperatorPicker, type OperatorOption } from '../operators/OperatorPicker';
 import { useBranch, useBranches } from '../../hooks/useBranches';
-import { useAssignEquipment, useDeleteEquipment, useUpdateEquipment } from '../../hooks/useEquipment';
+import { useDeleteEquipment, useSaveEquipment } from '../../hooks/useEquipment';
 import { useUsers } from '../../hooks/useUsers';
 import { CONTROL_UNIT_OPTIONS, EQUIPMENT_CLASS_OPTIONS, EQUIPMENT_STATUS_OPTIONS } from '../../config/flota-colors';
 import { buildAssignmentDiff, SIN_ASIGNAR, SIN_SUCURSAL } from '../../lib/equipment-assignment';
@@ -208,8 +208,8 @@ export function CamposEquipo({
          antes de `Modal.Header` en `CreateEquipoModal`/`EditEquipoModal` para
          poder sangrar hasta el borde del diálogo (§2, PC). */}
 
-      {/* Rediseño v3 (feedback de Benjamin: la v2 de 2 columnas fijas se veía
-         angosta y desordenada): los 10 campos ya no van en pares fijos, cada
+      {/* Rediseño v3 (la v2 de 2 columnas fijas se veía angosta y
+         desordenada): los 10 campos ya no van en pares fijos, cada
          uno en su propio `<div className="grid ...">` de 2 columnas — ahora
          se agrupan en 4 secciones con encabezado (`.label`, mismo estilo que
          ya usaba "Datos de la unidad"/"Asignación") y UNA grilla compartida
@@ -559,8 +559,7 @@ function buildEquipoFormValues(equipo: Equipment): EquipmentFormValues {
 }
 
 export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
-  const updateEquipment = useUpdateEquipment();
-  const assignEquipment = useAssignEquipment();
+  const saveEquipment = useSaveEquipment();
   const [operatorId, setOperatorId] = useState(equipo.operator?.id ?? SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(equipo.supervisor?.id ?? SIN_ASIGNAR);
   // Foto — vive FUERA del form de RHF (ver `EquipoPhotoBanner`): `undefined` =
@@ -585,9 +584,9 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
     // `useCombustible`/`useHorometro` al invalidar esa key, `EquipoThumb.
     // onError`, o la URL firmada de la foto rotando cada ~30 min.
     // `keepDirtyValues` evita que ese re-sync EN SEGUNDO PLANO pise campos
-    // que el usuario ya tocó y no ha guardado (review QA: antes cualquiera de
-    // esos refetches mientras el modal seguía abierto borraba en silencio el
-    // texto que se estaba escribiendo).
+    // que el usuario ya tocó y no ha guardado: sin esto, cualquiera de esos
+    // refetches mientras el modal seguía abierto borraba en silencio el texto
+    // que se estaba escribiendo.
     values: buildEquipoFormValues(equipo),
     resetOptions: { keepDirtyValues: true },
   });
@@ -597,8 +596,8 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
   // efecto corría con CUALQUIER cambio de referencia de `equipo` mientras el
   // modal seguía abierto (el mismo refetch de arriba), lo que además pisaba
   // en silencio la foto recién elegida (`photo`, tri-state fuera del form
-  // de RHF — `keepDirtyValues` no lo protege) y los pickers de asignación
-  // (review QA). El re-sync de los CAMPOS del form mientras el modal sigue
+  // de RHF — `keepDirtyValues` no lo protege) y los pickers de asignación. El
+  // re-sync de los CAMPOS del form mientras el modal sigue
   // abierto ahora lo cubre `keepDirtyValues` de arriba; acá solo queda el
   // caso "abrir de verdad", que sigue necesitando el `reset` imperativo: sin
   // él, cancelar sin guardar y reabrir dejaría los campos editados a medias,
@@ -627,40 +626,25 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
       <Modal.Container>
         <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_WIDE_CLASS}>
           {({ close }) => {
-            // Encadenado (no fire-and-forget): antes la asignación se
-            // disparaba sin `await` y el modal cerraba de inmediato con el
-            // toast de éxito de `updateEquipment` — si `assignEquipment`
-            // fallaba (p. ej. el operador perdió el rol), el modal ya había
-            // cerrado y el cambio de asignación se perdía en silencio (Fix 2,
-            // review QA). Ahora ambas mutaciones deben resolver OK para
-            // cerrar; si cualquiera falla, el modal queda abierto (su propio
-            // `onError` ya muestra el toast de danger) para que el usuario
-            // vea el error y pueda reintentar.
-            const onSubmit = async (values: EquipmentFormValues): Promise<void> => {
-              try {
-                await updateEquipment.mutateAsync({
+            // El modal solo cierra si la ficha Y la asignación quedaron guardadas: si
+            // la asignación falla (p. ej. el operador perdió el rol) queda abierto
+            // para que se vea el error y se pueda reintentar, en vez de perder el
+            // cambio en silencio detrás del aviso de éxito de la ficha.
+            const onSubmit = (values: EquipmentFormValues): void => {
+              saveEquipment.mutate(
+                {
                   equipo,
                   input: toUpdateEquipmentPayload(values),
                   photo: photo ?? null,
                   quitarFoto: photo === null,
-                });
-
-                // Solo manda la(s) clave(s) que de verdad cambiaron respecto
-                // de la asignación actual del equipo — ver `buildAssignmentDiff`
-                // (evita revalidar contra el catálogo un campo que el usuario
-                // nunca tocó, p. ej. un operador ya inactivo cuando solo se
-                // cambió el supervisor).
-                const assignmentDiff = buildAssignmentDiff(equipo, operatorId, supervisorId);
-                if (Object.keys(assignmentDiff).length > 0) {
-                  await assignEquipment.mutateAsync({ equipo, input: assignmentDiff });
-                }
-
-                close();
-              } catch {
-                // No-op: cada mutación ya toasteó el error por su cuenta
-                // (`useUpdateEquipment`/`useAssignEquipment`). Acá solo se
-                // evita cerrar el modal para no enmascarar el fallo.
-              }
+                  // Solo las claves que de verdad cambiaron respecto de la asignación
+                  // actual (`buildAssignmentDiff`): evita revalidar contra el catálogo un
+                  // campo que no se tocó, p. ej. un operador ya inactivo cuando solo se
+                  // cambió el supervisor.
+                  asignacion: buildAssignmentDiff(equipo, operatorId, supervisorId),
+                },
+                { onSuccess: ({ errorAsignacion }) => (errorAsignacion === null ? close() : undefined) },
+              );
             };
 
             return (
@@ -698,7 +682,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                   </Button>
                   <Button
                     form={`edit-equipo-form-${equipo.id}`}
-                    isPending={updateEquipment.isPending}
+                    isPending={saveEquipment.isPending}
                     type="submit"
                   >
                     {({ isPending }) =>

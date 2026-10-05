@@ -2,13 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { BranchAPI, type BranchFiltros } from '../api/BranchAPI';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { pickFields } from '../lib/edit-diff';
 import { BRANCHES_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
+import { buildQueuedEdit } from '../lib/queued-edit';
 import { branchEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type { Branch, BranchFields, CreateBranchInput, UpdateBranchInput } from '../types/branch';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
 /**
  * Lista de sucursales (Plataforma). La usa el selector `homeBranch` del
@@ -32,9 +31,9 @@ export function useBranch(id: string) {
 }
 
 export function useCreateBranch() {
-  return useOfficeMutation<'branch.create', CreateBranchInput>({
+  return useQueuedCreate<'branch.create', CreateBranchInput>({
     endpoint: 'branch.create',
-    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
     onSent: (branch, input) => {
       toast.success('Sucursal creada', { description: branch?.name ?? input.name });
     },
@@ -51,25 +50,20 @@ export interface UpdateBranchVars {
 }
 
 export function useUpdateBranch() {
-  return useOfficeMutation<'branch.update', UpdateBranchVars>({
+  return useQueuedMutation<'branch.update', UpdateBranchVars>({
     endpoint: 'branch.update',
     build: async ({ branch, input }) => {
-      const pendiente = await cambiosPendientes(branchEntity(branch.id), ['branch.update']);
-      const base = conPendientes<BranchFields>(
-        { name: branch.name, address: branch.address, isActive: branch.isActive },
-        pendiente,
-        CAMPOS_DE_SUCURSAL,
-      );
       // Una dirección vacía no se manda (el formulario la omite): "omitida" es
       // "sin cambio".
-      const nuevo: BranchFields = {
-        name: input.name ?? base.name,
-        address: input.address ?? base.address,
-        isActive: input.isActive ?? base.isActive,
-      };
-      const { cambios, esperado } = diferenciaEdicion(base, nuevo, CAMPOS_DE_SUCURSAL);
-      if (Object.keys(cambios).length === 0) return null;
-      return { params: { id: branch.id }, body: cambios, expected: precondicion(esperado) };
+      const edicion = await buildQueuedEdit<BranchFields>({
+        entity: branchEntity(branch.id),
+        ops: ['branch.update'],
+        base: pickFields(branch, CAMPOS_DE_SUCURSAL),
+        next: input,
+        fields: CAMPOS_DE_SUCURSAL,
+      });
+      if (!edicion.hayCambios) return null;
+      return { params: { id: branch.id }, body: edicion.cambios, expected: edicion.esperado };
     },
     onSent: (data, { branch }) => {
       toast.success('Sucursal actualizada', { description: data?.name ?? branch.name });
@@ -79,15 +73,11 @@ export function useUpdateBranch() {
 }
 
 export function useDeleteBranch() {
-  return useOfficeMutation<'branch.delete', string>({
+  // El backend rechaza con 409 si la sucursal tiene equipos asociados y explica
+  // cómo retirarla en su lugar (isActive=false): el mensaje llega tal cual.
+  return useQueuedDelete({
     endpoint: 'branch.delete',
-    build: (id) => ({ params: { id }, body: {} }),
-    onSent: () => {
-      toast.success('Sucursal eliminada');
-    },
-    // El backend rechaza con 409 si la sucursal tiene equipos asociados y
-    // explica cómo retirarla en su lugar (isActive=false) — mismo criterio
-    // que `useDeleteEquipment`, el mensaje llega tal cual.
+    sentMessage: 'Sucursal eliminada',
     errorFallback: 'No se pudo eliminar la sucursal.',
   });
 }

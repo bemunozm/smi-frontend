@@ -102,7 +102,6 @@ export function CombustibleView() {
         <FotoRespaldoField
           file={foto.file}
           isReadingPhoto={foto.isReadingPhoto}
-          isUploadingPhoto={false}
           captureDate={foto.captureDate}
           onSelect={foto.handleSelectPhoto}
           onClear={foto.handleClearPhoto}

@@ -112,7 +112,7 @@ function CategoryRow({ category }: { category: ItemCategory }) {
 }
 
 /**
- * Administración de las categorías del catálogo (T05 · DEV-29): la taxonomía
+ * Administración de las categorías del catálogo: la taxonomía
  * base se siembra, pero tiene que poder crecer desde la app — cada faena
  * clasifica distinto y nadie va a pedir un despliegue para agregar
  * «Soldadura».

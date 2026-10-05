@@ -33,11 +33,11 @@ import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/
 import { StatusChip } from '../components/flota/StatusChip';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
 import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
-import { equipmentEntity } from '../offline/db';
 import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
+import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
 import {
   useCreateEquipment,
   useEquipment,
@@ -54,7 +54,6 @@ import {
   equipoEstadoUsoLabel,
   equipoIdentidad,
 } from '../config/flota-colors';
-import { ROLES } from '../types/roles';
 import {
   EquipmentFormSchema,
   EQUIPMENT_STATUS,
@@ -151,13 +150,13 @@ function AsignacionCell({
   // Fuente única con `EstadoDeUso` de `EquipoDetalleView` — ver
   // `equipoEstadoUsoLabel` (`flota-colors.ts`): antes esta rama decidía
   // "Disponible"/"Detenido" con su propio branching inline, que había
-  // divergido del de la ficha (Fix F-ALTA, review adversarial).
+  // divergido del de la ficha.
   const chipLabel = equipoEstadoUsoLabel(equipo);
 
   // Antes esto se decidía leyendo `equipo.inUse` (que el backend deriva de
   // `!!operator`): un equipo con supervisor asignado pero SIN operador
   // quedaba mostrando "Disponible" y el supervisor desaparecía por completo
-  // de la fila, aunque la asignación sí existía (Fix 4, review QA). Ahora se
+  // de la fila, aunque la asignación sí existía. Ahora se
   // decide por presencia real de cualquiera de los dos.
   if (!operator && !supervisor) {
     return <span className="text-sm text-(--muted)">{chipLabel}</span>;
@@ -257,7 +256,7 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
   // El modal es controlado y queda montado entre aperturas (mismo patrón que
   // `EditEquipoModal`) — sin esto, cancelar (`Cancelar`, backdrop, Escape)
   // dejaba el código/marca/modelo y el operador/supervisor elegidos, y
-  // reaparecían "viejos" la próxima vez que se abría (Fix 1, review QA).
+  // reaparecían "viejos" la próxima vez que se abría.
   useEffect(() => {
     if (isOpen) {
       reset(DEFAULT_FORM_VALUES);
@@ -338,18 +337,12 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
  * modal de edición completo — además es la única escritura que el SUPERVISOR
  * tiene permitida sobre la flota.
  */
-function EquipoActionsMenu({
-  equipo,
-  puedeEditarFicha,
-  puedeCambiarEstado,
-}: {
-  equipo: Equipment;
-  puedeEditarFicha: boolean;
-  /** `PATCH /equipment/:id/status` solo lo autoriza el backend a ADMIN y
-   * SUPERVISOR — MANTENEDOR recibe 403 si lo intenta, así que los ítems
-   * "Marcar como…" ni se muestran para el resto de los roles. */
-  puedeCambiarEstado: boolean;
-}) {
+function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
+  // Los ítems "Marcar como…" solo se muestran a quien el backend le deja cambiar
+  // el estado (ADMIN y SUPERVISOR); editar y eliminar, solo a ADMIN.
+  const { can } = usePermissions();
+  const puedeCambiarEstado = can('equipment.status');
+  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const updateStatus = useUpdateEquipmentStatus();
@@ -438,17 +431,18 @@ function ResumenFlota() {
 function EquipoCardMobile({
   equipo,
   sucursalPorId,
-  puedeEditarFicha,
-  puedeCambiarEstado,
   marca,
 }: {
   equipo: Equipment;
   marca: Marca | null;
   sucursalPorId: Map<string, string>;
-  puedeEditarFicha: boolean;
-  puedeCambiarEstado: boolean;
 }) {
   const navigate = useNavigate();
+  const { can, canAny } = usePermissions();
+  const puedeCambiarEstado = can('equipment.status');
+  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
+  const puedeRegistrarHorometro = canAny(['horometro.create', 'horometro.close']);
+  const puedeRegistrarCombustible = can('combustible.create');
   const updateStatus = useUpdateEquipmentStatus();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -604,22 +598,26 @@ function EquipoCardMobile({
                     navigate(`/equipos/${equipo.id}`);
                   }}
                 />
-                <ActionTile
-                  icon={Gauge}
-                  label={registrarHorometroLabel(equipo)}
-                  onPress={() => {
-                    setIsSheetOpen(false);
-                    setIsShiftModalOpen(true);
-                  }}
-                />
-                <ActionTile
-                  icon={Droplet}
-                  label="Registrar combustible"
-                  onPress={() => {
-                    setIsSheetOpen(false);
-                    setIsCargaOpen(true);
-                  }}
-                />
+                {puedeRegistrarHorometro ? (
+                  <ActionTile
+                    icon={Gauge}
+                    label={registrarHorometroLabel(equipo)}
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsShiftModalOpen(true);
+                    }}
+                  />
+                ) : null}
+                {puedeRegistrarCombustible ? (
+                  <ActionTile
+                    icon={Droplet}
+                    label="Registrar combustible"
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsCargaOpen(true);
+                    }}
+                  />
+                ) : null}
                 {puedeEditarFicha ? (
                   <ActionTile
                     icon={Pencil}
@@ -662,11 +660,8 @@ function EquipoCardMobile({
 
 const TODOS = '__todos__';
 
-/** Escrituras que esta pantalla muestra como pendientes (ver `usePendingWrites`). */
-const RECURSOS_DE_FLOTA = ['equipment', 'equipmentDocument', 'horometro', 'combustible'] as const;
-
 export function EquiposView() {
-  const { user, role } = useCurrentUser();
+  const { can } = usePermissions();
   const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
   const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
   const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
@@ -675,10 +670,7 @@ export function EquiposView() {
   // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const puedeEditarFicha = user?.role === ROLES.ADMIN;
-  // `PATCH /equipment/:id/status` solo lo autoriza el backend a ADMIN y
-  // SUPERVISOR (MANTENEDOR recibe 403 vía `/equipos`) — ver Fix 3 del review QA.
-  const puedeCambiarEstado = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const puedeCrear = can('equipment.create');
 
   const {
     data: equipos,
@@ -722,7 +714,7 @@ export function EquiposView() {
         {/* PC: botón de texto en el header. En tablet/celular la creación es
            por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
            calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}
-        {puedeEditarFicha ? (
+        {puedeCrear ? (
           <Button className="hidden xl:block" onPress={() => setIsCreateOpen(true)}>
             Nuevo equipo
           </Button>
@@ -897,7 +889,7 @@ export function EquiposView() {
                               ) : null}
                               <span className="mt-0.5 block text-sm text-foreground">{identidad.marcaModelo}</span>
                               <span className="mt-0.5 block text-xs text-(--muted)">{claseTipoAnio(equipo)}</span>
-                              <MarcaPendiente marca={pendientes.marcaDe(equipmentEntity(equipo.id))} />
+                              <MarcaPendiente marca={pendientes.marcaDe('equipment', equipo.id)} />
                             </Link>
                           </Table.Cell>
                           <Table.Cell>
@@ -927,11 +919,7 @@ export function EquiposView() {
                           </Table.Cell>
                           <Table.Cell>
                             <div className="flex justify-end">
-                              <EquipoActionsMenu
-                                equipo={equipo}
-                                puedeCambiarEstado={puedeCambiarEstado}
-                                puedeEditarFicha={puedeEditarFicha}
-                              />
+                              <EquipoActionsMenu equipo={equipo} />
                             </div>
                           </Table.Cell>
                         </Table.Row>
@@ -955,9 +943,7 @@ export function EquiposView() {
               <EquipoCardMobile
                 equipo={equipo}
                 key={equipo.id}
-                marca={pendientes.marcaDe(equipmentEntity(equipo.id))}
-                puedeCambiarEstado={puedeCambiarEstado}
-                puedeEditarFicha={puedeEditarFicha}
+                marca={pendientes.marcaDe('equipment', equipo.id)}
                 sucursalPorId={sucursalPorId}
               />
             ))}
@@ -970,7 +956,7 @@ export function EquiposView() {
          verse también con la lista vacía, para crear el primer equipo.
          Mismo gate de rol y mismo modal (`CreateEquipoModal`, controlado)
          que ese botón. */}
-      {puedeEditarFicha ? (
+      {puedeCrear ? (
         <Button
           aria-label="Crear equipo"
           className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg shadow-black/25 xl:hidden"

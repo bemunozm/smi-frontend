@@ -19,11 +19,9 @@ import type { Equipment } from '../../types/equipment';
  * `EditEquipoModal` de forma aislada, sin depender de `EquiposView`/
  * `EquipoDetalleView` — mismo criterio que `RegistrarCargaCombustibleModal.test.tsx`.
  */
-const updateMutateAsyncMock = vi.fn();
-const assignMutateAsyncMock = vi.fn();
+const saveMutateMock = vi.fn();
 vi.mock('../../hooks/useEquipment', () => ({
-  useUpdateEquipment: () => ({ mutateAsync: updateMutateAsyncMock, isPending: false }),
-  useAssignEquipment: () => ({ mutateAsync: assignMutateAsyncMock, isPending: false }),
+  useSaveEquipment: () => ({ mutate: saveMutateMock, isPending: false }),
   useDeleteEquipment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -93,8 +91,7 @@ beforeEach(() => {
   // jsdom no implementa los object URL con los que el banner previsualiza la foto elegida.
   URL.createObjectURL = vi.fn(() => 'blob:foto-nueva');
   URL.revokeObjectURL = vi.fn();
-  updateMutateAsyncMock.mockReset().mockResolvedValue(EQUIPO);
-  assignMutateAsyncMock.mockReset().mockResolvedValue(EQUIPO);
+  saveMutateMock.mockReset();
 });
 
 describe('EditEquipoModal — un refetch en segundo plano no pisa una subida pendiente ni texto sin guardar', () => {
@@ -126,8 +123,8 @@ describe('EditEquipoModal — un refetch en segundo plano no pisa una subida pen
     // mientras el modal seguía abierto). Viaja como archivo, no como key.
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() => expect(updateMutateAsyncMock).toHaveBeenCalledTimes(1));
-    const [{ input, photo, quitarFoto }] = updateMutateAsyncMock.mock.calls[0] as [
+    await waitFor(() => expect(saveMutateMock).toHaveBeenCalledTimes(1));
+    const [{ input, photo, quitarFoto }] = saveMutateMock.mock.calls[0] as [
       { input: Record<string, unknown>; photo: File | null; quitarFoto: boolean },
     ];
     expect(photo).toBe(FILE);

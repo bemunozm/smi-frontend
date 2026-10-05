@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'luc
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useAhora } from '../hooks/useAhora';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { aNumero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
+import { numeroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { diferencias } from '../lib/cambios';
 import type { EntradaCambios } from '../types/cambios';
 import { contextoTurno, turnoAnterior, type Turno } from '../lib/turno';
@@ -36,7 +36,7 @@ import {
 } from '../components/terreno/ui';
 
 /**
- * Reporte diario del supervisor — Módulo B de la especificación del 21/09/2026.
+ * Reporte diario del supervisor (Módulo B de la especificación).
  *
  * ⚠️ MAQUETA. No hay backend: ni endpoints, ni tablas, ni tipos compartidos.
  * La especificación define SIETE entidades nuevas para esta pantalla
@@ -44,8 +44,7 @@ import {
  * `empresa_externa`, `produccion_turno` y los catálogos), y además dice que el
  * Módulo B es alcance nuevo, fuera de la propuesta que se cotizó.
  *
- * Se maqueta ahora para que el cliente la vea en la prueba en faena del
- * 05/10, no porque esté lista. Todo lo que hay debajo son constantes de este
+ * Se maqueta ahora para que el cliente la vea en la prueba en faena, no porque esté lista. Todo lo que hay debajo son constantes de este
  * archivo: nada se guarda y nada se lee del servidor. Cuando exista el
  * backend, lo que se reemplaza es el origen de los datos — el layout y los
  * cálculos de esta pantalla ya quedan resueltos.
@@ -98,7 +97,7 @@ interface ContenidoReporte {
   plantas: [string, string][];
   traspasos: [string, string][];
   empresas: string[];
-  /** Quién corrigió qué después de enviarlo, del más reciente al más viejo (R13). */
+  /** Quién corrigió qué después de enviarlo, del más reciente al más viejo. */
   cambios?: EntradaCambios[];
 }
 
@@ -120,7 +119,7 @@ interface ReporteAnterior extends ContenidoReporte {
   supervisor: string;
 }
 
-/** Quién firmó los turnos de ejemplo: el supervisor real de cada turno (Acta N.° 004). En el sistema real viene del reporte. */
+/** Quién firmó los turnos de ejemplo: el supervisor real de cada turno. En el sistema real viene del reporte. */
 const SUPERVISOR_DE_EJEMPLO: Record<Turno, string> = {
   DIURNO: 'Limbert Villacorta',
   NOCTURNO: 'José Pérez',
@@ -263,7 +262,7 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
 /**
  * Las tres secciones de camiones. Cada una registra cuántos camiones tiene y
  * cuántas vueltas da cada uno de esos camiones en el turno, y lleva su propio
- * contador: cada tipo tiene tarifa distinta (Acta N.° 004, R9).
+ * contador: cada tipo tiene tarifa distinta.
  *
  * La referencia es la que dio el cliente en esa reunión, en volúmenes
  * **diarios** — el formulario es por turno, así que sirve para detectar un
@@ -296,7 +295,7 @@ const SECCIONES_CAMIONES = [
 /**
  * Alimentación Planta PPE (Planta Producto Envasado): lo que cada tolva
  * descargó a la planta en el turno, contado en cargas. Antes se llamaba
- * «vueltas por tolva»; el cliente pidió el cambio de nombre en el Acta N.° 004
+ * «vueltas por tolva»; el cliente pidió el cambio de nombre
  * porque «vuelta» se confundía con las de los camiones, que son otra cosa y
  * no se cruzan ni se suman con estas.
  */
@@ -405,7 +404,7 @@ export function ReporteDiarioView() {
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
-  /** Lo escrito en los turnos anteriores; es estado porque se puede corregir (R13). */
+  /** Lo escrito en los turnos anteriores; es estado porque se puede corregir. */
   const [contenidos, setContenidos] = useState(CONTENIDO_ANTERIORES);
 
   const anteriores = useMemo<ReporteAnterior[]>(() => {
@@ -444,7 +443,7 @@ export function ReporteDiarioView() {
   };
 
   /**
-   * Guarda la corrección de un reporte ya enviado (Acta N.° 004, R13): sin
+   * Guarda la corrección de un reporte ya enviado: sin
    * autorización, pero con registro de quién cambió qué. Si nada cambió de
    * verdad no se registra nada. Maqueta: el aviso al administrador lo hará el
    * servidor cuando exista el backend del reporte.
@@ -456,10 +455,10 @@ export function ReporteDiarioView() {
       personal: r.personal.map(([cargo], i) => [cargo, edicion.personal[i].trim()]),
       secciones: r.secciones.map((s, i) => ({
         label: s.label,
-        camiones: aNumero(edicion.secciones[i].camiones),
-        vueltas: aNumero(edicion.secciones[i].vueltas),
+        camiones: numeroOCero(edicion.secciones[i].camiones),
+        vueltas: numeroOCero(edicion.secciones[i].vueltas),
       })),
-      tolvas: edicion.tolvas.map(aNumero),
+      tolvas: edicion.tolvas.map((tolva) => numeroOCero(tolva)),
       plantas: PLANTAS.filter((p) => edicion.plantas[p].trim()).map((p) => [p, edicion.plantas[p].trim()]),
       traspasos: r.traspasos.map(([label], i) => [label, edicion.traspasos[i].trim()]),
       empresas: [...EMPRESAS, ...EMPRESAS_EN_DUDA].filter((e) => edicion.empresas.includes(e)),
@@ -710,7 +709,7 @@ export function ReporteDiarioView() {
             ))}
           </div>
           {/* Un contador por tipo y ningún total: cada tipo se cobra con su
-              tarifa (R9), y una suma no correspondería a ninguna. */}
+              tarifa, y una suma no correspondería a ninguna. */}
           <div className="flex flex-col gap-1.5">
             <Label>Vueltas del turno por tipo</Label>
             <Cifras
@@ -832,7 +831,7 @@ export function ReporteDiarioView() {
   const editar = (cambio: (b: BorradorReporte) => BorradorReporte) => setEdicion((b) => (b ? cambio(b) : b));
 
   /**
-   * Corregir un reporte ya enviado (R13): los mismos bloques del formulario
+   * Corregir un reporte ya enviado: los mismos bloques del formulario
    * del turno, con lo que se envió, y el aviso al administrador arriba.
    */
   const vistaEdicion = detalle && edicion && (

@@ -4,16 +4,14 @@ import { toast } from '@heroui/react';
 
 import { listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 import { useCurrentUser } from './useCurrentUser';
+import { useQueuedMutation } from './useQueuedMutation';
 import { DomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
-import { opsDeCreacion, trabajoExtraEntity } from '../offline/db';
-import { useOutboxOps } from '../offline/useOutboxOps';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
-import { submitWrite } from '../offline/submit-write';
-import { diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { edicionContraBase } from '../lib/edit-diff';
 import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
@@ -100,59 +98,53 @@ const CAMPOS_TRABAJO = [
   'observaciones',
 ] as const;
 
-/** Edición de un trabajo ya registrado (R13) por la cola. El administrador se
- * entera cuando el servidor la recibe, no al guardar. */
+/** Edición de un trabajo ya registrado por la cola. El administrador se entera
+ * cuando el servidor la recibe, no al guardar. */
 export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   const { user } = useCurrentUser();
-  const ops = useOutboxOps(user?.id);
-  const [isGuardando, setIsGuardando] = useState(false);
+  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraForm }>({
+    endpoint: 'trabajoExtra.edit',
+    waitMs: 0,
+    userId: user?.id,
+    build: ({ original, corregido }) => {
+      // Un texto opcional vacío y uno ausente son lo mismo: sin esto, abrir y
+      // guardar sin tocar nada marcaría `observaciones` como cambiada.
+      const base: TrabajoExtraForm = {
+        equipoId: original.equipoId,
+        operatorId: original.operatorId ?? '',
+        faena: original.faena,
+        turno: original.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+        horometroInicial: original.horometroInicial,
+        horometroFinal: original.horometroFinal,
+        actividades: original.actividades,
+        otraActividad: original.otraActividad ?? '',
+        descripcion: original.descripcion,
+        observaciones: original.observaciones ?? '',
+      };
+      const nuevo: TrabajoExtraForm = {
+        ...corregido,
+        otraActividad: corregido.otraActividad ?? '',
+        observaciones: corregido.observaciones ?? '',
+      };
+      const cambio = edicionContraBase(base, nuevo, CAMPOS_TRABAJO);
+      if (!cambio.hayCambios) return null;
+      return { params: { id: original.id }, body: cambio.cambios, expected: cambio.esperado };
+    },
+    errorFallback: 'No se pudo guardar el cambio en el equipo.',
+    errorMessage: (error) => mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'),
+  });
 
   const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraForm): Promise<boolean> => {
-    // Un texto opcional vacío y uno ausente son lo mismo: sin esto, abrir y
-    // guardar sin tocar nada marcaría `observaciones` como cambiada.
-    const base: TrabajoExtraForm = {
-      equipoId: original.equipoId,
-      operatorId: original.operatorId ?? '',
-      faena: original.faena,
-      turno: original.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
-      horometroInicial: original.horometroInicial,
-      horometroFinal: original.horometroFinal,
-      actividades: original.actividades,
-      otraActividad: original.otraActividad ?? '',
-      descripcion: original.descripcion,
-      observaciones: original.observaciones ?? '',
-    };
-    const nuevo: TrabajoExtraForm = {
-      ...corregido,
-      otraActividad: corregido.otraActividad ?? '',
-      observaciones: corregido.observaciones ?? '',
-    };
-    const diff = diferenciaEdicion(base, nuevo, CAMPOS_TRABAJO);
-    if (Object.keys(diff.cambios).length === 0) return true;
-    setIsGuardando(true);
     try {
-      await submitWrite(
-        'trabajoExtra.edit',
-        {
-          params: { id: original.id },
-          body: diff.cambios,
-          expected: precondicion(diff.esperado),
-          entityKey: trabajoExtraEntity(original.id),
-          dependsOn: opsDeCreacion(trabajoExtraEntity(original.id), ops),
-        },
-        { waitMs: 0, userId: user?.id },
-      );
-      avisarGuardadoEnCola();
+      await edicion.mutateAsync({ original, corregido });
       return true;
-    } catch (error: unknown) {
-      toast.danger(mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'));
+    } catch {
+      // `useQueuedMutation` ya avisó el error.
       return false;
-    } finally {
-      setIsGuardando(false);
     }
   };
 
-  return { guardar, isGuardando };
+  return { guardar, isGuardando: edicion.isPending };
 }
 
 export function useCambiosTrabajoExtra(id: string | null) {

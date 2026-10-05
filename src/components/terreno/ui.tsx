@@ -20,7 +20,7 @@ import type { Turno } from '../../lib/turno';
 import type { EntradaCambios } from '../../types/cambios';
 
 /**
- * Kit visual de Terreno, según la maqueta aprobada el 23/09/2026.
+ * Kit visual de Terreno, según la maqueta aprobada.
  *
  * Convive con `mobile.tsx` a propósito: ese archivo es el kit anterior y las
  * vistas todavía sin migrar lo siguen usando. La migración va vista por vista;
@@ -939,7 +939,7 @@ export function Filas({ filas }: { filas: [string, ReactNode][] }) {
   );
 }
 
-/* ---------- Edición de registros enviados (Acta N.° 004, R13) ---------- */
+/* ---------- Edición de registros enviados ---------- */
 
 /**
  * Lo que se le dice a quien edita algo ya enviado, siempre en el mismo

@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Chip, FieldError, Input, Label, ListBox, Modal, NumberField, Select, Spinner, TextField } from '@heroui/react';
+import { Button, Chip, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
+import { DecimalField } from '../DecimalField';
 import { useCreateCombustible } from '../../hooks/useCombustible';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from './FotoRespaldoField';
@@ -16,7 +17,7 @@ const TIPO_OPTIONS = [
 
 // Schema local de la UI — ver la nota equivalente en `RegistrarEntradaModal`
 // sobre por qué no se reutiliza `combustibleFormSchema` tal cual (litros
-// controlado por `NumberField` necesita `number`, no `number | undefined`).
+// controlado por `DecimalField` necesita `number`, no `number | undefined`).
 const CargaSchema = z.object({
   litros: z.number().positive('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
@@ -162,7 +163,6 @@ export function RegistrarCargaCombustibleModal({
                 captureDate={photoFlow.captureDate}
                 file={photoFlow.file}
                 isReadingPhoto={photoFlow.isReadingPhoto}
-                isUploadingPhoto={false}
                 onClear={photoFlow.handleClearPhoto}
                 onSelect={(f) => void photoFlow.handleSelectPhoto(f)}
                 staleQuestion="¿es la carga actual?"
@@ -174,18 +174,14 @@ export function RegistrarCargaCombustibleModal({
                 control={control}
                 name="litros"
                 render={({ field }) => (
-                  <NumberField
-                    fullWidth
+                  <DecimalField
+                    errorMessage={errors.litros?.message}
                     isDisabled={!photoFlow.file}
                     isInvalid={!!errors.litros}
-                    minValue={0}
-                    onChange={field.onChange}
-                    value={field.value}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label>Litros</Label>
-                      {ocrLeido &&
-                        (ocrLeido.status === 'CONFIRMED' ? (
+                    label="Litros"
+                    labelAddon={
+                      ocrLeido ? (
+                        ocrLeido.status === 'CONFIRMED' ? (
                           <Chip color="success" size="sm" variant="soft">
                             Leído de la foto
                           </Chip>
@@ -197,18 +193,14 @@ export function RegistrarCargaCombustibleModal({
                           <Chip color="default" size="sm" variant="soft">
                             No se pudo leer la foto, ingresá los litros a mano
                           </Chip>
-                        ))}
-                    </div>
-                    <NumberField.Group>
-                      <NumberField.DecrementButton />
-                      <NumberField.Input
-                        onBlur={field.onBlur}
-                        placeholder={!photoFlow.file ? 'Requiere foto de respaldo' : undefined}
-                      />
-                      <NumberField.IncrementButton />
-                    </NumberField.Group>
-                    {errors.litros ? <FieldError>{errors.litros.message}</FieldError> : null}
-                  </NumberField>
+                        )
+                      ) : undefined
+                    }
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                    placeholder={!photoFlow.file ? 'Requiere foto de respaldo' : undefined}
+                    value={field.value}
+                  />
                 )}
               />
 

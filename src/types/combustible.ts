@@ -8,7 +8,7 @@ export const combustibleFormSchema = z.object({
   fotoUrl: z.string().optional(), // legacy Terreno: ruta servida por el backend (/uploads/...)
   /** Key `tmp/<userId>/<uuid>.<ext>` de la foto, que escribe el replay al
    * subirla (la foto viaja como archivo de la escritura, ver
-   * `hooks/useCombustible.ts`; Diseño del RFC R2-storage). Excluyente con
+   * `hooks/useCombustible.ts`). Excluyente con
    * `fotoUrl`: el backend rechaza los dos juntos. */
   fotoKey: z.string().optional(),
   // ISO datetime — auto-rellenada en el modal desde la EXIF de la foto (o

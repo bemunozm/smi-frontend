@@ -41,7 +41,7 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
   const handleClick = (): void => {
     markRead.mutate(notificacion.id);
 
-    // `shift.exit-report` (RFC "Supervisión en Terreno" §Backend): no tiene
+    // `shift.exit-report`: no tiene
     // una pantalla propia — abre directo el PDF (302 a la URL firmada, ver
     // `api/ShiftReportAPI.ts#fileUrl`), no una navegación interna con
     // `navigate()`. Se resuelve ANTES que `equipoIdFrom` porque

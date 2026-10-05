@@ -39,7 +39,7 @@ export function extractBackendCode(data: unknown): string | undefined {
  * negocio del backend, ver `extractBackendCode`) y `status` (el HTTP status
  * de la respuesta) — para el caller que SÍ necesita diferenciar casos de
  * negocio sin volver a parsear `.message` (ver `hooks/useShiftCards.ts`,
- * Módulo A de Supervisión en Terreno).
+ * Supervisión en Terreno).
  */
 export class DomainError extends Error {
   readonly code?: string;

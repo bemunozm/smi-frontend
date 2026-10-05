@@ -36,6 +36,7 @@ import {
   useEquipment,
   useEquipmentDetail,
   useResumenFleet,
+  useSaveEquipment,
   useUpdateEquipment,
   useUpdateEquipmentStatus,
 } from './useEquipment';
@@ -454,5 +455,78 @@ describe('useDeleteEquipment', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(toast.danger).toHaveBeenCalledWith('No se puede eliminar: tiene 3 registro(s) asociados');
+  });
+});
+
+describe('useSaveEquipment', () => {
+  const cambioDeTipo = {
+    licensePlate: null,
+    equipmentClass: 'HEAVY' as const,
+    type: 'Retroexcavadora',
+    brand: 'Caterpillar',
+    model: '336',
+    year: 2019,
+    controlUnit: 'HOURS' as const,
+    status: 'OPERATIONAL' as const,
+    homeBranchId: null,
+  };
+
+  it('guarda la ficha y la asignación, cada una con su aviso', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ internalCode: 'EX-001' }));
+    submitWriteMock.mockResolvedValueOnce(enviado({ internalCode: 'EX-001' }));
+    const { result } = renderHook(() => useSaveEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ equipo: EQUIPO, input: cambioDeTipo, asignacion: { operatorId: 'op_1' } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(submitWriteMock.mock.calls.map(([endpoint]) => endpoint)).toEqual(['equipment.update', 'equipment.assign']);
+    expect(toast.success).toHaveBeenCalledWith('Equipo actualizado', { description: 'EX-001' });
+    expect(toast.success).toHaveBeenCalledWith('Asignación actualizada', { description: 'EX-001' });
+    expect(result.current.data?.errorAsignacion).toBeNull();
+  });
+
+  it('sin asignación que cambiar solo guarda la ficha', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ internalCode: 'EX-001' }));
+    const { result } = renderHook(() => useSaveEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ equipo: EQUIPO, input: cambioDeTipo, asignacion: {} });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(submitWriteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('si la asignación falla, la ficha queda guardada y el error se avisa sin dar por buena la operación', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ internalCode: 'EX-001' }));
+    submitWriteMock.mockRejectedValueOnce(new DomainError('Ese operador ya no está activo.', { code: 'OPERATOR_INACTIVE', status: 409 }));
+    const { result } = renderHook(() => useSaveEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ equipo: EQUIPO, input: cambioDeTipo, asignacion: { operatorId: 'op_1' } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(toast.success).toHaveBeenCalledWith('Equipo actualizado', { description: 'EX-001' });
+    expect(toast.danger).toHaveBeenCalledWith('Ese operador ya no está activo. Elegí otro del catálogo.');
+    expect(result.current.data?.errorAsignacion).toBeInstanceOf(DomainError);
+  });
+
+  it('si la ficha falla, la asignación ni se intenta', async () => {
+    submitWriteMock.mockRejectedValueOnce(new DomainError('Código duplicado', { status: 409 }));
+    const { result } = renderHook(() => useSaveEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ equipo: EQUIPO, input: cambioDeTipo, asignacion: { operatorId: 'op_1' } });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(submitWriteMock).toHaveBeenCalledTimes(1);
+    expect(toast.danger).toHaveBeenCalledWith('Código duplicado');
+  });
+
+  it('con lo que quedó en cola avisa una sola vez que quedó guardado', async () => {
+    submitWriteMock.mockResolvedValue(encolado());
+    const { result } = renderHook(() => useSaveEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({ equipo: EQUIPO, input: cambioDeTipo, asignacion: { operatorId: 'op_1' } });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Guardado'));
   });
 });

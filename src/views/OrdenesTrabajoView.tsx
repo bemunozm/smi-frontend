@@ -1,7 +1,3 @@
-import { MarcaPendiente } from '../components/sync/MarcaPendiente';
-import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
-import { ordenEntity } from '../offline/db';
-import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -20,8 +16,12 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { usePermissions } from '../hooks/usePermissions';
 import { useActualizarOrden, useCrearOrden, useOrdenes, useToggleTarea } from '../hooks/useOrdenes';
+import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ESTADO_OT_LABELS,
   ESTADO_OT_OPTIONS,
@@ -34,7 +34,6 @@ import {
   estadoOTChipColor,
   prioridadOTChipColor,
 } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import {
   CreateOrdenSchema,
   ORIGEN_OT,
@@ -461,10 +460,8 @@ function OrdenCard({ orden, marca }: { orden: OrdenTrabajo; marca: Marca | null 
  * `useActualizarOrden`/`useToggleTarea` — sin try/catch ni toasts acá (viven
  * en los hooks).
  */
-const RECURSOS_DE_ORDENES = ['orden', 'intervencion'] as const;
-
 export function OrdenesTrabajoView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const [filtro, setFiltro] = useState<FiltroEstado>('TODAS');
   const { data: ordenes, isPending, isError, error } = useOrdenes(filtro === 'TODAS' ? undefined : filtro);
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
@@ -479,7 +476,7 @@ export function OrdenesTrabajoView() {
     };
   }, [ordenes]);
 
-  const puedeCrear = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const puedeCrear = can('orden.create');
 
   return (
     <div className="flex flex-col gap-4">
@@ -555,7 +552,7 @@ export function OrdenesTrabajoView() {
       {!isPending && !isError && ordenes && ordenes.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {ordenes.map((orden) => (
-            <OrdenCard key={orden.id} marca={pendientes.marcaDe(ordenEntity(orden.id))} orden={orden} />
+            <OrdenCard key={orden.id} marca={pendientes.marcaDe('orden', orden.id)} orden={orden} />
           ))}
         </div>
       ) : null}

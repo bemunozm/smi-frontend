@@ -2,13 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { CategoryAPI, type CategoryFilters } from '../api/CategoryAPI';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
 import { INVENTORY_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
+import { buildQueuedEdit } from '../lib/queued-edit';
 import { categoryEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type { ItemCategory } from '../types/category';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
 const CATEGORIES_KEY = [...INVENTORY_KEY, 'categories'] as const;
 
@@ -33,9 +31,9 @@ export function useCategories(filters: CategoryFilters = {}) {
  * lista de categorías. */
 
 export function useCreateCategory() {
-  return useOfficeMutation<'category.create', string>({
+  return useQueuedCreate<'category.create', string>({
     endpoint: 'category.create',
-    build: (name) => ({ params: {}, body: { name, id: generateUuid() } }),
+    build: (name, id) => ({ params: {}, body: { name, id } }),
     onSent: (category, name) => {
       toast.success('Categoría creada', { description: category?.name ?? name });
     },
@@ -52,14 +50,18 @@ export interface UpdateCategoryVars {
 }
 
 export function useUpdateCategory() {
-  return useOfficeMutation<'category.update', UpdateCategoryVars>({
+  return useQueuedMutation<'category.update', UpdateCategoryVars>({
     endpoint: 'category.update',
     build: async ({ category, name }) => {
-      const pendiente = await cambiosPendientes(categoryEntity(category.id), ['category.update']);
-      const base = conPendientes({ name: category.name }, pendiente, ['name']);
-      const { cambios, esperado } = diferenciaEdicion(base, { name }, ['name']);
-      if (Object.keys(cambios).length === 0) return null;
-      return { params: { id: category.id }, body: cambios, expected: precondicion(esperado) };
+      const edicion = await buildQueuedEdit({
+        entity: categoryEntity(category.id),
+        ops: ['category.update'],
+        base: { name: category.name },
+        next: { name },
+        fields: ['name'],
+      });
+      if (!edicion.hayCambios) return null;
+      return { params: { id: category.id }, body: edicion.cambios, expected: edicion.esperado };
     },
     onSent: (category, { name }) => {
       toast.success('Categoría actualizada', { description: category?.name ?? name });
@@ -69,13 +71,10 @@ export function useUpdateCategory() {
 }
 
 export function useDeleteCategory() {
-  return useOfficeMutation<'category.delete', string>({
+  // El 409 explica cuántos ítems la usan y que hay que reasignarlos.
+  return useQueuedDelete({
     endpoint: 'category.delete',
-    build: (id) => ({ params: { id }, body: {} }),
-    onSent: () => {
-      toast.success('Categoría eliminada');
-    },
-    // El 409 explica cuántos ítems la usan y que hay que reasignarlos.
+    sentMessage: 'Categoría eliminada',
     errorFallback: 'No se pudo eliminar la categoría.',
   });
 }

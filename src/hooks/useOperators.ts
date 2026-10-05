@@ -2,13 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { OperatorAPI, type OperatorFiltros } from '../api/OperatorAPI';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { pickFields } from '../lib/edit-diff';
 import { OPERATORS_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
+import { buildQueuedEdit } from '../lib/queued-edit';
 import { operatorEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type { CreateOperatorInput, Operator, OperatorFields, UpdateOperatorInput } from '../types/operator';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
 // La key vive en `lib/query-keys.ts` (la comparten `offline/` y la precarga de
 // "Preparar para uso sin señal"); se re-exporta para los consumidores existentes.
@@ -30,9 +29,9 @@ export function useOperators(filtros: OperatorFiltros = {}) {
 }
 
 export function useCreateOperator() {
-  return useOfficeMutation<'operator.create', CreateOperatorInput>({
+  return useQueuedCreate<'operator.create', CreateOperatorInput>({
     endpoint: 'operator.create',
-    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
     onSent: (operator, input) => {
       toast.success('Operador creado', { description: operator?.name ?? input.name });
     },
@@ -51,24 +50,19 @@ export interface UpdateOperatorVars {
 /** Arma la edición de un operador contra su base (lo que se ve más lo ya guardado
  * sin enviar). Un RUT omitido es "sin cambio": el contrato no admite borrarlo. */
 async function edicionDeOperador({ operator, input }: UpdateOperatorVars) {
-  const pendiente = await cambiosPendientes(operatorEntity(operator.id), ['operator.update']);
-  const base = conPendientes<OperatorFields>(
-    { name: operator.name, rut: operator.rut, isActive: operator.isActive },
-    pendiente,
-    CAMPOS_DE_OPERADOR,
-  );
-  const nuevo: OperatorFields = {
-    name: input.name ?? base.name,
-    rut: input.rut ?? base.rut,
-    isActive: input.isActive ?? base.isActive,
-  };
-  const { cambios, esperado } = diferenciaEdicion(base, nuevo, CAMPOS_DE_OPERADOR);
-  if (Object.keys(cambios).length === 0) return null;
-  return { params: { id: operator.id }, body: cambios, expected: precondicion(esperado) };
+  const edicion = await buildQueuedEdit<OperatorFields>({
+    entity: operatorEntity(operator.id),
+    ops: ['operator.update'],
+    base: pickFields(operator, CAMPOS_DE_OPERADOR),
+    next: input,
+    fields: CAMPOS_DE_OPERADOR,
+  });
+  if (!edicion.hayCambios) return null;
+  return { params: { id: operator.id }, body: edicion.cambios, expected: edicion.esperado };
 }
 
 export function useUpdateOperator() {
-  return useOfficeMutation<'operator.update', UpdateOperatorVars>({
+  return useQueuedMutation<'operator.update', UpdateOperatorVars>({
     endpoint: 'operator.update',
     build: edicionDeOperador,
     onSent: (data, { operator }) => {
@@ -82,7 +76,7 @@ export function useUpdateOperator() {
  * `PATCH { isActive }`. Comparte la escritura con `useUpdateOperator` porque
  * pega al mismo endpoint. */
 export function useToggleOperatorActive() {
-  return useOfficeMutation<'operator.update', { operator: Operator; isActive: boolean }>({
+  return useQueuedMutation<'operator.update', { operator: Operator; isActive: boolean }>({
     endpoint: 'operator.update',
     build: ({ operator, isActive }) => edicionDeOperador({ operator, input: { isActive } }),
     onSent: (data, { operator, isActive }) => {
@@ -95,14 +89,11 @@ export function useToggleOperatorActive() {
 }
 
 export function useDeleteOperator() {
-  return useOfficeMutation<'operator.delete', string>({
+  // El backend rechaza con 409 si el operador está en uso y sugiere desactivarlo:
+  // ese mensaje llega tal cual.
+  return useQueuedDelete({
     endpoint: 'operator.delete',
-    build: (id) => ({ params: { id }, body: {} }),
-    onSent: () => {
-      toast.success('Operador eliminado');
-    },
-    // El backend rechaza con 409 si el operador está en uso y sugiere
-    // desactivarlo — ese mensaje llega tal cual.
+    sentMessage: 'Operador eliminado',
     errorFallback: 'No se pudo eliminar el operador.',
   });
 }

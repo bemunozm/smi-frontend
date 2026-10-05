@@ -71,7 +71,7 @@ const TURNOS = [
  * placeholder «Ej: Rajo Norte», que producía «Patillo», «patillo» y «PAT» como
  * tres lugares distintos para la base de datos.
  *
- * Es provisorio: RFC-4 decide que la faena es una `Branch` de tipo `SITE`, así
+ * Es provisorio: la faena pasará a ser una `Branch` de tipo `SITE`, así
  * que cuando exista `branchId` esta lista sale del servidor y deja de estar
  * escrita acá.
  */
@@ -110,7 +110,7 @@ export function TrabajosExtraView() {
   const { registrar, isGuardando } = useRegistrarTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleId, setDetalleId] = useState<string | null>(null);
-  /** Modo edición del trabajo abierto en el detalle (Acta N.° 004, R13). */
+  /** Modo edición del trabajo abierto en el detalle. */
   const [editando, setEditando] = useState(false);
   const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarTrabajoExtra();
   // Se lee de la lista y no de una copia: tras editar, la lista se refresca
@@ -145,10 +145,9 @@ export function TrabajosExtraView() {
    * que lo lleva. «Turno en curso» es `equipo.openShift`: la lectura de
    * horómetro sin `valorFinal`, la misma definición que usa el backend.
    *
-   * Hasta el Acta N.° 004 un equipo en turno no se podía elegir. El cliente lo
-   * corrigió (punto 4): el trabajo extra se registra al final del turno y usa
-   * la misma máquina, que tiene tiempos en ralentí. Ahora se puede elegir, y
-   * el turno abierto queda como **aviso** —para no tener que coordinarlo por
+   * Un equipo en turno se puede elegir: el trabajo extra se registra al final
+   * del turno y usa la misma máquina, que tiene tiempos en ralentí. El turno
+   * abierto queda como **aviso** —para no tener que coordinarlo por
    * radio—, no como bloqueo.
    */
   const enTurno = useMemo(
@@ -162,7 +161,7 @@ export function TrabajosExtraView() {
   );
 
   /**
-   * R10: el selector separa los equipos en terreno de los disponibles. Los que
+   * El selector separa los equipos en terreno de los disponibles. Los que
    * están en taller o fuera de servicio quedan al final, a la vista pero sin
    * poder elegirse, para que no parezca que desaparecieron.
    */
@@ -302,7 +301,7 @@ export function TrabajosExtraView() {
     );
 
   /**
-   * Editar un trabajo ya registrado (Acta N.° 004, R13): el mismo formulario
+   * Editar un trabajo ya registrado: el mismo formulario
    * del alta, con los datos guardados y el aviso de que el administrador se
    * entera. Vive en la misma ventana que el detalle, como lista y detalle.
    */
@@ -468,7 +467,7 @@ export function TrabajosExtraView() {
 
 /**
  * Los campos de un trabajo extraordinario, para registrarlo y para editarlo
- * (Acta N.° 004, R13). Es el mismo formulario en los dos casos a propósito:
+ * Es el mismo formulario en los dos casos a propósito:
  * corregir un dato no tiene por qué verse distinto de cargarlo, y las reglas
  * —horómetros, «Otro» con texto, cobro mínimo— no pueden quedar aplicadas en
  * uno y en el otro no.
@@ -584,7 +583,7 @@ function FormularioTrabajo({
         <Hint>Delimitan el trabajo, no el turno completo.</Hint>
 
         {/* Lo que se muestra es lo que se COBRA: el mínimo es una hora
-            máquina (Acta N.° 004). Las horas reales van en la nota cuando
+            máquina. Las horas reales van en la nota cuando
             son menos, para que se vea por qué la cifra no calza con la
             resta de los horómetros. */}
         <Calculado

@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Contrato de las categorías del catálogo (`/api/inventory/categories`) —
- * T05 · DEV-29.
+ * Contrato de las categorías del catálogo (`/api/inventory/categories`).
  *
  * Vive aparte de `types/inventory.ts` a propósito: el ítem trae su categoría
  * embebida (`{ id, name }`), así que ninguno de los dos archivos necesita
@@ -25,23 +24,3 @@ export const CategoryListResponseSchema = z.object({
   data: z.array(ItemCategorySchema),
   message: z.string(),
 });
-
-export const CategoryResponseSchema = z.object({
-  data: ItemCategorySchema,
-  message: z.string(),
-});
-
-export const DeleteCategoryResponseSchema = z.object({
-  data: z.object({ id: z.string() }).nullable(),
-  message: z.string(),
-});
-
-// --- Formulario ------------------------------------------------------------
-
-export const CategoryFormSchema = z.object({
-  name: z
-    .string()
-    .min(2, 'El nombre debe tener al menos 2 caracteres')
-    .max(60, 'Máximo 60 caracteres'),
-});
-export type CategoryFormValues = z.infer<typeof CategoryFormSchema>;

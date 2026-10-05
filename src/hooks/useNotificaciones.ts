@@ -3,8 +3,7 @@ import { toast } from '@heroui/react';
 
 import { NotificacionAPI } from '../api/NotificacionAPI';
 
-const NOTIFICACIONES_QUERY_KEY = ['notificaciones'] as const;
-const UNREAD_COUNT_QUERY_KEY = ['notificaciones', 'unread'] as const;
+import { NOTIFICACIONES_KEY as NOTIFICACIONES_QUERY_KEY, NOTIFICACIONES_UNREAD_KEY as UNREAD_COUNT_QUERY_KEY } from '../lib/query-keys';
 
 /** Polling cada 30s: no hay push/websocket de notificaciones todavía. */
 const POLL_INTERVAL_MS = 30_000;

@@ -3,9 +3,8 @@ import { toast } from '@heroui/react';
 
 import { IntervencionesAPI } from '../api/MantenimientoAPI';
 import { INTERVENCIONES_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
 import type { CreateIntervencionInput } from '../types/mantenimiento';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate } from './useQueuedMutation';
 
 function intervencionesQueryKey(ordenId: string | undefined) {
   return [...INTERVENCIONES_KEY, ordenId] as const;
@@ -26,9 +25,9 @@ export function useIntervenciones(ordenId: string | undefined) {
  * OT en el backend.
  */
 export function useCrearIntervencion() {
-  return useOfficeMutation<'intervencion.create', { ordenId: string; input: CreateIntervencionInput }>({
+  return useQueuedCreate<'intervencion.create', { ordenId: string; input: CreateIntervencionInput }>({
     endpoint: 'intervencion.create',
-    build: ({ ordenId, input }) => ({ params: { ordenId }, body: { ...input, id: generateUuid() } }),
+    build: ({ ordenId, input }, id) => ({ params: { ordenId }, body: { ...input, id } }),
     onSent: () => {
       toast.success('Intervención registrada');
     },

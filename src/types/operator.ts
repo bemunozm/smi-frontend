@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { isValidRut, normalizeRut } from '../lib/rut';
 
 /**
- * Contrato del dominio Operadores (`GET/POST/PATCH/DELETE /api/operators`,
- * ver plan "Supervisión en Terreno") — catálogo propio, ya no texto libre.
+ * Contrato del dominio Operadores (`GET/POST/PATCH/DELETE /api/operators`):
+ * catálogo propio, ya no texto libre.
  * `rut` normalizado `12345678-K` (único en el backend); lectura para
  * cualquier sesión autenticada, escritura ADMIN/SUPERVISOR, borrado
  * ADMIN-only con guarda de uso (409 si está en uso, sugiere desactivar).
@@ -23,16 +23,6 @@ export type Operator = z.infer<typeof OperatorSchema>;
 
 export const OperatorListResponseSchema = z.object({
   data: z.array(OperatorSchema),
-  message: z.string(),
-});
-
-export const OperatorResponseSchema = z.object({
-  data: OperatorSchema,
-  message: z.string(),
-});
-
-export const DeleteOperatorResponseSchema = z.object({
-  data: z.object({ id: z.string() }).nullable(),
   message: z.string(),
 });
 

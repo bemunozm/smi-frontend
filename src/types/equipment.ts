@@ -19,7 +19,7 @@ export const EQUIPMENT_STATUS = ['OPERATIONAL', 'IN_WORKSHOP', 'OUT_OF_SERVICE']
 export type EquipmentStatus = (typeof EQUIPMENT_STATUS)[number];
 
 /**
- * Estado de vigencia de un documento (revisión técnica R1 / seguro R2),
+ * Estado de vigencia de un documento (revisión técnica, seguro, etc.),
  * derivado ON-READ por el backend (`equipment.service.ts#buildDocumentExpiryInfo`)
  * — nunca se persiste tal cual, se recalcula en cada lectura contra la fecha
  * actual. Mismo vocabulario que `DocumentStatus` del backend.
@@ -58,9 +58,9 @@ const OpenShiftSchema = z.object({
   /** Nombre del supervisor que abrió la tarjeta, o `null` si el registro no
    * tiene supervisor asociado (dato legacy) o el usuario ya no existe —
    * alimenta el "ocupado por X" del selector de equipo en Registro de
-   * equipo (`hooks/useShiftRegister.ts`, RFC "Supervisión en Terreno"). */
+   * equipo (`hooks/useShiftRegister.ts`). */
   supervisorName: z.string().nullable(),
-  /** id del `Shift` (Módulo A) si esta tarjeta viene de Registro de turno —
+  /** id del `Shift` si esta tarjeta viene de Registro de turno —
    * `null` para un `RegistroHorometro` abierto solo desde Flota. Lo usa
    * `RegistrarSalidaModal` (salida de Flota) para avisar que cerrar ahí no
    * registra litros ni foto, y que un cierre guardado sin señal desde
@@ -101,7 +101,7 @@ export const EquipmentSchema = z.object({
    * partir de los documentos de la unidad (dominio "Documentos de equipo",
    * ver `types/equipment-document.ts`): el tono más urgente entre todos sus
    * documentos, o `null` si ninguno está POR_VENCER/VENCIDO. Reemplaza al
-   * viejo campo anidado `documents` (R1/R2 fijos) — el detalle completo (qué
+   * viejo campo anidado `documents` (solo revisión técnica y seguro) — el detalle completo (qué
    * documento, de qué tipo) vive en `GET /equipment/:id/documents`, no acá. */
   documentsAlert: z.enum(['VENCIDO', 'POR_VENCER']).nullable(),
   createdAt: z.string().datetime(),
@@ -183,11 +183,6 @@ export type ResumenFleet = z.infer<typeof ResumenFleetSchema>;
 
 export const EquipmentListResponseSchema = z.object({
   data: z.array(EquipmentSchema),
-  message: z.string(),
-});
-
-export const EquipmentResponseSchema = z.object({
-  data: EquipmentSchema,
   message: z.string(),
 });
 

@@ -8,7 +8,6 @@ const { fuelReadingOcrMock, readCaptureDateMock } = vi.hoisted(() => ({
 
 vi.mock('../api/OcrAPI', () => ({ fuelReadingOcr: fuelReadingOcrMock }));
 vi.mock('./photo-reading', () => ({ readCaptureDate: readCaptureDateMock }));
-vi.mock('../api/UploadsAPI', () => ({ uploadFile: vi.fn() }));
 vi.mock('@heroui/react', () => ({ toast: { danger: vi.fn() } }));
 
 import { usePhotoCaptureFlow } from './usePhotoCaptureFlow';

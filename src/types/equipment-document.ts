@@ -53,20 +53,6 @@ export const EquipmentDocumentListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const EquipmentDocumentResponseSchema = z.object({
-  data: EquipmentDocumentSchema,
-  message: z.string(),
-});
-
-/** A diferencia de `DeleteEquipmentResponseSchema` (que admite `data: null`
- * cuando el backend rechaza el borrado por historial asociado), el borrado de
- * un documento no tiene ese caso de conflicto — el contrato siempre trae
- * `{ id }`. */
-export const DeleteEquipmentDocumentResponseSchema = z.object({
-  data: z.object({ id: z.string() }),
-  message: z.string(),
-});
-
 // --- Bodies de API -----------------------------------------------------------
 
 /** Body de `POST /api/equipment/:equipmentId/documents` — solo `type` es

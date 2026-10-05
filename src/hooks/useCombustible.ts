@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { toast } from '@heroui/react';
+
 import { listCombustible } from '../api/CombustibleAPI';
 import { COMBUSTIBLE_KEY as KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
 import type { CombustibleForm } from '../types/combustible';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate } from './useQueuedMutation';
 
 export function useCombustibleList() {
   return useQuery({ queryKey: KEY, queryFn: listCombustible });
@@ -23,14 +24,16 @@ export interface CreateCombustibleVars {
  * contadores de la ficha).
  */
 export function useCreateCombustible() {
-  return useOfficeMutation<'combustible.create', CreateCombustibleVars>({
+  return useQueuedCreate<'combustible.create', CreateCombustibleVars>({
     endpoint: 'combustible.create',
-    build: ({ input, foto }) => ({
+    build: ({ input, foto }, id) => ({
       params: {},
-      body: { ...input, id: generateUuid() },
+      body: { ...input, id },
       files: [{ field: 'fotoKey', file: foto }],
     }),
-    onSent: () => undefined,
+    onSent: () => {
+      toast.success('Carga de combustible registrada');
+    },
     errorFallback: 'No se pudo registrar la carga de combustible.',
   });
 }

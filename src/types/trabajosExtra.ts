@@ -6,7 +6,7 @@ export const ACTIVIDADES = [
   { value: 'LIMPIEZA_CANCHA', label: 'Limpieza de cancha' },
   { value: 'SOLTAR_MATERIAL', label: 'Soltar material' },
   { value: 'LIMPIEZA_SILOS', label: 'Limpieza de silos' },
-  // «Pretil», no «petril» (Acta N.° 004, punto 3). Solo cambia la etiqueta:
+  // «Pretil», no «petril». Solo cambia la etiqueta:
   // el valor guardado en la base sigue siendo `HACER_PETRIL`.
   { value: 'HACER_PETRIL', label: 'Hacer pretil' },
   { value: 'ARREGLO_CANCHA', label: 'Arreglo cancha' },

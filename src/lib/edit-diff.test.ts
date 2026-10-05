@@ -1,6 +1,37 @@
 import { describe, expect, it } from 'vitest';
 
-import { conPendientes, diferenciaEdicion, precondicion } from './edit-diff';
+import { conPendientes, diferenciaEdicion, edicionContraBase, pickFields, precondicion } from './edit-diff';
+
+describe('pickFields', () => {
+  it('toma solo los campos pedidos de la entidad', () => {
+    expect(pickFields({ id: 'e1', name: 'A', extra: 1 }, ['id', 'name'])).toEqual({ id: 'e1', name: 'A' });
+  });
+});
+
+describe('edicionContraBase', () => {
+  const base = { name: 'A', address: 'Calle 1' as string | null, isActive: true };
+  const campos = ['name', 'address', 'isActive'] as const;
+
+  it('un campo que el formulario no trae es "sin cambio"; null es "dejarlo vacío"', () => {
+    const edicion = edicionContraBase(base, { name: 'B', address: null }, campos);
+
+    expect(edicion.cambios).toEqual({ name: 'B', address: null });
+    expect(edicion.esperado).toEqual({ name: 'A', address: 'Calle 1' });
+    expect(edicion.hayCambios).toBe(true);
+  });
+
+  it('sin diferencias no hay cambios ni precondición', () => {
+    const edicion = edicionContraBase(base, { name: 'A', isActive: undefined }, campos);
+
+    expect(edicion.hayCambios).toBe(false);
+    expect(edicion.cambios).toEqual({});
+    expect(edicion.esperado).toBeUndefined();
+  });
+
+  it('un campo que la base no tenía y el formulario deja vacío no es un cambio', () => {
+    expect(edicionContraBase({ ...base, address: null }, { address: null }, campos).hayCambios).toBe(false);
+  });
+});
 
 describe('diferenciaEdicion', () => {
   const base = { a: 'x', b: 1, c: ['u', 'v'], d: undefined as string | undefined };

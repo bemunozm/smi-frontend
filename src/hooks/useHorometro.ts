@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import { toast } from '@heroui/react';
+
 import { listHorometro } from '../api/HorometroAPI';
 import { HOROMETRO_KEY as KEY } from '../lib/query-keys';
 import { generateUuid } from '../lib/uuid';
 import type { CerrarHorometroInput, HorometroForm } from '../types/horometro';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedMutation } from './useQueuedMutation';
 
 export function useHorometroList() {
   return useQuery({ queryKey: KEY, queryFn: listHorometro });
@@ -17,13 +19,15 @@ export function useHorometroList() {
  * llega tal cual al formulario. El replay refresca horómetro y `['equipment']`.
  */
 export function useCreateHorometro() {
-  return useOfficeMutation<'horometro.create', Omit<HorometroForm, 'fotoUrl'>>({
+  return useQueuedCreate<'horometro.create', Omit<HorometroForm, 'fotoUrl'>>({
     endpoint: 'horometro.create',
-    build: (payload) => ({
+    build: (payload, id) => ({
       params: {},
-      body: { ...payload, id: generateUuid(), capturedAt: new Date().toISOString() },
+      body: { ...payload, id, capturedAt: new Date().toISOString() },
     }),
-    onSent: () => undefined,
+    onSent: () => {
+      toast.success('Entrada registrada');
+    },
     errorFallback: 'No se pudo registrar la entrada.',
   });
 }
@@ -40,13 +44,15 @@ export interface CerrarHorometroVars {
  * mismo, así el servidor reconoce el cierre propio y no lo toma por un segundo.
  */
 export function useCerrarHorometro() {
-  return useOfficeMutation<'horometro.close', CerrarHorometroVars>({
+  return useQueuedMutation<'horometro.close', CerrarHorometroVars>({
     endpoint: 'horometro.close',
     build: ({ id, payload }) => ({
       params: { id },
       body: { ...payload, closeClientId: generateUuid(), capturedAt: new Date().toISOString() },
     }),
-    onSent: () => undefined,
+    onSent: () => {
+      toast.success('Salida registrada');
+    },
     errorFallback: 'No se pudo registrar la salida.',
   });
 }

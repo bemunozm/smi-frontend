@@ -69,3 +69,42 @@ export function conPendientes<T extends object>(base: T, pendientes: JsonObject,
   }
   return resultado;
 }
+
+/** Solo los `fields` de `source`: la base de una edición se deriva de la entidad
+ * en vez de copiarla campo por campo. */
+export function pickFields<T extends object, K extends keyof T>(source: T, fields: readonly K[]): Pick<T, K> {
+  // `Pick<T, K>` tiene justo las claves de `fields`, todas presentes en `source`.
+  return Object.fromEntries(fields.map((campo) => [campo, source[campo]])) as Pick<T, K>;
+}
+
+export interface EdicionContraBase<T> {
+  /** Solo los campos que cambiaron, con su valor nuevo: el cuerpo del PATCH. */
+  cambios: Partial<T>;
+  /** Precondición (`X-Expected`); `undefined` si no hay campos tocados. */
+  esperado: JsonObject | undefined;
+  hayCambios: boolean;
+}
+
+/**
+ * Compara el formulario con la base. Un campo que `nuevo` no trae (`undefined`)
+ * es "sin cambio"; `null` es "dejarlo vacío". Es lo que permite que un formulario
+ * que omite lo que no tocó no lo borre.
+ */
+export function edicionContraBase<T extends { [K in keyof T]?: JsonValue }>(
+  base: T,
+  nuevo: Partial<T>,
+  campos: readonly (keyof T & string)[],
+): EdicionContraBase<T> {
+  const completo: T = { ...base };
+  for (const campo of campos) {
+    const valor = nuevo[campo];
+    if (valor !== undefined) completo[campo] = valor;
+  }
+  const { cambios, esperado } = diferenciaEdicion(base, completo, campos);
+  const precondiciones = precondicion(esperado);
+  return {
+    cambios,
+    esperado: Object.keys(precondiciones).length > 0 ? precondiciones : undefined,
+    hayCambios: Object.keys(cambios).length > 0,
+  };
+}

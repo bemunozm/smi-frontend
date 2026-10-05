@@ -119,7 +119,7 @@ describe('RegistrarCargaCombustibleModal', () => {
     expect(guardar.hasAttribute('disabled')).toBe(true);
 
     // El campo sigue editable pese a no tener sugerencia — el usuario tipea.
-    fireEvent.click(screen.getByRole('button', { name: 'Increase Litros' }));
+    fireEvent.change(screen.getByLabelText('Litros'), { target: { value: '1' } });
 
     await waitFor(() => expect(guardar.hasAttribute('disabled')).toBe(false));
   });

@@ -1,7 +1,3 @@
-import { MarcaPendiente } from '../components/sync/MarcaPendiente';
-import { usePendingWrites } from '../hooks/usePendingWrites';
-import { actividadEntity } from '../offline/db';
-import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -20,15 +16,18 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { usePermissions } from '../hooks/usePermissions';
 import { useActividades, useActualizarActividad, useCrearActividad } from '../hooks/useActividades';
+import { RECURSOS_DE_ACTIVIDADES } from '../lib/pending-resources';
 import {
   ESTADO_ACTIVIDAD_LABELS,
   ORIGEN_ACTIVIDAD_LABELS,
   ORIGEN_ACTIVIDAD_OPTIONS,
   estadoActividadChipColor,
 } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import {
   CreateActividadSchema,
   ESTADO_ACTIVIDAD,
@@ -208,10 +207,8 @@ function AsignarActividadForm() {
  * (`useActualizarActividad`). Sin try/catch ni toasts acá — viven en los
  * hooks.
  */
-const RECURSOS_DE_ACTIVIDADES = ['actividad'] as const;
-
 export function ActividadesView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: actividades, isPending, isError, error } = useActividades();
   const actualizarActividad = useActualizarActividad();
   const pendientes = usePendingWrites(RECURSOS_DE_ACTIVIDADES);
@@ -224,7 +221,7 @@ export function ActividadesView() {
     };
   }, [actividades]);
 
-  const puedeAsignar = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const puedeAsignar = can('actividad.create');
 
   return (
     <div className="flex flex-col gap-4">
@@ -315,7 +312,7 @@ export function ActividadesView() {
                         >
                           {actividad.descripcion}
                         </p>
-                        <MarcaPendiente marca={pendientes.marcaDe(actividadEntity(actividad.id))} />
+                        <MarcaPendiente marca={pendientes.marcaDe('actividad', actividad.id)} />
                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>{ORIGEN_ACTIVIDAD_LABELS[actividad.origen]}</span>
                           {actividad.referencia ? <span>· {actividad.referencia}</span> : null}

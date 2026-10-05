@@ -22,14 +22,6 @@ export function useUsers(filtros: UserFiltros = {}) {
   });
 }
 
-export function useUser(id: string) {
-  return useQuery({
-    queryKey: ['users', id],
-    queryFn: () => UserAPI.getById(id),
-    enabled: !!id,
-  });
-}
-
 /**
  * Patrón "crear/editar/eliminar → useMutation + invalidar + feedback": las
  * tres mutaciones de abajo son la plantilla de referencia para el resto del

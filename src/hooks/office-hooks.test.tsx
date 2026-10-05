@@ -42,7 +42,7 @@ import {
   useCreateItem,
   useCreateMovement,
   useDeleteItem,
-  useSetMinimum,
+  useSaveItemWithMinimums,
   useTransferStock,
   useUpdateItem,
 } from './useInventory';
@@ -140,7 +140,7 @@ describe('Flota — horómetro', () => {
   it.each([
     ['CARD_NOT_FOUND', 404, 'El turno que intentás cerrar ya no existe'],
     ['ALREADY_CLOSED', 409, 'Este turno ya fue cerrado por otra persona'],
-    ['HOURMETER_BELOW_INITIAL', 400, 'El horómetro final no puede ser menor que el inicial.'],
+    ['FORBIDDEN', 403, 'Tu rol no puede hacer esta acción'],
     ['SHIFT_CARD_CLOSE_ELSEWHERE', 409, 'la cierra el supervisor desde Terreno'],
     ['INVALID_CAPTURE_TIME', 400, 'La hora del registro no es válida'],
   ])('el error %s de la salida tiene un texto claro', async (code, status, texto) => {
@@ -180,6 +180,30 @@ describe('Flota — combustible', () => {
     );
 
     expect(toast.danger).toHaveBeenCalledWith('El archivo supera el máximo de 8 MB.');
+  });
+});
+
+describe('Flota — confirmación cuando el servidor responde a tiempo', () => {
+  it('la entrada, la salida y la carga de combustible confirman con su aviso (antes no decían nada)', async () => {
+    submitWriteMock.mockResolvedValue(enviado(true));
+
+    await correr(useCreateHorometro, {
+      equipoId: 'eq_1',
+      operatorId: 'op_1',
+      turno: 'DIURNO' as const,
+      valorInicial: 1200,
+      valorFinal: undefined,
+    });
+    expect(toast.success).toHaveBeenLastCalledWith('Entrada registrada');
+
+    await correr(useCerrarHorometro, { id: 'h_1', payload: { valorFinal: 1210 } });
+    expect(toast.success).toHaveBeenLastCalledWith('Salida registrada');
+
+    await correr(useCreateCombustible, {
+      input: { equipoId: 'eq_1', litros: 80, tipo: 'PETROLEO' },
+      foto: new File(['x'], 'surtidor.jpg'),
+    });
+    expect(toast.success).toHaveBeenLastCalledWith('Carga de combustible registrada');
   });
 });
 
@@ -313,12 +337,13 @@ describe('Inventario', () => {
       expect(toast.warning).not.toHaveBeenCalled();
     });
 
-    it('una salida sin existencia (INSUFFICIENT_STOCK) dice qué pasó', async () => {
-      submitWriteMock.mockRejectedValueOnce(new DomainError('x', { code: 'INSUFFICIENT_STOCK', status: 409 }));
+    it('una salida sin existencia (INSUFFICIENT_STOCK) muestra lo disponible y lo pedido que dice el servidor', async () => {
+      const mensaje = 'Existencia insuficiente de "Aceite" en Casa Matriz: disponible 16, solicitado 20. Hay 5 en otras sucursales.';
+      submitWriteMock.mockRejectedValueOnce(new DomainError(mensaje, { code: 'INSUFFICIENT_STOCK', status: 409 }));
 
       await correr(useCreateMovement, { input: salida, item: ITEM }, 'error');
 
-      expect(toast.danger).toHaveBeenCalledWith(expect.stringContaining('No hay existencia suficiente'));
+      expect(toast.danger).toHaveBeenCalledWith(mensaje);
     });
   });
 
@@ -392,21 +417,105 @@ describe('Inventario', () => {
     });
   });
 
-  it('fijar el mínimo es un set sin precondición y puede ir detrás de la edición del ítem', async () => {
-    submitWriteMock.mockResolvedValueOnce(encolado());
+  describe('guardar la ficha con los mínimos', () => {
+    const ITEM_CON_STOCK = {
+      ...ITEM,
+      stocks: [
+        { branchId: 'br_1', branchName: 'Centro', quantity: 10, minimumQuantity: 4 },
+        { branchId: 'br_2', branchName: 'Faena', quantity: 3, minimumQuantity: 0 },
+      ],
+    } as unknown as InventoryItem;
+    const sinCambios = { name: ITEM.name, unit: ITEM.unit, type: ITEM.type };
+    const cambioDeNombre = { ...sinCambios, name: 'Aceite 15W40' };
 
-    await correr(useSetMinimum, {
-      input: { itemId: 'it_1', branchId: 'br_1', minimumQuantity: 6 },
-      dependsOn: ['op-edicion'],
+    it('edita la ficha y manda solo los mínimos que cambiaron, con UN solo aviso', async () => {
+      submitWriteMock.mockResolvedValueOnce(enviado({ name: 'Aceite 15W40' }));
+      submitWriteMock.mockResolvedValueOnce(enviado(true));
+
+      await correr(useSaveItemWithMinimums, {
+        item: ITEM_CON_STOCK,
+        input: cambioDeNombre,
+        minimums: { br_1: '4', br_2: '6,5' },
+      });
+
+      const escrituras = submitWriteMock.mock.calls.map(([endpoint, input]) => ({ endpoint, input }));
+      expect(escrituras).toMatchObject([
+        { endpoint: 'item.update', input: { params: { id: ITEM_CON_STOCK.id }, body: { name: 'Aceite 15W40' } } },
+        {
+          endpoint: 'item.setMinimum',
+          input: { body: { itemId: ITEM_CON_STOCK.id, branchId: 'br_2', minimumQuantity: 6.5 } },
+        },
+      ]);
+      expect(escrituras[1]?.input).not.toHaveProperty('dependsOn');
+      expect(toast.success).toHaveBeenCalledTimes(1);
+      expect(toast.success).toHaveBeenCalledWith('Ítem actualizado', { description: ITEM_CON_STOCK.name });
     });
 
-    const { endpoint, input } = ultimaEscritura();
-    expect(endpoint).toBe('item.setMinimum');
-    expect(input).toMatchObject({
-      body: { itemId: 'it_1', branchId: 'br_1', minimumQuantity: 6 },
-      dependsOn: ['op-edicion'],
+    it('sin cambios en la ficha, solo se manda el mínimo', async () => {
+      submitWriteMock.mockResolvedValueOnce(enviado(true));
+
+      await correr(useSaveItemWithMinimums, {
+        item: ITEM_CON_STOCK,
+        input: sinCambios,
+        minimums: { br_1: '8', br_2: '0' },
+      });
+
+      expect(submitWriteMock).toHaveBeenCalledTimes(1);
+      expect(ultimaEscritura()).toMatchObject({
+        endpoint: 'item.setMinimum',
+        input: { body: { itemId: ITEM_CON_STOCK.id, branchId: 'br_1', minimumQuantity: 8 } },
+      });
     });
-    expect(input.expected).toBeUndefined();
+
+    it('si algo queda en cola avisa una sola vez que quedó guardado', async () => {
+      submitWriteMock.mockResolvedValueOnce(encolado());
+      submitWriteMock.mockResolvedValueOnce(encolado());
+
+      await correr(useSaveItemWithMinimums, {
+        item: ITEM_CON_STOCK,
+        input: cambioDeNombre,
+        minimums: { br_1: '9', br_2: '0' },
+      });
+
+      expect(toast.success).toHaveBeenCalledTimes(1);
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Guardado'));
+    });
+
+    it('si falla la edición, los mínimos ni se intentan y el error se avisa', async () => {
+      submitWriteMock.mockRejectedValueOnce(new DomainError('Nombre duplicado', { status: 409 }));
+
+      await correr(
+        useSaveItemWithMinimums,
+        { item: ITEM_CON_STOCK, input: cambioDeNombre, minimums: { br_1: '9', br_2: '0' } },
+        'error',
+      );
+
+      expect(submitWriteMock).toHaveBeenCalledTimes(1);
+      expect(toast.danger).toHaveBeenCalledWith('Nombre duplicado');
+    });
+
+    it('si falla un mínimo, la ficha ya quedó guardada: el aviso lo dice con el motivo', async () => {
+      submitWriteMock.mockResolvedValueOnce(enviado({ name: 'Aceite 15W40' }));
+      submitWriteMock.mockRejectedValueOnce(new DomainError('La bodega no existe', { status: 404 }));
+
+      await correr(useSaveItemWithMinimums, {
+        item: ITEM_CON_STOCK,
+        input: cambioDeNombre,
+        minimums: { br_1: '9', br_2: '0' },
+      });
+
+      expect(toast.warning).toHaveBeenCalledWith('Ítem actualizado, pero no se guardó el stock mínimo', {
+        description: 'La bodega no existe',
+      });
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('sin nada que cambiar no escribe ni avisa', async () => {
+      await correr(useSaveItemWithMinimums, { item: ITEM_CON_STOCK, input: sinCambios, minimums: { br_1: '4', br_2: '0' } });
+
+      expect(submitWriteMock).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -537,6 +646,24 @@ describe('Mantenimiento', () => {
       endpoint: 'orden.update',
       input: { params: { id: 'ot_1' }, body: { estado: 'EN_PROCESO' }, expected: { estado: 'PENDIENTE' } },
     });
+  });
+
+  it('desasignar una orden manda asignadoAId null y espera el asignado de hoy', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado(ORDEN));
+    const asignada = { ...ORDEN, asignadoA: { id: 'u_7', name: 'Pedro' } } as unknown as OrdenTrabajo;
+
+    await correr(useActualizarOrden, { orden: asignada, input: { asignadoAId: null } });
+
+    expect(ultimaEscritura()).toMatchObject({
+      endpoint: 'orden.update',
+      input: { params: { id: 'ot_1' }, body: { asignadoAId: null }, expected: { asignadoAId: 'u_7' } },
+    });
+  });
+
+  it('un campo que el formulario no manda no se toca: sin cambios no escribe', async () => {
+    await correr(useActualizarOrden, { orden: ORDEN, input: { estado: 'PENDIENTE' } });
+
+    expect(submitWriteMock).not.toHaveBeenCalled();
   });
 
   it('marcar una tarea es un set: sin precondición', async () => {

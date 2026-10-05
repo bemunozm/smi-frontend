@@ -3,9 +3,8 @@ import { toast } from '@heroui/react';
 
 import { UmbralesAPI } from '../api/MantenimientoAPI';
 import { UMBRALES_KEY as UMBRALES_QUERY_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
 import type { CreateUmbralInput } from '../types/mantenimiento';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate } from './useQueuedMutation';
 
 export function useUmbrales() {
   return useQuery({
@@ -15,9 +14,9 @@ export function useUmbrales() {
 }
 
 export function useCrearUmbral() {
-  return useOfficeMutation<'umbral.create', CreateUmbralInput>({
+  return useQueuedCreate<'umbral.create', CreateUmbralInput>({
     endpoint: 'umbral.create',
-    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
     onSent: (umbral, input) => {
       toast.success('Umbral creado', {
         description: `${umbral?.tipoEquipo ?? input.tipoEquipo} · ${umbral?.tipoMantencion ?? input.tipoMantencion}`,

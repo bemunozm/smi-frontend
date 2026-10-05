@@ -2,17 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { EquipmentDocumentAPI } from '../api/EquipmentDocumentAPI';
-import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
 import { EQUIPMENT_DOCUMENTS_KEY } from '../lib/query-keys';
-import { generateUuid } from '../lib/uuid';
+import { buildQueuedEdit } from '../lib/queued-edit';
 import { equipmentDocumentEntity } from '../offline/db';
-import { cambiosPendientes } from '../offline/outbox';
 import type {
   CreateEquipmentDocumentInput,
   EquipmentDocument,
   UpdateEquipmentDocumentInput,
 } from '../types/equipment-document';
-import { useOfficeMutation } from './useOfficeMutation';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
 /** Documentos de UN equipo (`GET /api/equipment/:equipmentId/documents`) —
  * ordenados `createdAt desc` por el backend. */
@@ -34,11 +32,11 @@ export interface CreateEquipmentDocumentVars {
  * `['equipment']` (el `documentsAlert` del listado/ficha se deriva de los
  * documentos), ver `offline/endpoints/flota.ts`. */
 export function useCreateEquipmentDocument(equipmentId: string) {
-  return useOfficeMutation<'equipmentDocument.create', CreateEquipmentDocumentVars>({
+  return useQueuedCreate<'equipmentDocument.create', CreateEquipmentDocumentVars>({
     endpoint: 'equipmentDocument.create',
-    build: ({ input, file }) => ({
+    build: ({ input, file }, id) => ({
       params: { equipmentId },
-      body: { ...input, id: generateUuid() },
+      body: { ...input, id },
       ...(file ? { files: [{ field: 'fileKey', file }] } : {}),
     }),
     onSent: () => {
@@ -72,20 +70,21 @@ function camposDeDocumento(documento: EquipmentDocument): CamposDeDocumento {
 }
 
 export function useUpdateEquipmentDocument() {
-  return useOfficeMutation<'equipmentDocument.update', UpdateEquipmentDocumentVars>({
+  return useQueuedMutation<'equipmentDocument.update', UpdateEquipmentDocumentVars>({
     endpoint: 'equipmentDocument.update',
     build: async ({ documento, input, file }) => {
-      const pendiente = await cambiosPendientes(equipmentDocumentEntity(documento.id), ['equipmentDocument.update']);
-      const campos = file === undefined ? CAMPOS_DE_DOCUMENTO : ([...CAMPOS_DE_DOCUMENTO, 'fileName'] as const);
-      const base = conPendientes(camposDeDocumento(documento), pendiente, campos);
-      const nuevo: CamposDeDocumento = { ...input, fileName: file ? file.name : null };
-      const { cambios, esperado } = diferenciaEdicion(base, nuevo, campos);
-      if (Object.keys(cambios).length === 0 && file === undefined) return null;
-      const precondiciones = precondicion(esperado);
+      const edicion = await buildQueuedEdit<CamposDeDocumento>({
+        entity: equipmentDocumentEntity(documento.id),
+        ops: ['equipmentDocument.update'],
+        base: camposDeDocumento(documento),
+        next: { ...input, fileName: file ? file.name : null },
+        fields: file === undefined ? CAMPOS_DE_DOCUMENTO : [...CAMPOS_DE_DOCUMENTO, 'fileName'],
+      });
+      if (!edicion.hayCambios && file === undefined) return null;
       return {
         params: { id: documento.id },
-        body: { ...cambios, ...(file === null ? { fileKey: null } : {}) },
-        ...(Object.keys(precondiciones).length > 0 ? { expected: precondiciones } : {}),
+        body: { ...edicion.cambios, ...(file === null ? { fileKey: null } : {}) },
+        expected: edicion.esperado,
         ...(file ? { files: [{ field: 'fileKey', file }] } : {}),
       };
     },
@@ -97,12 +96,9 @@ export function useUpdateEquipmentDocument() {
 }
 
 export function useDeleteEquipmentDocument() {
-  return useOfficeMutation<'equipmentDocument.delete', string>({
+  return useQueuedDelete({
     endpoint: 'equipmentDocument.delete',
-    build: (id) => ({ params: { id }, body: {} }),
-    onSent: () => {
-      toast.success('Documento eliminado');
-    },
+    sentMessage: 'Documento eliminado',
     errorFallback: 'No se pudo eliminar el documento.',
   });
 }

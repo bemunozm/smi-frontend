@@ -20,8 +20,8 @@ export const RESPONSIVE_SHEET_DIALOG_CLASS =
  * equipo (`CreateEquipoModal`/`EditEquipoModal`): con 10 campos agrupados en
  * secciones + banner de foto, `CamposEquipo` reflowa a 3 columnas en PC
  * (`xl:grid-cols-3`) — `max-w-2xl` (672px) dejaba esas 3 columnas apretadas,
- * así que se sube a `max-w-3xl` (768px) para que respiren (v3 del rediseño,
- * feedback de Benjamin: la v2 de 2 columnas se veía angosta y desordenada).
+ * así que se sube a `max-w-3xl` (768px) para que respiren (v3 del rediseño: la
+ * v2 de 2 columnas se veía angosta y desordenada).
  * `overflow-hidden` es necesario acá (no en la base) porque el banner de foto
  * sangra por fuera del padding del diálogo (`-mx-6 -mt-6`, ver
  * `EquipoPhotoBanner`) y necesita quedar recortado por el radio del diálogo

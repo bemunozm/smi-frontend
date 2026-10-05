@@ -41,10 +41,15 @@ describe('seccionesDelFormulario', () => {
     expect(vueltasDeSeccion(mineras)).toBe(0);
   });
 
-  /** El formulario guarda strings en formato es-CL: «1.200» son mil doscientos. */
-  it('entiende el separador de miles es-CL', () => {
-    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: '1.200', vueltasInternos: '1' });
-    expect(vueltasDeSeccion(internos)).toBe(1200);
+  /** No hay separador de miles: un punto o una coma sueltos son el decimal. */
+  it.each(['2.5', '2,5'])('lee %s como dos y medio', (camiones) => {
+    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: camiones, vueltasInternos: '4' });
+    expect(vueltasDeSeccion(internos)).toBe(10);
+  });
+
+  it('un texto que no es un número vale cero', () => {
+    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: 'abc', vueltasInternos: '4' });
+    expect(vueltasDeSeccion(internos)).toBe(0);
   });
 });
 

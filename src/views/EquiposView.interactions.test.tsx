@@ -243,6 +243,29 @@ describe('EquiposView — menú de acciones', () => {
     expect(screen.queryByText('Marcar como En taller')).toBeNull();
   });
 
+  it.each([
+    ['MANTENEDOR', false],
+    ['SUPERVISOR', true],
+  ])('en la hoja de acciones móvil, %s %s ve los registros de horómetro y combustible', async (rol, ve) => {
+    currentUserResult = {
+      user: { id: 'u2', name: 'Usuario', email: 'u@smi.local', role: rol },
+      role: rol,
+      isPending: false,
+      isAuthenticated: true,
+    };
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    const { container } = renderView();
+    await screen.findByRole('button', { name: `Acciones para ${EQUIPO.internalCode}` });
+    fireEvent.click(container.querySelector('button.block.w-full') as HTMLButtonElement);
+
+    expect(await screen.findByRole('button', { name: 'Ver ficha completa' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' }) !== null).toBe(ve);
+    expect(screen.queryByRole('button', { name: 'Registrar combustible' }) !== null).toBe(ve);
+  });
+
   it('elimina el equipo al confirmar el AlertDialog', async () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);

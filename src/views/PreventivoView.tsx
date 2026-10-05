@@ -14,10 +14,10 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
 import { useMantencionesProximas } from '../hooks/useDashboard';
 import { useCrearUmbral, useUmbrales } from '../hooks/useUmbrales';
-import { ROLES } from '../types/roles';
+import { RECURSOS_DE_UMBRALES } from '../lib/pending-resources';
 import { CreateUmbralSchema, type CreateUmbralInput } from '../types/mantenimiento';
 
 /** Modal de creación de umbral (ADMIN) — mismo patrón que `CreateUserModal`. */
@@ -108,7 +108,13 @@ function CreateUmbralModal() {
                         control={control}
                         name="umbralHoras"
                         render={({ field }) => (
-                          <NumberField fullWidth minValue={1} value={field.value} onChange={field.onChange}>
+                          <NumberField
+                            fullWidth
+                            formatOptions={{ maximumFractionDigits: 0 }}
+                            minValue={1}
+                            value={field.value}
+                            onChange={field.onChange}
+                          >
                             <Label>Umbral (horas)</Label>
                             <NumberField.Group>
                               <NumberField.DecrementButton />
@@ -142,7 +148,7 @@ function CreateUmbralModal() {
 /**
  * Equipos cerca de su umbral de horómetro (horómetro actual vs. umbral). Es un
  * dato del dominio Mantenimiento: se reutiliza `useMantencionesProximas` (mismo
- * hook/tipo/estilo que el Dashboard de Benjamín) — hoy mockeado hasta que Flota
+ * hook/tipo/estilo que el Dashboard) — hoy mockeado hasta que Flota
  * exponga el horómetro real. `horometroRestante === 0` ⇒ umbral alcanzado (rojo).
  */
 function EquiposCercaUmbralSection() {
@@ -209,13 +215,11 @@ function EquiposCercaUmbralSection() {
  *  2. Umbrales configurados (horas por tipo de equipo/mantención) — CRUD real
  *     vía `useUmbrales` / `useCrearUmbral`, renderizados como grid de cards.
  */
-const RECURSOS_DE_UMBRALES = ['umbral'] as const;
-
 export function PreventivoView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: umbrales, isPending, isError, error } = useUmbrales();
 
-  const puedeCrear = role === ROLES.ADMIN;
+  const puedeCrear = can('umbral.create');
 
   return (
     <div className="flex flex-col gap-6">
