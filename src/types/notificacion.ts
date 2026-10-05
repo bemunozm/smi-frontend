@@ -15,7 +15,14 @@ export const NOTIF_TIPOS = {
   /** Reporte de salida de turno (`POST /api/shift-reports`) —
    * `data: { reportId, shiftId }`. */
   SHIFT_EXIT_REPORT: 'shift.exit-report',
+  /** Un registro ya enviado fue corregido (solo lo recibe el administrador) —
+   * `data: { entity, entityId }`, con `entity` en `RECORD_EDITED_ENTITIES`. */
+  RECORD_EDITED: 'record.edited',
 } as const;
+
+/** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */
+export const RECORD_EDITED_ENTITIES = ['shift_card', 'hallazgo', 'trabajo_extra'] as const;
+export type RecordEditedEntity = (typeof RECORD_EDITED_ENTITIES)[number];
 
 export type NotificacionTipo = (typeof NOTIF_TIPOS)[keyof typeof NOTIF_TIPOS];
 

@@ -34,7 +34,10 @@ export function NotificacionesView() {
     () =>
       lista.filter((n) => {
         if (soloNoLeidas && n.leida) return false;
-        return tiposSeleccionados.has(n.tipo as NotificacionTipo);
+        // Un tipo que este cliente todavía no conoce no tiene chip de filtro: se
+        // muestra siempre, en vez de desaparecer de la lista.
+        const conocido = (TODOS_TIPOS as readonly string[]).includes(n.tipo);
+        return !conocido || tiposSeleccionados.has(n.tipo as NotificacionTipo);
       }),
     [lista, soloNoLeidas, tiposSeleccionados],
   );

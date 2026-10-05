@@ -6,6 +6,7 @@ import { notificacionTipoConfig } from '../../config/notificacion-colors';
 import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { relativeTime } from '../../lib/relative-time';
 import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
+import { rutaDeRegistroEditado } from './record-edited-route';
 
 function equipoIdFrom(data: Notificacion['data']): string | null {
   if (!data) return null;
@@ -49,6 +50,13 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
     const reportId = notificacion.tipo === NOTIF_TIPOS.SHIFT_EXIT_REPORT ? reportIdFrom(notificacion.data) : null;
     if (reportId) {
       window.open(ShiftReportAPI.fileUrl(reportId), '_blank', 'noopener');
+      onAfterClick?.();
+      return;
+    }
+
+    if (notificacion.tipo === NOTIF_TIPOS.RECORD_EDITED) {
+      const ruta = rutaDeRegistroEditado(notificacion.data);
+      if (ruta) navigate(ruta);
       onAfterClick?.();
       return;
     }
