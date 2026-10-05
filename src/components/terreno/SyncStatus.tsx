@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useEquipment } from '../../hooks/useEquipment';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
-import { CONTAINER } from '../../layout/TerrenoLayout';
+import { CONTAINER } from '../../layout/terreno-container';
 import { useOutboxOps } from '../../offline/useOutboxOps';
 import { useSyncState } from '../../offline/replay';
 import { isRole } from '../../types/roles';

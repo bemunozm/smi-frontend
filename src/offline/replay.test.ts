@@ -159,6 +159,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   resetReplayEngineForTests();
 });
 
@@ -273,9 +274,11 @@ describe('replay — errores transitorios (red/5xx/429)', () => {
     },
   );
 
-  it('sin red en absoluto (navigator.onLine === false) el run SÍ se corta: la segunda ni se toca', async () => {
-    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-    openCardMock.mockRejectedValueOnce(new DomainError('Network Error'));
+  it('si la red se cae a mitad del run (navigator.onLine pasa a false) el run se corta: la segunda ni se toca', async () => {
+    openCardMock.mockImplementationOnce(() => {
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      return Promise.reject(new DomainError('Network Error'));
+    });
     await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
     await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
 

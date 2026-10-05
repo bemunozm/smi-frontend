@@ -1,5 +1,6 @@
 import { AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 
+import { plural } from '../../lib/format';
 import type { SyncState } from '../../offline/replay';
 
 /**
@@ -20,8 +21,8 @@ export function SyncBadge({ sync, onPress }: { sync: SyncState; onPress: () => v
   const etiqueta = sync.authRequired
     ? 'Sesión vencida: la sincronización está detenida'
     : requiereAtencion
-      ? `Sincronización: ${total} cambios sin sincronizar, ${sync.attentionCount} requieren atención`
-      : `Sincronización: ${total} cambios sin sincronizar`;
+      ? `Sincronización: ${plural(total, 'cambio', 'cambios')} sin sincronizar, ${sync.attentionCount} ${sync.attentionCount === 1 ? 'requiere' : 'requieren'} atención`
+      : `Sincronización: ${plural(total, 'cambio', 'cambios')} sin sincronizar`;
 
   return (
     <button

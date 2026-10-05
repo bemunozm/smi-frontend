@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
 const { sendWriteMock, sendExitReportMock, openCardMock, closeCardMock, uploadFileMock, loggerErrorMock } =
   vi.hoisted(() => ({
@@ -47,6 +47,7 @@ import {
   resetReplayEngineForTests,
   setCurrentUser,
   uploadTimeoutMs,
+  useSyncEngine,
   useEngineStoreForTests,
   waitForOutcome,
 } from './replay';
@@ -201,9 +202,11 @@ describe('ROB ALTO-2 — un fallo transitorio de UNA operación no corta el run 
     expect(await db.outbox.count()).toBe(0);
   });
 
-  it('sin red en absoluto (navigator.onLine === false) el run sí se corta: no se gasta un intento por operación', async () => {
-    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-    sendWriteMock.mockRejectedValue(SIN_SENAL());
+  it('si la red se cae a mitad del run el run se corta: no se gasta un intento por operación', async () => {
+    sendWriteMock.mockImplementation(async () => {
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      throw SIN_SENAL();
+    });
     await borrarCategoria('a', 'c1');
     await borrarCategoria('b', 'c2');
 
@@ -211,6 +214,28 @@ describe('ROB ALTO-2 — un fallo transitorio de UNA operación no corta el run 
 
     expect(sendWriteMock).toHaveBeenCalledTimes(1);
     expect((await db.outbox.get('b'))?.attempts).toBe(0);
+  });
+
+  it('sin red desde el principio un run no intenta NADA (ni gasta intentos) y se reanuda con el evento online', async () => {
+    const enLinea = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    sendWriteMock.mockResolvedValue(true);
+    const { unmount } = renderHook(() => useSyncEngine(U));
+    await borrarCategoria('a', 'c1');
+
+    for (let i = 0; i < 5; i += 1) {
+      requestSync();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+    expect(sendWriteMock).not.toHaveBeenCalled();
+    expect((await db.outbox.get('a'))?.attempts).toBe(0);
+
+    enLinea.mockReturnValue(true);
+    window.dispatchEvent(new Event('online'));
+
+    await waitFor(() => expect(sendWriteMock).toHaveBeenCalledTimes(1));
+    expect(await db.outbox.count()).toBe(0);
+    unmount();
   });
 
   it('un 401 corta el run y deja la sesión marcada como terminada', async () => {
@@ -557,9 +582,11 @@ describe('EJEC BAJO / ROB MEDIO-7 — tras sincronizar, las listas se refrescan 
     });
 
     it('sin red no toca el cache: dejaría las pantallas sin lecturas para el arranque sin señal', async () => {
-      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
       const guardadas = fingirCaches(['https://smi.test/api/inventory/items?isActive=true']);
-      sendWriteMock.mockResolvedValueOnce({ id: 'X' }).mockRejectedValue(SIN_SENAL());
+      sendWriteMock.mockResolvedValueOnce({ id: 'X' }).mockImplementation(async () => {
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        throw SIN_SENAL();
+      });
       await enqueueHttpWrite(U, { id: 'e1', endpoint: 'item.update', params: { id: 'X' }, body: { name: 'B' }, label: 'e1' });
       await enqueueHttpWrite(U, { id: 'e2', endpoint: 'branch.delete', params: { id: 'b' }, body: {}, label: 'e2' });
 

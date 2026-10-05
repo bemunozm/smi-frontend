@@ -356,6 +356,10 @@ export function requestSync(): void {
 async function runReplayForCurrentUser(): Promise<void> {
   const userId = currentUserId;
   if (!userId) return;
+  // Sin red en absoluto no hay nada que intentar: cada run solo gastaría un intento de
+  // la primera operación. Se espera al evento `online` (`useSyncEngine`) o al próximo
+  // disparador con señal.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   try {
     await withReplayLock(() => runReplay(userId));
   } catch (error) {

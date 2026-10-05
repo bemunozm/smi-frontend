@@ -194,7 +194,13 @@ describe('SyncBadge', () => {
   it('lo que requiere atención se cuenta aparte en el nombre accesible', () => {
     render(<SyncBadge sync={sync({ pendingCount: 2, attentionCount: 1 })} onPress={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: 'Sincronización: 3 cambios sin sincronizar, 1 requieren atención' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sincronización: 3 cambios sin sincronizar, 1 requiere atención' })).toBeTruthy();
+  });
+
+  it('en singular: "1 cambio sin sincronizar"', () => {
+    render(<SyncBadge sync={sync({ pendingCount: 1 })} onPress={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Sincronización: 1 cambio sin sincronizar' })).toBeTruthy();
   });
 
   it('una sesión vencida se ve aunque no haya nada pendiente', () => {
@@ -356,6 +362,33 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
     expect(discardOpMock).toHaveBeenCalledWith('w-403', 'u1');
+  });
+
+  it.each([
+    ['FILE_TOO_LARGE', 413, 'El archivo supera el máximo de 8 MB.'],
+    ['FILE_TYPE_NOT_ALLOWED', 415, 'Formato no permitido. Solo se aceptan JPG, PNG, WebP o PDF.'],
+    ['FILE_TYPE_NOT_ALLOWED', undefined, 'Formato no permitido. Solo se aceptan JPG, PNG, WebP o PDF.'],
+  ])('un archivo inválido (%s, %s): su mensaje claro y solo Descartar', (code, status, message) => {
+    const op = write({ id: 'w-f', status: 'needs_attention', lastError: { message, code, status } });
+    renderHoja(sync({ attentionCount: 1 }), [op]);
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy();
+  });
+
+  it('tras Sobrescribir el foco queda dentro de la hoja, no en <body>', () => {
+    const op = write({
+      id: 'w-y',
+      status: 'needs_attention',
+      lastError: { message: 'Otra persona cambió', code: 'STALE_UPDATE', status: 409 },
+    });
+    renderHoja(sync({ attentionCount: 1 }), [op]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sobrescribir' }));
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
   });
 
   it('un STALE_UPDATE ofrece Sobrescribir en vez de Reintentar', () => {

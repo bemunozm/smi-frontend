@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Circle } from 'lucide-react';
 import { Button } from '@heroui/react';
 
 import { FORBIDDEN_MESSAGE } from '../../lib/error-messages';
 import { arrastradasAlDescartar, type OutboxOp } from '../../offline/db';
 import { discardOp, overwriteOp, retryOp } from '../../offline/outbox';
+import { isNonRetryable } from '../../offline/retryable';
 import type { Equipment } from '../../types/equipment';
 
 /** Código del equipo desde el catálogo (el mismo que precarga "Preparar para
@@ -122,23 +123,28 @@ export function SyncOpsList({
   equipos?: Equipment[];
 }) {
   const [descartando, setDescartando] = useState<string | null>(null);
+  // Reintentar, Sobrescribir y Descartar quitan o cambian el botón que se acaba de
+  // pulsar: sin un lugar al que mandar el foco, cae en <body> y se pierde el teclado.
+  const raiz = useRef<HTMLDivElement>(null);
+  const conservarFoco = (): void => raiz.current?.focus();
   const opsAtencion = ops.filter((op) => op.status === 'needs_attention');
   const opsEnCola = ops.filter((op) => op.status !== 'needs_attention');
 
   const confirmarDescarte = (op: OutboxOp): void => {
     if (userId) void discardOp(op.id, userId);
     setDescartando(null);
+    conservarFoco();
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={raiz} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       {opsAtencion.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">Ningún registro requiere atención.</p>
       ) : (
         <div className="flex flex-col gap-2.5">
           <span className={ENCABEZADO}>Requieren atención</span>
           {opsAtencion.map((op) => {
-            const sinPermiso = op.lastError?.status === 403;
+            const sinReintento = isNonRetryable(op.lastError);
             const esStale = op.lastError?.code === 'STALE_UPDATE' && op.type === 'httpWrite';
             return (
               <div key={op.id} className="flex flex-col gap-2 rounded-2xl border border-border p-3">
@@ -147,7 +153,7 @@ export function SyncOpsList({
                   <Circle aria-hidden className="mt-1 h-2 w-2 shrink-0 fill-danger text-danger" />
                 </div>
                 <p className="m-0 text-[13px] text-danger">
-                  {sinPermiso
+                  {op.lastError?.status === 403
                     ? FORBIDDEN_MESSAGE
                     : (op.lastError?.message ?? 'El servidor rechazó esta operación.')}
                 </p>
@@ -161,12 +167,15 @@ export function SyncOpsList({
                   />
                 ) : (
                   <div className="flex gap-2">
-                    {sinPermiso ? null : esStale ? (
+                    {sinReintento ? null : esStale ? (
                       <Button
                         className="flex-1"
                         size="sm"
                         variant="outline"
-                        onPress={() => userId && void overwriteOp(op.id, userId)}
+                        onPress={() => {
+                          if (userId) void overwriteOp(op.id, userId);
+                          conservarFoco();
+                        }}
                       >
                         Sobrescribir
                       </Button>
@@ -175,7 +184,10 @@ export function SyncOpsList({
                         className="flex-1"
                         size="sm"
                         variant="outline"
-                        onPress={() => userId && void retryOp(op.id, userId)}
+                        onPress={() => {
+                          if (userId) void retryOp(op.id, userId);
+                          conservarFoco();
+                        }}
                       >
                         Reintentar
                       </Button>
