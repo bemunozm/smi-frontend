@@ -1,10 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { BranchAPI, type BranchFiltros } from '../api/BranchAPI';
-import type { CreateBranchInput, UpdateBranchInput } from '../types/branch';
-
-const BRANCHES_KEY = ['branches'] as const;
+import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { BRANCHES_KEY } from '../lib/query-keys';
+import { generateUuid } from '../lib/uuid';
+import { branchEntity } from '../offline/db';
+import { cambiosPendientes } from '../offline/outbox';
+import type { Branch, BranchFields, CreateBranchInput, UpdateBranchInput } from '../types/branch';
+import { useOfficeMutation } from './useOfficeMutation';
 
 /**
  * Lista de sucursales (Plataforma). La usa el selector `homeBranch` del
@@ -27,56 +31,63 @@ export function useBranch(id: string) {
   });
 }
 
-function useInvalidarBranches() {
-  const queryClient = useQueryClient();
-  return () => void queryClient.invalidateQueries({ queryKey: BRANCHES_KEY });
-}
-
 export function useCreateBranch() {
-  const invalidar = useInvalidarBranches();
-
-  return useMutation({
-    mutationFn: (input: CreateBranchInput) => BranchAPI.create(input),
-    onSuccess: (branch) => {
-      invalidar();
-      toast.success('Sucursal creada', { description: branch.name });
+  return useOfficeMutation<'branch.create', CreateBranchInput>({
+    endpoint: 'branch.create',
+    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    onSent: (branch, input) => {
+      toast.success('Sucursal creada', { description: branch?.name ?? input.name });
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo crear la sucursal.');
-    },
+    errorFallback: 'No se pudo crear la sucursal.',
   });
 }
 
-export function useUpdateBranch() {
-  const invalidar = useInvalidarBranches();
+const CAMPOS_DE_SUCURSAL = ['name', 'address', 'isActive'] as const;
 
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateBranchInput }) =>
-      BranchAPI.update(id, input),
-    onSuccess: (branch) => {
-      invalidar();
-      toast.success('Sucursal actualizada', { description: branch.name });
+export interface UpdateBranchVars {
+  /** La sucursal tal como la muestra la pantalla: la base de la edición. */
+  branch: Branch;
+  input: UpdateBranchInput;
+}
+
+export function useUpdateBranch() {
+  return useOfficeMutation<'branch.update', UpdateBranchVars>({
+    endpoint: 'branch.update',
+    build: async ({ branch, input }) => {
+      const pendiente = await cambiosPendientes(branchEntity(branch.id), ['branch.update']);
+      const base = conPendientes<BranchFields>(
+        { name: branch.name, address: branch.address, isActive: branch.isActive },
+        pendiente,
+        CAMPOS_DE_SUCURSAL,
+      );
+      // Una dirección vacía no se manda (el formulario la omite): "omitida" es
+      // "sin cambio".
+      const nuevo: BranchFields = {
+        name: input.name ?? base.name,
+        address: input.address ?? base.address,
+        isActive: input.isActive ?? base.isActive,
+      };
+      const { cambios, esperado } = diferenciaEdicion(base, nuevo, CAMPOS_DE_SUCURSAL);
+      if (Object.keys(cambios).length === 0) return null;
+      return { params: { id: branch.id }, body: cambios, expected: precondicion(esperado) };
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar la sucursal.');
+    onSent: (data, { branch }) => {
+      toast.success('Sucursal actualizada', { description: data?.name ?? branch.name });
     },
+    errorFallback: 'No se pudo actualizar la sucursal.',
   });
 }
 
 export function useDeleteBranch() {
-  const invalidar = useInvalidarBranches();
-
-  return useMutation({
-    mutationFn: (id: string) => BranchAPI.remove(id),
-    onSuccess: () => {
-      invalidar();
+  return useOfficeMutation<'branch.delete', string>({
+    endpoint: 'branch.delete',
+    build: (id) => ({ params: { id }, body: {} }),
+    onSent: () => {
       toast.success('Sucursal eliminada');
     },
-    onError: (error: unknown) => {
-      // El backend rechaza con 409 si la sucursal tiene equipos asociados y
-      // explica cómo retirarla en su lugar (isActive=false) — mismo criterio
-      // que `useDeleteEquipment`, el mensaje llega tal cual.
-      toast.danger(error instanceof Error ? error.message : 'No se pudo eliminar la sucursal.');
-    },
+    // El backend rechaza con 409 si la sucursal tiene equipos asociados y
+    // explica cómo retirarla en su lugar (isActive=false) — mismo criterio
+    // que `useDeleteEquipment`, el mensaje llega tal cual.
+    errorFallback: 'No se pudo eliminar la sucursal.',
   });
 }

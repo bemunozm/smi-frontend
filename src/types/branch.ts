@@ -58,3 +58,11 @@ export function toBranchPayload(values: BranchFormValues): CreateBranchInput {
     isActive: values.isActive,
   };
 }
+
+/** Los campos editables de una sucursal tal como los guarda el servidor: la
+ * forma de la base de una edición (una dirección vacía es `null`). */
+export interface BranchFields {
+  name: string;
+  address: string | null;
+  isActive: boolean;
+}

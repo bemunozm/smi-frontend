@@ -85,3 +85,11 @@ export function toUpdateOperatorPayload(values: OperatorFormValues): UpdateOpera
     isActive: values.isActive,
   };
 }
+
+/** Los campos editables de un operador tal como los guarda el servidor: la forma
+ * de la base de una edición (sin RUT es `null`). */
+export interface OperatorFields {
+  name: string;
+  rut: string | null;
+  isActive: boolean;
+}
