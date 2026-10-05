@@ -49,6 +49,10 @@ const OpenShiftSchema = z.object({
   id: z.string(),
   valorInicial: z.number(),
   operador: z.string(),
+  /** `id` del catálogo de Operadores del turno abierto. `null` en turnos
+   * previos al catálogo; `default(null)` tolera un backend que aún no lo
+   * envíe sin tumbar el parseo de toda la lista de equipos. */
+  operatorId: z.string().nullable().default(null),
   turno: z.string(),
   fecha: z.string().datetime(),
   /** Nombre del supervisor que abrió la tarjeta, o `null` si el registro no

@@ -3,18 +3,29 @@ import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-li
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
 import { TrabajosExtraView } from './TrabajosExtraView';
+import { updateTrabajoExtra } from '../api/TrabajosExtraAPI';
 
-// Se mockea solo `createTrabajoExtra` (no `listTrabajosExtra`, que las
-// pruebas de abajo siguen alimentando vía `qc.setQueryData`, mismo criterio
-// que `equipment`/`horometro`) — así el `mutate` real de
-// `useCreateTrabajoExtra` corre de verdad y se puede probar el flujo
-// completo vista → hook → API, incluido el mapeo de errores a toast.
+/**
+ * Crear, editar y el historial de cambios van al servidor; acá se simulan
+ * (`createTrabajoExtra` con un mock controlable para probar el flujo completo
+ * vista → hook → API, incluido el mapeo de errores a toast). Lo demás del API
+ * queda real: `listTrabajosExtra` se alimenta por la caché de las pruebas.
+ */
 const { createTrabajoExtraMock } = vi.hoisted(() => ({ createTrabajoExtraMock: vi.fn() }));
 
-vi.mock('../api/TrabajosExtraAPI', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/TrabajosExtraAPI')>();
-  return { ...actual, createTrabajoExtra: createTrabajoExtraMock };
-});
+vi.mock('../api/TrabajosExtraAPI', async (original) => ({
+  ...(await original<typeof import('../api/TrabajosExtraAPI')>()),
+  createTrabajoExtra: createTrabajoExtraMock,
+  updateTrabajoExtra: vi.fn(async ({ id }: { id: string }) => ({ id })),
+  listCambiosTrabajoExtra: vi.fn(async () => [
+    {
+      id: 'c1',
+      userName: 'Limbert Villacorta',
+      createdAt: '2026-10-01T14:20:00.000Z',
+      changes: [{ field: 'operador', label: 'Operador', before: 'Pedro Soto', after: 'Juan Rojas' }],
+    },
+  ]),
+}));
 
 const { toastDangerMock } = vi.hoisted(() => ({ toastDangerMock: vi.fn() }));
 vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
@@ -29,6 +40,8 @@ const OPERADOR = {
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
+
+const OPERADOR_NUEVO = { ...OPERADOR, id: 'op_3', name: 'Pedro Soto' };
 
 const REGISTRO = {
   id: 'r1',
@@ -52,8 +65,7 @@ function renderConRegistro() {
   const qc = new QueryClient();
   qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
   qc.setQueryData(['trabajos-extra'], [REGISTRO]);
-  qc.setQueryData(['horometro'], []);
-  qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+  qc.setQueryData(['operators', { isActive: true }], [OPERADOR, OPERADOR_NUEVO]);
   return render(
     <QueryClientProvider client={qc}>
       <TrabajosExtraView />
@@ -138,51 +150,118 @@ describe('TrabajosExtraView', () => {
   });
 
   /**
-   * Un equipo con turno en curso está ocupado: sus horas todavía no están
-   * cerradas, así que las del trabajo extraordinario podrían terminar
-   * contadas dos veces. El servidor lo rechaza; la vista además lo muestra en
-   * gris, para que se sepa que el equipo existe y por qué no se puede elegir.
+   * Acta N.° 004 (R10): el selector separa los equipos en terreno de los
+   * disponibles, y un equipo en turno SE PUEDE elegir — el trabajo extra usa
+   * la misma máquina del turno. El turno abierto queda como aviso, con el
+   * operador, para no tener que coordinarlo por radio.
    */
-  it('muestra los equipos en turno como ocupados y no deja elegirlos', () => {
-    const qc = new QueryClient();
-    qc.setQueryData(
-      ['equipment'],
-      [
-        { id: 'e1', internalCode: 'CM-003', type: 'Camión' },
-        { id: 'e2', internalCode: 'CA-011', type: 'Cargador' },
-      ],
-    );
-    qc.setQueryData(['trabajos-extra'], []);
-    // CA-011 abrió turno y todavía no lo cerró: `valorFinal` en null.
-    qc.setQueryData(
-      ['horometro'],
-      [
-        { id: 'h1', equipoId: 'e2', valorInicial: 100, valorFinal: null },
-        { id: 'h2', equipoId: 'e1', valorInicial: 50, valorFinal: 62 },
-      ],
-    );
-    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+  describe('selector de equipo', () => {
+    function renderConTurnoAbierto() {
+      const qc = new QueryClient();
+      qc.setQueryData(
+        ['equipment'],
+        [
+          { id: 'e1', internalCode: 'CM-003', type: 'Camión', status: 'OPERATIONAL' },
+          {
+            id: 'e2',
+            internalCode: 'CA-011',
+            type: 'Cargador',
+            status: 'OPERATIONAL',
+            openShift: { operador: 'Patricio Rojas', operatorId: 'op_2' },
+          },
+          { id: 'e3', internalCode: 'EX-002', type: 'Excavadora', status: 'IN_WORKSHOP' },
+        ],
+      );
+      qc.setQueryData(['trabajos-extra'], []);
+      qc.setQueryData(['operators', { isActive: true }], [OPERADOR, { ...OPERADOR, id: 'op_2', name: 'Patricio Rojas' }]);
+      render(
+        <QueryClientProvider client={qc}>
+          <TrabajosExtraView />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      return within(screen.getByRole('listbox'));
+    }
 
-    render(
-      <QueryClientProvider client={qc}>
-        <TrabajosExtraView />
-      </QueryClientProvider>,
-    );
+    it('separa los equipos en terreno de los disponibles', () => {
+      const lista = renderConTurnoAbierto();
 
-    fireEvent.click(screen.getByLabelText('Equipo'));
-    const lista = within(screen.getByRole('listbox'));
+      const enTerreno = lista.getByRole('group', { name: 'En terreno' });
+      const disponibles = lista.getByRole('group', { name: 'Disponibles' });
+      expect(within(enTerreno).getByRole('option', { name: /CA-011/ })).toBeTruthy();
+      expect(within(disponibles).getByRole('option', { name: /CM-003/ })).toBeTruthy();
+    });
 
-    // El libre se puede elegir.
-    const libre = lista.getByRole('option', { name: /CM-003/ });
-    expect(libre.getAttribute('aria-disabled')).not.toBe('true');
+    it('deja elegir un equipo en turno y avisa con quién está', () => {
+      const lista = renderConTurnoAbierto();
 
-    // El ocupado sigue a la vista —para que se sepa que existe— pero
-    // deshabilitado y diciendo por qué.
-    const ocupado = lista.getByRole('option', { name: /CA-011/ });
-    expect(ocupado.getAttribute('aria-disabled')).toBe('true');
-    expect(ocupado.textContent).toContain('Ocupado, en turno');
+      const enTurno = lista.getByRole('option', { name: /CA-011/ });
+      expect(enTurno.getAttribute('aria-disabled')).not.toBe('true');
+      expect(enTurno.textContent).toContain('En turno · Patricio Rojas');
 
-    expect(screen.getByText(/1 equipo está en turno/)).toBeTruthy();
+      fireEvent.click(enTurno);
+      expect(screen.getByText(/CA-011 está en turno con Patricio Rojas/)).toBeTruthy();
+      // Su operador (por `openShift.operatorId`) se propone mientras el campo esté vacío.
+      expect(screen.getByLabelText('Operador').textContent).toContain('Patricio Rojas');
+    });
+
+    it('no pisa el operador ya elegido al escoger un equipo en turno', () => {
+      const lista = renderConTurnoAbierto();
+      fireEvent.click(lista.getByRole('option', { name: /CM-003/ }));
+      fireEvent.click(screen.getByLabelText('Operador'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: OPERADOR.name }));
+
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CA-011/ }));
+
+      expect(screen.getByLabelText('Operador').textContent).toContain(OPERADOR.name);
+    });
+
+    it('sin operatorId en el turno abierto no propone operador', () => {
+      const qc = new QueryClient();
+      qc.setQueryData(['equipment'], [
+        { id: 'e2', internalCode: 'CA-011', type: 'Cargador', status: 'OPERATIONAL', openShift: { operador: 'Patricio Rojas', operatorId: null } },
+      ]);
+      qc.setQueryData(['trabajos-extra'], []);
+      qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+      render(
+        <QueryClientProvider client={qc}>
+          <TrabajosExtraView />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CA-011/ }));
+
+      expect(screen.getByLabelText('Operador').textContent).toContain('Elegí el operador');
+    });
+
+    it('muestra los equipos en taller sin dejar elegirlos', () => {
+      const lista = renderConTurnoAbierto();
+
+      const enTaller = lista.getByRole('option', { name: /EX-002/ });
+      expect(enTaller.getAttribute('aria-disabled')).toBe('true');
+      expect(enTaller.textContent).toContain('En taller');
+    });
+  });
+
+  /** Acta N.° 004: por regla se cobra un mínimo de una hora máquina. */
+  describe('horas a cobrar', () => {
+    const conHorometros = (inicial: string, final: string) => {
+      renderConRegistro();
+      fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: inicial } });
+      fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: final } });
+      return screen.getByText('Horas a cobrar').closest('div')!.parentElement!.textContent ?? '';
+    };
+
+    it('cobra una hora aunque el trabajo dure minutos', () => {
+      const calculado = conHorometros('100', '100.3');
+      expect(calculado).toContain('1 h');
+      expect(calculado).toContain('Duró 0,3 h');
+    });
+
+    it('cobra las horas reales cuando pasan del mínimo', () => {
+      expect(conHorometros('100', '102.5')).toContain('2,5 h');
+    });
   });
 
   /**
@@ -194,7 +273,6 @@ describe('TrabajosExtraView', () => {
     const qc = new QueryClient();
     qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
     qc.setQueryData(['trabajos-extra'], []);
-    qc.setQueryData(['horometro'], []);
     qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
 
     render(
@@ -290,5 +368,59 @@ describe('TrabajosExtraView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
     await waitFor(() => expect(toastDangerMock).toHaveBeenCalledWith(OPERATOR_INACTIVE_MESSAGE));
+  });
+
+  /**
+   * Acta N.° 004, R13: lo ya registrado se puede editar desde el historial,
+   * avisando antes de guardar que el administrador se entera, y el detalle
+   * muestra quién cambió qué.
+   */
+  describe('editar un trabajo registrado', () => {
+    afterEach(() => vi.clearAllMocks());
+
+    const abrirDetalle = () => {
+      renderConRegistro();
+      fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Ver detalle/ }));
+      return within(screen.getByRole('dialog'));
+    };
+
+    it('muestra el historial de cambios en el detalle', async () => {
+      const ventana = abrirDetalle();
+
+      expect(await ventana.findByText('Limbert Villacorta')).toBeTruthy();
+      expect(ventana.getByText('Pedro Soto')).toBeTruthy();
+    });
+
+    it('edita con el formulario prellenado, avisa al administrador y guarda', async () => {
+      const ventana = abrirDetalle();
+      fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
+
+      expect(ventana.getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
+      // El operador guardado (`operatorId`) llega seleccionado del catálogo.
+      expect(ventana.getByLabelText('Operador').textContent).toContain(OPERADOR.name);
+
+      fireEvent.click(ventana.getByLabelText('Operador'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Pedro Soto' }));
+      fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
+
+      await waitFor(() => expect(updateTrabajoExtra).toHaveBeenCalled());
+      const [{ id, payload }] = vi.mocked(updateTrabajoExtra).mock.calls[0];
+      expect(id).toBe('r1');
+      expect(payload.operatorId).toBe('op_3');
+      // El operador viaja como `operatorId` del catálogo, nunca como texto libre.
+      expect((payload as Record<string, unknown>).operador).toBeUndefined();
+      // Lo que no se tocó viaja igual: el servidor compara el registro entero.
+      expect(payload.horometroFinal).toBe(5400);
+    });
+
+    it('cancelar vuelve al detalle sin guardar', () => {
+      const ventana = abrirDetalle();
+      fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
+      fireEvent.click(ventana.getByRole('button', { name: 'Cancelar' }));
+
+      expect(ventana.getByRole('button', { name: /Editar/ })).toBeTruthy();
+      expect(updateTrabajoExtra).not.toHaveBeenCalled();
+    });
   });
 });

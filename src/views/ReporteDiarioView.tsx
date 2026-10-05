@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, ChevronRight, History } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useAhora } from '../hooks/useAhora';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { calcularTotales, totalesDeSecciones } from '../lib/reporte-diario';
+import { aNumero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
+import { diferencias } from '../lib/cambios';
+import type { EntradaCambios } from '../types/cambios';
 import { contextoTurno, turnoAnterior, type Turno } from '../lib/turno';
 import {
+  AvisoEdicion,
   Boton,
   Campo,
   Card,
@@ -18,6 +21,7 @@ import {
   Filas,
   Form,
   GrupoHead,
+  HistorialCambios,
   Hint,
   Input,
   Label,
@@ -94,6 +98,19 @@ interface ContenidoReporte {
   plantas: [string, string][];
   traspasos: [string, string][];
   empresas: string[];
+  /** Quién corrigió qué después de enviarlo, del más reciente al más viejo (R13). */
+  cambios?: EntradaCambios[];
+}
+
+/** Un reporte enviado mientras se corrige: los mismos datos, como texto de formulario. */
+interface BorradorReporte {
+  personal: string[];
+  secciones: { camiones: string; vueltas: string }[];
+  tolvas: string[];
+  /** Planta → producto; vacío si no operó en el turno. */
+  plantas: Record<string, string>;
+  traspasos: string[];
+  empresas: string[];
 }
 
 /** Un turno ya enviado: su contenido más a qué turno pertenece y quién firmó. */
@@ -103,10 +120,10 @@ interface ReporteAnterior extends ContenidoReporte {
   supervisor: string;
 }
 
-/** Quién firmó los turnos de ejemplo. En el sistema real viene del reporte. */
+/** Quién firmó los turnos de ejemplo: el supervisor real de cada turno (Acta N.° 004). En el sistema real viene del reporte. */
 const SUPERVISOR_DE_EJEMPLO: Record<Turno, string> = {
-  DIURNO: 'Rodrigo Fuentes',
-  NOCTURNO: 'Gonzalo Riquelme',
+  DIURNO: 'Limbert Villacorta',
+  NOCTURNO: 'José Pérez',
 };
 
 /**
@@ -124,11 +141,11 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
       ['Asistente de planta', 'Javiera Morales'],
     ],
     secciones: [
-      { label: 'Camiones internos', camiones: 5, vueltas: 6 },
-      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
-      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+      { label: 'Camiones internos', camiones: 5, vueltas: 4 },
+      { label: 'Camiones Mina Caleta', camiones: 16, vueltas: 3 },
+      { label: 'Camiones mineras', camiones: 34, vueltas: 1 },
     ],
-    tolvas: [10, 8, 6],
+    tolvas: [1, 2, 3],
     plantas: [
       ['P.P.1', 'Sal gruesa granel'],
       ['P.R.2', 'Rechazo a acopio'],
@@ -149,11 +166,11 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
       ['Asistente de planta', 'Javiera Morales'],
     ],
     secciones: [
-      { label: 'Camiones internos', camiones: 6, vueltas: 7 },
-      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 5 },
-      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+      { label: 'Camiones internos', camiones: 6, vueltas: 5 },
+      { label: 'Camiones Mina Caleta', camiones: 20, vueltas: 3 },
+      { label: 'Camiones mineras', camiones: 42, vueltas: 1 },
     ],
-    tolvas: [14, 11, 8],
+    tolvas: [2, 2, 4],
     plantas: [
       ['P.P.1', 'Sal gruesa granel'],
       ['P.P.2', 'Sal fina'],
@@ -175,11 +192,11 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
       ['Asistente de planta', 'Ignacio Sepúlveda'],
     ],
     secciones: [
-      { label: 'Camiones internos', camiones: 4, vueltas: 6 },
-      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 4 },
-      { label: 'Camiones minera', camiones: 2, vueltas: 5 },
+      { label: 'Camiones internos', camiones: 5, vueltas: 4 },
+      { label: 'Camiones Mina Caleta', camiones: 14, vueltas: 3 },
+      { label: 'Camiones mineras', camiones: 30, vueltas: 1 },
     ],
-    tolvas: [9, 7, 5],
+    tolvas: [1, 1, 3],
     plantas: [
       ['P.R.2', 'Rechazo a acopio'],
       ['Producto Fino', 'Fino a silo 2'],
@@ -199,11 +216,11 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
       ['Asistente de planta', 'Javiera Morales'],
     ],
     secciones: [
-      { label: 'Camiones internos', camiones: 6, vueltas: 6 },
-      { label: 'Camiones mina-caleta', camiones: 4, vueltas: 6 },
-      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+      { label: 'Camiones internos', camiones: 8, vueltas: 5 },
+      { label: 'Camiones Mina Caleta', camiones: 18, vueltas: 3 },
+      { label: 'Camiones mineras', camiones: 40, vueltas: 1 },
     ],
-    tolvas: [13, 10, 7],
+    tolvas: [2, 2, 4],
     plantas: [
       ['P.P.1', 'Sal gruesa granel'],
       ['P.P.2', 'Sal fina'],
@@ -224,11 +241,11 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
       ['Asistente de planta', 'Ignacio Sepúlveda'],
     ],
     secciones: [
-      { label: 'Camiones internos', camiones: 5, vueltas: 7 },
-      { label: 'Camiones mina-caleta', camiones: 3, vueltas: 5 },
-      { label: 'Camiones minera', camiones: 2, vueltas: 4 },
+      { label: 'Camiones internos', camiones: 5, vueltas: 5 },
+      { label: 'Camiones Mina Caleta', camiones: 15, vueltas: 3 },
+      { label: 'Camiones mineras', camiones: 36, vueltas: 1 },
     ],
-    tolvas: [11, 9, 6],
+    tolvas: [1, 2, 3],
     plantas: [
       ['P.P.1', 'Sal gruesa granel'],
       ['P.R.4', 'Rechazo a acopio'],
@@ -245,18 +262,43 @@ const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
 
 /**
  * Las tres secciones de camiones. Cada una registra cuántos camiones tiene y
- * cuántas vueltas da cada uno de esos camiones en el turno.
+ * cuántas vueltas da cada uno de esos camiones en el turno, y lleva su propio
+ * contador: cada tipo tiene tarifa distinta (Acta N.° 004, R9).
+ *
+ * La referencia es la que dio el cliente en esa reunión, en volúmenes
+ * **diarios** — el formulario es por turno, así que sirve para detectar un
+ * dato fuera de escala, no como meta.
  */
 const SECCIONES_CAMIONES = [
-  { label: 'Camiones internos', camiones: 'camionesInternos', vueltas: 'vueltasInternos' },
-  { label: 'Camiones mina-caleta', camiones: 'camionesMinaCaleta', vueltas: 'vueltasMinaCaleta' },
-  { label: 'Camiones minera', camiones: 'camionesMinera', vueltas: 'vueltasMinera' },
+  {
+    label: 'Camiones internos',
+    corto: 'Internos',
+    camiones: 'camionesInternos',
+    vueltas: 'vueltasInternos',
+    referencia: 'Retiro de rechazos. 5 camiones por contrato (8 a 10 en alta demanda o huelga), 30 a 50 vueltas al día.',
+  },
+  {
+    label: 'Camiones Mina Caleta',
+    corto: 'Mina Caleta',
+    camiones: 'camionesMinaCaleta',
+    vueltas: 'vueltasMinaCaleta',
+    referencia: 'De unos 100 camiones se cargan 30 a 40, con 5 a 6 vueltas al día cada uno.',
+  },
+  {
+    label: 'Camiones mineras',
+    corto: 'Mineras',
+    camiones: 'camionesMinera',
+    vueltas: 'vueltasMinera',
+    referencia: 'Unos 80 camiones, 1 vuelta al día: traslados a Calama, RT y Spence.',
+  },
 ] as const;
 
 /**
- * Las tres tolvas. Su «vuelta» es un ciclo de llenado y descarga de la tolva
- * misma — no tiene relación con las vueltas de los camiones, y por eso no se
- * cruzan ni se suman entre sí.
+ * Alimentación Planta PPE (Planta Producto Envasado): lo que cada tolva
+ * descargó a la planta en el turno, contado en cargas. Antes se llamaba
+ * «vueltas por tolva»; el cliente pidió el cambio de nombre en el Acta N.° 004
+ * porque «vuelta» se confundía con las de los camiones, que son otra cosa y
+ * no se cruzan ni se suman con estas.
  */
 const TOLVAS = [
   { label: 'Tolva 1', clave: 'tolva1' },
@@ -266,6 +308,14 @@ const TOLVAS = [
 
 const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+/** Un contador de vueltas por tipo de camión, con su nombre corto. */
+const cifrasPorTipo = (secciones: readonly { camiones: number; vueltas: number }[]) =>
+  SECCIONES_CAMIONES.map((s, i) => ({
+    label: s.corto,
+    valor: fmt(secciones[i] ? vueltasDeSeccion(secciones[i]) : 0),
+    destacado: true,
+  }));
 
 const dd = (n: number) => String(n).padStart(2, '0');
 /** `22/09` */
@@ -355,17 +405,101 @@ export function ReporteDiarioView() {
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
+  /** Lo escrito en los turnos anteriores; es estado porque se puede corregir (R13). */
+  const [contenidos, setContenidos] = useState(CONTENIDO_ANTERIORES);
+
   const anteriores = useMemo<ReporteAnterior[]>(() => {
-    const previos = turnosPrevios(ctx.turno, ctx.fecha, CONTENIDO_ANTERIORES.length);
-    return CONTENIDO_ANTERIORES.map((contenido, i) => ({
+    const previos = turnosPrevios(ctx.turno, ctx.fecha, contenidos.length);
+    return contenidos.map((contenido, i) => ({
       ...contenido,
       ...previos[i],
       supervisor: SUPERVISOR_DE_EJEMPLO[previos[i].turno],
     }));
-  }, [ctx]);
+  }, [ctx, contenidos]);
 
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalle, setDetalle] = useState<ReporteAnterior | null>(null);
+  const [detalleIdx, setDetalleIdx] = useState<number | null>(null);
+  const detalle = detalleIdx == null ? null : (anteriores[detalleIdx] ?? null);
+  /** Borrador de la corrección del reporte abierto; null si no se edita. */
+  const [edicion, setEdicion] = useState<BorradorReporte | null>(null);
+  const [avisoGuardado, setAvisoGuardado] = useState(false);
+
+  /** Abrir o dejar un reporte siempre sale del modo edición. */
+  const abrirDetalle = (idx: number | null) => {
+    setDetalleIdx(idx);
+    setEdicion(null);
+    setAvisoGuardado(false);
+  };
+
+  const abrirEdicion = (r: ReporteAnterior) => {
+    setAvisoGuardado(false);
+    setEdicion({
+      personal: r.personal.map(([, nombre]) => nombre),
+      secciones: r.secciones.map((s) => ({ camiones: String(s.camiones), vueltas: String(s.vueltas) })),
+      tolvas: r.tolvas.map(String),
+      plantas: Object.fromEntries(PLANTAS.map((p) => [p, r.plantas.find(([nombre]) => nombre === p)?.[1] ?? ''])),
+      traspasos: r.traspasos.map(([, v]) => v),
+      empresas: r.empresas,
+    });
+  };
+
+  /**
+   * Guarda la corrección de un reporte ya enviado (Acta N.° 004, R13): sin
+   * autorización, pero con registro de quién cambió qué. Si nada cambió de
+   * verdad no se registra nada. Maqueta: el aviso al administrador lo hará el
+   * servidor cuando exista el backend del reporte.
+   */
+  const guardarEdicion = () => {
+    if (detalleIdx == null || !detalle || !edicion) return;
+    const r = detalle;
+    const nuevo: ContenidoReporte = {
+      personal: r.personal.map(([cargo], i) => [cargo, edicion.personal[i].trim()]),
+      secciones: r.secciones.map((s, i) => ({
+        label: s.label,
+        camiones: aNumero(edicion.secciones[i].camiones),
+        vueltas: aNumero(edicion.secciones[i].vueltas),
+      })),
+      tolvas: edicion.tolvas.map(aNumero),
+      plantas: PLANTAS.filter((p) => edicion.plantas[p].trim()).map((p) => [p, edicion.plantas[p].trim()]),
+      traspasos: r.traspasos.map(([label], i) => [label, edicion.traspasos[i].trim()]),
+      empresas: [...EMPRESAS, ...EMPRESAS_EN_DUDA].filter((e) => edicion.empresas.includes(e)),
+    };
+    const productoDe = (c: ContenidoReporte, p: string) => c.plantas.find(([n]) => n === p)?.[1] ?? '';
+    const cambios = diferencias([
+      ...r.personal.map(([cargo, nombre], i) => ({
+        field: `personal.${i}`,
+        label: cargo,
+        antes: nombre,
+        despues: nuevo.personal[i][1],
+      })),
+      ...r.secciones.flatMap((s, i) => [
+        { field: `secciones.${i}.camiones`, label: `${s.label} · camiones`, antes: String(s.camiones), despues: String(nuevo.secciones[i].camiones) },
+        { field: `secciones.${i}.vueltas`, label: `${s.label} · vueltas por camión`, antes: String(s.vueltas), despues: String(nuevo.secciones[i].vueltas) },
+      ]),
+      ...r.tolvas.map((v, i) => ({
+        field: `tolvas.${i}`,
+        label: `Alimentación Planta PPE · tolva ${i + 1}`,
+        antes: String(v),
+        despues: String(nuevo.tolvas[i]),
+      })),
+      ...PLANTAS.map((p) => ({ field: `plantas.${p}`, label: `Planta ${p}`, antes: productoDe(r, p), despues: productoDe(nuevo, p) })),
+      ...r.traspasos.map(([label, v], i) => ({ field: `traspasos.${i}`, label, antes: v, despues: nuevo.traspasos[i][1] })),
+      { field: 'empresas', label: 'Empresas externas', antes: r.empresas.join(', '), despues: nuevo.empresas.join(', ') },
+    ]);
+    if (cambios.length > 0) {
+      const entrada: EntradaCambios = {
+        id: `${detalleIdx}-${Date.now()}`,
+        userName: supervisor,
+        createdAt: new Date().toISOString(),
+        changes: cambios,
+      };
+      setContenidos((cs) =>
+        cs.map((c, i) => (i === detalleIdx ? { ...nuevo, cambios: [entrada, ...(c.cambios ?? [])] } : c)),
+      );
+      setAvisoGuardado(true);
+    }
+    setEdicion(null);
+  };
 
   const [personal, setPersonal] = useState({
     jefeMina: 'Álvaro Henríquez',
@@ -393,18 +527,18 @@ export function ReporteDiarioView() {
     Sijam: true,
   });
   const [prod, setProd] = useState({
-    camionesInternos: '8',
-    vueltasInternos: '6',
-    camionesMinaCaleta: '4',
-    vueltasMinaCaleta: '5',
-    camionesMinera: '3',
-    vueltasMinera: '4',
-    tolva1: '12',
-    tolva2: '9',
-    tolva3: '7',
+    camionesInternos: '5',
+    vueltasInternos: '5',
+    camionesMinaCaleta: '18',
+    vueltasMinaCaleta: '3',
+    camionesMinera: '38',
+    vueltasMinera: '1',
+    tolva1: '2',
+    tolva2: '2',
+    tolva3: '4',
   });
 
-  const totales = useMemo(() => calcularTotales(prod), [prod]);
+  const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
   const formulario = (
     <>
@@ -538,10 +672,18 @@ export function ReporteDiarioView() {
            * cada uno de ellos. Las dos cifras van lado a lado porque es el par
            * que el supervisor anota junto, sección por sección.
            */}
-          <div className="flex flex-col gap-3">
-            {SECCIONES_CAMIONES.map((seccion) => (
+          <div className="flex flex-col gap-4">
+            {SECCIONES_CAMIONES.map((seccion, i) => (
               <div key={seccion.camiones} className="flex flex-col gap-1.5">
-                <TituloSeccion>{seccion.label}</TituloSeccion>
+                <div className="flex items-baseline justify-between gap-3">
+                  <TituloSeccion>{seccion.label}</TituloSeccion>
+                  {/* El contador de la sección, a la vista mientras se tipea:
+                      es la cifra que se cobra con la tarifa de este tipo. */}
+                  <span className="tabular text-[13.5px] font-semibold whitespace-nowrap text-[#0f2a7a]">
+                    {fmt(vueltasDeSeccion(secciones[i]))} vueltas
+                  </span>
+                </div>
+                <Hint>Referencia: {seccion.referencia}</Hint>
                 <div className="grid grid-cols-2 gap-2.5">
                   <Campo label="Cantidad de camiones">
                     <Input
@@ -567,17 +709,23 @@ export function ReporteDiarioView() {
               </div>
             ))}
           </div>
-          <Hint>Referencia: entre 5 y 7 vueltas por camión en el turno.</Hint>
-
-          <Cifras
-            items={[
-              { label: 'Total camiones', valor: fmt(totales.camiones) },
-              { label: 'Total vueltas', valor: fmt(totales.vueltas), destacado: true },
-            ]}
-          />
+          {/* Un contador por tipo y ningún total: cada tipo se cobra con su
+              tarifa (R9), y una suma no correspondería a ninguna. */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Vueltas del turno por tipo</Label>
+            <Cifras
+              items={SECCIONES_CAMIONES.map((s, i) => ({
+                label: s.corto,
+                valor: fmt(vueltasDeSeccion(secciones[i])),
+                destacado: true,
+              }))}
+            />
+            <Hint>Cada tipo de camión tiene su propia tarifa: se cuentan por separado y no se suman.</Hint>
+          </div>
 
           <div className="flex flex-col gap-1.5">
-            <TituloSeccion>Vueltas por tolva</TituloSeccion>
+            <TituloSeccion>Alimentación Planta PPE</TituloSeccion>
+            <Hint>Planta Producto Envasado. Cargas que cada tolva descargó a la planta en el turno.</Hint>
             <div className="grid grid-cols-3 gap-2.5">
               {TOLVAS.map((tolva) => (
                 <Campo key={tolva.clave} label={tolva.label}>
@@ -591,8 +739,9 @@ export function ReporteDiarioView() {
               ))}
             </div>
             <Hint>
-              Una vuelta de tolva es un ciclo de llenado y descarga. No son las vueltas de los
-              camiones: se cuentan aparte y no tienen por qué cuadrar entre sí.
+              Referencia diaria: tolva 1, 60–70 t (unas 30 t por carga); tolva 2, 60–80 t en
+              maxisacos; tolva 3, 150–200 t en 6 a 7 cargas. No son vueltas de camión: se cuentan
+              aparte y no tienen por qué cuadrar con ellas.
             </Hint>
           </div>
         </Form>
@@ -616,8 +765,12 @@ export function ReporteDiarioView() {
           <th className={TH}>Fecha</th>
           <th className={TH}>Turno</th>
           <th className={TH}>Supervisor</th>
-          <th className={`${TH} text-right`}>Camiones</th>
-          <th className={`${TH} text-right`}>Vueltas</th>
+          {/* Una columna de vueltas por tipo de camión: se cobran por separado. */}
+          {SECCIONES_CAMIONES.map((s) => (
+            <th key={s.corto} className={`${TH} text-right`}>
+              {s.corto}
+            </th>
+          ))}
           <th className={TH}>Estado</th>
           <th className={TH}>
             <span className="sr-only">Detalle</span>
@@ -626,21 +779,23 @@ export function ReporteDiarioView() {
       </thead>
       <tbody>
         {anteriores.map((r, i) => {
-          const t = totalesDeSecciones(r.secciones);
           return (
             <tr key={i}>
               <td className={`${TD} tabular`}>{fechaCompleta(r.fecha)}</td>
               <td className={TD}>{r.turno}</td>
               <td className={TD}>{r.supervisor}</td>
-              <td className={`${TD} tabular text-right`}>{t.camiones}</td>
-              <td className={`${TD} tabular text-right`}>{fmt(t.vueltas)}</td>
+              {r.secciones.map((s) => (
+                <td key={s.label} className={`${TD} tabular text-right`}>
+                  {fmt(vueltasDeSeccion(s))}
+                </td>
+              ))}
               <td className={TD}>
                 <Chip tono="success">Enviado</Chip>
               </td>
               <td className={`${TD} text-right`}>
                 <button
                   type="button"
-                  onClick={() => setDetalle(r)}
+                  onClick={() => abrirDetalle(i)}
                   className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
                 >
                   Ver más detalle <ChevronRight className="h-4 w-4" />
@@ -654,7 +809,6 @@ export function ReporteDiarioView() {
   ) : (
     <div className="flex flex-col gap-3">
       {anteriores.map((r, i) => {
-        const t = totalesDeSecciones(r.secciones);
         return (
           <Tarjeta key={i}>
             <div className="flex items-center justify-between gap-2">
@@ -664,13 +818,8 @@ export function ReporteDiarioView() {
               <Chip tono="success">Enviado</Chip>
             </div>
             <span className="text-[13px] text-muted-foreground">{r.supervisor}</span>
-            <Cifras
-              items={[
-                { label: 'Camiones', valor: t.camiones },
-                { label: 'Vueltas', valor: fmt(t.vueltas), destacado: true },
-              ]}
-            />
-            <Boton variante="contorno" ancho onClick={() => setDetalle(r)}>
+            <Cifras items={cifrasPorTipo(r.secciones)} />
+            <Boton variante="contorno" ancho onClick={() => abrirDetalle(i)}>
               Ver más detalle <ChevronRight className="h-[18px] w-[18px]" />
             </Boton>
           </Tarjeta>
@@ -679,35 +828,167 @@ export function ReporteDiarioView() {
     </div>
   );
 
+  /** Para cambiar un valor del borrador sin repetir el `e && {...}` en cada campo. */
+  const editar = (cambio: (b: BorradorReporte) => BorradorReporte) => setEdicion((b) => (b ? cambio(b) : b));
+
+  /**
+   * Corregir un reporte ya enviado (R13): los mismos bloques del formulario
+   * del turno, con lo que se envió, y el aviso al administrador arriba.
+   */
+  const vistaEdicion = detalle && edicion && (
+    <div className="flex flex-col gap-4">
+      <AvisoEdicion />
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Personal del turno" />
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {detalle.personal.map(([cargo], i) => (
+            <Campo key={cargo} label={cargo}>
+              <Input
+                value={edicion.personal[i]}
+                onChange={(ev) => editar((b) => ({ ...b, personal: b.personal.map((v, j) => (j === i ? ev.target.value : v)) }))}
+              />
+            </Campo>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Producción del turno" />
+        {detalle.secciones.map((s, i) => (
+          <div key={s.label} className="flex flex-col gap-1.5">
+            <TituloSeccion>{s.label}</TituloSeccion>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(['camiones', 'vueltas'] as const).map((campo) => (
+                <Campo key={campo} label={campo === 'camiones' ? 'Cantidad de camiones' : 'Vueltas por camión'}>
+                  <Input
+                    numerico
+                    className="!pr-3.5"
+                    value={edicion.secciones[i][campo]}
+                    onChange={(ev) =>
+                      editar((b) => ({
+                        ...b,
+                        secciones: b.secciones.map((x, j) => (j === i ? { ...x, [campo]: ev.target.value } : x)),
+                      }))
+                    }
+                  />
+                </Campo>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Alimentación Planta PPE" detalle="cargas por tolva" />
+        <div className="grid grid-cols-3 gap-2.5">
+          {edicion.tolvas.map((v, i) => (
+            <Campo key={i} label={`Tolva ${i + 1}`}>
+              <Input
+                numerico
+                className="!pr-3.5"
+                value={v}
+                onChange={(ev) => editar((b) => ({ ...b, tolvas: b.tolvas.map((x, j) => (j === i ? ev.target.value : x)) }))}
+              />
+            </Campo>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Operaciones en planta" />
+        {PLANTAS.map((p) => (
+          <div key={p} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
+            <span className="tabular text-sm leading-tight font-semibold">{p}</span>
+            <Input
+              aria-label={`Producto de ${p}`}
+              className="!h-12 !text-[15px]"
+              placeholder="Sin operación en el turno"
+              value={edicion.plantas[p]}
+              onChange={(ev) => editar((b) => ({ ...b, plantas: { ...b.plantas, [p]: ev.target.value } }))}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Traspasos" />
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {detalle.traspasos.map(([label], i) => (
+            <Campo key={label} label={label}>
+              <Input
+                numerico
+                className="!pr-3.5"
+                value={edicion.traspasos[i]}
+                onChange={(ev) => editar((b) => ({ ...b, traspasos: b.traspasos.map((x, j) => (j === i ? ev.target.value : x)) }))}
+              />
+            </Campo>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <GrupoHead titulo="Empresas externas" />
+        <div className="flex flex-wrap gap-2">
+          {[...EMPRESAS, ...EMPRESAS_EN_DUDA].map((e) => (
+            <ChipSeleccion
+              key={e}
+              activo={edicion.empresas.includes(e)}
+              onToggle={() =>
+                editar((b) => ({
+                  ...b,
+                  empresas: b.empresas.includes(e) ? b.empresas.filter((x) => x !== e) : [...b.empresas, e],
+                }))
+              }
+            >
+              {e}
+            </ChipSeleccion>
+          ))}
+        </div>
+      </div>
+
+      <Boton ancho onClick={guardarEdicion}>
+        Guardar cambios <ArrowRight className="h-[19px] w-[19px]" />
+      </Boton>
+      <Boton variante="contorno" ancho onClick={() => setEdicion(null)}>
+        Cancelar
+      </Boton>
+    </div>
+  );
+
   const vistaDetalle = detalle && (
     <div className="flex flex-col gap-4">
-      <Boton variante="contorno" onClick={() => setDetalle(null)} className="self-start">
-        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
-      </Boton>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Boton variante="contorno" onClick={() => abrirDetalle(null)}>
+          <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+        </Boton>
+        <Boton variante="contorno" onClick={() => abrirEdicion(detalle)}>
+          <Pencil className="h-[17px] w-[17px]" /> Editar
+        </Boton>
+      </div>
+      {avisoGuardado && (
+        <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
+          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+        </p>
+      )}
 
-      <Cifras
-        items={[
-          { label: 'Camiones', valor: totalesDeSecciones(detalle.secciones).camiones },
-          {
-            label: 'Vueltas',
-            valor: fmt(totalesDeSecciones(detalle.secciones).vueltas),
-            destacado: true,
-          },
-        ]}
-      />
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Vueltas por tipo de camión" />
+        <Cifras items={cifrasPorTipo(detalle.secciones)} />
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Producción del turno" />
         <Filas
           filas={detalle.secciones.map((s): [string, string] => [
             s.label,
-            `${s.camiones} camiones × ${s.vueltas} vueltas`,
+            `${s.camiones} camiones × ${s.vueltas} = ${fmt(vueltasDeSeccion(s))} vueltas`,
           ])}
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <GrupoHead titulo="Vueltas por tolva" />
+        <GrupoHead titulo="Alimentación Planta PPE" detalle="cargas por tolva" />
         <Cifras
           items={detalle.tolvas.map((v, i) => ({ label: `Tolva ${i + 1}`, valor: v }))}
         />
@@ -736,6 +1017,8 @@ export function ReporteDiarioView() {
           ))}
         </div>
       </div>
+
+      <HistorialCambios entradas={detalle.cambios ?? []} />
     </div>
   );
 
@@ -753,7 +1036,7 @@ export function ReporteDiarioView() {
           variante="contorno"
           ancho
           onClick={() => {
-            setDetalle(null);
+            abrirDetalle(null);
             setHistorialAbierto(true);
           }}
         >
@@ -771,12 +1054,16 @@ export function ReporteDiarioView() {
         abierto={historialAbierto}
         onAbiertoChange={(abierto) => {
           setHistorialAbierto(abierto);
-          if (!abierto) setDetalle(null);
+          if (!abierto) abrirDetalle(null);
         }}
-        titulo={detalle ? `Reporte del ${fechaCompleta(detalle.fecha)} · ${detalle.turno}` : 'Historial de reportes'}
+        titulo={
+          detalle
+            ? `${edicion ? 'Editar · ' : ''}Reporte del ${fechaCompleta(detalle.fecha)} · ${detalle.turno}`
+            : 'Historial de reportes'
+        }
         detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${anteriores.length} turnos`}
       >
-        {vistaDetalle ?? lista}
+        {vistaEdicion || vistaDetalle || lista}
       </ModalTerreno>
     </>
   );

@@ -760,6 +760,7 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
     id: 'h_abierto',
     valorInicial: 1200,
     operador: 'Carlos Núñez',
+    operatorId: 'op_1',
     turno: 'NOCTURNO',
     fecha: '2026-08-06T20:00:00.000Z',
     supervisorName: 'Marcela Pizarro',
