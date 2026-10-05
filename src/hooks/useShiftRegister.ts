@@ -7,11 +7,13 @@ import { useShiftCardsMine } from './useShiftCards';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useAperturaForm, type AperturaState } from './useAperturaForm';
 import { useCierreForm, type CierreState } from './useCierreForm';
+import { useEditarTarjeta, type UseEditarTarjetaResult } from './useEditarTarjeta';
 import { useExitReportState } from './useExitReportState';
 import { useShiftProjection } from './useShiftProjection';
 import { useTurnoSelector } from './useTurnoSelector';
 import type { EstadoReporte, TarjetaTurno } from './shift-register-helpers';
 import type { OutboxLastError } from '../offline/db';
+import type { ResultadoAdBlue } from '../lib/adblue';
 import type { ContextoTurno, Turno } from '../lib/turno';
 import type { UsePhotoCaptureFlowResult } from '../lib/usePhotoCaptureFlow';
 import type { Equipment } from '../types/equipment';
@@ -99,8 +101,13 @@ export interface UseShiftRegisterResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  adBlueCierre: ResultadoAdBlue;
+  adBlueIncompletoCierre: boolean;
   isCerrando: boolean;
   foto: UsePhotoCaptureFlowResult;
+
+  /** Editar una tarjeta (abierta o cerrada) — ver `useEditarTarjeta`. */
+  edicion: UseEditarTarjetaResult;
 
   verReporte: boolean;
   setVerReporte: Dispatch<SetStateAction<boolean>>;
@@ -153,6 +160,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
   });
   const apertura = useAperturaForm({ disponibles: proyeccion.disponibles, ctx: turno.ctx, userId: user?.id });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, userId: user?.id });
+  const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id });
   const reporte = useExitReportState({
     tarjetasServidor,
     ctx: turno.ctx,
@@ -164,6 +172,11 @@ export function useShiftRegister(): UseShiftRegisterResult {
   const [verReporte, setVerReporte] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
+  // El detalle abierto se lee de la proyeccion, no de la copia guardada: tras
+  // editar, muestra el dato nuevo sin volver a abrirlo.
+  const detalleCerradaVivo = detalleCerrada
+    ? (proyeccion.tarjetas.find((t) => t.id === detalleCerrada.id) ?? detalleCerrada)
+    : null;
 
   return {
     ...turno,
@@ -179,11 +192,12 @@ export function useShiftRegister(): UseShiftRegisterResult {
     enCurso: proyeccion.enCurso,
     ...apertura,
     ...cierre,
+    edicion,
     verReporte,
     setVerReporte,
     historialAbierto,
     setHistorialAbierto,
-    detalleCerrada,
+    detalleCerrada: detalleCerradaVivo,
     setDetalleCerrada,
     ...reporte,
   };

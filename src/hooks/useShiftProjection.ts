@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import { esActual, mapCardToTarjeta, type TarjetaTurno } from './shift-register-helpers';
-import type { CloseCardOp, OpenCardOp, OutboxOp } from '../offline/db';
+import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp } from '../offline/db';
 import type { ContextoTurno } from '../lib/turno';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
@@ -26,7 +26,9 @@ function mapOpenOpToTarjeta(
     equipo: equipo?.internalCode ?? '—',
     tipo: equipo?.type ?? '—',
     operador: operador?.name ?? 'Operador',
+    operatorId: op.payload.operatorId,
     inicial: op.payload.valorInicial,
+    adBlue: false,
     grupo,
     estado: 'curso',
     supervisor,
@@ -44,6 +46,8 @@ function overlayCloseOp(base: TarjetaTurno, op: CloseCardOp): TarjetaTurno {
     estado: 'cerrada',
     final: op.payload.input.valorFinal,
     litros: op.payload.input.fuelLiters,
+    adBlue: op.payload.input.adBlue ?? false,
+    adBlueLitros: op.payload.input.adBlueLiters,
     observaciones: op.payload.input.observaciones ?? base.observaciones,
     cerradaA: new Date(op.payload.input.capturedAt).toLocaleTimeString('es-CL', {
       hour: '2-digit',
@@ -51,6 +55,32 @@ function overlayCloseOp(base: TarjetaTurno, op: CloseCardOp): TarjetaTurno {
     }),
     sinSincronizar: true,
     arrastrada: false,
+  };
+}
+
+const numero = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+
+/** Superpone una edición pendiente (`PATCH /shift-cards/:id` en el outbox) sobre
+ * la tarjeta: lo que se ve ya es lo que quedará cuando el servidor lo confirme.
+ * Las ediciones llegan en orden `seq`, así la última gana. */
+function overlayEditOp(base: TarjetaTurno, op: HttpWriteOp, operadores: Operator[]): TarjetaTurno {
+  const { body } = op;
+  const operatorId = typeof body.operatorId === 'string' ? body.operatorId : undefined;
+  const adBlue = typeof body.adBlue === 'boolean' ? body.adBlue : (base.adBlue ?? false);
+  return {
+    ...base,
+    ...(operatorId
+      ? { operatorId, operador: operadores.find((o) => o.id === operatorId)?.name ?? base.operador }
+      : {}),
+    inicial: numero(body.valorInicial) ?? base.inicial,
+    final: numero(body.valorFinal) ?? base.final,
+    litros: numero(body.fuelLiters) ?? base.litros,
+    adBlue,
+    // `adBlue: false` sin litros los borra en el servidor.
+    adBlueLitros: !adBlue ? undefined : (numero(body.adBlueLiters) ?? base.adBlueLitros),
+    observaciones: typeof body.observaciones === 'string' ? body.observaciones || undefined : base.observaciones,
+    edicionSinSincronizar: true,
+    edicionRequiereAtencion: base.edicionRequiereAtencion || op.status === 'needs_attention',
   };
 }
 
@@ -112,6 +142,11 @@ export function useShiftProjection({
   const opsAbrir = useMemo(() => ops.filter((op): op is OpenCardOp => op.type === 'openCard'), [ops]);
   const opsCerrar = useMemo(() => ops.filter((op): op is CloseCardOp => op.type === 'closeCard'), [ops]);
 
+  const opsEditar = useMemo(
+    () => ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'shiftCard.edit'),
+    [ops],
+  );
+
   const tarjetas = useMemo(() => {
     const porId = new Map<string, TarjetaTurno>();
     tarjetasServidor.forEach((card) => porId.set(card.id, mapCardToTarjeta(card, ctx)));
@@ -130,8 +165,13 @@ export function useShiftProjection({
       if (!base) return;
       porId.set(op.payload.cardId, overlayCloseOp(base, op));
     });
+    opsEditar.forEach((op) => {
+      const id = op.params.id;
+      const base = id ? porId.get(id) : undefined;
+      if (id && base) porId.set(id, overlayEditOp(base, op, operadores));
+    });
     return Array.from(porId.values());
-  }, [tarjetasServidor, opsAbrir, opsCerrar, ctx, equipos, operadores, supervisor]);
+  }, [tarjetasServidor, opsAbrir, opsCerrar, opsEditar, ctx, equipos, operadores, supervisor]);
 
   const abiertas = tarjetas.filter((t) => t.estado === 'curso');
   const cerradas = tarjetas.filter((t) => t.estado === 'cerrada');
