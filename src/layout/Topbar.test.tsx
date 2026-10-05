@@ -158,7 +158,7 @@ describe('Topbar — cerrar sesión', () => {
 
     const dialogo = await screen.findByRole('alertdialog');
     expect(dialogo.textContent).toContain('Hay 3 registros sin enviar');
-    expect(dialogo.textContent).toContain('se enviarán cuando vuelvas a iniciar sesión en este equipo');
+    expect(dialogo.textContent).toContain('Quedan guardados en este equipo y se envían cuando vuelvas a iniciar sesión');
     expect(logoutMock).not.toHaveBeenCalled();
 
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar sesión' }));
@@ -172,7 +172,7 @@ describe('Topbar — cerrar sesión', () => {
     await pedirCerrarSesion();
 
     const dialogo = await screen.findByRole('alertdialog');
-    expect(dialogo.textContent).toContain('Hay 1 registro sin enviar; se enviará cuando vuelvas');
+    expect(dialogo.textContent).toContain('Hay 1 registro sin enviar. Queda guardado en este equipo y se envía cuando vuelvas');
   });
 
   it('cancelar la confirmación deja la sesión abierta', async () => {

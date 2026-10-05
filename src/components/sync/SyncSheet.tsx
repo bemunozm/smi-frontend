@@ -81,7 +81,7 @@ export function SyncSheet({
             {sync.otherAccountCount > 0 && (
               <p className="m-0 text-[12.5px] text-muted-foreground">
                 Este equipo también guarda {plural(sync.otherAccountCount, 'registro', 'registros')} sin enviar de otra
-                cuenta: se envían cuando esa persona vuelva a iniciar sesión.
+                cuenta: {sync.otherAccountCount === 1 ? 'se envía' : 'se envían'} cuando esa persona vuelva a iniciar sesión.
               </p>
             )}
 

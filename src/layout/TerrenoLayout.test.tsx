@@ -171,9 +171,8 @@ describe('TerrenoLayout', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
 
       const dialogo = await screen.findByRole('alertdialog');
-      expect(dialogo.textContent).toContain(
-        'Hay 2 registros sin enviar; se enviarán cuando vuelvas a iniciar sesión en este equipo.',
-      );
+      expect(dialogo.textContent).toContain('Hay 2 registros sin enviar.');
+      expect(dialogo.textContent).toContain('se envían cuando vuelvas a iniciar sesión acá');
       expect(logoutMock).not.toHaveBeenCalled();
 
       fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar sesión' }));

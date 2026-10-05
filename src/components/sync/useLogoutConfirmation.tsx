@@ -70,8 +70,9 @@ export function useLogoutConfirmation(userId: string | undefined, navigate: Navi
               </AlertDialog.Header>
               <AlertDialog.Body>
                 <p>
-                  Hay {plural(pendingCount ?? 0, 'registro', 'registros')} sin enviar; {pendingCount === 1 ? 'se enviará' : 'se enviarán'} cuando
-                  vuelvas a iniciar sesión en este equipo.
+                  Hay {plural(pendingCount ?? 0, 'registro', 'registros')} sin enviar. {pendingCount === 1 ? 'Queda guardado' : 'Quedan guardados'} en
+                  este equipo y {pendingCount === 1 ? 'se envía' : 'se envían'} cuando vuelvas a iniciar sesión acá; si alguno requiere atención, lo
+                  vas a ver en Sincronización.
                 </p>
               </AlertDialog.Body>
               <AlertDialog.Footer>
