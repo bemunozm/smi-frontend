@@ -77,13 +77,17 @@ const TRASPASOS = [
   { clave: 'minaPuerto', label: 'Equipos Mina-Puerto', detalle: 'Bajan material hasta el puerto' },
 ] as const;
 
-/** Operadores del turno. En el sistema real salen del Registro de equipo. */
+/**
+ * Operadores del turno. En el sistema real salen del Registro de equipo; los
+ * de ejemplo calcan las tarjetas abiertas de esa pantalla, con códigos de la
+ * flota REAL (el seed) — no equipos inventados que el administrador no tiene.
+ */
 const OPERADORES_DEL_TURNO = [
-  { nombre: 'Patricio Rojas', equipo: 'CA-011' },
-  { nombre: 'Luis Contreras', equipo: 'PE-004' },
-  { nombre: 'Marcelo Soto', equipo: 'EX-002' },
-  { nombre: 'Cristian Araya', equipo: 'CM-015' },
-  { nombre: 'Héctor Villalobos', equipo: 'CM-021' },
+  { nombre: 'Patricio Rojas', equipo: 'CG-002' },
+  { nombre: 'Marcelo Soto', equipo: 'EX-001' },
+  { nombre: 'Cristian Araya', equipo: 'CM-006' },
+  { nombre: 'Héctor Villalobos', equipo: 'CN-007' },
+  { nombre: 'Felipe Gallardo', equipo: 'MB-008' },
 ];
 
 /**
