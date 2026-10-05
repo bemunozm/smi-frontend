@@ -29,11 +29,18 @@ export interface SubmitWriteOptions {
   userId?: string;
 }
 
+/** Cuánto espera oficina el resultado antes de dar la escritura por guardada en
+ * el equipo (`queued`): lo bastante para mostrar un error de negocio en el
+ * formulario, sin dejar a la persona mirando un spinner con mala señal. */
+export const OFFICE_WAIT_MS = 8_000;
+
+/** `opId` es el id de la operación en el outbox: sirve para encadenar lo
+ * siguiente (`dependsOn`) cuando la escritura quedó esperando. */
 export type SubmitWriteResult<K extends EndpointKey> =
   /** `data` es `null` si el servidor no devolvió un cuerpo que calce (la
    * escritura igual se aplicó). */
-  | { status: 'sent'; data: EndpointResult<K> | null }
-  | { status: 'queued' };
+  | { status: 'sent'; data: EndpointResult<K> | null; opId: string }
+  | { status: 'queued'; opId: string };
 
 /**
  * Único camino de escritura encolable: SIEMPRE guarda en el outbox y pide la
@@ -45,6 +52,10 @@ export type SubmitWriteResult<K extends EndpointKey> =
  *   muestre en vez de dejar un registro rechazado esperando en la hoja de
  *   sincronización;
  * - sin señal, tiempo agotado o error transitorio → `{ status: 'queued' }`.
+ *
+ * Lo que se encole sobre una entidad cuya creación sigue en la cola queda detrás
+ * de ella sin que el llamador lo pida (ver `offline/outbox.ts#enqueueHttpWrite`);
+ * `dependsOn` sirve para encadenar entre entidades distintas con el `opId`.
  */
 export async function submitWrite<K extends EndpointKey>(
   endpoint: K,
@@ -79,13 +90,13 @@ export async function submitWrite<K extends EndpointKey>(
     throw error;
   }
   requestSync();
-  if (!waiter) return { status: 'queued' };
+  if (!waiter) return { status: 'queued', opId: id };
 
   const outcome = await waiter.promise;
   if (outcome.kind === 'business') {
     await discardOp(id, userId);
     throw outcome.error;
   }
-  if (outcome.kind === 'sent') return { status: 'sent', data: def.parse(outcome.data) };
-  return { status: 'queued' };
+  if (outcome.kind === 'sent') return { status: 'sent', data: def.parse(outcome.data), opId: id };
+  return { status: 'queued', opId: id };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mensajeErrorOperacion } from './error-messages';
+import { mensajeErrorFormulario, mensajeErrorOperacion } from './error-messages';
 import { DomainError } from './api-error';
 
 describe('mensajeErrorOperacion', () => {
@@ -78,5 +78,47 @@ describe('mensajeErrorOperacion', () => {
     expect(mensajeErrorOperacion('rareza', 'No se pudo actualizar la asignación.')).toBe(
       'No se pudo actualizar la asignación.',
     );
+  });
+});
+
+describe('mensajeErrorFormulario', () => {
+  it('STALE_UPDATE: no manda a una hoja de sincronización que el formulario ya no tiene', () => {
+    const mensaje = mensajeErrorFormulario(new DomainError('x', { code: 'STALE_UPDATE', status: 409 }));
+
+    expect(mensaje).toContain('Actualizá la pantalla');
+    expect(mensaje).not.toContain('Sobrescribir');
+  });
+
+  it('ID_CONFLICT: tampoco habla de Sincronización', () => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code: 'ID_CONFLICT', status: 409 }))).not.toContain(
+      'Sincronización',
+    );
+  });
+
+  it.each([
+    ['ALREADY_CLOSED', 'ya fue cerrado'],
+    ['CARD_NOT_FOUND', 'ya no existe'],
+    ['SHIFT_CARD_CLOSE_ELSEWHERE', 'desde Terreno'],
+  ])('%s: texto del cierre de turno de Flota', (code, texto) => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code }))).toContain(texto);
+  });
+
+  it('INSUFFICIENT_STOCK: texto claro de existencia (viene de la tabla común)', () => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code: 'INSUFFICIENT_STOCK', status: 409 }))).toContain(
+      'No hay existencia suficiente',
+    );
+  });
+
+  it('FILE_TYPE_NOT_ALLOWED: dice qué formatos sirven', () => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code: 'FILE_TYPE_NOT_ALLOWED' }))).toContain(
+      'JPG, PNG, WebP o PDF',
+    );
+  });
+
+  it('lo demás se comporta como mensajeErrorOperacion (409 sin code: el mensaje del servidor)', () => {
+    expect(mensajeErrorFormulario(new DomainError('Ya existe una sucursal con ese nombre', { status: 409 }))).toBe(
+      'Ya existe una sucursal con ese nombre',
+    );
+    expect(mensajeErrorFormulario('rareza', 'Fallback propio')).toBe('Fallback propio');
   });
 });

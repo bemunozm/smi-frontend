@@ -38,6 +38,20 @@ export type OutboxOpType =
 export const shiftCardEntity = (cardId: string) => `shift-card:${cardId}`;
 export const hallazgoEntity = (id: string) => `hallazgo:${id}`;
 export const trabajoExtraEntity = (id: string) => `trabajo-extra:${id}`;
+export const equipmentEntity = (id: string) => `equipment:${id}`;
+export const equipmentDocumentEntity = (id: string) => `equipment-document:${id}`;
+export const horometroEntity = (id: string) => `horometro:${id}`;
+export const combustibleEntity = (id: string) => `combustible:${id}`;
+/** Un ítem agrupa también sus movimientos, traspasos, ajustes y mínimos: todo lo
+ * que toca su existencia se serializa detrás de lo que esté retenido del ítem. */
+export const itemEntity = (id: string) => `item:${id}`;
+export const categoryEntity = (id: string) => `category:${id}`;
+export const branchEntity = (id: string) => `branch:${id}`;
+export const operatorEntity = (id: string) => `operator:${id}`;
+export const ordenEntity = (id: string) => `orden:${id}`;
+export const intervencionEntity = (id: string) => `intervencion:${id}`;
+export const actividadEntity = (id: string) => `actividad:${id}`;
+export const umbralEntity = (id: string) => `umbral:${id}`;
 
 /**
  * `'pending'`/`'pending_upload'`/`'pending_claim'`: esperando su turno en el
@@ -163,6 +177,10 @@ export interface HttpWriteOp extends OutboxBase {
   label: string;
   /** Keys EXTRA a invalidar al terminar, además de las del registro. */
   invalidate?: QueryKeyName[];
+  /** El endpoint de la operación CREA su entidad (`entityKey`). Se guarda en la
+   * operación para que `opsDeCreacion` no dependa del registro de endpoints, que
+   * importa de este archivo. */
+  creates?: true;
 }
 
 export type OutboxOp =
@@ -288,8 +306,12 @@ export function dependientesDe(id: string, ops: readonly OutboxOp[]): OutboxOp[]
 /**
  * Ids de las operaciones que CREAN (o abren/cierran) la entidad `entityKey`: de
  * ellas depende una edición encolada detrás. Así, descartar la creación desde
- * `SyncStatus` arrastra la edición en vez de dejarla huérfana con un 404.
+ * `SyncStatus` arrastra la edición en vez de dejarla huérfana con un 404. Una
+ * `httpWrite` cuenta solo si su endpoint crea (`creates`): una edición de la
+ * misma entidad no es de la que dependa la siguiente.
  */
 export function opsDeCreacion(entityKey: string, ops: readonly OutboxOp[]): string[] {
-  return ops.filter((op) => op.entityKey === entityKey && op.type !== 'httpWrite').map((op) => op.id);
+  return ops
+    .filter((op) => op.entityKey === entityKey && (op.type !== 'httpWrite' || op.creates === true))
+    .map((op) => op.id);
 }

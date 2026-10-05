@@ -44,6 +44,9 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   INVALID_RESPONSE: 'Respuesta inesperada del servidor — reintentá más tarde o avisá si sigue pasando.',
   STORAGE_FULL: 'No hay espacio en el equipo para guardar esto. Liberá espacio o sincronizá lo pendiente y reintentá.',
   FILE_TOO_LARGE: 'El archivo supera el máximo de 8 MB.',
+  FILE_TYPE_NOT_ALLOWED: 'Formato no permitido. Solo se aceptan JPG, PNG, WebP o PDF.',
+  INSUFFICIENT_STOCK:
+    'No hay existencia suficiente en la bodega para esta salida. Revisá el saldo y registrá una cantidad menor.',
   ENDPOINT_NOT_QUEUEABLE: 'Esta operación no se puede guardar para enviar después.',
   // `nextPendingOp` (`offline/replay.ts`) ya evita mandar un cierre mientras
   // su apertura sigue en `needs_attention` — este código cubre cualquier
@@ -75,4 +78,30 @@ export function mensajeErrorOperacion(error: unknown, fallback = 'No se pudo com
     if (mensaje) return mensaje;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * Mensajes para un error que sale en un FORMULARIO de oficina, mientras la
+ * persona sigue mirándolo: la operación ya se descartó de la cola, así que las
+ * instrucciones de la hoja de sincronización ("Sobrescribir", "Descartá este
+ * registro en Sincronización") no existen para ella. Sin override cae en
+ * `mensajeErrorOperacion`.
+ */
+const MENSAJES_DE_FORMULARIO: Partial<Record<ErrorCode, string>> = {
+  STALE_UPDATE:
+    'Otra persona cambió estos datos mientras tanto. Actualizá la pantalla, revisá los valores y volvé a guardar.',
+  ID_CONFLICT: 'No se pudo guardar: ese registro ya existe. Intentá de nuevo.',
+  // Cierre de turno desde Flota (`PATCH /horometro/:id/salida`).
+  ALREADY_CLOSED: 'Este turno ya fue cerrado por otra persona. Actualizá la pantalla para ver su estado.',
+  CARD_NOT_FOUND: 'El turno que intentás cerrar ya no existe. Actualizá la pantalla.',
+  SHIFT_CARD_CLOSE_ELSEWHERE:
+    'Esta tarjeta es de Registro de turno: la cierra el supervisor desde Terreno, no desde Flota.',
+};
+
+export function mensajeErrorFormulario(error: unknown, fallback = 'No se pudo completar la operación.'): string {
+  if (error instanceof DomainError && error.code) {
+    const mensaje = MENSAJES_DE_FORMULARIO[error.code as ErrorCode];
+    if (mensaje) return mensaje;
+  }
+  return mensajeErrorOperacion(error, fallback);
 }

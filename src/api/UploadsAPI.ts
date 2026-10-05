@@ -3,6 +3,12 @@ import type { AxiosRequestConfig } from 'axios';
 
 import { axiosInstance as api } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
+import {
+  isAcceptedUploadType,
+  MAX_UPLOAD_BYTES,
+  UPLOAD_SIZE_ERROR_MESSAGE,
+  UPLOAD_TYPE_ERROR_MESSAGE,
+} from '../lib/upload-limits';
 import type { ApiResponse } from '../types/api';
 
 // `uploadImage`/`POST /api/uploads` se borró: subía a la carpeta que el
@@ -19,11 +25,6 @@ export interface UploadedFile {
    * antes de guardar el formulario. */
   url: string;
 }
-
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const ACCEPTED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-const SIZE_ERROR_MESSAGE = 'El archivo supera el máximo de 8 MB.';
-const TYPE_ERROR_MESSAGE = 'Formato no permitido. Solo se aceptan JPG, PNG, WebP o PDF.';
 
 /**
  * Sube un archivo a `POST /api/files` (bucket privado R2/MinIO, ver Diseño
@@ -45,10 +46,10 @@ const TYPE_ERROR_MESSAGE = 'Formato no permitido. Solo se aceptan JPG, PNG, WebP
  */
 export async function uploadFile(file: File, config?: AxiosRequestConfig): Promise<UploadedFile> {
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error(SIZE_ERROR_MESSAGE);
+    throw new Error(UPLOAD_SIZE_ERROR_MESSAGE);
   }
-  if (!ACCEPTED_MIME_TYPES.has(file.type)) {
-    throw new Error(TYPE_ERROR_MESSAGE);
+  if (!isAcceptedUploadType(file.type)) {
+    throw new Error(UPLOAD_TYPE_ERROR_MESSAGE);
   }
 
   const form = new FormData();
@@ -63,8 +64,8 @@ export async function uploadFile(file: File, config?: AxiosRequestConfig): Promi
     return res.data.data;
   } catch (error: unknown) {
     if (axios.isAxiosError(error)) {
-      if (error.response?.status === 413) throw new Error(SIZE_ERROR_MESSAGE);
-      if (error.response?.status === 415) throw new Error(TYPE_ERROR_MESSAGE);
+      if (error.response?.status === 413) throw new Error(UPLOAD_SIZE_ERROR_MESSAGE);
+      if (error.response?.status === 415) throw new Error(UPLOAD_TYPE_ERROR_MESSAGE);
     }
     throw toDomainError(error, 'No se pudo subir el archivo.');
   }

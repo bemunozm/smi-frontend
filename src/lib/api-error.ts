@@ -66,9 +66,10 @@ export const OPERATOR_INACTIVE_MESSAGE = 'Ese operador ya no está activo. Eleg�
 
 /**
  * Mensaje de un error de axios que nunca recibió respuesta (sin señal, DNS,
- * timeout). Los módulos de oficina no tienen cola offline: en vez de quedar
- * esperando en silencio, el guardado falla rápido con este aviso (ver
- * `lib/query-client.ts`, `mutations.networkMode`).
+ * timeout). Lo que NUNCA se encola (usuarios, notificaciones, ver
+ * `offline/endpoints`) no queda esperando en silencio: el guardado falla rápido
+ * con este aviso (ver `lib/query-client.ts`, `mutations.networkMode`). Las
+ * escrituras que sí se encolan no lo muestran: `offline/replay.ts` las reintenta.
  */
 export const NETWORK_ERROR_MESSAGE = 'Sin señal: no se pudo guardar. Revisá la conexión e intentá de nuevo.';
 

@@ -620,7 +620,7 @@ describe('submitWrite', () => {
   it('siempre encola primero: con waitMs 0 devuelve queued y la operación queda en el outbox', async () => {
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 0, userId: 'u1' });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
     expect(await db.outbox.toArray()).toMatchObject([
       { type: 'httpWrite', endpoint: 'shiftCard.edit', label: 'Edición de tarjeta', expected: { valorFinal: 130 } },
     ]);
@@ -651,7 +651,7 @@ describe('submitWrite', () => {
 
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 5000 });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
     expect(Date.now() - inicio).toBeLessThan(2000);
     expect(await db.outbox.count()).toBe(1);
   });
@@ -662,7 +662,7 @@ describe('submitWrite', () => {
 
     const resultado = await submitWrite('shiftCard.edit', edicion, { waitMs: 50 });
 
-    expect(resultado).toEqual({ status: 'queued' });
+    expect(resultado).toEqual({ status: 'queued', opId: expect.any(String) });
   });
 
   it('sin sesión ni userId: error claro y nada encolado', async () => {

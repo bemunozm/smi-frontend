@@ -2,7 +2,7 @@
  * Espejo en el frontend de los códigos de negocio que expone el backend
  * (`HttpExceptionFilter#code`, ver `smi-backend/src/common/errors/error-codes.ts`)
  * más los códigos propios del cliente (`PHOTO_MISSING`, `INVALID_RESPONSE`,
- * `STORAGE_FULL`, `FILE_TOO_LARGE`, `ENDPOINT_NOT_QUEUEABLE`,
+ * `STORAGE_FULL`, `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `ENDPOINT_NOT_QUEUEABLE`,
  * ver `lib/api-error.ts#toDomainError` y `offline/replay.ts`). Fuente única
  * de los strings — `lib/error-messages.ts` los usa para tipar el mapa de
  * mensajes, en vez de un `string` suelto que aceptaría cualquier typo.
@@ -26,11 +26,13 @@ export const ERROR_CODES = [
   'OPERATOR_INACTIVE',
   'STALE_UPDATE',
   'CARD_NOT_CLOSED',
+  'INSUFFICIENT_STOCK',
   // Códigos SOLO del cliente — nunca los manda el backend.
   'PHOTO_MISSING',
   'INVALID_RESPONSE',
   'STORAGE_FULL',
   'FILE_TOO_LARGE',
+  'FILE_TYPE_NOT_ALLOWED',
   'ENDPOINT_NOT_QUEUEABLE',
 ] as const;
 

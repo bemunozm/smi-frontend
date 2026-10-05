@@ -49,3 +49,23 @@ export function precondicion<T extends { [K in keyof T]?: JsonValue }>(
   }
   return resultado;
 }
+
+/**
+ * La base de una edición: lo que la pantalla muestra, con lo que esa misma
+ * entidad ya tiene esperando en la cola (`offline/outbox.ts#cambiosPendientes`)
+ * por encima. Sin esto, dos ediciones seguidas sin señal del mismo campo
+ * compararían la segunda contra el valor que el servidor tiene HOY y chocarían
+ * con la primera al sincronizar (`STALE_UPDATE` contra un cambio propio).
+ *
+ * `pendientes` solo trae campos que armó una edición con la misma forma `T`, por
+ * eso el valor de cada uno es del tipo del campo.
+ */
+export function conPendientes<T extends object>(base: T, pendientes: JsonObject, campos: readonly (keyof T & string)[]): T {
+  const resultado: T = { ...base };
+  for (const campo of campos) {
+    if (!Object.hasOwn(pendientes, campo)) continue;
+    // El cuerpo guardado es JSON; el campo de `T` que lo originó es el mismo valor.
+    resultado[campo] = pendientes[campo] as T[keyof T & string];
+  }
+  return resultado;
+}

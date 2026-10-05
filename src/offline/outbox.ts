@@ -1,4 +1,5 @@
 import {
+  bySeq,
   db,
   dependientesDe,
   hallazgoEntity,
@@ -11,23 +12,26 @@ import {
   type HttpWriteFile,
   type HttpWriteOp,
   type OpenCardOp,
+  opsDeCreacion,
   type OutboxOp,
   type SendExitReportOp,
 } from './db';
 import { ENDPOINTS, type EndpointKey, type HttpParams } from './endpoints';
 import { compressPhoto } from './photo';
-import { requestSync } from './replay';
+import { getCurrentUserId, requestSync } from './replay';
 import { DomainError } from '../lib/api-error';
 import type { QueryKeyName } from '../lib/query-keys';
+import {
+  isAcceptedUploadType,
+  MAX_UPLOAD_BYTES,
+  UPLOAD_SIZE_ERROR_MESSAGE,
+  UPLOAD_TYPE_ERROR_MESSAGE,
+} from '../lib/upload-limits';
 import { generateUuid } from '../lib/uuid';
 import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { JsonObject } from '../types/json';
 import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
-
-/** Tope de un archivo guardado en el equipo — el mismo que acepta
- * `POST /api/files` (ver `api/UploadsAPI.ts`). */
-export const MAX_BLOB_BYTES = 8 * 1024 * 1024;
 
 function now(): number {
   return Date.now();
@@ -287,26 +291,21 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
   if (archivos.length > 0 && !def.carriesFiles) {
     throw new DomainError('Este endpoint no admite archivos.', { code: 'ENDPOINT_NOT_QUEUEABLE' });
   }
-  for (const { file } of archivos) {
-    if (file.size > MAX_BLOB_BYTES) throw new DomainError('El archivo supera el máximo de 8 MB.', { code: 'FILE_TOO_LARGE' });
-  }
-  const buffers = await Promise.all(archivos.map(({ file }) => file.arrayBuffer()));
+  const guardables = await Promise.all(archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })));
+
+  const entityKey = spec.entityKey ?? def.entity?.(spec.params, spec.body);
+  const claves = [...(entityKey ? [entityKey] : []), ...(def.parents?.(spec.params, spec.body) ?? [])];
 
   return conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
       const files: HttpWriteFile[] = [];
-      for (const [index, { field, file }] of archivos.entries()) {
+      for (const { field, data, mime, name } of guardables) {
         const blobId = generateUuid();
-        await db.blobs.put({
-          id: blobId,
-          data: buffers[index]!,
-          mime: file.type || 'application/octet-stream',
-          name: file.name,
-          createdAt: timestamp,
-        });
+        await db.blobs.put({ id: blobId, data, mime, name, createdAt: timestamp });
         files.push({ field, blobId });
       }
+      const dependsOn = await dependenciasDeCreacion(userId, spec.id, claves, spec.dependsOn);
       const op: HttpWriteOp = {
         id: spec.id,
         type: 'httpWrite',
@@ -319,11 +318,12 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
         ...(files.length > 0 ? { files } : {}),
         label: spec.label,
         ...(spec.invalidate ? { invalidate: spec.invalidate } : {}),
+        ...(def.creates ? { creates: true as const } : {}),
         status: files.length > 0 ? 'pending_upload' : 'pending',
         attempts: 0,
         seq: await nextSeq(),
-        ...(spec.entityKey ? { entityKey: spec.entityKey } : {}),
-        ...(spec.dependsOn && spec.dependsOn.length > 0 ? { dependsOn: spec.dependsOn } : {}),
+        ...(entityKey ? { entityKey } : {}),
+        ...(dependsOn.length > 0 ? { dependsOn } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -331,6 +331,96 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
       return op;
     }),
   );
+}
+
+interface ArchivoGuardable {
+  data: ArrayBuffer;
+  mime: string;
+  name: string;
+}
+
+/**
+ * Deja el archivo listo para guardarlo en el equipo: una foto se comprime (una
+ * tablet sin señal acumula varias) y todo se valida contra lo que el servidor va
+ * a aceptar — un archivo que se rechazaría al sincronizar queda trabado en la
+ * cola, así que se rechaza acá, mientras la persona todavía puede elegir otro.
+ */
+async function prepararArchivo(file: File): Promise<ArchivoGuardable> {
+  const guardable: ArchivoGuardable = file.type.startsWith('image/')
+    ? await compressPhoto(file)
+    : { data: await file.arrayBuffer(), mime: file.type || 'application/octet-stream', name: file.name };
+  if (!isAcceptedUploadType(guardable.mime)) {
+    throw new DomainError(UPLOAD_TYPE_ERROR_MESSAGE, { code: 'FILE_TYPE_NOT_ALLOWED' });
+  }
+  if (guardable.data.byteLength > MAX_UPLOAD_BYTES) {
+    throw new DomainError(UPLOAD_SIZE_ERROR_MESSAGE, { code: 'FILE_TOO_LARGE' });
+  }
+  return guardable;
+}
+
+/**
+ * Ids de las operaciones del usuario que CREAN alguna de las entidades `claves`
+ * y todavía no terminaron, más las `explicitas`: lo que se encola sobre una
+ * entidad cuya creación sigue esperando va detrás de ella (y se descarta con
+ * ella). Se lee dentro de la transacción de encolado: así una creación que
+ * termina justo ahora no deja una dependencia colgando.
+ */
+async function dependenciasDeCreacion(
+  userId: string,
+  propia: string,
+  claves: readonly string[],
+  explicitas: readonly string[] = [],
+): Promise<string[]> {
+  if (claves.length === 0) return [...new Set(explicitas)];
+  const ops = await db.outbox
+    .where('entityKey')
+    .anyOf([...claves])
+    .filter((op) => op.userId === userId && op.id !== propia)
+    .toArray();
+  const ids = claves.flatMap((clave) => opsDeCreacion(clave, ops));
+  return [...new Set([...explicitas, ...ids])];
+}
+
+/**
+ * Escrituras genéricas que la entidad `entityKey` tiene guardadas en el equipo
+ * y que el servidor todavía no vio, en el orden en que se mandarán. Excluye las
+ * que esperan una acción humana (`needs_attention`): esas no se aplicarán por sí
+ * solas, así que no se cuentan como "ya cambiado". Sin `userId` usa el de la
+ * sesión del motor, igual que `submitWrite`.
+ */
+export async function escriturasPendientes(
+  entityKey: string,
+  endpoints?: readonly EndpointKey[],
+  userId: string | null = getCurrentUserId(),
+): Promise<HttpWriteOp[]> {
+  if (!userId) return [];
+  const ops = await db.outbox.where('entityKey').equals(entityKey).toArray();
+  return ops
+    .filter(
+      (op): op is HttpWriteOp =>
+        op.type === 'httpWrite' &&
+        op.userId === userId &&
+        op.status !== 'needs_attention' &&
+        (!endpoints || endpoints.includes(op.endpoint)),
+    )
+    .sort(bySeq);
+}
+
+/**
+ * Los campos que ya están guardados en el equipo para la entidad y que la
+ * pantalla todavía no muestra (el servidor no los recibió), fusionados en orden.
+ * La base de una edición nueva es lo que se ve MÁS esto: así su precondición
+ * apunta al valor que el servidor tendrá cuando la edición anterior llegue, no
+ * al que tiene hoy, y no choca con el cambio propio que va delante.
+ */
+export async function cambiosPendientes(
+  entityKey: string,
+  endpoints: readonly EndpointKey[],
+  userId: string | null = getCurrentUserId(),
+): Promise<JsonObject> {
+  const resultado: JsonObject = {};
+  for (const op of await escriturasPendientes(entityKey, endpoints, userId)) Object.assign(resultado, op.body);
+  return resultado;
 }
 
 // --- Editar una operación ya encolada -----------------------------------------

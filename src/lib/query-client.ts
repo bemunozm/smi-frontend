@@ -20,10 +20,11 @@ export const queryClient = new QueryClient({
     mutations: {
       // `'always'` (default `'online'`): con `'online'` una mutación sin señal
       // se PAUSA en silencio — `isPending` para siempre y ningún `onError` —,
-      // y el usuario cree que se está guardando. Los módulos de oficina no
-      // tienen cola offline (solo Terreno, vía el outbox de `offline/`, que no
-      // usa mutaciones de TanStack), así que acá es mejor fallar rápido con el
-      // aviso de `toDomainError` ("Sin señal…") que esperar.
+      // y el usuario cree que se está guardando. Las escrituras de datos pasan
+      // por la cola de `offline/` (`hooks/useOfficeMutation`), cuya mutación solo
+      // guarda en el equipo; las que NUNCA se encolan (usuarios, notificaciones,
+      // ver `offline/endpoints`) siguen siendo requests directas, y para ellas es
+      // mejor fallar rápido con el aviso de `toDomainError` ("Sin señal…") que esperar.
       networkMode: 'always',
     },
   },
