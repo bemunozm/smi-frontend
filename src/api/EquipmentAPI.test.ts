@@ -106,8 +106,11 @@ describe('EquipmentAPI.list', () => {
         id: 'h_abierto',
         valorInicial: 1200,
         operador: 'Carlos Núñez',
+        operatorId: 'op_1',
         turno: 'NOCTURNO',
         fecha: '2026-08-06T20:00:00.000Z',
+        supervisorName: 'Marcela Pizarro',
+        shiftId: null,
       },
     };
     getMock.mockResolvedValueOnce({ data: { data: [conTurnoAbierto], message: 'ok' } });
@@ -115,6 +118,26 @@ describe('EquipmentAPI.list', () => {
     const result = await EquipmentAPI.list();
 
     expect(result).toEqual([conTurnoAbierto]);
+  });
+
+  it('un `openShift` sin `operatorId` (backend previo o turno sin catálogo) se parsea con null', async () => {
+    const sinOperatorId = {
+      ...EQUIPMENT,
+      openShift: {
+        id: 'h_abierto',
+        valorInicial: 1200,
+        operador: 'Carlos Núñez',
+        turno: 'NOCTURNO',
+        fecha: '2026-08-06T20:00:00.000Z',
+        supervisorName: null,
+        shiftId: null,
+      },
+    };
+    getMock.mockResolvedValueOnce({ data: { data: [sinOperatorId], message: 'ok' } });
+
+    const [equipo] = await EquipmentAPI.list();
+
+    expect(equipo.openShift?.operatorId).toBeNull();
   });
 
   // `documentsAlert` es el campo derivado on-read que resume el estado de los

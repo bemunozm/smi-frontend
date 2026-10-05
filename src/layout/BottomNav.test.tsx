@@ -20,28 +20,42 @@ function renderNav(role: Parameters<typeof BottomNav>[0]['role']) {
 }
 
 describe('BottomNav', () => {
-  it('lleva los cuatro destinos diarios más «Más»', () => {
+  it('ADMIN ve Inicio, Equipos, Inventario y Mantención, sin Terreno', () => {
     renderNav(ROLES.ADMIN);
 
     for (const label of ['Inicio', 'Equipos', 'Inventario', 'Mantención']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+    expect(screen.queryByText('Terreno')).toBeNull();
     expect(screen.getByText('Más')).toBeTruthy();
   });
 
-  it('respeta el permiso por rol de `NAV_ITEMS`', () => {
-    // El operador no ve Equipos ni Inventario en el menú lateral; mostrarlos
-    // abajo solo lo llevaría a rebotar en /forbidden.
-    renderNav(ROLES.OPERADOR);
+  it('MANTENEDOR ve el mismo set que ADMIN', () => {
+    renderNav(ROLES.MANTENEDOR);
 
-    expect(screen.getByText('Inicio')).toBeTruthy();
-    expect(screen.queryByText('Equipos')).toBeNull();
-    expect(screen.queryByText('Inventario')).toBeNull();
+    for (const label of ['Inicio', 'Equipos', 'Inventario', 'Mantención']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+  });
+
+  it('SUPERVISOR ve Terreno primero, después Inicio, Equipos, Inventario — sin Mantención', () => {
+    renderNav(ROLES.SUPERVISOR);
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
+    // El orden en el DOM importa: Terreno primero (donde vive el trabajo
+    // diario de SUPERVISOR), no al final como en el resto de los roles.
+    const links = nav.querySelectorAll('a');
+    expect(Array.from(links).map((link) => link.textContent)).toEqual([
+      'Terreno',
+      'Inicio',
+      'Equipos',
+      'Inventario',
+    ]);
+
+    expect(screen.queryByText('Mantención')).toBeNull();
   });
 
   it('«Más» abre el mismo cajón del menú lateral', () => {
-    // Mantener dos menús sincronizados es cómo terminan divergiendo: el cajón
-    // ya lista todo y ya está filtrado por rol.
     renderNav(ROLES.ADMIN);
 
     fireEvent.click(screen.getByText('Más'));

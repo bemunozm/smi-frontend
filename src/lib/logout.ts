@@ -1,5 +1,7 @@
 import { signOut } from './auth-client';
 import { queryClient } from './query-client';
+import { clearSessionSnapshot } from './session-snapshot';
+import { countPending } from '../offline/outbox';
 
 /** Prefijo de los Cache Storage PRIVADOS de la app (ver `vite.config.ts`:
  * `smi-signed-files`, `smi-uploads`, `smi-api`) — todos arrancan con `smi-`.
@@ -11,6 +13,22 @@ import { queryClient } from './query-client';
 const PRIVATE_CACHE_PREFIX = 'smi-';
 
 type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
+
+/**
+ * El logout se bloqueó porque `userId` todavía tiene operaciones sin
+ * sincronizar en el outbox (RFC "Supervisión en Terreno" §Diseño → Offline,
+ * "logout() no borra el outbox y bloquea si hay pendientes"). `pendingCount`
+ * — cuántas — para el mensaje de la UI ("Sincronizar ahora").
+ */
+export class LogoutBlockedError extends Error {
+  readonly pendingCount: number;
+
+  constructor(pendingCount: number) {
+    super(`Hay ${pendingCount} registro(s) sin sincronizar — sincronizá antes de salir.`);
+    this.name = 'LogoutBlockedError';
+    this.pendingCount = pendingCount;
+  }
+}
 
 /**
  * Logout único para toda la app — reemplaza los `signOut()` sueltos que
@@ -27,14 +45,34 @@ type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
  *   que la entrada expirara sola (antes 30 días; bajado a 7 en el mismo fix,
  *   ver `vite.config.ts`).
  *
- * Orden: `signOut()` primero (invalida la cookie de sesión en el backend
- * antes de tocar nada del cliente), recién después se limpia el estado local
- * y se navega — así ninguna pantalla intermedia llega a pintar con datos del
- * usuario que se fue.
+ * `userId` es opcional (sesiones sin outbox, ej. ADMIN/
+ * MANTENEDOR, no tienen por qué pasarlo) — cuando viene y tiene operaciones
+ * pendientes en Dexie (CUALQUIER estado, incluido `needs_attention`: esas
+ * necesitan Reintentar o Descartar primero, ver `SyncStatus`), el logout se
+ * BLOQUEA con `LogoutBlockedError` ANTES de tocar la sesión — nunca se borra
+ * el outbox acá: las operaciones son por `userId`, así que otro usuario en
+ * una tablet compartida nunca las ve ni las reintenta.
+ *
+ * Orden (sesión ya autorizada a salir): `signOut()` primero (invalida la
+ * cookie de sesión en el backend antes de tocar nada del cliente), recién
+ * después se limpia el estado local y se navega — así ninguna pantalla
+ * intermedia llega a pintar con datos del usuario que se fue.
  */
-export async function logout(navigate: NavigateFn): Promise<void> {
+export async function logout(navigate: NavigateFn, userId?: string): Promise<void> {
+  if (userId) {
+    const pending = await countPending(userId);
+    if (pending > 0) {
+      throw new LogoutBlockedError(pending);
+    }
+  }
+
   await signOut();
   queryClient.clear();
+  // El snapshot offline (`lib/session-snapshot.ts`) es lo que le permite a
+  // `useCurrentUser` seguir mostrando una sesión sin señal — un logout
+  // explícito tiene que invalidarlo, si no el próximo arranque en frío sin
+  // red "resucitaría" la sesión que el usuario cerró a propósito.
+  clearSessionSnapshot();
 
   if ('caches' in window) {
     try {

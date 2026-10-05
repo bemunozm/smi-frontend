@@ -49,8 +49,23 @@ const OpenShiftSchema = z.object({
   id: z.string(),
   valorInicial: z.number(),
   operador: z.string(),
+  /** `id` del catálogo de Operadores del turno abierto. `null` en turnos
+   * previos al catálogo; `default(null)` tolera un backend que aún no lo
+   * envíe sin tumbar el parseo de toda la lista de equipos. */
+  operatorId: z.string().nullable().default(null),
   turno: z.string(),
   fecha: z.string().datetime(),
+  /** Nombre del supervisor que abrió la tarjeta, o `null` si el registro no
+   * tiene supervisor asociado (dato legacy) o el usuario ya no existe —
+   * alimenta el "ocupado por X" del selector de equipo en Registro de
+   * equipo (`hooks/useShiftRegister.ts`, RFC "Supervisión en Terreno"). */
+  supervisorName: z.string().nullable(),
+  /** id del `Shift` (Módulo A) si esta tarjeta viene de Registro de turno —
+   * `null` para un `RegistroHorometro` abierto solo desde Flota. Lo usa
+   * `RegistrarSalidaModal` (salida de Flota) para avisar que cerrar ahí no
+   * registra litros ni foto, y que un cierre guardado sin señal desde
+   * Registro de turno quedaría rechazado. */
+  shiftId: z.string().nullable(),
 });
 export type OpenShift = z.infer<typeof OpenShiftSchema>;
 
@@ -266,8 +281,12 @@ export type UpdateEquipmentInput = Omit<
 
 /** Body de `PATCH /api/equipment/:id/assignment` — asigna/libera operador y/o
  * supervisor. `null` explícito libera esa asignación; omitir la clave la deja
- * igual (ver `useAssignEquipment`, que siempre manda ambas para evitar esa
- * ambigüedad — "sin cambios" y "liberar" quedan siempre explícitos). */
+ * igual — `EditEquipoModal`/`AsignacionForm` arman este body con
+ * `buildAssignmentDiff` (`EquipoEditDelete.tsx`), que omite cada clave salvo
+ * que el id elegido difiera del actual: mandar SIEMPRE ambas (como se hacía
+ * antes) hacía que el backend revalidara con `OperatorsService.assertActive`/
+ * `assertSupervisor` un campo que el usuario nunca tocó (p. ej. un operador
+ * ya inactivo bloqueaba guardar un cambio de solo el supervisor). */
 export interface AssignEquipmentInput {
   operatorId?: string | null;
   supervisorId?: string | null;

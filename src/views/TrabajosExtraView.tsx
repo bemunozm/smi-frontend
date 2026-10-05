@@ -20,7 +20,8 @@ import {
   useCambiosTrabajoExtra,
 } from '../hooks/useTrabajosExtra';
 import { useEquipment } from '../hooks/useEquipment';
-import { useHorometroList } from '../hooks/useHorometro';
+import { useOperators } from '../hooks/useOperators';
+import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import {
@@ -53,6 +54,12 @@ import {
   VistaUnica,
   type OpcionSelector,
 } from '../components/terreno/ui';
+
+interface OperadorEnTurno {
+  nombre: string;
+  /** `null` cuando el turno es previo al catálogo de operadores. */
+  operatorId: string | null;
+}
 
 const TURNOS = [
   { valor: 'DIURNO' as const, label: 'DIURNO', sub: '08–20' },
@@ -93,7 +100,8 @@ export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
   const { data: registros = [] } = useTrabajosExtraList();
-  const { data: lecturas = [] } = useHorometroList();
+  // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
+  const { data: operadores = [] } = useOperators({ isActive: true });
   const crear = useCreateTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleId, setDetalleId] = useState<string | null>(null);
@@ -113,7 +121,7 @@ export function TrabajosExtraView() {
    */
   const vacio = (): Partial<TrabajoExtraFormInput> => ({
     equipoId: '',
-    operador: '',
+    operatorId: '',
     faena: 'Patillo',
     turno: turnoDe(new Date()),
     actividades: [],
@@ -122,8 +130,8 @@ export function TrabajosExtraView() {
 
   /**
    * Equipos **en terreno**: los que tienen un turno en curso, con el operador
-   * que lo lleva. «Turno en curso» es la misma definición que usa el backend:
-   * una lectura de horómetro sin `valorFinal`.
+   * que lo lleva. «Turno en curso» es `equipo.openShift`: la lectura de
+   * horómetro sin `valorFinal`, la misma definición que usa el backend.
    *
    * Hasta el Acta N.° 004 un equipo en turno no se podía elegir. El cliente lo
    * corrigió (punto 4): el trabajo extra se registra al final del turno y usa
@@ -132,8 +140,13 @@ export function TrabajosExtraView() {
    * radio—, no como bloqueo.
    */
   const enTurno = useMemo(
-    () => new Map(lecturas.filter((l) => l.valorFinal == null).map((l) => [l.equipoId, l.operador])),
-    [lecturas],
+    () =>
+      new Map<string, OperadorEnTurno>(
+        equipos
+          .filter((e) => e.openShift != null)
+          .map((e) => [e.id, { nombre: e.openShift!.operador, operatorId: e.openShift!.operatorId }]),
+      ),
+    [equipos],
   );
 
   /**
@@ -145,7 +158,7 @@ export function TrabajosExtraView() {
     const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
       const operador = enTurno.get(e.id);
       if (operador != null) {
-        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En terreno', aviso: `En turno · ${operador}` };
+        return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'En terreno', aviso: `En turno · ${operador.nombre}` };
       }
       if (e.status && e.status !== 'OPERATIONAL') {
         return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'No disponibles', motivo: ESTADO_NO_DISPONIBLE[e.status] ?? 'No operativo' };
@@ -173,6 +186,7 @@ export function TrabajosExtraView() {
         key={formKey}
         inicial={vacio()}
         equipos={equipos}
+        operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Registrar trabajo"
@@ -276,7 +290,7 @@ export function TrabajosExtraView() {
       <FormularioTrabajo
         inicial={{
           equipoId: detalle.equipoId,
-          operador: detalle.operador,
+          operatorId: detalle.operatorId ?? '',
           faena: detalle.faena,
           turno: detalle.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
           horometroInicial: detalle.horometroInicial,
@@ -287,6 +301,7 @@ export function TrabajosExtraView() {
           observaciones: detalle.observaciones ?? '',
         }}
         equipos={equipos}
+        operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
@@ -424,6 +439,7 @@ export function TrabajosExtraView() {
 function FormularioTrabajo({
   inicial,
   equipos,
+  operadores,
   enTurno,
   opcionesEquipo,
   textoBoton,
@@ -433,8 +449,10 @@ function FormularioTrabajo({
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
   equipos: { id: string; internalCode: string }[];
+  /** Catálogo de operadores activos: el operador se elige, no se escribe. */
+  operadores: Pick<Operator, 'id' | 'name'>[];
   /** Equipos con turno abierto → operador que lo lleva. */
-  enTurno: Map<string, string>;
+  enTurno: Map<string, OperadorEnTurno>;
   opcionesEquipo: OpcionSelector[];
   textoBoton: string;
   pendiente: boolean;
@@ -475,7 +493,7 @@ function FormularioTrabajo({
             hint={
               errors.equipoId?.message ??
               (operadorEnTurno != null
-                ? `${codigoElegido} está en turno con ${operadorEnTurno}. Se registra igual: queda a nombre de esta máquina.`
+                ? `${codigoElegido} está en turno con ${operadorEnTurno.nombre}. Se registra igual: queda a nombre de esta máquina.`
                 : undefined)
             }
           >
@@ -486,17 +504,25 @@ function FormularioTrabajo({
               onChange={(id) => {
                 setValue('equipoId', id, { shouldValidate: true });
                 // Si el equipo está en turno, su operador es el candidato
-                // obvio; se propone solo si el campo sigue vacío.
+                // obvio; se propone solo si el campo sigue vacío. Si el turno
+                // no trae `operatorId` (dato previo al catálogo) no se propone
+                // nada: se elige a mano.
                 const enTurnoCon = enTurno.get(id);
-                if (enTurnoCon && !watch('operador')) {
-                  setValue('operador', enTurnoCon, { shouldValidate: true });
+                if (enTurnoCon?.operatorId && !watch('operatorId')) {
+                  setValue('operatorId', enTurnoCon.operatorId, { shouldValidate: true });
                 }
               }}
               opciones={opcionesEquipo}
             />
           </Campo>
-          <Campo label="Operador" hint={errors.operador?.message}>
-            <Input placeholder="Nombre y apellido" {...register('operador')} />
+          <Campo label="Operador" hint={errors.operatorId?.message}>
+            <Selector
+              etiqueta="Operador"
+              placeholder="Elegí el operador"
+              valor={watch('operatorId') ?? ''}
+              onChange={(operatorId) => setValue('operatorId', operatorId, { shouldValidate: true })}
+              opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
+            />
           </Campo>
         </div>
 

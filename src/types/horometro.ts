@@ -3,7 +3,11 @@ import { nonNegNumber, optNumber } from '../lib/forms';
 
 export const horometroFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
-  operador: z.string().min(1, 'Indicá el operador'),
+  // `id` del catálogo de Operadores (ver `types/operator.ts`) — obligatorio:
+  // el servidor lo valida (`OperatorsService.assertActive`) y deriva
+  // `operador` (el nombre, snapshot) a partir de él; el cliente ya no manda
+  // texto libre. Ver `components/flota/RegistrarEntradaModal.tsx`.
+  operatorId: z.string().min(1, 'Seleccioná un operador'),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: nonNegNumber('Valor inválido'),
   valorFinal: optNumber,

@@ -20,6 +20,31 @@ export type Turno = 'DIURNO' | 'NOCTURNO';
 export const INICIO_DIURNO = 8;
 export const FIN_DIURNO = 20;
 
+/** Cuántas horas antes de un cambio de turno vale la pena ofrecer
+ * "adelantar turno" — ver `puedeAdelantarTurno`. */
+export const VENTANA_ADELANTO_HORAS = 2;
+
+/**
+ * ¿Vale la pena ofrecer "adelantar turno" AHORA? Solo dentro de
+ * `VENTANA_ADELANTO_HORAS` horas antes de cada cambio (06:00–08:00 y
+ * 18:00–20:00 con la ventana actual de 2 h) — fuera de esa ventana no hay
+ * ninguna razón real para adelantarse, y el botón solo agrega riesgo de un
+ * toque accidental que cargue tarjetas en el turno equivocado.
+ *
+ * En minutos enteros (no horas fraccionadas) para no depender de
+ * redondeos de punto flotante en los bordes.
+ */
+export function puedeAdelantarTurno(ahora: Date): boolean {
+  const minutos = ahora.getHours() * 60 + ahora.getMinutes();
+  const ventanaMin = VENTANA_ADELANTO_HORAS * 60;
+  const inicioDiurnoMin = INICIO_DIURNO * 60;
+  const finDiurnoMin = FIN_DIURNO * 60;
+
+  const cercaDelDiurno = minutos >= inicioDiurnoMin - ventanaMin && minutos < inicioDiurnoMin;
+  const cercaDelNocturno = minutos >= finDiurnoMin - ventanaMin && minutos < finDiurnoMin;
+  return cercaDelDiurno || cercaDelNocturno;
+}
+
 /**
  * Los bordes van al turno que EMPIEZA: 08:00 es diurno y 20:00 es nocturno.
  * Cualquier otro criterio deja un minuto sin dueño o con dos.
@@ -94,6 +119,45 @@ export function turnoAnterior(turno: Turno, fecha: Date): { turno: Turno; fecha:
   const dia = new Date(fecha);
   dia.setDate(dia.getDate() - 1);
   return { turno: 'NOCTURNO', fecha: dia };
+}
+
+/**
+ * El turno inmediatamente SIGUIENTE — espejo de `turnoAnterior`. Lo usa el
+ * selector "actual / siguiente" de Registro de equipo (RFC "Supervisión en
+ * Terreno" §Diseño): a las 07:30 el reloj todavía propone el NOCTURNO de
+ * anoche, pero el supervisor ya está empezando el DIURNO de hoy — el
+ * selector le permite adelantarse UN turno sin esperar a las 08:00.
+ */
+export function turnoSiguiente(turno: Turno, fecha: Date): { turno: Turno; fecha: Date } {
+  if (turno === 'DIURNO') return { turno: 'NOCTURNO', fecha };
+  const dia = new Date(fecha);
+  dia.setDate(dia.getDate() + 1);
+  return { turno: 'DIURNO', fecha: dia };
+}
+
+/**
+ * `YYYY-MM-DD` a partir de las partes LOCALES de la fecha — NUNCA
+ * `toISOString()` (que convierte a UTC y puede correr el día: a las 23:30 en
+ * Chile, `toISOString()` ya cae en el día siguiente en UTC). Es el mismo
+ * formato que exige `shiftDate` de `POST /api/shift-cards`
+ * (`OpenShiftCardDto`, backend, `DATE_ONLY_REGEX`).
+ */
+export function toDateOnly(fecha: Date): string {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Inversa de `toDateOnly`: arma la fecha con partes LOCALES (`new Date(y, m,
+ * d)`), nunca con `new Date(unString)` — ese constructor interpreta
+ * `"YYYY-MM-DD"` como medianoche UTC, que en huso horario de Chile puede
+ * mostrar el día anterior.
+ */
+export function fromDateOnly(dateOnly: string): Date {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
 export function contextoTurno(ahora: Date): ContextoTurno {

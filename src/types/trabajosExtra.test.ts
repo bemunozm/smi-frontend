@@ -3,7 +3,7 @@ import { trabajoExtraFormSchema } from './trabajosExtra';
 
 const base = {
   equipoId: 'e1',
-  operador: 'Juan Rojas',
+  operatorId: 'op_1',
   faena: 'Patillo',
   turno: 'DIURNO',
   horometroInicial: 1200,
@@ -19,6 +19,14 @@ describe('trabajoExtraFormSchema', () => {
 
   it('rechaza horómetro final menor que inicial', () => {
     expect(trabajoExtraFormSchema.safeParse({ ...base, horometroFinal: 1100 }).success).toBe(false);
+  });
+
+  it('rechaza un trabajo sin operador elegido', () => {
+    const r = trabajoExtraFormSchema.safeParse({ ...base, operatorId: '' });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.message === 'Elegí el operador')).toBe(true);
+    }
   });
 
   it('rechaza una actividad que no está en la lista', () => {

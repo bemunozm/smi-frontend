@@ -177,8 +177,11 @@ describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
         id: 'h_abierto',
         valorInicial: 1200,
         operador: 'Carlos Núñez',
+        operatorId: 'op_1',
         turno: 'DIURNO',
         fecha: '2026-08-06T08:00:00.000Z',
+        supervisorName: 'Marcela Pizarro',
+        shiftId: null,
       },
     };
     const { container } = renderConDatos(<EquiposView />, (qc) => {
@@ -316,5 +319,4 @@ describe('EquiposView — indicador de documentos', () => {
 // — `EquipoDetalleView.test.tsx` — desde la Fase 2 (fidelidad con el
 // artefacto): creció lo suficiente (KPIs, estado de uso, actividad reciente)
 // como para justificar separarla de este archivo, mismo criterio que el
-// resto de las vistas de Flota/Terreno (`CombustibleView.test.tsx`,
-// `HorometroView.test.tsx`, etc.).
+// resto de las vistas de Flota/Terreno (`CombustibleView.test.tsx`, etc.).

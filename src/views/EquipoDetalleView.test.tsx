@@ -368,7 +368,14 @@ describe('EquipoDetalleView', () => {
     renderFicha();
 
     expect(screen.getByText('En uso')).toBeTruthy();
-    expect(screen.getByText('Pedro Soto')).toBeTruthy();
+    // `getAllByText` (no `getByText`): el operador asignado hoy también
+    // aparece dentro del `OperatorPicker` de `AsignacionForm` (vía
+    // `currentAssignee`, ver ese componente) — React Aria puede mantener una
+    // copia oculta de la colección de items para resolver el valor
+    // seleccionado con el popover cerrado, así que "Pedro Soto" puede
+    // aparecer más de una vez en el DOM (mismo criterio que `elegirOpcion`
+    // en `EquiposView.interactions.test.tsx`).
+    expect(screen.getAllByText('Pedro Soto').length).toBeGreaterThan(0);
     expect(screen.getByText('Luis Vega')).toBeTruthy();
   });
 
@@ -444,8 +451,12 @@ describe('EquipoDetalleView', () => {
     assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, inUse: false, operator: null, supervisor: null });
 
     renderFicha((qc) => {
-      // Pickers de operador/supervisor — mismas keys que `useUsers({ role })`.
-      qc.setQueryData(['users', { role: 'OPERADOR' }], [{ id: 'u_op', name: 'Pedro Soto' }]);
+      // Picker de operador — catálogo propio (`useOperators({isActive:true})`);
+      // mismo id que `EQUIPO_DETALLE.operator` (`u_op`) para que el
+      // catálogo lo encuentre activo, sin inyección de `currentAssignee`
+      // (ese caso — operador inactivo — tiene su propio test más abajo).
+      // Supervisor sigue con `useUsers({ role })`.
+      qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
       qc.setQueryData(['users', { role: 'SUPERVISOR' }], [{ id: 'u_sup', name: 'Luis Vega' }]);
     });
 
@@ -459,7 +470,7 @@ describe('EquipoDetalleView', () => {
   // Antes "Liberar" limpiaba los pickers a "Sin asignar" ANTES de que la
   // mutación resolviera; si fallaba, `onError` de `useAssignEquipment` solo
   // toastea (no invalida), así que los pickers quedaban mostrando "Sin
-  // asignar" aunque el server mantuviera la asignación (Fix 3, review QA).
+  // asignar" aunque el server mantuviera la asignación.
   it('si "Liberar" falla, los pickers siguen mostrando la asignación real (no se limpian de forma optimista)', async () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -470,7 +481,7 @@ describe('EquipoDetalleView', () => {
     assignMock.mockRejectedValue(new Error('No se pudo liberar la asignación.'));
 
     renderFicha((qc) => {
-      qc.setQueryData(['users', { role: 'OPERADOR' }], [{ id: 'u_op', name: 'Pedro Soto' }]);
+      qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
       qc.setQueryData(['users', { role: 'SUPERVISOR' }], [{ id: 'u_sup', name: 'Luis Vega' }]);
     });
 
@@ -480,16 +491,154 @@ describe('EquipoDetalleView', () => {
       expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: null, supervisorId: null }),
     );
 
-    // El botón del Select acumula valor + label en su nombre accesible
-    // (mismo criterio que `EquiposView.interactions.test.tsx`).
-    expect(screen.getByRole('button', { name: /Pedro Soto/ })).toBeTruthy();
+    // El operador se lee del `<input>` del `OperatorPicker` (`ComboBox`, sin
+    // nombre accesible propio en el trigger — su botón resuelve al `<label>`
+    // del campo, no al valor, a diferencia del `<Select>` de supervisor).
+    expect((screen.getByPlaceholderText('Buscar operador…') as HTMLInputElement).value).toBe('Pedro Soto');
     expect(screen.getByRole('button', { name: /Luis Vega/ })).toBeTruthy();
+  });
+
+  // Sin `currentAssignee` (ver `OperatorPicker`), abrir la ficha de un
+  // equipo cuyo operador pasó a INACTIVO mostraría el picker "en blanco" —
+  // y "Liberar"/"Guardar asignación" sin querer, porque el estado del
+  // picker (`operatorId`) arranca en el id real pero el picker no tiene
+  // forma de resolverlo a un nombre visible.
+  it('el operador asignado sigue visible en la ficha aunque ya esté inactivo', () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+
+    renderFicha(
+      (qc) => {
+        // El catálogo de ACTIVOS ya no trae al operador asignado — se
+        // desactivó, pero la ficha lo sigue mostrando (`equipo.operator`).
+        qc.setQueryData(['operators', { isActive: true }], []);
+        qc.setQueryData(['users', { role: 'SUPERVISOR' }], [{ id: 'u_sup', name: 'Luis Vega' }]);
+      },
+      { ...EQUIPO_DETALLE, operator: { id: 'op_inactivo', name: 'Ana Ruiz' } },
+    );
+
+    expect((screen.getByPlaceholderText('Buscar operador…') as HTMLInputElement).value).toBe('Ana Ruiz');
+  });
+
+  // Abre el picker de operador (`OperatorPicker`, un `ComboBox`) — mismo
+  // criterio que `EquiposView.interactions.test.tsx#abrirPickerOperador`: el
+  // trigger es un botón chico sin nombre accesible predecible (a diferencia
+  // del `<Select>` de supervisor), así que se ubica por clase. Espera a que
+  // `useOperators({isActive:true})` deje de estar pendiente (el `ComboBox` se
+  // deshabilita mientras carga).
+  async function abrirPickerOperadorAsignacion(): Promise<void> {
+    const trigger = await waitFor(() => {
+      const el = document.body.querySelector('.combo-box__trigger');
+      if (!el || el.hasAttribute('disabled')) throw new Error('Trigger del picker de operador no listo todavía.');
+      return el as HTMLButtonElement;
+    });
+    fireEvent.click(trigger);
+  }
+
+  // Elige una opción de un `Select`/`ComboBox` (HeroUI/React Aria) ya
+  // abierto — mismo criterio que `elegirOpcion` del describe "Documentos" más
+  // abajo: no se puede usar `getByText`/`findByText` acá porque React Aria
+  // mantiene montada una copia oculta de la colección de items.
+  function elegirOpcionAsignacion(texto: string): void {
+    const opcion = screen.getAllByRole('option').find((item) => item.textContent === texto);
+    if (!opcion) {
+      throw new Error(`No se encontró la opción "${texto}" entre las visibles del Select/ComboBox abierto.`);
+    }
+    fireEvent.click(opcion);
+  }
+
+  // `PATCH /equipment/:id/assignment`
+  // revalidaba SIEMPRE `operatorId` (aunque no cambiara) contra
+  // `OperatorsService.assertActive` — un operador ya inactivo bloqueaba con
+  // 409 `OPERATOR_INACTIVE` un guardado que solo tocaba el supervisor. Ahora
+  // el body es parcial (`buildAssignmentDiff`): cambiar SOLO el supervisor no
+  // debe mandar `operatorId` en absoluto.
+  it('cambiar SOLO el supervisor y "Guardar asignación" manda supervisorId SIN operatorId', async () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+    assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, supervisor: { id: 'u_sup2', name: 'Marta Ríos' } });
+
+    renderFicha((qc) => {
+      qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
+      qc.setQueryData(
+        ['users', { role: 'SUPERVISOR' }],
+        [
+          { id: 'u_sup', name: 'Luis Vega' },
+          { id: 'u_sup2', name: 'Marta Ríos' },
+        ],
+      );
+    });
+
+    // El trigger del `<Select>` de supervisor acumula valor + label en su
+    // nombre accesible ("Luis Vega Supervisor a cargo") — mismo criterio que
+    // el test de "Liberar" de arriba.
+    fireEvent.click(screen.getByRole('button', { name: /Luis Vega/ }));
+    await screen.findByRole('option', { name: 'Marta Ríos' });
+    elegirOpcionAsignacion('Marta Ríos');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
+
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { supervisorId: 'u_sup2' }));
+  });
+
+  it('cambiar SOLO el operador y "Guardar asignación" manda operatorId SIN supervisorId', async () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+    assignMock.mockResolvedValue({ ...EQUIPO_DETALLE, operator: { id: 'op_2', name: 'Ana Ruiz' } });
+
+    renderFicha((qc) => {
+      qc.setQueryData(
+        ['operators', { isActive: true }],
+        [
+          { id: 'u_op', name: 'Pedro Soto' },
+          { id: 'op_2', name: 'Ana Ruiz' },
+        ],
+      );
+      qc.setQueryData(['users', { role: 'SUPERVISOR' }], [{ id: 'u_sup', name: 'Luis Vega' }]);
+    });
+
+    await abrirPickerOperadorAsignacion();
+    await screen.findByRole('option', { name: 'Ana Ruiz' });
+    elegirOpcionAsignacion('Ana Ruiz');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
+
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_2' }));
+  });
+
+  it('sin tocar los pickers, "Guardar asignación" queda deshabilitado (el diff está vacío)', () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+
+    renderFicha((qc) => {
+      qc.setQueryData(['operators', { isActive: true }], [{ id: 'u_op', name: 'Pedro Soto' }]);
+      qc.setQueryData(['users', { role: 'SUPERVISOR' }], [{ id: 'u_sup', name: 'Luis Vega' }]);
+    });
+
+    expect(screen.getByRole('button', { name: 'Guardar asignación' }).hasAttribute('disabled')).toBe(true);
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   // Antes esto se decidía leyendo `inUse` (que el backend deriva de
   // `!!operator`): un equipo con supervisor asignado pero SIN operador
   // mostraba "Disponible" y el supervisor desaparecía de la ficha, aunque el
-  // picker de editar lo mostraba preseleccionado (Fix 4, review QA).
+  // picker de editar lo mostraba preseleccionado.
   it('muestra al supervisor aunque no haya operador asignado (no depende solo de "inUse")', () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -611,8 +760,11 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
     id: 'h_abierto',
     valorInicial: 1200,
     operador: 'Carlos Núñez',
+    operatorId: 'op_1',
     turno: 'NOCTURNO',
     fecha: '2026-08-06T20:00:00.000Z',
+    supervisorName: 'Marcela Pizarro',
+    shiftId: null,
   };
 
   it('sin turno abierto: ofrece "Registrar entrada" y no muestra el banner de turno en curso', () => {

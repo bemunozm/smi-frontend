@@ -9,10 +9,10 @@ const USERS_QUERY_KEY = ['users'] as const;
 /**
  * Lista de usuarios. Retrocompatible a propósito — mismo criterio que
  * `useEquipment`/`useBranches`: sin filtros usa `['users']` (la key que ya
- * consume `UsersView`); con `{ role }` agrega el objeto aparte, así los
- * pickers de operador/supervisor de Flota (`CamposEquipo` →
- * `useUsers({ role: 'OPERADOR' })` / `useUsers({ role: 'SUPERVISOR' })`)
- * cachean cada rol por separado sin pisar la lista general.
+ * consume `UsersView`); con `{ role }` agrega el objeto aparte, así el
+ * picker de supervisor de Flota (`CamposEquipo`/`AsignacionForm` →
+ * `useUsers({ role: 'SUPERVISOR' })`) cachea aparte de la lista general (el
+ * picker de operador sale del catálogo propio, `useOperators`).
  */
 export function useUsers(filtros: UserFiltros = {}) {
   const tieneFiltros = Object.keys(filtros).length > 0;

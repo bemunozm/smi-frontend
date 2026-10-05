@@ -18,6 +18,9 @@ src/
 ├── hooks/       # useX.ts (useQuery + useMutation) y useCurrentUser
 ├── layout/      # AppLayout, Sidebar, Topbar
 ├── lib/         # instancias configuradas: axios.ts, query-client.ts, auth-client.ts, api-error.ts (toDomainError compartido)
+├── offline/     # Dexie, outbox, replay — infra offline de Terreno; incluye sus PROPIOS hooks
+│                  (useLiveQuery, useOutboxOps): excepción a "los hooks viven en hooks/" porque son
+│                  infraestructura interna de este módulo, no datos de dominio consumidos por vistas
 ├── store/       # ui.ts (Zustand — SOLO estado de UI, nunca auth)
 ├── types/       # schemas Zod + tipos: roles.ts, user.ts, ...
 ├── views/       # una vista por pantalla — SE LLAMAN *View, NO *Page

@@ -20,11 +20,11 @@ import {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useCreateUser, useDeleteUser, useUpdateUser, useUsers } from '../hooks/useUsers';
 import { ROLE_OPTIONS, roleChipColor } from '../config/role-colors';
-import { ROLES } from '../types/roles';
 import {
-  CreateUserSchema,
+  CreateUserFormSchema,
   UpdateUserSchema,
-  type CreateUserInput,
+  type CreateUserFormInput,
+  type CreateUserFormOutput,
   type UpdateUserInput,
   type User,
 } from '../types/user';
@@ -78,9 +78,12 @@ function CreateUserModal() {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<CreateUserInput>({
-    resolver: zodResolver(CreateUserSchema),
-    defaultValues: { name: '', email: '', password: '', role: ROLES.OPERADOR },
+  } = useForm<CreateUserFormInput, unknown, CreateUserFormOutput>({
+    resolver: zodResolver(CreateUserFormSchema),
+    // `role: ''` a propósito — sin default (ver `CreateUserFormSchema`): el
+    // ADMIN tiene que elegir explícitamente entre ADMIN/SUPERVISOR/
+    // MANTENEDOR, nunca queda un rol sin que nadie lo haya decidido.
+    defaultValues: { name: '', email: '', password: '', role: '' },
   });
 
   return (
@@ -90,7 +93,12 @@ function CreateUserModal() {
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-md">
             {({ close }) => {
-              const onSubmit = (values: CreateUserInput): void => {
+              // `values` ya viene con `role: Role` (no `''`): `handleSubmit`
+              // entrega el tipo de SALIDA del resolver (`CreateUserFormOutput`,
+              // ver `types/user.ts`), que el `.refine` de `CreateUserFormSchema`
+              // angosta en runtime Y en tipos — no hace falta descartar `''`
+              // a mano acá.
+              const onSubmit = (values: CreateUserFormOutput): void => {
                 createUser.mutate(values, {
                   onSuccess: () => {
                     reset();
@@ -181,7 +189,8 @@ function CreateUserModal() {
                             fullWidth
                             isInvalid={!!errors.role}
                             name={field.name}
-                            value={field.value}
+                            placeholder="Elegí un rol"
+                            value={field.value || null}
                             onChange={(value) => {
                               if (value) field.onChange(value);
                             }}

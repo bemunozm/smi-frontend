@@ -65,8 +65,8 @@ vi.mock('../api/BranchAPI', () => ({
   },
 }));
 
-// `CamposEquipo` también puebla los pickers de operador/supervisor
-// (`useUsers({ role })`) — se mockea `UserAPI` para no pegarle a axios.
+// `CamposEquipo` puebla el picker de supervisor (`useUsers({ role:
+// 'SUPERVISOR' })`) — se mockea `UserAPI` para no pegarle a axios.
 const { userListMock } = vi.hoisted(() => ({
   userListMock: vi.fn(),
 }));
@@ -75,6 +75,21 @@ vi.mock('../api/UserAPI', () => ({
   UserAPI: {
     list: userListMock,
     getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  },
+}));
+
+// El picker de operador (`OperatorPicker`, dentro de `CamposEquipo`) sale
+// del catálogo propio, NO de `UserAPI` — se mockea `OperatorAPI` aparte.
+const { operatorListMock } = vi.hoisted(() => ({
+  operatorListMock: vi.fn(),
+}));
+
+vi.mock('../api/OperatorAPI', () => ({
+  OperatorAPI: {
+    list: operatorListMock,
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
@@ -102,8 +117,9 @@ const ADMIN = {
 beforeEach(() => {
   currentUserResult = ADMIN;
   // Default sin operadores/supervisores — los tests que abren el picker de
-  // asignación lo sobrescriben con `userListMock.mockResolvedValue(...)`.
+  // asignación lo sobrescriben con `userListMock`/`operatorListMock`.
   userListMock.mockResolvedValue([]);
+  operatorListMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -182,6 +198,28 @@ function elegirOpcion(texto: string): void {
     throw new Error(`No se encontró la opción "${texto}" entre las visibles del Select abierto.`);
   }
   fireEvent.click(opcion);
+}
+
+/**
+ * Abre el picker de operador (`OperatorPicker`, un `ComboBox`) — a
+ * diferencia del `<Select>` de sucursal/estado/supervisor (todo el botón es
+ * el trigger, con nombre accesible propio), acá el trigger es un botón
+ * chico aparte del input de búsqueda, sin nombre accesible predecible
+ * ("aria-labelledby" apunta al `<label>` del campo) — mismo criterio que
+ * `OperatorPicker.test.tsx`, que por eso ubica el trigger por clase.
+ * Busca en `document.body` (no en el `container` de `render()`): el modal
+ * de editar/crear equipo porta su contenido fuera del árbol montado por RTL,
+ * así que `container.querySelector` nunca lo encuentra. Espera a que
+ * `useOperators({isActive:true})` deje de estar pendiente (el `ComboBox` se
+ * deshabilita mientras carga) antes de hacer click.
+ */
+async function abrirPickerOperador(): Promise<void> {
+  const trigger = await waitFor(() => {
+    const el = document.body.querySelector('.combo-box__trigger');
+    if (!el || el.hasAttribute('disabled')) throw new Error('Trigger del picker de operador no listo todavía.');
+    return el as HTMLButtonElement;
+  });
+  fireEvent.click(trigger);
 }
 
 describe('EquiposView — menú de acciones', () => {
@@ -317,15 +355,69 @@ describe('EquiposView — editar equipo', () => {
     );
   });
 
-  it('al elegir un operador y guardar, llama a EquipmentAPI.assign con su id', async () => {
-    const OPERADOR = { id: 'u_op', name: 'Pedro Soto' };
+  it('al elegir un operador y guardar, llama a EquipmentAPI.assign con su id (catálogo, no UserAPI) SIN supervisorId (no cambió)', async () => {
+    const OPERADOR = { id: 'op_1', name: 'Pedro Soto' };
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
     updateMock.mockResolvedValue(EQUIPO);
     assignMock.mockResolvedValue({ ...EQUIPO, operator: OPERADOR });
+    operatorListMock.mockResolvedValue([OPERADOR]);
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    await abrirPickerOperador();
+    // `useOperators({ isActive: true })` resuelve async — la opción recién
+    // aparece cuando esa query settlea, así que hay que esperarla.
+    await screen.findByRole('option', { name: 'Pedro Soto' });
+    elegirOpcion('Pedro Soto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // `EQUIPO.supervisor` ya era `null` y el usuario no tocó ese picker — el
+    // body PARCIAL (`buildAssignmentDiff`) omite `supervisorId` por completo
+    // (no manda `null` de relleno): antes, mandar siempre las dos claves
+    // revalidaba de más un campo intacto (ver el fix de "operador inactivo
+    // bloquea guardar solo-supervisor" más abajo).
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_1' }));
+    // El picker de operador sale del catálogo propio (`OperatorAPI.list`,
+    // solo activos) — ya no filtra `UserAPI` por `role: 'OPERADOR'` (ese rol
+    // no existe más).
+    expect(operatorListMock).toHaveBeenCalledWith({ isActive: true });
+    expect(userListMock).not.toHaveBeenCalledWith(expect.objectContaining({ role: 'OPERADOR' }));
+  });
+
+  // El operador ya asignado se desactivó
+  // (no aparece en el catálogo de activos, igual que el test de arriba "el
+  // operador asignado hoy sigue visible..."), y el usuario cambia SOLO el
+  // supervisor. Antes esto mandaba `operatorId` de todos modos (aunque no
+  // cambió) y el backend lo revalidaba con `assertActive`, tirando 409
+  // `OPERATOR_INACTIVE` sobre un campo que nadie tocó.
+  it('al cambiar SOLO el supervisor con un operador YA inactivo asignado, EquipmentAPI.assign recibe supervisorId SIN operatorId', async () => {
+    const EQUIPO_ASIGNADO = {
+      ...EQUIPO,
+      operator: { id: 'op_inactivo', name: 'Ana Ruiz' },
+      supervisor: { id: 'u_sup1', name: 'Luis Vega' },
+    };
+    listMock.mockResolvedValue([EQUIPO_ASIGNADO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO_ASIGNADO);
+    assignMock.mockResolvedValue({ ...EQUIPO_ASIGNADO, supervisor: { id: 'u_sup2', name: 'Marta Ríos' } });
+    // El catálogo de operadores ACTIVOS ya no trae a Ana Ruiz — se desactivó.
+    operatorListMock.mockResolvedValue([]);
     userListMock.mockImplementation((filtros?: { role?: string }) =>
-      Promise.resolve(filtros?.role === 'OPERADOR' ? [OPERADOR] : []),
+      Promise.resolve(
+        filtros?.role === 'SUPERVISOR'
+          ? [
+              { id: 'u_sup1', name: 'Luis Vega' },
+              { id: 'u_sup2', name: 'Marta Ríos' },
+            ]
+          : [],
+      ),
     );
 
     renderView();
@@ -333,19 +425,91 @@ describe('EquiposView — editar equipo', () => {
     fireEvent.click(screen.getByText('Editar ficha'));
     await screen.findByText(`Editar ${EQUIPO.internalCode}`);
 
-    // El botón del Select acumula valor + label en su nombre accesible
-    // ("Sin operador asignado Operador") — por eso el regex, no exact match.
-    fireEvent.click(screen.getByRole('button', { name: /Operador/ }));
-    // `useUsers({ role: 'OPERADOR' })` resuelve async — la opción recién
-    // aparece cuando esa query settlea, así que hay que esperarla.
-    await screen.findByRole('option', { name: 'Pedro Soto' });
-    elegirOpcion('Pedro Soto');
+    // No se toca el picker de operador — sigue mostrando "Ana Ruiz" gracias a
+    // `currentAssignee` aunque ya no esté en el catálogo de activos.
+    const inputOperador = await screen.findByPlaceholderText('Buscar operador…');
+    await waitFor(() => expect((inputOperador as HTMLInputElement).value).toBe('Ana Ruiz'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Luis Vega/ }));
+    await screen.findByRole('option', { name: 'Marta Ríos' });
+    elegirOpcion('Marta Ríos');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() =>
-      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null }),
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { supervisorId: 'u_sup2' }));
+  });
+
+  it('el picker de supervisor sigue usando UserAPI (rol SUPERVISOR)', async () => {
+    const SUPERVISOR = { id: 'u_sup', name: 'Luis Vega' };
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    userListMock.mockImplementation((filtros?: { role?: string }) =>
+      Promise.resolve(filtros?.role === 'SUPERVISOR' ? [SUPERVISOR] : []),
     );
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    // El botón del `<Select>` de supervisor acumula valor + label en su
+    // nombre accesible ("Sin supervisor asignado Supervisor a cargo").
+    fireEvent.click(screen.getByRole('button', { name: /Supervisor a cargo/ }));
+    await screen.findByRole('option', { name: 'Luis Vega' });
+
+    expect(userListMock).toHaveBeenCalledWith({ role: 'SUPERVISOR' });
+  });
+
+  it('el operador asignado hoy sigue visible aunque ya esté inactivo, y guardar sin tocarlo no lo desasigna', async () => {
+    const EQUIPO_CON_OPERADOR_INACTIVO = { ...EQUIPO, operator: { id: 'op_inactivo', name: 'Ana Ruiz' } };
+    listMock.mockResolvedValue([EQUIPO_CON_OPERADOR_INACTIVO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO_CON_OPERADOR_INACTIVO);
+    // El catálogo de ACTIVOS ya no trae a Ana Ruiz — se desactivó.
+    operatorListMock.mockResolvedValue([]);
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    // Sin esto, abrir el form de un equipo cuyo operador pasó a inactivo lo
+    // mostraría "sin seleccionar" — y guardar así lo desasignaría en
+    // silencio (ver `OperatorPicker#currentAssignee`).
+    const input = screen.getByPlaceholderText('Buscar operador…') as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('Ana Ruiz'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it('al elegir "Sin operador asignado" y guardar, EquipmentAPI.assign recibe operatorId: null', async () => {
+    const EQUIPO_CON_OPERADOR = { ...EQUIPO, operator: { id: 'op_1', name: 'Pedro Soto' } };
+    listMock.mockResolvedValue([EQUIPO_CON_OPERADOR]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+    updateMock.mockResolvedValue(EQUIPO_CON_OPERADOR);
+    assignMock.mockResolvedValue({ ...EQUIPO_CON_OPERADOR, operator: null });
+    operatorListMock.mockResolvedValue([{ id: 'op_1', name: 'Pedro Soto' }]);
+
+    renderView();
+    await abrirMenuAcciones();
+    fireEvent.click(screen.getByText('Editar ficha'));
+    await screen.findByText(`Editar ${EQUIPO.internalCode}`);
+
+    await abrirPickerOperador();
+    elegirOpcion('Sin operador asignado');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // El supervisor de `EQUIPO_CON_OPERADOR` ya era `null` y no se tocó — el
+    // `null` explícito de "liberar operador" viaja igual (sí cambió respecto
+    // de `op_1`), pero `supervisorId` se omite (sin cambios).
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: null }));
   });
 
   it('sin cambiar la asignación, guardar la edición NO llama a EquipmentAPI.assign', async () => {
@@ -434,7 +598,7 @@ describe('EquiposView — editar equipo', () => {
   // desmonta al cerrar) — antes, cancelar sin guardar no descartaba los
   // cambios de texto: `values` del `useForm` solo re-sincroniza cuando el
   // `equipo` en sí cambia, no cuando el usuario descarta su propia edición
-  // (Fix 1, review QA, mismo criterio que `CreateEquipoModal`).
+  // (mismo criterio que `CreateEquipoModal`).
   it('EditEquipoModal descarta los cambios de texto no guardados al cancelar y reabrir', async () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
@@ -460,32 +624,28 @@ describe('EquiposView — editar equipo', () => {
   // esperar su resultado, y el modal cerraba de inmediato (con el toast de
   // éxito de `updateEquipment` ya mostrado) — si la asignación fallaba (p.
   // ej. el operador perdió el rol → 400 de `assertUserWithRole`), el modal
-  // ya había cerrado y el cambio se perdía en silencio (Fix 2, review QA).
+  // ya había cerrado y el cambio se perdía en silencio.
   it('si la asignación falla al guardar la edición, el modal permanece abierto (no enmascara el error)', async () => {
-    const OPERADOR = { id: 'u_op', name: 'Pedro Soto' };
+    const OPERADOR = { id: 'op_1', name: 'Pedro Soto' };
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
     updateMock.mockResolvedValue(EQUIPO);
-    assignMock.mockRejectedValue(new Error('El operador ya no tiene ese rol.'));
-    userListMock.mockImplementation((filtros?: { role?: string }) =>
-      Promise.resolve(filtros?.role === 'OPERADOR' ? [OPERADOR] : []),
-    );
+    assignMock.mockRejectedValue(new Error('Ese operador ya no está activo.'));
+    operatorListMock.mockResolvedValue([OPERADOR]);
 
     renderView();
     await abrirMenuAcciones();
     fireEvent.click(screen.getByText('Editar ficha'));
     await screen.findByText(`Editar ${EQUIPO.internalCode}`);
 
-    fireEvent.click(screen.getByRole('button', { name: /Operador/ }));
+    await abrirPickerOperador();
     await screen.findByRole('option', { name: 'Pedro Soto' });
     elegirOpcion('Pedro Soto');
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() =>
-      expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'u_op', supervisorId: null }),
-    );
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_1' }));
 
     // El update sí se guardó, pero el modal no debe cerrarse: si se cerrara
     // acá, el cambio de asignación fallido quedaría enmascarado detrás del
@@ -496,8 +656,7 @@ describe('EquiposView — editar equipo', () => {
   // El modal de crear es controlado y queda montado (no se desmonta al
   // cerrar) — antes, el `reset()` del form y de los pickers vivía SOLO en el
   // `onSuccess` de crear: cancelar sin crear dejaba código/marca/modelo y el
-  // operador elegido, y reaparecían "viejos" la próxima vez que se abría
-  // (Fix 1, review QA).
+  // operador elegido, y reaparecían "viejos" la próxima vez que se abría.
   it('CreateEquipoModal se resetea al cancelar y reabrir (no arrastra datos de un intento anterior)', async () => {
     listMock.mockResolvedValue([]);
     resumenMock.mockResolvedValue({

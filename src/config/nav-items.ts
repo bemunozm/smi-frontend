@@ -21,7 +21,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Dashboard',
     to: '/',
-    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.OPERADOR],
+    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
   },
   {
     label: 'Equipos',
@@ -34,6 +34,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
   },
   { label: 'Terreno', to: '/terreno', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
+  { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   { label: 'Mantenimiento', to: '/mantenimiento', roles: [ROLES.ADMIN, ROLES.MANTENEDOR] },
   // Universal: todos los roles autenticados ven y usan notificaciones.
   { label: 'Notificaciones', to: '/notificaciones', roles: ALL_ROLES },

@@ -1,20 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import {
-  Briefcase,
-  ClipboardCheck,
-  FileText,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  TriangleAlert,
-  WifiOff,
-  X,
-} from 'lucide-react';
+import { Briefcase, ClipboardCheck, FileText, LayoutDashboard, LogOut, Menu, TriangleAlert, X } from 'lucide-react';
+import { toast } from '@heroui/react';
 
+import { SyncStatus } from '../components/terreno/SyncStatus';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { logout } from '../lib/logout';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { logout, LogoutBlockedError } from '../lib/logout';
+import { requestSync } from '../offline/replay';
 
 /**
  * Los cuatro destinos del módulo, en el orden de la maqueta. La etiqueta larga
@@ -45,24 +39,10 @@ const tabs = [
  * El techo igual existe: sin él, en un monitor de 1920 el formulario quedaría
  * de punta a punta, que es tan malo como la columna angosta pero al revés.
  */
-const CONTAINER =
+// Exportada: `components/terreno/SyncStatus.tsx` la reusa para que su barra
+// quede en la misma columna que el header/main, sin repetir el string.
+export const CONTAINER =
   'mx-auto w-full max-w-md px-4 sm:max-w-2xl lg:max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1680px]';
-
-/** ¿Hay señal? Es un dato de la sesión entera, no de una vista. */
-function useEnLinea(): boolean {
-  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-  return online;
-}
 
 function StatusPill({ enLinea }: { enLinea: boolean }) {
   return (
@@ -83,34 +63,11 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
   );
 }
 
-/**
- * Sin señal el supervisor sigue registrando: la app guarda en el equipo y
- * sincroniza después (R4 de la especificación). Esa promesa hay que hacerla
- * visible — si la pantalla no la dice, el supervisor no sabe si su registro
- * existe, y vuelve a anotarlo en papel.
- */
-function BarraSinSenal() {
-  return (
-    <div
-      className="flex-none border-b text-[13px] leading-snug"
-      style={{ background: 'var(--warning-soft)', color: 'var(--warning-soft-foreground)', borderColor: '#f1d9a2' }}
-    >
-      <div className={`${CONTAINER} flex items-start gap-2.5 py-2.5`}>
-        <WifiOff className="mt-0.5 h-[18px] w-[18px] shrink-0" />
-        <span>
-          <b>Sin señal.</b> Lo que registres queda guardado en el equipo y se envía solo al volver la
-          conexión.
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export function TerrenoLayout() {
   const { user, role } = useCurrentUser();
   const [menu, setMenu] = useState(false);
   const navigate = useNavigate();
-  const enLinea = useEnLinea();
+  const enLinea = useOnlineStatus();
 
   /**
    * Los cuatro destinos viven en UN solo lugar según el tamaño: barra inferior
@@ -127,8 +84,21 @@ export function TerrenoLayout() {
   const handleSignOut = async () => {
     // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
     // Cache Storage privado + navega — ver ese archivo para el porqué
-    // (SEGURIDAD M1, review QA del RFC R2-storage).
-    await logout(navigate);
+    // (SEGURIDAD M1, RFC R2-storage). Se le
+    // pasa el `userId` para que bloquee si hay operaciones sin sincronizar
+    // en el outbox — el catch de acá abajo es ESE bloqueo, no un error real.
+    try {
+      await logout(navigate, user?.id);
+    } catch (error) {
+      if (error instanceof LogoutBlockedError) {
+        toast.danger(error.message, {
+          description: 'Los registros quedan guardados en el equipo — no se pierden.',
+          actionProps: { children: 'Sincronizar ahora', onPress: () => requestSync() },
+        });
+        return;
+      }
+      throw error;
+    }
   };
 
   return (
@@ -187,7 +157,11 @@ export function TerrenoLayout() {
           </div>
         </header>
 
-        {!enLinea && <BarraSinSenal />}
+        {/* Reemplaza a la vieja `BarraSinSenal`: siempre visible (no solo sin
+            señal) — el estado real de sincronización, incluido "todo
+            sincronizado", vale la pena verlo tanto en línea como fuera de
+            ella (ver `components/terreno/SyncStatus.tsx`). */}
+        <SyncStatus />
 
         <main className="flex-1 overflow-y-auto">
           <div className={`${CONTAINER} pt-[18px] pb-7 lg:pt-6 lg:pb-10`}>

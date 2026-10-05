@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -18,13 +18,12 @@ import {
   TextField,
 } from '@heroui/react';
 
+import { ActionTile } from '../components/ActionTile';
 import {
   CamposEquipo,
   DeleteEquipoAlertDialog,
   EditEquipoModal,
   EquipoPhotoBanner,
-  idDesdeSentinel,
-  SIN_ASIGNAR,
 } from '../components/flota/EquipoEditDelete';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { FuelGauge } from '../components/flota/FuelGauge';
@@ -33,6 +32,7 @@ import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCar
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { StatusChip } from '../components/flota/StatusChip';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
 import {
   useAssignEquipment,
@@ -419,61 +419,6 @@ function ResumenFlota() {
 }
 
 /**
- * Tile de acción de la hoja de acciones móvil (`EquipoCardMobile`) — ícono en
- * una insignia redondeada + etiqueta debajo, calca `.qa`/`.qa-ic` de
- * `FlotaClienteTablet/Phone.dc.html`. `tone="danger"` solo tiñe la insignia
- * (igual que el artefacto: el tile en sí queda neutro, no se pinta rojo
- * entero) — se usa para "Eliminar equipo".
- *
- * `variant="outline"` (no `secondary`/`tertiary`) + `bg-surface` explícito:
- * antes usaba `secondary`, que pinta `--button-bg: var(--default)` (gris) —
- * el usuario lo veía "apagado" sobre el fondo blanco del sheet. `outline` ya
- * fija su propio `--button-fg` (a diferencia de `tertiary`, que hereda
- * `currentColor` y por eso NUNCA se usa acá — ver el fix de `.drawer__body`
- * en `index.css`), así que se mantiene libre del mismo bug; la etiqueta igual
- * queda en su propio `<span className="text-foreground">` a contraste pleno
- * pase lo que pase con la variante (mismo criterio que ya usa el badge del
- * ícono, que nunca dependió de `currentColor`).
- *
- * Ancho fijo a `calc(50% - gap/2)` (no `fullWidth`/grid): el padre es un
- * `flex flex-wrap justify-center`, así que 2 tiles entran por fila y — como
- * `justify-content` en flexbox se aplica POR LÍNEA — un tile impar al final
- * (3 tiles para MANTENEDOR/no-ADMIN, 5 para ADMIN) queda centrado solo en su
- * propia fila sin lógica condicional adicional en el llamador.
- */
-function AccionTile({
-  icon: Icon,
-  label,
-  onPress,
-  isDisabled,
-  tone = 'accent',
-}: {
-  icon: LucideIcon;
-  label: string;
-  onPress: () => void;
-  isDisabled?: boolean;
-  tone?: 'accent' | 'danger';
-}) {
-  return (
-    <Button
-      className="h-auto w-[calc(50%-0.375rem)] flex-col gap-2.5 rounded-2xl border border-border bg-surface py-4 text-center text-[13px] font-semibold whitespace-normal"
-      isDisabled={isDisabled}
-      onPress={onPress}
-      variant="outline"
-    >
-      <span
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${
-          tone === 'danger' ? 'bg-danger-soft text-danger-soft-foreground' : 'bg-accent-soft text-accent-soft-foreground'
-        }`}
-      >
-        <Icon aria-hidden className="h-5 w-5" />
-      </span>
-      <span className="text-foreground">{label}</span>
-    </Button>
-  );
-}
-
-/**
  * Tarjeta de equipo para tablet/celular: ya no navega directo a la ficha
  * (`Link`) — al tocarla abre una hoja de acciones inferior (`Drawer`
  * `placement="bottom"`), calcando la hoja de `FlotaClienteTablet/Phone.dc.html`
@@ -644,7 +589,7 @@ function EquipoCardMobile({
               ) : null}
 
               <div className="flex flex-wrap justify-center gap-3">
-                <AccionTile
+                <ActionTile
                   icon={Eye}
                   label="Ver ficha completa"
                   onPress={() => {
@@ -652,7 +597,7 @@ function EquipoCardMobile({
                     navigate(`/equipos/${equipo.id}`);
                   }}
                 />
-                <AccionTile
+                <ActionTile
                   icon={Gauge}
                   label={registrarHorometroLabel(equipo)}
                   onPress={() => {
@@ -660,7 +605,7 @@ function EquipoCardMobile({
                     setIsShiftModalOpen(true);
                   }}
                 />
-                <AccionTile
+                <ActionTile
                   icon={Droplet}
                   label="Registrar combustible"
                   onPress={() => {
@@ -669,7 +614,7 @@ function EquipoCardMobile({
                   }}
                 />
                 {puedeEditarFicha ? (
-                  <AccionTile
+                  <ActionTile
                     icon={Pencil}
                     label="Editar equipo"
                     onPress={() => {
@@ -679,7 +624,7 @@ function EquipoCardMobile({
                   />
                 ) : null}
                 {puedeEditarFicha ? (
-                  <AccionTile
+                  <ActionTile
                     icon={Trash2}
                     label="Eliminar equipo"
                     onPress={() => {
@@ -716,8 +661,8 @@ export function EquiposView() {
   const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
   const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
   const [busqueda, setBusqueda] = useState('');
-  // Un solo modal de creación, dos triggers: el botón del header (PC, `lg:`)
-  // y el FAB (tablet/celular, `lg:hidden`) — ver `CreateEquipoModal`.
+  // Un solo modal de creación, dos triggers: el botón del header (PC, `xl:`)
+  // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const puedeEditarFicha = user?.role === ROLES.ADMIN;
@@ -767,7 +712,7 @@ export function EquiposView() {
            por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
            calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}
         {puedeEditarFicha ? (
-          <Button className="hidden lg:block" onPress={() => setIsCreateOpen(true)}>
+          <Button className="hidden xl:block" onPress={() => setIsCreateOpen(true)}>
             Nuevo equipo
           </Button>
         ) : null}
@@ -901,7 +846,7 @@ export function EquiposView() {
           {/* PC: tabla completa (≥ md) — columnas calcan FlotaClientePC.dc.html:
              Foto · Equipo · Sucursal · Horómetro/KM · Combustible · En uso
              por · Estado · Acciones. */}
-          <div className="hidden lg:block">
+          <div className="hidden xl:block">
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Equipos" className="min-w-[1120px]">
@@ -991,7 +936,7 @@ export function EquiposView() {
              Tocar la tarjeta abre la hoja de acciones (`EquipoCardMobile`),
              no navega directo a la ficha — ahí viven editar/eliminar/cambiar
              estado, que antes solo existían en el kebab de PC. */}
-          <div className="flex flex-col gap-3 lg:hidden">
+          <div className="flex flex-col gap-3 xl:hidden">
             {equipos.map((equipo) => (
               <EquipoCardMobile
                 equipo={equipo}
@@ -1013,7 +958,7 @@ export function EquiposView() {
       {puedeEditarFicha ? (
         <Button
           aria-label="Crear equipo"
-          className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg shadow-black/25 lg:hidden"
+          className="fixed right-4 bottom-20 z-20 h-14 w-14 rounded-full shadow-lg shadow-black/25 xl:hidden"
           isIconOnly
           onPress={() => setIsCreateOpen(true)}
         >
