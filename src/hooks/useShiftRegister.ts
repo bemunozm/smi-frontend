@@ -86,6 +86,8 @@ export interface UseShiftRegisterResult {
    * de agregar se deshabilita en vez de abrir una tarjeta con horómetro 0
    * sin que el supervisor lo haya pedido. */
   valorInicialApertura: number | null;
+  horometroInvalido: boolean;
+  bajoUltimaLectura: boolean;
   abrir: () => void;
   isAbriendo: boolean;
 

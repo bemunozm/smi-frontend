@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { FieldError, Input, Label, TextField } from '@heroui/react';
 
-import { formatDecimalInput, parseDecimal } from '../lib/decimal';
+import { avisoDeAgrupacion, formatDecimalInput, parseDecimal } from '../lib/decimal';
 
 interface DecimalFieldProps {
   label: string;
@@ -13,6 +13,8 @@ interface DecimalFieldProps {
   onBlur?: () => void;
   isInvalid?: boolean;
   errorMessage?: ReactNode;
+  /** Advertencia que no impide guardar (p. ej. "menor que la última lectura"). */
+  warning?: ReactNode;
   isDisabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -34,6 +36,7 @@ export function DecimalField({
   onBlur,
   isInvalid,
   errorMessage,
+  warning,
   isDisabled,
   placeholder,
   className,
@@ -74,6 +77,13 @@ export function DecimalField({
         placeholder={placeholder}
       />
       {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
+      {[warning, avisoDeAgrupacion(texto)].map((aviso, i) =>
+        aviso ? (
+          <p className="m-0 text-xs text-warning-soft-foreground" key={i} role="status">
+            {aviso}
+          </p>
+        ) : null,
+      )}
     </TextField>
   );
 }

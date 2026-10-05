@@ -157,6 +157,8 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     setApertura,
     equipoElegido: EQUIPOS_DISPONIBLES[0],
     valorInicialApertura: 4218.7,
+    horometroInvalido: false,
+    bajoUltimaLectura: false,
     abrir: abrirMock,
     isAbriendo: false,
     cerrandoId: null,
@@ -219,6 +221,39 @@ describe('RegistroEquipoView', () => {
     const lista = within(screen.getByRole('listbox'));
     expect(lista.getByRole('option', { name: /EX-005/ })).toBeTruthy();
     expect(lista.getByRole('option', { name: /PE-009/ })).toBeTruthy();
+  });
+
+  describe('horómetro inicial: avisos y errores', () => {
+    it('un texto que no es un número se marca como error', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130.5' }, horometroInvalido: true, valorInicialApertura: null });
+
+      expect(screen.getByRole('alert').textContent).toMatch(/Escribí un número/);
+      expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('menor que la última lectura: avisa mostrando esa lectura, sin bloquear', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, bajoUltimaLectura: true, valorInicialApertura: 2.13 });
+
+      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      expect(aviso).toMatch(/Es menor que la última lectura registrada \(4\.218,7 h\)/);
+      expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('un valor con aspecto de miles ("2.130") avisa cómo se leerá', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, valorInicialApertura: 2.13 });
+
+      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      expect(aviso).toContain('Se guardará 2,13. Si querías 2130, escribilo sin punto ni coma.');
+    });
+
+    it('elegir un equipo precarga el horómetro SIN separador de miles', () => {
+      renderView('phone');
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /PE-009/ }));
+
+      const precargado = setApertura.mock.calls.at(-1)![0]({ equipoId: '', operatorId: '', horometro: '' });
+      expect(precargado.horometro).toBe('3120,4');
+    });
   });
 
   it('propone el último horómetro registrado del equipo elegido', () => {

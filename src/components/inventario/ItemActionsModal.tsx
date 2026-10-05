@@ -28,7 +28,7 @@ import {
 } from '../../hooks/useInventory';
 import { usePermissions } from '../../hooks/usePermissions';
 import { MOVEMENT_ACTIONS, MOVEMENT_MODE_ACTIONS, type MovementMode } from '../../lib/permissions';
-import { parseDecimal } from '../../lib/decimal';
+import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import {
   MOVEMENT_REASON_LABELS,
@@ -212,7 +212,7 @@ function MovementPanel({
             label="Tipo de movimiento"
             onChange={(next) => {
               setMode(next);
-              setAmount(next === 'count' ? String(here) : '');
+              setAmount(next === 'count' ? formatDecimalInput(here) : '');
               setCountBase(next === 'count' ? { branchId, quantity: here } : null);
               setReason(next === 'in' ? 'PURCHASE' : 'INTERVENTION');
             }}

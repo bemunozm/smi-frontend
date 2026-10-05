@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'luc
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useAhora } from '../hooks/useAhora';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { formatDecimalInput } from '../lib/decimal';
 import { numeroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { diferencias } from '../lib/cambios';
 import type { EntradaCambios } from '../types/cambios';
@@ -434,8 +435,8 @@ export function ReporteDiarioView() {
     setAvisoGuardado(false);
     setEdicion({
       personal: r.personal.map(([, nombre]) => nombre),
-      secciones: r.secciones.map((s) => ({ camiones: String(s.camiones), vueltas: String(s.vueltas) })),
-      tolvas: r.tolvas.map(String),
+      secciones: r.secciones.map((s) => ({ camiones: formatDecimalInput(s.camiones), vueltas: formatDecimalInput(s.vueltas) })),
+      tolvas: r.tolvas.map((cargas) => formatDecimalInput(cargas)),
       plantas: Object.fromEntries(PLANTAS.map((p) => [p, r.plantas.find(([nombre]) => nombre === p)?.[1] ?? ''])),
       traspasos: r.traspasos.map(([, v]) => v),
       empresas: r.empresas,

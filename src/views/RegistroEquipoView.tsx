@@ -21,7 +21,8 @@ import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { fmtDecimales, fmtTime, plural } from '../lib/format';
+import { formatDecimalInput } from '../lib/decimal';
+import { fmtLitros, fmtTime, plural } from '../lib/format';
 import { fechaCorta, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
@@ -74,10 +75,6 @@ import {
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-/** Litros de combustible o AdBlue: hasta dos decimales, sin forzar ceros (12,5 se
- * ve `12,5`, no `13`). */
-const fmtLitros = (n: number | undefined) => (n == null ? '—' : fmtDecimales(n, 2));
-
 export function RegistroEquipoView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enLinea = useOnlineStatus();
@@ -103,6 +100,8 @@ export function RegistroEquipoView() {
     setApertura,
     equipoElegido,
     valorInicialApertura,
+    horometroInvalido,
+    bajoUltimaLectura,
     abrir: agregarEquipo,
     isAbriendo,
     setCerrandoId,
@@ -153,7 +152,7 @@ export function RegistroEquipoView() {
                 setApertura((a) => ({
                   ...a,
                   equipoId: id,
-                  horometro: eq?.currentHourmeter != null ? fmt(eq.currentHourmeter) : '',
+                  horometro: formatDecimalInput(eq?.currentHourmeter, 1),
                 }));
               }}
               opciones={disponibles.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
@@ -172,6 +171,12 @@ export function RegistroEquipoView() {
           <Campo
             label="Horómetro inicial"
             unidad="h"
+            error={horometroInvalido ? 'Escribí un número, por ejemplo 2120,5.' : undefined}
+            aviso={
+              bajoUltimaLectura && equipoElegido?.currentHourmeter != null
+                ? `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisá que esté bien; podés agregarlo igual.`
+                : undefined
+            }
             hint={
               equipoElegido?.currentHourmeter != null ? (
                 <>
@@ -185,7 +190,7 @@ export function RegistroEquipoView() {
             <Input
               numerico
               value={apertura.horometro}
-              placeholder={equipoElegido?.currentHourmeter != null ? fmt(equipoElegido.currentHourmeter) : '0'}
+              placeholder={equipoElegido?.currentHourmeter != null ? formatDecimalInput(equipoElegido.currentHourmeter, 1) : '0'}
               onChange={(e) => setApertura((a) => ({ ...a, horometro: e.target.value }))}
             />
           </Campo>

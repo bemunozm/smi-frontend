@@ -89,4 +89,31 @@ describe('DecimalField', () => {
 
     expect(campo().getAttribute('inputmode')).toBe('decimal');
   });
+
+  it('avisa, sin bloquear, cuando lo escrito parece un valor con separador de miles', () => {
+    const alCambiar = vi.fn();
+    render(<Campo alCambiar={alCambiar} />);
+
+    escribir('2.130');
+
+    expect(screen.getByRole('status').textContent).toBe('Se guardará 2,13. Si querías 2130, escribilo sin punto ni coma.');
+    expect(alCambiar).toHaveBeenLastCalledWith(2.13);
+  });
+
+  it('el aviso se va al escribir otro valor', () => {
+    render(<Campo alCambiar={vi.fn()} />);
+
+    escribir('2.130');
+    escribir('2130');
+
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('un decimal normal no avisa', () => {
+    render(<Campo alCambiar={vi.fn()} />);
+
+    escribir('2.13');
+
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });

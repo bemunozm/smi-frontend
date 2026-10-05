@@ -1,4 +1,6 @@
 import { cloneElement, useId } from 'react';
+import { avisoDeAgrupacion } from '../../lib/decimal';
+
 import type { ReactElement, ReactNode } from 'react';
 import {
   Button as AriaButton,
@@ -292,19 +294,29 @@ export function Campo({
   label,
   requerido,
   hint,
+  aviso,
+  error,
   unidad,
   children,
 }: {
   label?: ReactNode;
   requerido?: boolean;
   hint?: ReactNode;
+  /** Advertencia que no impide guardar. */
+  aviso?: ReactNode;
+  /** Lo escrito no vale: se muestra en rojo bajo el campo. */
+  error?: ReactNode;
   /** Sufijo fijo dentro del campo: `h`, `L`, `t`, `%`. */
   unidad?: string;
-  children: ReactElement<{ id?: string; 'aria-describedby'?: string }>;
+  children: ReactElement<{ id?: string; 'aria-describedby'?: string; numerico?: boolean; value?: unknown }>;
 }) {
   const base = useId();
   const idCampo = `${base}-campo`;
   const idHint = `${base}-hint`;
+
+  // Un campo numérico con aspecto de "2.130" avisa cómo se va a leer.
+  const valor = children.props.numerico ? children.props.value : undefined;
+  const avisoAgrupacion = typeof valor === 'string' ? avisoDeAgrupacion(valor) : null;
 
   const control = cloneElement(children, {
     id: children.props.id ?? idCampo,
@@ -332,6 +344,18 @@ export function Campo({
         <span id={idHint}>
           <Hint>{hint}</Hint>
         </span>
+      )}
+      {error && (
+        <span className="text-[12.5px] leading-snug font-semibold text-[var(--danger)]" role="alert">
+          {error}
+        </span>
+      )}
+      {[aviso, avisoAgrupacion].map((texto, i) =>
+        texto ? (
+          <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" key={i} role="status">
+            {texto}
+          </span>
+        ) : null,
       )}
     </div>
   );

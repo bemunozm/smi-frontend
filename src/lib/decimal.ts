@@ -44,6 +44,22 @@ export function parseDecimal(texto: string): number | null {
   return Number.isFinite(valor) ? valor : null;
 }
 
+const PARECE_AGRUPADO = /^[1-9]\d{0,2}[.,]\d{3}$/;
+
+/**
+ * Aviso para un texto que parece un valor con separador de miles (`2.130`,
+ * `2,130`): como un `.` o una `,` sueltos son el decimal, se leería `2,13`. No
+ * bloquea; dice cómo se leerá y cómo escribir el otro valor. `null` si el texto no
+ * tiene ese aspecto.
+ */
+export function avisoDeAgrupacion(texto: string): string | null {
+  const limpio = texto.trim();
+  if (!PARECE_AGRUPADO.test(limpio)) return null;
+  const leido = parseDecimal(limpio);
+  if (leido == null) return null;
+  return `Se guardará ${formatDecimalInput(leido, 3)}. Si querías ${limpio.replace(/[.,]/, '')}, escribilo sin punto ni coma.`;
+}
+
 /**
  * Número → texto de un campo de formulario, con coma decimal y sin miles: lo
  * que `parseDecimal` vuelve a leer sin cambiar el valor.

@@ -270,6 +270,44 @@ describe('useShiftRegister', () => {
     expect(payload.id).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
+  describe('horómetro inicial de la apertura', () => {
+    async function conEquipo(horometro: string) {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const hook = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(hook.result.current.disponibles).toHaveLength(1));
+      act(() => {
+        hook.result.current.setApertura((a) => ({ ...a, equipoId: 'eq_1', operatorId: 'op_1', horometro }));
+      });
+      await waitFor(() => expect(hook.result.current.equipoElegido?.id).toBe('eq_1'));
+      return hook.result;
+    }
+
+    it('vacío conserva la última lectura del equipo', async () => {
+      const result = await conEquipo('');
+      expect(result.current.valorInicialApertura).toBe(4218.7);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('un texto que no es un número es un error y NO cae a la última lectura', async () => {
+      const result = await conEquipo('2.130.5');
+      expect(result.current.horometroInvalido).toBe(true);
+      expect(result.current.valorInicialApertura).toBeNull();
+    });
+
+    it('menor que la última lectura avisa (bajoUltimaLectura), pero el valor sigue siendo válido', async () => {
+      const result = await conEquipo('2.130');
+      expect(result.current.valorInicialApertura).toBe(2.13);
+      expect(result.current.bajoUltimaLectura).toBe(true);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('igual o mayor que la última lectura no avisa', async () => {
+      expect((await conEquipo('4218,7')).current.bajoUltimaLectura).toBe(false);
+      expect((await conEquipo('4300')).current.bajoUltimaLectura).toBe(false);
+    });
+  });
+
   it('abrir() no hace nada sin operador elegido (guardia silenciosa)', async () => {
     mockApis();
     const { Wrapper } = withQueryClient();
