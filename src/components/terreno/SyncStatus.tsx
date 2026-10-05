@@ -7,8 +7,8 @@ import { usePrepareOffline } from '../../hooks/usePrepareOffline';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { CONTAINER } from '../../layout/TerrenoLayout';
-import type { CloseCardOp, OutboxOp } from '../../offline/db';
-import { discardOp, retryOp } from '../../offline/outbox';
+import { dependientesDe, type OutboxOp } from '../../offline/db';
+import { discardOp, overwriteOp, retryOp } from '../../offline/outbox';
 import { useOutboxOps } from '../../offline/useOutboxOps';
 import { useSyncState } from '../../offline/replay';
 import type { Equipment } from '../../types/equipment';
@@ -51,19 +51,18 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined): string {
       const codigo = codigoEquipo(equipos, op.payload.equipoId);
       return codigo ? `Trabajo extra · ${codigo}` : 'Trabajo extra';
     }
+    case 'httpWrite':
+      // La etiqueta la armó el registro de endpoints al encolar.
+      return op.label;
   }
 }
 
-/** El `closeCard` que depende de ESTE `openCard` (misma `cardId`), si
- * existe: `nextPendingOp` (`offline/replay.ts`) lo retiene sin mandarlo
- * mientras la apertura siga en `needs_attention`, así que acá se avisa por
- * qué ese cierre no avanza, y `discardOp` (`offline/outbox.ts`) lo arrastra
- * si se descarta la apertura. Busca en TODAS las operaciones (no solo las
- * de atención): el cierre dependiente sigue `pending_upload`/`pending_claim`,
- * nunca `needs_attention` por sí mismo. */
-function cierreDependiente(op: OutboxOp, ops: OutboxOp[]): CloseCardOp | undefined {
-  if (op.type !== 'openCard') return undefined;
-  return ops.find((o): o is CloseCardOp => o.type === 'closeCard' && o.payload.cardId === op.id);
+/** Lo que depende de ESTA operación (`dependsOn`, transitivo): `nextPendingOp`
+ * (`offline/replay.ts`) lo retiene sin mandarlo mientras siga en
+ * `needs_attention`, y `discardOp` (`offline/outbox.ts`) lo arrastra si se
+ * descarta. Busca en TODAS las operaciones, no solo las de atención. */
+function dependientes(op: OutboxOp, ops: OutboxOp[]): OutboxOp[] {
+  return dependientesDe(op.id, ops);
 }
 
 function PrepItemRow({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -174,7 +173,9 @@ export function SyncStatus() {
                     Requieren atención
                   </span>
                   {opsAtencion.map((op) => {
-                    const dependiente = cierreDependiente(op, ops);
+                    const deps = dependientes(op, ops);
+                    const dependiente = deps.find((o) => o.type === 'closeCard');
+                    const esStale = op.lastError?.code === 'STALE_UPDATE' && op.type === 'httpWrite';
                     return (
                       <div key={op.id} className="flex flex-col gap-2 rounded-2xl border border-border p-3">
                         <div className="flex items-start justify-between gap-2">
@@ -184,18 +185,27 @@ export function SyncStatus() {
                         <p className="m-0 text-[13px] text-[var(--danger)]">
                           {op.lastError?.message ?? 'El servidor rechazó esta operación.'}
                         </p>
-                        {dependiente && (
+                        {dependiente ? (
                           <p className="m-0 text-[12.5px] text-muted-foreground">
                             Esta tarjeta también tiene un cierre guardado (con foto): se envía solo cuando resuelvas
                             la apertura.
                           </p>
+                        ) : (
+                          deps.length > 0 && (
+                            <p className="m-0 text-[12.5px] text-muted-foreground">
+                              Hay {deps.length === 1 ? '1 cambio guardado' : `${deps.length} cambios guardados`} que
+                              dependen de este: se envían cuando lo resuelvas.
+                            </p>
+                          )
                         )}
                         {descartando === op.id ? (
                           <div className="flex flex-col gap-2 rounded-xl bg-[var(--danger-soft)] p-2.5">
                             <span className="text-[12.5px] font-semibold text-[var(--danger)]">
                               {dependiente
                                 ? 'Se descarta la apertura y también su cierre guardado con la foto. No se puede deshacer.'
-                                : '¿Descartar? No se puede deshacer.'}
+                                : deps.length > 0
+                                  ? 'Se descarta este registro y los cambios guardados que dependen de él. No se puede deshacer.'
+                                  : '¿Descartar? No se puede deshacer.'}
                             </span>
                             <div className="flex gap-2">
                               <button
@@ -219,13 +229,23 @@ export function SyncStatus() {
                           </div>
                         ) : (
                           <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => user?.id && void retryOp(op.id, user.id)}
-                              className="min-h-9 flex-1 rounded-lg border border-border text-[13px] font-semibold"
-                            >
-                              Reintentar
-                            </button>
+                            {esStale ? (
+                              <button
+                                type="button"
+                                onClick={() => user?.id && void overwriteOp(op.id, user.id)}
+                                className="min-h-9 flex-1 rounded-lg border border-border text-[13px] font-semibold"
+                              >
+                                Sobrescribir
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => user?.id && void retryOp(op.id, user.id)}
+                                className="min-h-9 flex-1 rounded-lg border border-border text-[13px] font-semibold"
+                              >
+                                Reintentar
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setDescartando(op.id)}

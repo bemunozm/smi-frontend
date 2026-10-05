@@ -32,3 +32,28 @@ export const HOROMETRO_KEY = ['horometro'] as const;
  * exactamente en esta key. `offline/replay.ts` la lee para completar el
  * código de equipo de un registro sincronizado sin importar `hooks/`. */
 export const EQUIPMENT_KEY = ['equipment'] as const;
+
+/** Raíz de todo lo de tarjetas de turno (`mine` + el historial de cambios de
+ * cada una): invalidarla refresca los dos. */
+export const SHIFT_CARDS_KEY = ['shift-cards'] as const;
+
+/** Historial de cambios (`GET /shift-cards/:id/changes`). Cuelga de
+ * `SHIFT_CARDS_KEY`, así una edición lo refresca invalidando solo la raíz. */
+export const shiftCardCambiosKey = (id: string) => [...SHIFT_CARDS_KEY, id, 'cambios'] as const;
+
+/**
+ * Nombres de las keys que una operación del outbox puede invalidar al
+ * terminar. La operación persiste el NOMBRE, no el arreglo: así una key que se
+ * reorganice más adelante no deja operaciones viejas apuntando a una que ya no
+ * existe (ver `offline/endpoints.ts` y `offline/replay.ts`).
+ */
+export const QUERY_KEYS = {
+  shiftCards: SHIFT_CARDS_KEY,
+  shiftCardsMine: SHIFT_CARDS_MINE_KEY,
+  hallazgos: HALLAZGOS_KEY,
+  trabajosExtra: TRABAJOS_EXTRA_KEY,
+  horometro: HOROMETRO_KEY,
+  equipment: EQUIPMENT_KEY,
+} as const;
+
+export type QueryKeyName = keyof typeof QUERY_KEYS;

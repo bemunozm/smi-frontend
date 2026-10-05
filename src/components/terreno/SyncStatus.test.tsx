@@ -9,12 +9,13 @@ import type { SyncState } from '../../offline/replay';
 import { queryClient } from '../../lib/query-client';
 import { EQUIPMENT_KEY } from '../../hooks/useEquipment';
 
-const { retryOpMock, discardOpMock } = vi.hoisted(() => ({
+const { retryOpMock, discardOpMock, overwriteOpMock } = vi.hoisted(() => ({
+  overwriteOpMock: vi.fn(),
   retryOpMock: vi.fn(),
   discardOpMock: vi.fn(),
 }));
 
-vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discardOpMock }));
+vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discardOpMock, overwriteOp: overwriteOpMock }));
 
 let mockSyncState: SyncState = {
   pendingCount: 0,
@@ -78,6 +79,7 @@ function attentionOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
     attempts: 1,
     lastError: { message: 'CA-011 está ocupado por Marcela Pizarro', code: 'EQUIPMENT_BUSY' },
     createdAt: Date.now(),
+    seq: Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 'op-1',
@@ -104,7 +106,9 @@ function pendingCloseOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
     status: 'pending_upload',
     attempts: 0,
     photoId: 'close-1',
+    dependsOn: ['op-1'],
     createdAt: Date.now(),
+    seq: Date.now(),
     updatedAt: Date.now(),
     payload: {
       cardId: 'op-1',
@@ -340,6 +344,7 @@ describe('SyncStatus — etiquetas de hallazgos y trabajos extra', () => {
       attempts: 1,
       lastError: { message: 'Rechazado por el servidor', code: 'OPERATOR_INACTIVE' },
       createdAt: Date.now(),
+      seq: Date.now(),
       updatedAt: Date.now(),
       ...op,
     } as OutboxOp;
@@ -415,5 +420,72 @@ describe('SyncStatus — etiquetas de hallazgos y trabajos extra', () => {
 
     expect(screen.getByText('Hallazgo')).toBeTruthy();
     expect(screen.getByText('Trabajo extra')).toBeTruthy();
+  });
+});
+
+function httpWriteOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
+  return {
+    id: 'w-1',
+    type: 'httpWrite',
+    v: 1,
+    userId: 'u1',
+    status: 'needs_attention',
+    attempts: 0,
+    seq: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    endpoint: 'shiftCard.edit',
+    params: { id: 'card-1' },
+    body: { valorFinal: 140 },
+    expected: { valorFinal: 130 },
+    label: 'Edición de tarjeta · EX-005',
+    lastError: { code: 'STALE_UPDATE', status: 409, message: 'Otra persona cambió estos datos mientras tanto.' },
+    ...overrides,
+  } as OutboxOp;
+}
+
+describe('SyncStatus — escrituras genéricas (httpWrite)', () => {
+  it('la etiqueta sale del registro de endpoints (persistida en la operación)', () => {
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [httpWriteOp()];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByText('Edición de tarjeta · EX-005')).toBeTruthy();
+  });
+
+  it('un STALE_UPDATE ofrece "Sobrescribir" (no "Reintentar") y llama a overwriteOp', () => {
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [httpWriteOp()];
+    renderBar();
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sobrescribir' }));
+
+    expect(overwriteOpMock).toHaveBeenCalledWith('w-1', 'u1');
+    expect(retryOpMock).not.toHaveBeenCalled();
+  });
+
+  it('un httpWrite en atención por otra razón sigue con "Reintentar"', () => {
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [httpWriteOp({ lastError: { code: 'NOT_OWNER', status: 403, message: 'No podés.' } })];
+    renderBar();
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sobrescribir' })).toBeNull();
+  });
+
+  it('descartar avisa que arrastra los cambios que dependen de él', () => {
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [httpWriteOp(), httpWriteOp({ id: 'w-2', status: 'pending', dependsOn: ['w-1'], lastError: undefined })];
+    renderBar();
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByText(/1 cambio guardado que dependen de este/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    expect(screen.getByText(/los cambios guardados que dependen de él/)).toBeTruthy();
   });
 });
