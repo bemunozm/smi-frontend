@@ -1,5 +1,5 @@
 /**
- * Reglas del AdBlue del cierre de tarjeta (Acta N.° 004). El servidor exige
+ * Reglas del AdBlue del cierre de tarjeta. El servidor exige
  * litros > 0 y ≤ 1000 cuando se marcó AdBlue; arriba de 30 L solo se avisa,
  * porque una carga grande existe pero casi siempre es un dedo de más.
  */

@@ -1,20 +1,21 @@
 import { ArrowRight, Check, Lock } from 'lucide-react';
 
 import type { UseEditarTarjetaResult } from '../../hooks/useEditarTarjeta';
-import { aNumero } from '../../hooks/shift-register-helpers';
+import { parseDecimal } from '../../lib/decimal';
 import { AdBlueCampos } from './AdBlueCampos';
 import { AvisoEdicion, Boton, Calculado, Campo, Form, Hint, HistorialCambios, Input, Selector, Textarea } from './ui';
 
 function diferenciaHoras(inicial: string, final: string): number | null {
-  const a = aNumero(inicial);
-  const b = aNumero(final);
+  const a = parseDecimal(inicial);
+  const b = parseDecimal(final);
   return a == null || b == null ? null : b - a;
 }
 
 const fmt = (n: number) => n.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
- * Corregir una tarjeta de turno (Acta N.° 004, R13). Abierta: operador,
+ * Corregir una tarjeta de turno ya enviada (queda en su historial de cambios).
+ * Abierta: operador,
  * horómetro inicial y observaciones. Cerrada: además horómetro final, litros y
  * AdBlue. Los datos y las reglas viven en `useEditarTarjeta`; acá solo se dibuja.
  */

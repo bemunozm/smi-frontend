@@ -1,6 +1,7 @@
 export const fmtNum = (n: number) => n.toLocaleString('es-CL');
-export const fmtMoney = (n: number) =>
-  n.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 });
+/** Hasta `maxDecimales` decimales, sin rellenar con ceros: 12,5 → `12,5`; 12 → `12`. */
+export const fmtDecimales = (n: number, maxDecimales: number) =>
+  n.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: maxDecimales });
 export const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('es-CL');
 export const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });

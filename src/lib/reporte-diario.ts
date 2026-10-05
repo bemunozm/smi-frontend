@@ -1,3 +1,5 @@
+import { parseDecimal } from './decimal';
+
 /**
  * Cálculos del reporte diario del supervisor.
  *
@@ -9,15 +11,12 @@
  */
 
 /**
- * Lee un número escrito en formato es-CL, como lo guardan los campos del
- * formulario: «2.160» son dos mil ciento sesenta y «3,5» son tres y medio.
- * Un campo vacío o a medio escribir vale cero en vez de NaN — el supervisor
- * borra un campo para corregirlo y el total no tiene por qué romperse
- * mientras tanto.
+ * Lee un campo numérico del formulario (`parseDecimal`). Un campo vacío o a
+ * medio escribir vale cero en vez de `null`: el supervisor borra un campo para
+ * corregirlo y el total no tiene por qué romperse mientras tanto.
  */
-export function aNumero(valor: string): number {
-  const n = Number.parseFloat(valor.replace(/\./g, '').replace(',', '.'));
-  return Number.isNaN(n) ? 0 : n;
+export function numeroOCero(valor: string): number {
+  return parseDecimal(valor) ?? 0;
 }
 
 export interface SeccionesCamiones {
@@ -42,7 +41,7 @@ export interface SeccionNumerica {
  *
  * Es un contador **por sección** y no hay un total que las sume: cada tipo de
  * camión —internos, Mina Caleta, mineras— se cobra con su propia tarifa
- * (Acta N.° 004, R9). Sumarlas daría una cifra que no corresponde a ninguna
+ * (cada tipo tiene tarifa distinta). Sumarlas daría una cifra que no corresponde a ninguna
  * tarifa y que invita a facturar mal.
  *
  * Vive acá, y no en la vista, porque la regla la aplican dos lados: el
@@ -59,8 +58,8 @@ export function vueltasDeSeccion(s: SeccionNumerica): number {
  */
 export function seccionesDelFormulario(s: SeccionesCamiones): SeccionNumerica[] {
   return [
-    { camiones: aNumero(s.camionesInternos), vueltas: aNumero(s.vueltasInternos) },
-    { camiones: aNumero(s.camionesMinaCaleta), vueltas: aNumero(s.vueltasMinaCaleta) },
-    { camiones: aNumero(s.camionesMinera), vueltas: aNumero(s.vueltasMinera) },
+    { camiones: numeroOCero(s.camionesInternos), vueltas: numeroOCero(s.vueltasInternos) },
+    { camiones: numeroOCero(s.camionesMinaCaleta), vueltas: numeroOCero(s.vueltasMinaCaleta) },
+    { camiones: numeroOCero(s.camionesMinera), vueltas: numeroOCero(s.vueltasMinera) },
   ];
 }

@@ -1,7 +1,8 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from '@heroui/react';
 
-import { aNumero, type TarjetaTurno } from './shift-register-helpers';
+import { formatDecimalInput, parseDecimal } from '../lib/decimal';
+import type { TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { generateUuid } from '../lib/uuid';
@@ -51,25 +52,23 @@ export interface UseCierreFormResult {
 export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCierreFormResult {
   const [cierre, setCierre] = useState<CierreState>(DEFAULT_CIERRE);
 
-  /** Foto del surtidor, OCR y EXIF — mismo flujo compartido de Flota que ya
-   * usaba la maqueta (`usePhotoCaptureFlow` + `FotoRespaldoField`). La
-   * SUBIDA no la dispara esta pantalla (`foto.upload` queda sin uso acá): el
-   * archivo se guarda comprimido en Dexie (`enqueueCloseCard`) y se sube
-   * recién durante el replay (`offline/replay.ts`). */
+  /** Foto del surtidor, OCR y EXIF (`usePhotoCaptureFlow` + `FotoRespaldoField`).
+   * La foto no se sube desde la pantalla: se guarda comprimida en Dexie
+   * (`enqueueCloseCard`) y se sube recién durante el replay (`offline/replay.ts`). */
   const foto = usePhotoCaptureFlow((litros) =>
     setCierre((c) => ({
       ...c,
-      litros: litros.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+      litros: formatDecimalInput(litros, 1),
     })),
   );
 
   const [cerrandoId, setCerrandoId] = useState<string | null>(null);
   const cerrando = tarjetas.find((t) => t.id === cerrandoId) ?? null;
-  const finalNum = aNumero(cierre.final);
+  const finalNum = parseDecimal(cierre.final);
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
 
-  const adBlueLitrosNum = aNumero(cierre.adBlueLitros);
+  const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
   const adBlueIncompletoCierre = adBlueIncompleto(cierre.adBlue, adBlueLitrosNum);
 
@@ -95,7 +94,7 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
         {
           closeClientId: generateUuid(),
           valorFinal: finalNum,
-          fuelLiters: aNumero(cierre.litros) ?? 0,
+          fuelLiters: parseDecimal(cierre.litros) ?? 0,
           adBlue: cierre.adBlue,
           ...(cierre.adBlue ? { adBlueLiters: adBlueCierre.litros ?? undefined } : {}),
           observaciones: cierre.observaciones.trim() || undefined,

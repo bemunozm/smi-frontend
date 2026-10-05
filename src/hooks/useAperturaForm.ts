@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from '@heroui/react';
 
-import { aNumero } from './shift-register-helpers';
+import { parseDecimal } from '../lib/decimal';
 import { enqueueOpenCard } from '../offline/outbox';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
@@ -25,7 +25,7 @@ export interface UseAperturaFormResult {
   apertura: AperturaState;
   setApertura: Dispatch<SetStateAction<AperturaState>>;
   equipoElegido: Equipment | undefined;
-  /** `aNumero(apertura.horometro) ?? equipoElegido?.currentHourmeter`, SIN
+  /** `parseDecimal(apertura.horometro) ?? equipoElegido?.currentHourmeter`, SIN
    * fallback a `0` — `null` cuando no hay ningún valor válido, así el botón
    * de agregar se deshabilita en vez de abrir una tarjeta con horómetro 0
    * sin que el supervisor lo haya pedido. */
@@ -42,7 +42,7 @@ export interface UseAperturaFormResult {
 export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
-  const valorInicialApertura = aNumero(apertura.horometro) ?? equipoElegido?.currentHourmeter ?? null;
+  const valorInicialApertura = parseDecimal(apertura.horometro) ?? equipoElegido?.currentHourmeter ?? null;
 
   // Solo cubre el ENCOLADO (rápido, un `put` a Dexie) — la subida y el POST
   // real pasan en segundo plano en el replay. Igual queda la protección

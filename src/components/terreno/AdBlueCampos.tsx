@@ -4,7 +4,7 @@ import { ADBLUE_AVISO_LITROS, type ResultadoAdBlue } from '../../lib/adblue';
 import { Campo, Input, Label, Segmentado } from './ui';
 
 /**
- * AdBlue del cierre de tarjeta (Acta N.° 004): ¿cargó? Sí/No y, si sí, cuántos
+ * AdBlue del cierre de tarjeta: ¿cargó? Sí/No y, si sí, cuántos
  * litros. El error (sin litros, más de 1000 L) impide guardar; el aviso de más
  * de 30 L no — es un «¿seguro?», no un rechazo.
  */
