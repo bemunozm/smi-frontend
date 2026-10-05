@@ -8,23 +8,28 @@ import { useOutboxOps } from '../../offline/useOutboxOps';
 import { useSyncState } from '../../offline/replay';
 import { isRole } from '../../types/roles';
 import { syncStatusPresentation, type SyncStatusTono } from '../../offline/sync-status-presentation';
-import { PrepChecklist } from '../sync/PrepChecklist';
+import { PrepChecklist, PREP_DETAIL_LIMITATION } from '../sync/PrepChecklist';
 import { SyncOpsList } from '../sync/SyncOpsList';
 import { SyncSheet } from '../sync/SyncSheet';
 
+const ESTILOS: Record<SyncStatusTono, string> = {
+  danger: 'bg-danger-soft text-danger-soft-foreground border-danger/25',
+  warning: 'bg-warning-soft text-warning-soft-foreground border-warning/30',
+  success: 'bg-success-soft text-success-soft-foreground border-success/25',
+  neutral: 'bg-white/10 text-white border-transparent',
+};
+
 /**
- * Barra + hoja de estado de sincronización — reemplaza a `BarraSinSenal`
- * (`layout/TerrenoLayout.tsx`), que prometía "se envía solo al volver la
- * conexión" sin ningún código detrás (RFC "Supervisión en Terreno" §Diseño
- * → Offline). Acá el contador es REAL: sale del outbox de Dexie
- * (`offline/replay.ts#useSyncState`), en vivo.
+ * Barra + hoja de estado de sincronización de Terreno. El contador es REAL: sale
+ * del outbox de Dexie (`offline/replay.ts#useSyncState`), en vivo, y sigue
+ * contando también cuando la sesión es la guardada de un arranque sin señal.
  *
  * Consumidor puro de `useSyncState()` — el motor (`useSyncEngine()`) vive a
  * nivel de sesión en `components/SyncEngineMount.tsx`, no acá: si viviera
  * en este componente (montado solo dentro de `TerrenoLayout`), navegar a
  * `/` lo desmontaría y la sincronización se detendría hasta volver a
- * Terreno. La hoja (lista de atención, "Preparar para uso sin señal") se arma
- * con las piezas de `components/sync/`, las mismas que usa oficina.
+ * Terreno. La hoja (la cola con su estado, "Preparar para uso sin señal") se
+ * arma con las piezas de `components/sync/`, las mismas que usa oficina.
  */
 export function SyncStatus() {
   const { user, isOfflineSnapshot } = useCurrentUser();
@@ -37,19 +42,12 @@ export function SyncStatus() {
 
   const { tono, icono, texto } = syncStatusPresentation(sync, isOfflineSnapshot, enLinea);
 
-  const estilos: Record<SyncStatusTono, string> = {
-    danger: 'bg-[var(--danger-soft)] text-[var(--danger)] border-[#f3c9c9]',
-    warning: 'bg-[var(--warning-soft)] text-[var(--warning-soft-foreground)] border-[#f1d9a2]',
-    success: 'bg-[var(--success-soft)] text-[var(--success-soft-foreground)] border-[#bfe3cd]',
-    neutral: 'bg-white/10 text-white border-transparent',
-  };
-
   return (
     <>
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className={`flex-none border-b text-[13px] leading-snug ${estilos[tono]}`}
+        className={`flex-none border-b text-[13px] leading-snug ${ESTILOS[tono]}`}
       >
         <div className={`${CONTAINER} flex items-start gap-2.5 py-2.5 text-left`}>
           {icono}
@@ -57,16 +55,14 @@ export function SyncStatus() {
         </div>
       </button>
 
-      {abierto && (
-        <SyncSheet sync={sync} onClose={() => setAbierto(false)}>
-          <SyncOpsList ops={ops} userId={user?.id} equipos={equipos} />
-          <PrepChecklist
-            role={isRole(user?.role) ? user.role : null}
-            titulo="Antes de ir a terreno"
-            descripcion="Precarga los equipos, operadores, tarjetas activas, hallazgos y trabajos para que la pantalla abra igual sin señal."
-          />
-        </SyncSheet>
-      )}
+      <SyncSheet sync={sync} isOpen={abierto} onClose={() => setAbierto(false)}>
+        <SyncOpsList ops={ops} userId={user?.id} equipos={equipos} />
+        <PrepChecklist
+          role={isRole(user?.role) ? user.role : null}
+          titulo="Antes de ir a terreno"
+          descripcion={`Precarga los equipos, operadores, tarjetas activas, hallazgos y trabajos para que la pantalla abra igual sin señal. ${PREP_DETAIL_LIMITATION}`}
+        />
+      </SyncSheet>
     </>
   );
 }

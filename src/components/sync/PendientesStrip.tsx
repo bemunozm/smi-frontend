@@ -2,6 +2,7 @@ import { AlertTriangle, Clock } from 'lucide-react';
 
 import { usePendingWrites } from '../../hooks/usePendingWrites';
 import { plural } from '../../lib/format';
+import type { EndpointResource } from '../../lib/pending-resources';
 
 /**
  * Franja de "N cambios sin sincronizar" para arriba de una lista de oficina. Las
@@ -12,7 +13,7 @@ import { plural } from '../../lib/format';
  *
  * `recursos`: qué escrituras corresponden a la vista (ver `usePendingWrites`).
  */
-export function PendientesStrip({ recursos }: { recursos: readonly string[] }) {
+export function PendientesStrip({ recursos }: { recursos: readonly EndpointResource[] }) {
   const { ops, pendientes, atencion } = usePendingWrites(recursos);
   if (ops.length === 0) return null;
 

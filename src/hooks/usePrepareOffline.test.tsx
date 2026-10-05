@@ -14,6 +14,12 @@ const {
   ordenesListMock,
   actividadesListMock,
   umbralesListMock,
+  resumenMock,
+  movementsMock,
+  notifListMock,
+  notifUnreadMock,
+  intervencionesListMock,
+  combustibleListMock,
 } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
   operatorListMock: vi.fn(),
@@ -27,9 +33,17 @@ const {
   ordenesListMock: vi.fn(),
   actividadesListMock: vi.fn(),
   umbralesListMock: vi.fn(),
+  resumenMock: vi.fn(),
+  movementsMock: vi.fn(),
+  notifListMock: vi.fn(),
+  notifUnreadMock: vi.fn(),
+  intervencionesListMock: vi.fn(),
+  combustibleListMock: vi.fn(),
 }));
 
-vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
+vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock, resumen: resumenMock } }));
+vi.mock('../api/CombustibleAPI', () => ({ listCombustible: combustibleListMock }));
+vi.mock('../api/NotificacionAPI', () => ({ NotificacionAPI: { list: notifListMock, unreadCount: notifUnreadMock } }));
 vi.mock('../api/OperatorAPI', () => ({ OperatorAPI: { list: operatorListMock } }));
 vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
 vi.mock('../api/HallazgosAPI', () => ({ listHallazgos: listHallazgosMock }));
@@ -37,11 +51,12 @@ vi.mock('../api/TrabajosExtraAPI', () => ({ listTrabajosExtra: listTrabajosMock 
 vi.mock('../api/HorometroAPI', () => ({ listHorometro: listHorometroMock }));
 vi.mock('../api/BranchAPI', () => ({ BranchAPI: { list: branchListMock } }));
 vi.mock('../api/CategoryAPI', () => ({ CategoryAPI: { list: categoryListMock } }));
-vi.mock('../api/InventoryAPI', () => ({ InventoryAPI: { listItems: itemsListMock } }));
+vi.mock('../api/InventoryAPI', () => ({ InventoryAPI: { listItems: itemsListMock, listMovements: movementsMock } }));
 vi.mock('../api/MantenimientoAPI', () => ({
   OrdenesAPI: { list: ordenesListMock },
   ActividadesAPI: { list: actividadesListMock },
   UmbralesAPI: { list: umbralesListMock },
+  IntervencionesAPI: { list: intervencionesListMock },
 }));
 
 import { usePrepareOffline } from './usePrepareOffline';
@@ -51,7 +66,9 @@ import {
   BRANCHES_KEY,
   EQUIPMENT_KEY,
   HALLAZGOS_KEY,
+  COMBUSTIBLE_KEY,
   HOROMETRO_KEY,
+  INTERVENCIONES_KEY,
   INVENTORY_KEY,
   OPERATORS_KEY,
   ORDENES_KEY,
@@ -59,6 +76,7 @@ import {
   TRABAJOS_EXTRA_KEY,
   UMBRALES_KEY,
 } from '../lib/query-keys';
+import { BITACORA_ORDENES_PRECARGADAS, PREP_KEYS } from '../config/offline-prep';
 import { ROLES } from '../types/roles';
 
 beforeEach(() => {
@@ -74,6 +92,12 @@ beforeEach(() => {
   ordenesListMock.mockResolvedValue([{ id: 'ot-1' }]);
   actividadesListMock.mockResolvedValue([{ id: 'ac-1' }]);
   umbralesListMock.mockResolvedValue([{ id: 'um-1' }]);
+  resumenMock.mockResolvedValue({ total: 3 });
+  movementsMock.mockResolvedValue([{ id: 'mv-1' }]);
+  notifListMock.mockResolvedValue([{ id: 'n-1' }]);
+  notifUnreadMock.mockResolvedValue(2);
+  intervencionesListMock.mockResolvedValue([{ id: 'in-1' }]);
+  combustibleListMock.mockResolvedValue([{ id: 'cb-1' }]);
 });
 
 afterEach(() => {
@@ -122,6 +146,61 @@ describe('usePrepareOffline', () => {
       equipment: 'ok',
     });
     expect(result.current.preparando).toBe(false);
+  });
+});
+
+describe('usePrepareOffline — modo sin señal y almacenamiento', () => {
+  function stubServiceWorker(controller: object | null) {
+    Object.defineProperty(navigator, 'serviceWorker', { value: { controller }, configurable: true });
+  }
+  function stubStorage(storage: { persist: () => Promise<boolean>; persisted?: () => Promise<boolean> }) {
+    Object.defineProperty(navigator, 'storage', { value: storage, configurable: true });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'serviceWorker');
+    Reflect.deleteProperty(navigator, 'storage');
+  });
+
+  async function preparar() {
+    const { result } = renderHook(() => usePrepareOffline(ROLES.ADMIN));
+    await act(async () => {
+      await result.current.handlePreparar();
+    });
+    return result.current.resultadoPrep!;
+  }
+
+  it('si el service worker NO controla la página, el resultado lo dice (lo precargado no quedó para el modo sin señal)', async () => {
+    stubServiceWorker(null);
+
+    const resultado = await preparar();
+
+    expect(resultado.serviceWorker).toBe('error');
+    expect(resultado.equipment).toBe('ok');
+  });
+
+  it('si el service worker controla la página, lo marca ok', async () => {
+    stubServiceWorker({});
+
+    expect((await preparar()).serviceWorker).toBe('ok');
+  });
+
+  it('pide almacenamiento persistente y lo reporta; si ya lo era, no vuelve a pedirlo', async () => {
+    const persist = vi.fn().mockResolvedValue(true);
+    stubStorage({ persist, persisted: vi.fn().mockResolvedValue(false) });
+    expect((await preparar()).persist).toBe('ok');
+    expect(persist).toHaveBeenCalledTimes(1);
+
+    const persistDeNuevo = vi.fn();
+    stubStorage({ persist: persistDeNuevo, persisted: vi.fn().mockResolvedValue(true) });
+    expect((await preparar()).persist).toBe('ok');
+    expect(persistDeNuevo).not.toHaveBeenCalled();
+  });
+
+  it('si el navegador lo niega, persist es error (la hoja lo muestra como aviso)', async () => {
+    stubStorage({ persist: vi.fn().mockResolvedValue(false) });
+
+    expect((await preparar()).persist).toBe('error');
   });
 });
 
@@ -177,9 +256,49 @@ describe('usePrepareOffline por rol', () => {
   it('ADMIN: todas las listas', async () => {
     const resultado = await preparar(ROLES.ADMIN);
 
-    for (const key of ['equipment', 'branches', 'operators', 'inventory', 'maintenance', 'shiftCards', 'hallazgos', 'trabajosExtra', 'horometro'] as const) {
+    for (const key of PREP_KEYS) {
       expect(resultado[key], key).toBe('ok');
     }
+  });
+
+  it('suma el panel, las notificaciones, los movimientos y la bitácora bajo las keys de las pantallas', async () => {
+    const resultado = await preparar(ROLES.ADMIN);
+
+    expect(resultado).toMatchObject({ dashboard: 'ok', notificaciones: 'ok', movimientos: 'ok', bitacora: 'ok' });
+    expect(queryClient.getQueryData([...EQUIPMENT_KEY, 'resumen'])).toEqual({ total: 3 });
+    expect(queryClient.getQueryData(['notificaciones'])).toEqual([{ id: 'n-1' }]);
+    expect(queryClient.getQueryData(['notificaciones', 'unread'])).toBe(2);
+    expect(queryClient.getQueryData([...INVENTORY_KEY, 'movements', { limit: 200 }])).toEqual([{ id: 'mv-1' }]);
+    expect(movementsMock).toHaveBeenCalledWith({ limit: 200 });
+    expect(queryClient.getQueryData([...INTERVENCIONES_KEY, 'ot-1'])).toEqual([{ id: 'in-1' }]);
+    expect(intervencionesListMock).toHaveBeenCalledWith('ot-1');
+  });
+
+  it('la bitácora se precarga solo para las órdenes más recientes', async () => {
+    ordenesListMock.mockResolvedValue(Array.from({ length: 40 }, (_, i) => ({ id: 'ot-' + String(i) })));
+
+    await preparar(ROLES.MANTENEDOR);
+
+    expect(intervencionesListMock).toHaveBeenCalledTimes(BITACORA_ORDENES_PRECARGADAS);
+    expect(intervencionesListMock).toHaveBeenCalledWith('ot-0');
+    expect(intervencionesListMock).not.toHaveBeenCalledWith('ot-' + String(BITACORA_ORDENES_PRECARGADAS));
+  });
+
+  it('MANTENEDOR: panel, notificaciones, movimientos y bitácora sí; combustible no (es de Terreno)', async () => {
+    const resultado = await preparar(ROLES.MANTENEDOR);
+
+    expect(resultado).toMatchObject({ dashboard: 'ok', notificaciones: 'ok', movimientos: 'ok', bitacora: 'ok' });
+    expect(resultado.combustible).toBeUndefined();
+    expect(combustibleListMock).not.toHaveBeenCalled();
+  });
+
+  it('SUPERVISOR: combustible sí; bitácora no (no ve Mantenimiento)', async () => {
+    const resultado = await preparar(ROLES.SUPERVISOR);
+
+    expect(resultado.combustible).toBe('ok');
+    expect(queryClient.getQueryData(COMBUSTIBLE_KEY)).toEqual([{ id: 'cb-1' }]);
+    expect(resultado.bitacora).toBeUndefined();
+    expect(intervencionesListMock).not.toHaveBeenCalled();
   });
 
   it('un fallo en las listas de una pantalla se reporta como error sin tumbar el resto', async () => {

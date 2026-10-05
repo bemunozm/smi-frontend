@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import type { OutboxOp } from '../offline/db';
@@ -18,14 +18,21 @@ vi.mock('../offline/replay', () => ({
   requestSync: vi.fn(),
 }));
 vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => mockOps }));
-vi.mock('../offline/outbox', () => ({ retryOp: vi.fn(), discardOp: vi.fn(), overwriteOp: vi.fn() }));
-vi.mock('../components/notifications/NotificationBell', () => ({ NotificationBell: () => null }));
-vi.mock('../lib/logout', () => ({ logout: vi.fn(), LogoutBlockedError: class extends Error {} }));
 
-const { prepararMock, usePrepareMock } = vi.hoisted(() => ({
+const { prepararMock, usePrepareMock, logoutMock, countPendingMock } = vi.hoisted(() => ({
   prepararMock: vi.fn(),
   usePrepareMock: vi.fn(),
+  logoutMock: vi.fn(),
+  countPendingMock: vi.fn(),
 }));
+vi.mock('../offline/outbox', () => ({
+  retryOp: vi.fn(),
+  discardOp: vi.fn(),
+  overwriteOp: vi.fn(),
+  countPending: countPendingMock,
+}));
+vi.mock('../components/notifications/NotificationBell', () => ({ NotificationBell: () => null }));
+vi.mock('../lib/logout', () => ({ logout: logoutMock }));
 vi.mock('../hooks/usePrepareOffline', () => ({ usePrepareOffline: usePrepareMock }));
 
 import { Topbar } from './Topbar';
@@ -34,6 +41,7 @@ function sync(overrides: Partial<SyncState> = {}): SyncState {
   return {
     pendingCount: 0,
     attentionCount: 0,
+    otherAccountCount: 0,
     syncing: false,
     authRequired: false,
     lastSyncAt: null,
@@ -75,6 +83,8 @@ beforeEach(() => {
   mockSync = sync();
   mockOps = [];
   usePrepareMock.mockReturnValue({ preparando: false, resultadoPrep: null, handlePreparar: prepararMock });
+  logoutMock.mockResolvedValue(undefined);
+  countPendingMock.mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -104,7 +114,7 @@ describe('Topbar — badge de sincronización', () => {
     renderTopbar();
     fireEvent.click(screen.getByRole('button', { name: /Sincronización: 2 cambios/ }));
 
-    expect(screen.getByRole('dialog', { name: 'Sincronización' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Registros sin señal' })).toBeTruthy();
     expect(screen.getByText('Nueva sucursal · Faena Norte')).toBeTruthy();
     expect(screen.getByText('Ya existe una sucursal con ese nombre')).toBeTruthy();
     expect(usePrepareMock).toHaveBeenCalledWith('MANTENEDOR');
@@ -120,6 +130,49 @@ describe('Topbar — badge de sincronización', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sincronización:/ }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar' })[0]!);
 
-    expect(screen.queryByRole('dialog', { name: 'Sincronización' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Registros sin señal' })).toBeNull();
+  });
+});
+
+describe('Topbar — cerrar sesión', () => {
+  async function pedirCerrarSesion() {
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Cerrar sesión' }));
+  }
+
+  it('sin registros pendientes cierra sesión directo', async () => {
+    renderTopbar();
+
+    await pedirCerrarSesion();
+
+    await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
+    expect(countPendingMock).toHaveBeenCalledWith('u1');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('con registros pendientes pide confirmación explícita y no cierra hasta confirmar', async () => {
+    countPendingMock.mockResolvedValue(3);
+    renderTopbar();
+
+    await pedirCerrarSesion();
+
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo.textContent).toContain('Hay 3 registros sin enviar');
+    expect(dialogo.textContent).toContain('se enviarán cuando vuelvas a iniciar sesión en este equipo');
+    expect(logoutMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar sesión' }));
+    await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('cancelar la confirmación deja la sesión abierta', async () => {
+    countPendingMock.mockResolvedValue(1);
+    renderTopbar();
+
+    await pedirCerrarSesion();
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(logoutMock).not.toHaveBeenCalled();
   });
 });

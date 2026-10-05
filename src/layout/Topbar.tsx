@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, Button, Chip, Dropdown, Label, toast } from '@heroui/react';
+import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
 import type { Key } from '@heroui/react';
 
-import { logout, LogoutBlockedError } from '../lib/logout';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { requestSync, useSyncState } from '../offline/replay';
+import { useSyncState } from '../offline/replay';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
 import { roleChipColor } from '../config/role-colors';
 import { NotificationBell } from '../components/notifications/NotificationBell';
-import { PrepChecklist } from '../components/sync/PrepChecklist';
+import { PREP_DETAIL_LIMITATION, PrepChecklist } from '../components/sync/PrepChecklist';
 import { SyncBadge } from '../components/sync/SyncBadge';
 import { SyncOpsList } from '../components/sync/SyncOpsList';
 import { SyncSheet } from '../components/sync/SyncSheet';
+import { useLogoutConfirmation } from '../components/sync/useLogoutConfirmation';
 
 function initialsFrom(name: string | undefined, email: string): string {
   const source = name?.trim() || email;
@@ -59,6 +59,7 @@ export function Topbar() {
   const sync = useSyncState(user?.id);
   const ops = useOutboxOps(user?.id);
   const [syncAbierta, setSyncAbierta] = useState(false);
+  const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
 
   const role = user && isRole(user.role) ? user.role : null;
 
@@ -72,23 +73,9 @@ export function Topbar() {
       return;
     }
     if (key === 'logout') {
-      // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
-      // Cache Storage privado + navega — ver ese archivo para el porqué
-      // (SEGURIDAD M1, RFC R2-storage). Se
-      // bloquea si `user.id` tiene operaciones sin sincronizar en el outbox
-      // (realista solo para SUPERVISOR, que en la práctica vive en
-      // `TerrenoLayout` — pasa el `userId` igual acá por si algún día un
-      // outbox se usa fuera de Terreno).
-      void logout(navigate, user?.id).catch((error: unknown) => {
-        if (error instanceof LogoutBlockedError) {
-          toast.danger(error.message, {
-            description: 'Los registros quedan guardados en el equipo — no se pierden.',
-            actionProps: { children: 'Sincronizar ahora', onPress: () => requestSync() },
-          });
-          return;
-        }
-        throw error;
-      });
+      // Con registros sin enviar pide confirmación antes de salir; los registros
+      // quedan en el equipo (ver `components/sync/useLogoutConfirmation`).
+      requestLogout();
     }
   };
 
@@ -164,16 +151,15 @@ export function Topbar() {
           </Dropdown>
         </div>
       ) : null}
-      {syncAbierta ? (
-        <SyncSheet sync={sync} onClose={() => setSyncAbierta(false)}>
-          <SyncOpsList ops={ops} userId={user?.id} />
-          <PrepChecklist
-            role={role}
-            titulo="Antes de trabajar sin señal"
-            descripcion="Precarga las listas de las pantallas de tu rol (equipos, inventario, sucursales, operadores, mantenimiento) para que abran igual sin señal."
-          />
-        </SyncSheet>
-      ) : null}
+      {confirmationDialog}
+      <SyncSheet sync={sync} isOpen={syncAbierta} onClose={() => setSyncAbierta(false)}>
+        <SyncOpsList ops={ops} userId={user?.id} />
+        <PrepChecklist
+          role={role}
+          titulo="Antes de trabajar sin señal"
+          descripcion={`Precarga las listas de las pantallas de tu rol (equipos, inventario, sucursales, operadores, mantenimiento) para que abran igual sin señal. ${PREP_DETAIL_LIMITATION}`}
+        />
+      </SyncSheet>
     </header>
   );
 }

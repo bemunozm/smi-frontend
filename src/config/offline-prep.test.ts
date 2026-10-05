@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { NAV_ITEMS } from './nav-items';
-import { prepKeysFor } from './offline-prep';
+import { PREP_KEYS, prepKeysFor } from './offline-prep';
 import { ROLES } from '../types/roles';
 
 describe('prepKeysFor — qué se precarga por rol', () => {
@@ -32,11 +32,32 @@ describe('prepKeysFor — qué se precarga por rol', () => {
   });
 
   it('ADMIN ve todo: precarga todas las listas', () => {
-    expect(prepKeysFor(ROLES.ADMIN)).toHaveLength(9);
+    expect(prepKeysFor(ROLES.ADMIN)).toEqual([...PREP_KEYS]);
+  });
+
+  it('todos los roles con menú precargan el panel y las notificaciones; los movimientos acompañan a Inventario', () => {
+    for (const role of [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]) {
+      expect(prepKeysFor(role), role).toEqual(expect.arrayContaining(['dashboard', 'notificaciones', 'movimientos']));
+    }
+  });
+
+  it('la bitácora acompaña a Mantenimiento y el combustible a Terreno', () => {
+    expect(prepKeysFor(ROLES.MANTENEDOR)).toContain('bitacora');
+    expect(prepKeysFor(ROLES.MANTENEDOR)).not.toContain('combustible');
+    expect(prepKeysFor(ROLES.SUPERVISOR)).toContain('combustible');
+    expect(prepKeysFor(ROLES.SUPERVISOR)).not.toContain('bitacora');
   });
 
   it('sin rol reconocido se prepara lo de Terreno (la barra de Terreno antes de resolver la sesión)', () => {
-    expect(prepKeysFor(null)).toEqual(['equipment', 'operators', 'shiftCards', 'hallazgos', 'trabajosExtra', 'horometro']);
+    expect(prepKeysFor(null)).toEqual([
+      'equipment',
+      'operators',
+      'shiftCards',
+      'hallazgos',
+      'trabajosExtra',
+      'horometro',
+      'combustible',
+    ]);
     expect(prepKeysFor(undefined)).toEqual(prepKeysFor(null));
   });
 

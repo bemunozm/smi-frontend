@@ -3,26 +3,37 @@ import { NAV_ITEMS } from './nav-items';
 
 /** Cada lista que "Preparar para uso sin señal" deja en el caché del equipo. */
 export const PREP_KEYS = [
+  'dashboard',
   'equipment',
   'branches',
   'operators',
   'inventory',
+  'movimientos',
   'maintenance',
+  'bitacora',
+  'notificaciones',
   'shiftCards',
   'hallazgos',
   'trabajosExtra',
   'horometro',
+  'combustible',
 ] as const;
 export type PrepKey = (typeof PREP_KEYS)[number];
+
+/** Cuántas órdenes de trabajo (las más recientes) dejan su bitácora precargada: la
+ * bitácora es una lectura por orden, y precargarlas todas serían cientos de requests. */
+export const BITACORA_ORDENES_PRECARGADAS = 15;
 
 /** Qué listas necesita cada pantalla del menú (`NAV_ITEMS`) para abrir sin señal:
  * las propias más las que sus formularios ofrecen en selectores. */
 const PREP_BY_ROUTE: Readonly<Record<string, readonly PrepKey[]>> = {
+  '/': ['dashboard'],
   '/equipos': ['equipment', 'branches', 'operators'],
-  '/inventario': ['inventory', 'branches'],
+  '/inventario': ['inventory', 'branches', 'movimientos'],
   '/operadores': ['operators'],
-  '/mantenimiento': ['maintenance', 'equipment'],
-  '/terreno': ['equipment', 'operators', 'shiftCards', 'hallazgos', 'trabajosExtra', 'horometro'],
+  '/mantenimiento': ['maintenance', 'equipment', 'bitacora'],
+  '/notificaciones': ['notificaciones'],
+  '/terreno': ['equipment', 'operators', 'shiftCards', 'hallazgos', 'trabajosExtra', 'horometro', 'combustible'],
 };
 
 /** Sin rol reconocido (la barra de Terreno antes de resolver la sesión) se prepara

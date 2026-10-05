@@ -7,9 +7,15 @@ así no hay CORS ni cookies entre sitios distintos.
 
 ```
 Tablet ─HTTPS→ cloudflared ─→ vite preview :4173
-                                ├─ /api/*       → :3001 (Nest)
+                                ├─ /api/*       → :3003 (Nest)
                                 └─ /smi-files/* → :9000 (MinIO, Host preservado)
 ```
+
+Los destinos del proxy salen de `VITE_PREVIEW_API_TARGET` (default
+`http://localhost:3003`) y `VITE_PREVIEW_STORAGE_TARGET` (default
+`http://localhost:9000`); ver `.env.example`. En esta máquina :3000, :3001 y
+:3002 son de otros proyectos: el backend de SMI va en :3003 (`PORT=3003`) y el
+preview en :4173.
 
 ## 1. Levantar el túnel primero (da la URL)
 
@@ -27,7 +33,7 @@ Las variables de entorno del proceso tienen prioridad sobre `.env` (dotenv no
 las pisa):
 
 ```bash
-FRONTEND_URL=<origen> BETTER_AUTH_URL=<origen> STORAGE_PUBLIC_ENDPOINT=<origen> \
+PORT=3003 FRONTEND_URL=<origen> BETTER_AUTH_URL=<origen> STORAGE_PUBLIC_ENDPOINT=<origen> \
 AUTH_RATE_LIMIT_ENABLED=true npm run start:dev
 ```
 
@@ -43,6 +49,10 @@ AUTH_RATE_LIMIT_ENABLED=true npm run start:dev
 VITE_API_URL=<origen> VITE_PREVIEW_PROXY=true npm run build
 VITE_PREVIEW_PROXY=true npx vite preview --port 4173 --strictPort
 ```
+
+Si el backend o MinIO no están en :3003 / :9000, agregá `VITE_PREVIEW_API_TARGET`
+y `VITE_PREVIEW_STORAGE_TARGET` al comando del preview: el proxy se lee al
+arrancar `vite preview`, no queda horneado en el build.
 
 `VITE_PREVIEW_PROXY=true` va en **los dos** comandos:
 - en el build, porque `VITE_API_URL` arma el `apiReadPattern` del service worker;

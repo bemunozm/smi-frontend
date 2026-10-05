@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { TerrenoLayout } from './TerrenoLayout';
@@ -17,29 +17,23 @@ vi.mock('../components/terreno/SyncStatus', () => ({
   SyncStatus: () => <div data-testid="sync-status-stub" />,
 }));
 
-const { requestSyncMock } = vi.hoisted(() => ({ requestSyncMock: vi.fn() }));
-vi.mock('../offline/replay', () => ({ requestSync: requestSyncMock }));
+const { logoutMock, countPendingMock, toastDangerMock } = vi.hoisted(() => ({
+  logoutMock: vi.fn(),
+  countPendingMock: vi.fn(),
+  toastDangerMock: vi.fn(),
+}));
+vi.mock('../lib/logout', () => ({ logout: logoutMock }));
+// `offline/outbox.ts` importa Dexie: acá solo importa el número de registros
+// sin enviar que ve la confirmación de cerrar sesión.
+vi.mock('../offline/outbox', () => ({ countPending: countPendingMock }));
+vi.mock('../hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({ user: { id: 'u1', name: 'Ana Soto', email: 'ana@smi.cl' }, role: 'SUPERVISOR' }),
+}));
 
-// `LogoutBlockedError` real vive en `lib/logout.ts`, que importa
-// `offline/outbox.ts` (Dexie) — cargar ese módulo de verdad acá obligaría a
-// este archivo a arrastrar `fake-indexeddb` sin necesitarlo (el candado de
-// logout en sí ya tiene su propia cobertura en `lib/logout.test.ts`). Se
-// mockea una clase equivalente: a `TerrenoLayout.tsx` solo le importa poder
-// hacer `error instanceof LogoutBlockedError` y leer `.message`.
-const { logoutMock, LogoutBlockedErrorMock } = vi.hoisted(() => {
-  class LogoutBlockedErrorMock extends Error {
-    pendingCount: number;
-    constructor(pendingCount: number) {
-      super(`Hay ${pendingCount} registro(s) sin sincronizar — sincronizá antes de salir.`);
-      this.pendingCount = pendingCount;
-    }
-  }
-  return { logoutMock: vi.fn(), LogoutBlockedErrorMock };
-});
-vi.mock('../lib/logout', () => ({ logout: logoutMock, LogoutBlockedError: LogoutBlockedErrorMock }));
-
-const { toastDangerMock } = vi.hoisted(() => ({ toastDangerMock: vi.fn() }));
-vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock } }));
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
+  toast: Object.assign(vi.fn(), { danger: toastDangerMock }),
+}));
 
 /**
  * El layout elige DÓNDE vive la navegación según el ancho, y esa elección pasa
@@ -148,37 +142,55 @@ describe('TerrenoLayout', () => {
   });
 
   /**
-   * `logout()` (`lib/logout.ts`) se bloquea con
-   * `LogoutBlockedError` si el usuario tiene operaciones sin sincronizar —
-   * el layout debe atrapar ESE error puntual (no cualquier otro) y ofrecer
-   * "Sincronizar ahora" en vez de dejar que la excepción se propague.
+   * Cerrar sesión con registros sin enviar: se puede, pero antes se confirma y se
+   * dice cuántos quedan y qué pasa con ellos. La cola no se borra (`lib/logout.ts`).
    */
-  describe('salir con pendientes sin sincronizar', () => {
-    it('logout exitoso: navega igual que siempre, sin mostrar ningún aviso', async () => {
-      logoutMock.mockResolvedValueOnce(undefined);
+  describe('salir con registros sin enviar', () => {
+    beforeEach(() => {
+      logoutMock.mockResolvedValue(undefined);
+      countPendingMock.mockResolvedValue(0);
+    });
+
+    it('sin pendientes: cierra sesión directo, sin confirmación ni aviso', async () => {
       renderLayout('desktop');
       fireEvent.click(screen.getByLabelText('Menú'));
 
       fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
 
       await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
+      expect(countPendingMock).toHaveBeenCalledWith('u1');
+      expect(screen.queryByRole('alertdialog')).toBeNull();
       expect(toastDangerMock).not.toHaveBeenCalled();
     });
 
-    it('logout bloqueado: muestra el aviso con la acción "Sincronizar ahora"', async () => {
-      logoutMock.mockRejectedValueOnce(new LogoutBlockedErrorMock(2));
+    it('con pendientes: pide confirmación con el aviso y cierra solo al confirmar', async () => {
+      countPendingMock.mockResolvedValue(2);
+      renderLayout('desktop');
+      fireEvent.click(screen.getByLabelText('Menú'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+
+      const dialogo = await screen.findByRole('alertdialog');
+      expect(dialogo.textContent).toContain(
+        'Hay 2 registros sin enviar; se enviarán cuando vuelvas a iniciar sesión en este equipo.',
+      );
+      expect(logoutMock).not.toHaveBeenCalled();
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar sesión' }));
+      await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
+    });
+
+    it('si cerrar la sesión falla, avisa en vez de dejar la excepción suelta', async () => {
+      logoutMock.mockRejectedValueOnce(new Error('network'));
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       renderLayout('desktop');
       fireEvent.click(screen.getByLabelText('Menú'));
 
       fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
 
       await waitFor(() => expect(toastDangerMock).toHaveBeenCalledTimes(1));
-      const [message, options] = toastDangerMock.mock.calls[0]!;
-      expect(message).toMatch(/2 registro\(s\) sin sincronizar/);
-      expect(options.actionProps.children).toBe('Sincronizar ahora');
-
-      options.actionProps.onPress();
-      expect(requestSyncMock).toHaveBeenCalledTimes(1);
+      expect(toastDangerMock.mock.calls[0]![0]).toMatch(/No se pudo cerrar la sesión/);
+      consoleErrorSpy.mockRestore();
     });
   });
 });

@@ -16,9 +16,13 @@ const { retryOpMock, discardOpMock, overwriteOpMock } = vi.hoisted(() => ({
 }));
 vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discardOpMock, overwriteOp: overwriteOpMock }));
 
+const { usePrepareMock } = vi.hoisted(() => ({ usePrepareMock: vi.fn() }));
+vi.mock('../../hooks/usePrepareOffline', () => ({ usePrepareOffline: usePrepareMock }));
+
 import { usePendingWrites } from '../../hooks/usePendingWrites';
 import { MarcaPendiente } from './MarcaPendiente';
 import { PendientesStrip } from './PendientesStrip';
+import { PREP_DETAIL_LIMITATION, PrepChecklist } from './PrepChecklist';
 import { SyncBadge } from './SyncBadge';
 import { SyncOpsList } from './SyncOpsList';
 import { SyncSheet } from './SyncSheet';
@@ -50,6 +54,7 @@ function sync(overrides: Partial<SyncState> = {}): SyncState {
   return {
     pendingCount: 0,
     attentionCount: 0,
+    otherAccountCount: 0,
     syncing: false,
     authRequired: false,
     lastSyncAt: null,
@@ -98,9 +103,9 @@ describe('usePendingWrites', () => {
 
     const { marcaDe, atencion, pendientes } = renderHook(() => usePendingWrites(['equipment'])).result.current;
 
-    expect(marcaDe('equipment:eq_1')).toBe('pendiente');
-    expect(marcaDe('equipment:eq_2')).toBe('atencion');
-    expect(marcaDe('equipment:eq_3')).toBeNull();
+    expect(marcaDe('equipment', 'eq_1')).toBe('pendiente');
+    expect(marcaDe('equipment', 'eq_2')).toBe('atencion');
+    expect(marcaDe('equipment', 'eq_3')).toBeNull();
     expect(atencion).toBe(1);
     expect(pendientes).toBe(2);
   });
@@ -199,12 +204,64 @@ describe('SyncBadge', () => {
   });
 });
 
+describe('PrepChecklist', () => {
+  const preparar = vi.fn();
+
+  function conResultado(resultadoPrep: Record<string, unknown> | null) {
+    usePrepareMock.mockReturnValue({ preparando: false, resultadoPrep, handlePreparar: preparar });
+    return render(<PrepChecklist role="ADMIN" titulo="Antes de trabajar sin señal" descripcion={PREP_DETAIL_LIMITATION} />);
+  }
+
+  it('dice en la descripción lo que NO se precarga (la ficha y el detalle de cada equipo, el kardex)', () => {
+    conResultado(null);
+
+    expect(screen.getByText(/ficha y el detalle de cada equipo, y el kardex de cada ítem, no se precargan/)).toBeTruthy();
+  });
+
+  it('muestra las pantallas nuevas y el modo sin señal', () => {
+    conResultado({
+      persist: 'ok',
+      serviceWorker: 'ok',
+      installed: true,
+      dashboard: 'ok',
+      notificaciones: 'ok',
+      movimientos: 'error',
+      bitacora: 'ok',
+    });
+
+    expect(screen.getByText('Modo sin señal activo en esta pantalla')).toBeTruthy();
+    expect(screen.getByText('Panel (resumen de flota) precargado')).toBeTruthy();
+    expect(screen.getByText('Notificaciones precargadas')).toBeTruthy();
+    expect(screen.getByText('Movimientos de inventario precargados')).toBeTruthy();
+    expect(screen.getByText('Bitácora de las órdenes recientes precargada')).toBeTruthy();
+    expect(screen.queryByText(/recargá la app una vez/)).toBeNull();
+  });
+
+  it('si el service worker no controla la página, el resultado lo dice y qué hacer', () => {
+    conResultado({ persist: 'ok', serviceWorker: 'error', installed: true, equipment: 'ok' });
+
+    expect(screen.getByText(/Todavía no se guardó nada para usar sin señal: recargá la app una vez/)).toBeTruthy();
+  });
+
+  it('el almacenamiento no reservado es un aviso (instalá la app), no un error', () => {
+    const { container } = conResultado({ persist: 'error', serviceWorker: 'ok', installed: false });
+
+    expect(screen.getByText('Almacenamiento reservado')).toBeTruthy();
+    expect(screen.getByText(/Instalá la app en la pantalla de inicio/)).toBeTruthy();
+    // Solo las filas en error llevan el ícono rojo; esta lleva el de aviso.
+    expect(container.querySelector('.text-danger')).toBeNull();
+    expect(container.querySelector('.text-warning')).toBeTruthy();
+  });
+});
+
 describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
+  const onClose = vi.fn();
+
   function renderHoja(estado: SyncState, ops: OutboxOp[]) {
     mockOps = ops;
     return render(
       <MemoryRouter>
-        <SyncSheet sync={estado} onClose={vi.fn()}>
+        <SyncSheet sync={estado} isOpen onClose={onClose}>
           <SyncOpsList ops={ops} userId="u1" />
         </SyncSheet>
       </MemoryRouter>,
@@ -214,10 +271,59 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
   it('muestra el contador de pendientes y que nada requiere atención', () => {
     renderHoja(sync({ pendingCount: 2 }), [write(), write()]);
 
-    expect(screen.getByRole('dialog', { name: 'Sincronización' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Registros sin señal' })).toBeTruthy();
     expect(screen.getByText('Pendientes por sincronizar')).toBeTruthy();
-    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0);
     expect(screen.getByText('Ningún registro requiere atención.')).toBeTruthy();
+  });
+
+  it('es un diálogo accesible: Escape y el botón Cerrar la cierran', () => {
+    renderHoja(sync(), []);
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('avisa, sin datos, cuántos registros de otra cuenta guarda el equipo', () => {
+    renderHoja(sync({ otherAccountCount: 3 }), []);
+
+    expect(screen.getByText(/3 registros sin enviar de otra cuenta/)).toBeTruthy();
+  });
+
+  it('lista TODO lo que espera, con su estado y su último error — no solo lo que requiere atención', () => {
+    const esperando = write({ id: 'e', label: 'Nuevo ítem · Aceite' });
+    const reintentando = write({
+      id: 'r',
+      label: 'Edición de equipo · EX-001',
+      attempts: 3,
+      lastError: { message: 'Sin señal: se reintentará automáticamente.' },
+    });
+    const enVuelo = write({ id: 'v', label: 'Movimiento de stock · Filtro', status: 'syncing' });
+    renderHoja(sync({ pendingCount: 3 }), [esperando, reintentando, enVuelo]);
+
+    expect(screen.getByText('En cola')).toBeTruthy();
+    expect(screen.getByText('Esperando señal')).toBeTruthy();
+    expect(screen.getByText('Reintentando solo · 3 intentos')).toBeTruthy();
+    expect(screen.getByText('Sin señal: se reintentará automáticamente.')).toBeTruthy();
+    expect(screen.getByText('Enviando…')).toBeTruthy();
+  });
+
+  it('permite descartar cualquier operación que no esté en vuelo (con confirmación), y no la que sí lo está', () => {
+    const atascada = write({ id: 'atascada', label: 'Nuevo equipo · EX-009', attempts: 7 });
+    const enVuelo = write({ id: 'v', label: 'Movimiento de stock', status: 'syncing' });
+    renderHoja(sync({ pendingCount: 2 }), [atascada, enVuelo]);
+
+    // Una sola operación se puede descartar: la que no está en vuelo.
+    const botones = screen.getAllByRole('button', { name: 'Descartar' });
+    expect(botones).toHaveLength(1);
+
+    fireEvent.click(botones[0]!);
+    expect(discardOpMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
+    expect(discardOpMock).toHaveBeenCalledWith('atascada', 'u1');
   });
 
   it('un rechazo de oficina muestra su etiqueta y el mensaje, con Reintentar y Descartar', () => {
@@ -233,6 +339,23 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
     expect(screen.getByText('Ya existe un equipo con ese código')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(retryOpMock).toHaveBeenCalledWith('w-x', 'u1');
+  });
+
+  it('un 403 (el rol no puede) dice por qué y ofrece solo Descartar, sin Reintentar', () => {
+    const op = write({
+      id: 'w-403',
+      status: 'needs_attention',
+      lastError: { message: 'Insufficient permissions', code: 'FORBIDDEN', status: 403 },
+    });
+    renderHoja(sync({ attentionCount: 1 }), [op]);
+
+    expect(screen.getByText('Tu rol no puede hacer esta acción.')).toBeTruthy();
+    expect(screen.queryByText('Insufficient permissions')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sobrescribir' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
+    expect(discardOpMock).toHaveBeenCalledWith('w-403', 'u1');
   });
 
   it('un STALE_UPDATE ofrece Sobrescribir en vez de Reintentar', () => {
@@ -255,7 +378,7 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
 
     expect(screen.getByText(/1 cambio guardado que dependen de este/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Descartar' })[0]!);
     expect(screen.getByText(/Se descarta este registro y los cambios guardados que dependen de él/)).toBeTruthy();
     expect(discardOpMock).not.toHaveBeenCalled();
 
