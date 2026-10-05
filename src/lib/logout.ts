@@ -1,4 +1,5 @@
 import { clearCacheOwner } from './cache-owner';
+import { markSessionClosed } from './pending-signout';
 import { clearSessionSnapshot } from './session-snapshot';
 import { signOutOrDefer } from './server-signout';
 import { purgeSessionData } from './session-data';
@@ -35,6 +36,9 @@ type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
 export async function logout(navigate: NavigateFn): Promise<void> {
   // Las queries en vuelo o por reintentar saldrían con la cookie ya invalidada (401).
   await queryClient.cancelQueries();
+  // Desde acá no hay sesión en el equipo, con o sin señal: nada vuelve a escribir el
+  // snapshot mientras Better Auth todavía tenga al usuario anterior en memoria.
+  markSessionClosed();
   await signOutOrDefer();
   // El snapshot offline (`lib/session-snapshot.ts`) es lo que le permite a
   // `useCurrentUser` seguir mostrando una sesión sin señal — un logout

@@ -4,7 +4,7 @@ import { renderHook } from '@testing-library/react';
 vi.mock('../config/env', () => ({ env: { apiUrl: 'http://api.test' } }));
 
 import { authClient } from './auth-client';
-import { clearServerSignOutPending, isServerSignOutPending, markServerSignOutPending, useServerSignOutPending } from './pending-signout';
+import { clearServerSignOutPending, clearSessionClosed, isServerSignOutPending, markServerSignOutPending, useSessionClosed } from './pending-signout';
 import { revokePendingSignOut, signInWithEmail, startSignOutRevocation } from './server-signout';
 
 const fetchMock = vi.fn();
@@ -106,8 +106,8 @@ describe('cierre de sesión pendiente en el servidor', () => {
     expect(llamadas().some((u) => u.includes('/sign-in/email'))).toBe(false);
   });
 
-  it('useServerSignOutPending sigue la marca en vivo', () => {
-    const { result, rerender } = renderHook(() => useServerSignOutPending());
+  it('useSessionClosed sigue la marca en vivo', () => {
+    const { result, rerender } = renderHook(() => useSessionClosed());
     expect(result.current).toBe(false);
 
     markServerSignOutPending();
@@ -115,6 +115,10 @@ describe('cierre de sesión pendiente en el servidor', () => {
     expect(result.current).toBe(true);
 
     clearServerSignOutPending();
+    rerender();
+    expect(result.current).toBe(true); // el servidor confirmó, pero la sesión sigue cerrada en el equipo
+
+    clearSessionClosed();
     rerender();
     expect(result.current).toBe(false);
   });

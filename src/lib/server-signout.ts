@@ -1,5 +1,10 @@
-import { authClient, signOut } from './auth-client';
-import { clearServerSignOutPending, isServerSignOutPending, markServerSignOutPending } from './pending-signout';
+import { authClient, refreshSession, signOut } from './auth-client';
+import {
+  clearServerSignOutPending,
+  clearSessionClosed,
+  isServerSignOutPending,
+  markServerSignOutPending,
+} from './pending-signout';
 
 /** `signOut()` resolvió el cierre en el servidor. Sin respuesta (red caída, timeout)
  * o con un error del servidor, la cookie puede seguir viva; un 401 quiere decir que
@@ -20,7 +25,11 @@ async function signOutReachedServer(): Promise<boolean> {
  */
 export async function signOutOrDefer(): Promise<boolean> {
   const done = await signOutReachedServer();
-  if (!done) markServerSignOutPending();
+  if (!done) {
+    markServerSignOutPending();
+    // Better Auth conserva en memoria al usuario que salió; que lo vuelva a pedir.
+    refreshSession();
+  }
   return done;
 }
 
@@ -66,6 +75,7 @@ export interface SignInResult {
 export async function signInWithEmail(credentials: EmailCredentials): Promise<SignInResult> {
   if (!(await revokePendingSignOut())) return { error: { message: PENDING_SIGNOUT_LOGIN_MESSAGE } };
   const { error } = await authClient.signIn.email(credentials);
+  if (!error) clearSessionClosed();
   return { error };
 }
 

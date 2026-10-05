@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { logout } from './logout';
 import { db } from '../offline/db';
-import { isServerSignOutPending } from './pending-signout';
+import { isServerSignOutPending, isSessionClosed } from './pending-signout';
 
 // `vi.hoisted` porque `vi.mock` se "hoistea" arriba de los imports.
 const { signOutMock, clearMock, cancelMock } = vi.hoisted(() => ({
@@ -14,6 +14,7 @@ const { signOutMock, clearMock, cancelMock } = vi.hoisted(() => ({
 
 vi.mock('./auth-client', () => ({
   signOut: (...args: unknown[]) => signOutMock(...args),
+  refreshSession: vi.fn(),
 }));
 
 vi.mock('./query-client', () => ({
@@ -142,6 +143,7 @@ describe('logout', () => {
       await logout(navigate);
 
       expect(isServerSignOutPending()).toBe(true);
+      expect(isSessionClosed()).toBe(true);
       expect(clearMock).toHaveBeenCalledTimes(1);
       expect(window.localStorage.getItem('smi-session-snapshot')).toBeNull();
       expect(window.localStorage.getItem('smi-cache-owner')).toBeNull();
@@ -154,6 +156,7 @@ describe('logout', () => {
       await logout(vi.fn());
 
       expect(isServerSignOutPending()).toBe(false);
+      expect(isSessionClosed()).toBe(true);
     });
 
     it('la cola sigue intacta', async () => {

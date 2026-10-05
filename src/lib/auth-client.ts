@@ -34,3 +34,9 @@ export const authClient = createAuthClient({
 });
 
 export const { useSession, signIn, signOut } = authClient;
+
+/** Obliga a Better Auth a volver a pedir la sesión (pasando por `sessionGate`): si el
+ * cierre quedó pendiente, el estado en memoria deja de tener al usuario anterior. */
+export function refreshSession(): void {
+  authClient.$store.notify('$sessionSignal');
+}
