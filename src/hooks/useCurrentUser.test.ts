@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCurrentUser } from './useCurrentUser';
 import { readSessionSnapshot, saveSessionSnapshot } from '../lib/session-snapshot';
+import { isCacheOwnerMismatch } from '../lib/cache-owner';
+import { reconcileCacheOwner } from '../lib/session-data';
+import { markServerSignOutPending } from '../lib/pending-signout';
 import { ROLES } from '../types/roles';
 
 interface MockSession {
@@ -101,6 +104,34 @@ describe('useCurrentUser — fallback offline (error de red)', () => {
     renderHook(() => useCurrentUser());
 
     expect(readSessionSnapshot()).toBeNull();
+  });
+
+  it('un 401 real anota que la sesión terminó: el próximo inicio purga las cachés, aun siendo la misma persona', () => {
+    reconcileCacheOwner('u1');
+    mockSession = { data: null, isPending: false, error: { status: 401, statusText: 'Unauthorized' } };
+
+    renderHook(() => useCurrentUser());
+
+    expect(isCacheOwnerMismatch('u1')).toBe(true);
+  });
+
+  it('con el cierre de sesión pendiente en el servidor no hay sesión: ni la del servidor ni el snapshot', () => {
+    markServerSignOutPending();
+    saveSessionSnapshot(SAVED_SNAPSHOT);
+    mockSession = { data: { user: { id: 'u1', role: ROLES.SUPERVISOR } }, isPending: false, error: null };
+
+    const { result } = renderHook(() => useCurrentUser());
+
+    expect(result.current).toMatchObject({ user: null, isAuthenticated: false, isPending: false, isOfflineSnapshot: false });
+  });
+
+  it('un error de red no anota nada', () => {
+    reconcileCacheOwner('u1');
+    mockSession = { data: null, isPending: false, error: new TypeError('Failed to fetch') };
+
+    renderHook(() => useCurrentUser());
+
+    expect(isCacheOwnerMismatch('u1')).toBe(false);
   });
 });
 

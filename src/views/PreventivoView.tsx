@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -8,15 +9,15 @@ import {
   Input,
   Label,
   Modal,
-  NumberField,
   Spinner,
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { IntegerField } from '../components/IntegerField';
+import { usePermissions } from '../hooks/usePermissions';
 import { useMantencionesProximas } from '../hooks/useDashboard';
 import { useCrearUmbral, useUmbrales } from '../hooks/useUmbrales';
-import { ROLES } from '../types/roles';
+import { RECURSOS_DE_UMBRALES } from '../lib/pending-resources';
 import { CreateUmbralSchema, type CreateUmbralInput } from '../types/mantenimiento';
 
 /** Modal de creación de umbral (ADMIN) — mismo patrón que `CreateUserModal`. */
@@ -107,15 +108,14 @@ function CreateUmbralModal() {
                         control={control}
                         name="umbralHoras"
                         render={({ field }) => (
-                          <NumberField fullWidth minValue={1} value={field.value} onChange={field.onChange}>
-                            <Label>Umbral (horas)</Label>
-                            <NumberField.Group>
-                              <NumberField.DecrementButton />
-                              <NumberField.Input onBlur={field.onBlur} />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                            {errors.umbralHoras ? <FieldError>{errors.umbralHoras.message}</FieldError> : null}
-                          </NumberField>
+                          <IntegerField
+                            errorMessage={errors.umbralHoras?.message}
+                            isInvalid={!!errors.umbralHoras}
+                            label="Umbral (horas)"
+                            onBlur={field.onBlur}
+                            onChange={field.onChange}
+                            value={field.value}
+                          />
                         )}
                       />
                     </form>
@@ -141,7 +141,7 @@ function CreateUmbralModal() {
 /**
  * Equipos cerca de su umbral de horómetro (horómetro actual vs. umbral). Es un
  * dato del dominio Mantenimiento: se reutiliza `useMantencionesProximas` (mismo
- * hook/tipo/estilo que el Dashboard de Benjamín) — hoy mockeado hasta que Flota
+ * hook/tipo/estilo que el Dashboard) — hoy mockeado hasta que Flota
  * exponga el horómetro real. `horometroRestante === 0` ⇒ umbral alcanzado (rojo).
  */
 function EquiposCercaUmbralSection() {
@@ -209,10 +209,10 @@ function EquiposCercaUmbralSection() {
  *     vía `useUmbrales` / `useCrearUmbral`, renderizados como grid de cards.
  */
 export function PreventivoView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const { data: umbrales, isPending, isError, error } = useUmbrales();
 
-  const puedeCrear = role === ROLES.ADMIN;
+  const puedeCrear = can('umbral.create');
 
   return (
     <div className="flex flex-col gap-6">
@@ -227,6 +227,8 @@ export function PreventivoView() {
         </div>
         {puedeCrear ? <CreateUmbralModal /> : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_UMBRALES} />
 
       <EquiposCercaUmbralSection />
 

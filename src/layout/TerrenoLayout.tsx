@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import { Briefcase, ClipboardCheck, FileText, LayoutDashboard, LogOut, Menu, TriangleAlert, X } from 'lucide-react';
-import { toast } from '@heroui/react';
 
+import { useLogoutConfirmation } from '../components/sync/useLogoutConfirmation';
 import { SyncStatus } from '../components/terreno/SyncStatus';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { logout, LogoutBlockedError } from '../lib/logout';
-import { requestSync } from '../offline/replay';
+import { CONTAINER } from './terreno-container';
 
 /**
  * Los cuatro destinos del módulo, en el orden de la maqueta. La etiqueta larga
@@ -26,23 +25,6 @@ const tabs = [
   { to: '/terreno/trabajos-extra', label: 'Trabajos extra', corto: 'Trabajos', icon: Briefcase },
   { to: '/terreno/hallazgos', label: 'Hallazgos', corto: 'Hallazgos', icon: TriangleAlert },
 ];
-
-/**
- * Ancho del contenido. Lo comparten el header, el `main` y la barra inferior
- * para que el título, el formulario y las pestañas queden en la misma columna.
- *
- * En teléfono son los mismos 448 px de siempre: es la pantalla donde se opera
- * en faena y no se toca. Desde `sm` el módulo deja de estar encajonado, y desde
- * `lg` se ensancha para las dos columnas —formulario e historial— que arman las
- * vistas: el formulario conserva su ancho y el sobrante se lo lleva la tabla.
- *
- * El techo igual existe: sin él, en un monitor de 1920 el formulario quedaría
- * de punta a punta, que es tan malo como la columna angosta pero al revés.
- */
-// Exportada: `components/terreno/SyncStatus.tsx` la reusa para que su barra
-// quede en la misma columna que el header/main, sin repetir el string.
-export const CONTAINER =
-  'mx-auto w-full max-w-md px-4 sm:max-w-2xl lg:max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1680px]';
 
 function StatusPill({ enLinea }: { enLinea: boolean }) {
   return (
@@ -66,8 +48,9 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
 export function TerrenoLayout() {
   const { user, role } = useCurrentUser();
   const [menu, setMenu] = useState(false);
-  const navigate = useNavigate();
   const enLinea = useOnlineStatus();
+  const navigate = useNavigate();
+  const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
 
   /**
    * Los cuatro destinos viven en UN solo lugar según el tamaño: barra inferior
@@ -80,26 +63,6 @@ export function TerrenoLayout() {
    * todo lo demás de esta pantalla es estilo y va con clases `sm:`/`lg:`.
    */
   const navEnHeader = useMediaQuery(DESKTOP_QUERY);
-
-  const handleSignOut = async () => {
-    // `logout()` (`lib/logout.ts`) hace signOut + limpia TanStack Query y
-    // Cache Storage privado + navega — ver ese archivo para el porqué
-    // (SEGURIDAD M1, RFC R2-storage). Se le
-    // pasa el `userId` para que bloquee si hay operaciones sin sincronizar
-    // en el outbox — el catch de acá abajo es ESE bloqueo, no un error real.
-    try {
-      await logout(navigate, user?.id);
-    } catch (error) {
-      if (error instanceof LogoutBlockedError) {
-        toast.danger(error.message, {
-          description: 'Los registros quedan guardados en el equipo — no se pierden.',
-          actionProps: { children: 'Sincronizar ahora', onPress: () => requestSync() },
-        });
-        return;
-      }
-      throw error;
-    }
-  };
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--terreno-warm)' }}>
@@ -157,9 +120,8 @@ export function TerrenoLayout() {
           </div>
         </header>
 
-        {/* Reemplaza a la vieja `BarraSinSenal`: siempre visible (no solo sin
-            señal) — el estado real de sincronización, incluido "todo
-            sincronizado", vale la pena verlo tanto en línea como fuera de
+        {/* Siempre visible (no solo sin señal): el estado real de sincronización,
+            incluido "todo sincronizado", vale la pena verlo en línea y fuera de
             ella (ver `components/terreno/SyncStatus.tsx`). */}
         <SyncStatus />
 
@@ -271,8 +233,8 @@ export function TerrenoLayout() {
                 </NavLink>
                 <button
                   type="button"
-                  onClick={handleSignOut}
-                  className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                  onClick={requestLogout}
+                  className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-danger hover:bg-danger-soft"
                 >
                   <LogOut className="h-[19px] w-[19px]" />
                   Salir
@@ -281,6 +243,7 @@ export function TerrenoLayout() {
             </div>
           </>
         )}
+        {confirmationDialog}
       </div>
     </div>
   );

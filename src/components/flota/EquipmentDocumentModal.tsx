@@ -3,16 +3,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField, toast } from '@heroui/react';
 
-import { uploadFile } from '../../api/UploadsAPI';
 import { env } from '../../config/env';
 import { useCreateEquipmentDocument, useUpdateEquipmentDocument } from '../../hooks/useEquipmentDocuments';
 import { EQUIPMENT_DOCUMENT_TYPE_OPTIONS } from '../../config/flota-colors';
+import { isAcceptedUploadType, UPLOAD_TYPE_ERROR_MESSAGE } from '../../lib/upload-limits';
 import {
   EquipmentDocumentFormSchema,
   toCreateEquipmentDocumentPayload,
   toUpdateEquipmentDocumentPayload,
   type EquipmentDocument,
-  type EquipmentDocumentFileChange,
   type EquipmentDocumentFormValues,
   type EquipmentDocumentType,
 } from '../../types/equipment-document';
@@ -34,24 +33,20 @@ function buildFormValues(documento: EquipmentDocument | null): EquipmentDocument
   };
 }
 
-/** Tri-state del adjunto, igual criterio que `photoKey` en
- * `EquipoEditDelete.tsx` pero con nombre incluido (los dos siempre viajan
- * juntos — ver `EquipmentDocumentFileChange`): `undefined` = sin cambios (se
- * sigue mostrando el archivo ya guardado), `{key: null, name: null}` = el
- * usuario lo quitó, `{key, name}` = subió uno nuevo. */
-type FileState = EquipmentDocumentFileChange | { key: null; name: null } | undefined;
+/** Tri-state del adjunto, vive FUERA del form de RHF: `undefined` = sin cambios
+ * (se sigue mostrando el archivo ya guardado), `null` = el usuario lo quitó,
+ * `File` = archivo nuevo. */
+type FileState = File | null | undefined;
 
 /**
- * Campo de adjunto simple — mismo criterio de subida inmediata y de "dirty
- * key" fuera del form de RHF que `EquipoPhotoBanner` (`EquipoEditDelete.tsx`),
- * pero SIN el flujo foto→OCR→EXIF de `FotoRespaldoField`: acá el archivo
- * puede ser un PDF o una imagen (`POST /api/files` ya admite ambos, ver
- * `UploadsAPI.ts#uploadFile`), no hay lectura automática de ningún valor a
- * partir de él.
+ * Campo de adjunto simple. No sube nada: el `File` elegido se guarda en el
+ * equipo junto con el documento y se sube al sincronizar (`useCreateEquipmentDocument`/
+ * `useUpdateEquipmentDocument`). Puede ser un PDF o una imagen, y no hay lectura
+ * automática de ningún valor a partir de él.
  *
  * El nombre a mostrar SIEMPRE sale de `fileName` (propio o del `File` recién
- * elegido) — nunca se parsea de la URL: ahora es una URL firmada con query,
- * no un nombre de archivo legible.
+ * elegido) — nunca se parsea de la URL: es una URL firmada con query, no un
+ * nombre de archivo legible.
  */
 function DocumentFileField({
   savedFileHref,
@@ -63,40 +58,25 @@ function DocumentFileField({
    * (`GET /api/equipment/documents/:id/file`, mismo patrón que
    * `EquipoDetalleView.tsx`), NO la URL firmada cruda de la respuesta del
    * listado: firma una URL RECIÉN generada en cada click, así que sirve
-   * aunque la pestaña lleve horas abierta (QA menor: la firma del listado
-   * podía haber expirado; ver Diseño del RFC R2-storage, "Contrato de la API
-   * — Documentos"). `null` si el documento no tiene adjunto. */
+   * aunque la pestaña lleve horas abierta. `null` si el documento no tiene adjunto. */
   savedFileHref: string | null;
   savedFileName: string | null;
   fileState: FileState;
   onFileStateChange: (state: FileState) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
 
-  const removed = fileState !== undefined && fileState.key === null;
-  const href = fileState !== undefined ? (removed ? null : pendingPreviewUrl) : savedFileHref;
-  const nombre = fileState !== undefined ? fileState.name : savedFileName;
-  const hasFile = href != null;
+  const href = fileState === undefined ? savedFileHref : null;
+  const nombre = fileState === undefined ? savedFileName : (fileState?.name ?? null);
+  const hasFile = fileState === undefined ? savedFileHref != null : fileState !== null;
 
-  const handleFile = async (file: File | undefined): Promise<void> => {
+  const handleFile = (file: File | undefined): void => {
     if (!file) return;
-    setIsUploading(true);
-    try {
-      const { key, url } = await uploadFile(file);
-      setPendingPreviewUrl(url);
-      onFileStateChange({ key, name: file.name });
-    } catch (error) {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo subir el archivo. Intenta de nuevo.');
-    } finally {
-      setIsUploading(false);
+    if (!isAcceptedUploadType(file.type)) {
+      toast.danger(UPLOAD_TYPE_ERROR_MESSAGE);
+      return;
     }
-  };
-
-  const handleRemove = () => {
-    setPendingPreviewUrl(null);
-    onFileStateChange({ key: null, name: null });
+    onFileStateChange(file);
   };
 
   return (
@@ -116,7 +96,9 @@ function DocumentFileField({
                 >
                   Ver archivo actual
                 </a>
-              ) : null}
+              ) : (
+                <span className="text-xs text-(--muted)">Se sube al tener señal.</span>
+              )}
             </>
           ) : (
             <span className="text-xs text-(--muted)">PDF, JPG, PNG o WebP · máx. 8 MB</span>
@@ -124,20 +106,12 @@ function DocumentFileField({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {hasFile ? (
-            <Button isDisabled={isUploading} size="sm" type="button" variant="tertiary" onPress={handleRemove}>
+            <Button size="sm" type="button" variant="tertiary" onPress={() => onFileStateChange(null)}>
               Quitar
             </Button>
           ) : null}
-          <Button
-            isPending={isUploading}
-            size="sm"
-            type="button"
-            variant="secondary"
-            onPress={() => inputRef.current?.click()}
-          >
-            {({ isPending }) =>
-              isPending ? <Spinner color="current" size="sm" /> : hasFile ? 'Reemplazar' : 'Adjuntar archivo'
-            }
+          <Button size="sm" type="button" variant="secondary" onPress={() => inputRef.current?.click()}>
+            {hasFile ? 'Reemplazar' : 'Adjuntar archivo'}
           </Button>
         </div>
       </div>
@@ -145,7 +119,7 @@ function DocumentFileField({
         accept="image/jpeg,image/png,image/webp,application/pdf"
         className="hidden"
         onChange={(e) => {
-          void handleFile(e.target.files?.[0]);
+          handleFile(e.target.files?.[0]);
           e.target.value = '';
         }}
         ref={inputRef}
@@ -174,7 +148,7 @@ export interface EquipmentDocumentModalProps {
 export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenChange }: EquipmentDocumentModalProps) {
   const isEditing = !!document;
   const createDocument = useCreateEquipmentDocument(equipmentId);
-  const updateDocument = useUpdateEquipmentDocument(equipmentId);
+  const updateDocument = useUpdateEquipmentDocument();
   const isPending = createDocument.isPending || updateDocument.isPending;
   // `fileUrl` (firmada, de la respuesta del listado) solo dice SI hay archivo
   // adjunto — el link real usa el endpoint de redirect 302, mismo criterio
@@ -183,13 +157,9 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
     ? `${env.apiUrl}/api/equipment/documents/${document.id}/file`
     : null;
   // Tri-state del adjunto — vive FUERA del form de RHF (ver `DocumentFileField`
-  // y `FileState`): `undefined` = sin cambios, `{key: null, name: null}` =
-  // se quitó, `{key, name}` = archivo nuevo. `fileResetKey` fuerza el
-  // remount de `DocumentFileField` al reabrir el modal (mismo patrón que
-  // `photoResetKey` en `EquipoEditDelete.tsx`).
-  const [fileState, setFileState] = useState<EquipmentDocumentFileChange | { key: null; name: null } | undefined>(
-    undefined,
-  );
+  // y `FileState`). `fileResetKey` fuerza el remount de `DocumentFileField` al
+  // reabrir el modal (mismo patrón que `photoResetKey` en `EquipoEditDelete.tsx`).
+  const [fileState, setFileState] = useState<FileState>(undefined);
   const [fileResetKey, setFileResetKey] = useState(0);
 
   const {
@@ -215,7 +185,7 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   // CUALQUIER cambio de referencia de `document` mientras el modal seguía
   // abierto (el refetch de arriba), lo que pisaba en silencio un archivo
   // recién subido (`fileState`, tri-state fuera del form de RHF —
-  // `keepDirtyValues` no lo protege) y su preview (review QA). El re-sync de
+  // `keepDirtyValues` no lo protege) y su preview. El re-sync de
   // los CAMPOS del form mientras el modal sigue abierto ahora lo cubre
   // `keepDirtyValues` de arriba; acá solo queda "abrir de verdad", que sigue
   // necesitando el `reset` imperativo: sin él, cancelar sin guardar y reabrir
@@ -241,12 +211,15 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
   const onSubmit = (values: EquipmentDocumentFormValues): void => {
     if (isEditing && document) {
       updateDocument.mutate(
-        { id: document.id, input: toUpdateEquipmentDocumentPayload(values, fileState) },
+        { documento: document, input: toUpdateEquipmentDocumentPayload(values), file: fileState },
         { onSuccess: cerrar },
       );
     } else {
-      const file = fileState && fileState.key !== null ? { key: fileState.key, name: fileState.name } : undefined;
-      createDocument.mutate(toCreateEquipmentDocumentPayload(values, file), { onSuccess: cerrar });
+      const file = fileState ?? undefined;
+      createDocument.mutate(
+        { input: toCreateEquipmentDocumentPayload(values, file), file },
+        { onSuccess: cerrar },
+      );
     }
   };
 

@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
@@ -17,11 +18,12 @@ import {
   stockStatus,
 } from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
+import { MOVEMENT_ACTIONS } from '../lib/permissions';
 import { useKardex } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { RECURSOS_DE_FICHA_ITEM } from '../lib/pending-resources';
 import { useUiStore } from '../store/ui';
-import { ROLES } from '../types/roles';
 import {
   ITEM_TYPE_LABELS,
   MOVEMENT_REASON_LABELS,
@@ -348,9 +350,7 @@ function MovementHistory({
  */
 export function FichaItemView() {
   const { id = '' } = useParams<{ id: string }>();
-  const { user } = useCurrentUser();
-  const isAdmin = user?.role === ROLES.ADMIN;
-  const canWrite = isAdmin || user?.role === ROLES.MANTENEDOR;
+  const { can, canAny } = usePermissions();
 
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const [branchFilter, setBranchFilter] = useState<string>(TODAS);
@@ -395,6 +395,8 @@ export function FichaItemView() {
         ← Volver a Inventario
       </Link>
 
+      <PendientesStrip recursos={RECURSOS_DE_FICHA_ITEM} />
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -426,12 +428,12 @@ export function FichaItemView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {isAdmin ? (
+          {can('item.update') ? (
             <Button onPress={() => setIsEditing(true)} variant="secondary">
               Editar ítem
             </Button>
           ) : null}
-          {canWrite ? (
+          {canAny(MOVEMENT_ACTIONS) ? (
             <Button onPress={() => setAction('movement')}>
               Registrar movimiento
             </Button>
@@ -490,9 +492,7 @@ export function FichaItemView() {
         <ItemActionsModal
           branchId={selectedBranchId ?? ALL_BRANCHES}
           branches={branches ?? []}
-          canWrite={canWrite}
           initialView={action}
-          isAdmin={isAdmin}
           isOpen
           item={item}
           onEdit={() => {

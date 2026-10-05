@@ -10,14 +10,19 @@ import {
   History,
   Lock,
   Mail,
+  Pencil,
   User,
 } from 'lucide-react';
 
 import { lineaEstadoCorreo, useShiftRegister, type EstadoReporte, type TarjetaTurno } from '../hooks/useShiftRegister';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
+import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { fmtTime, plural } from '../lib/format';
+import { formatDecimalInput } from '../lib/decimal';
+import { fmtLitros, fmtTime, plural } from '../lib/format';
 import { fechaCorta, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
@@ -48,7 +53,7 @@ import {
 } from '../components/terreno/ui';
 
 /**
- * Registro de equipo — Módulo A de la especificación del 21/09/2026.
+ * Registro de equipo (Módulo A de la especificación).
  *
  * Fusiona lo que hoy son dos pantallas sueltas, Horómetro y Combustible, en una
  * sola tarjeta por equipo: se abre al empezar el turno con el horómetro inicial
@@ -59,7 +64,7 @@ import {
  * cliente describió en la reunión, con la falla de cargadores que se supo recién
  * al turno siguiente. Por eso el botón no está escondido al final del formulario.
  *
- * Conectada de punta a punta (RFC "Supervisión en Terreno", Fases 4b+5): el
+ * Conectada de punta a punta: el
  * catálogo de equipos/operadores, las tarjetas de turno (apertura/cierre) y
  * el reporte de salida en PDF salen todos de `useShiftRegister()` — online
  * y sin señal por igual, vía el outbox de Dexie (`offline/outbox.ts`/
@@ -95,6 +100,8 @@ export function RegistroEquipoView() {
     setApertura,
     equipoElegido,
     valorInicialApertura,
+    horometroInvalido,
+    bajoUltimaLectura,
     abrir: agregarEquipo,
     isAbriendo,
     setCerrandoId,
@@ -106,6 +113,9 @@ export function RegistroEquipoView() {
     finalNum,
     horasMaquina,
     finalInvalido,
+    adBlueCierre,
+    adBlueIncompletoCierre,
+    edicion,
     isCerrando,
     foto,
     verReporte,
@@ -142,7 +152,7 @@ export function RegistroEquipoView() {
                 setApertura((a) => ({
                   ...a,
                   equipoId: id,
-                  horometro: eq?.currentHourmeter != null ? fmt(eq.currentHourmeter) : '',
+                  horometro: formatDecimalInput(eq?.currentHourmeter, 1),
                 }));
               }}
               opciones={disponibles.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
@@ -161,6 +171,12 @@ export function RegistroEquipoView() {
           <Campo
             label="Horómetro inicial"
             unidad="h"
+            error={horometroInvalido ? 'Escribí un número, por ejemplo 2120,5.' : undefined}
+            aviso={
+              bajoUltimaLectura && equipoElegido?.currentHourmeter != null
+                ? `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisá que esté bien; podés agregarlo igual.`
+                : undefined
+            }
             hint={
               equipoElegido?.currentHourmeter != null ? (
                 <>
@@ -174,7 +190,7 @@ export function RegistroEquipoView() {
             <Input
               numerico
               value={apertura.horometro}
-              placeholder={equipoElegido?.currentHourmeter != null ? fmt(equipoElegido.currentHourmeter) : '0'}
+              placeholder={equipoElegido?.currentHourmeter != null ? formatDecimalInput(equipoElegido.currentHourmeter, 1) : '0'}
               onChange={(e) => setApertura((a) => ({ ...a, horometro: e.target.value }))}
             />
           </Campo>
@@ -272,8 +288,8 @@ export function RegistroEquipoView() {
       <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisá el detalle en el panel de sincronización.'}</>
     ) : (
       <>
-        <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron en este turno y la
-        administración todavía no lo sabe.
+        <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
+        {enCurso.length === 1 ? 'salió' : 'salieron'} en este turno y la administración todavía no lo sabe.
       </>
     );
 
@@ -327,8 +343,8 @@ export function RegistroEquipoView() {
         <div className="flex items-center gap-2 text-[12.5px] text-white/80">
           <i className="h-2 w-2 shrink-0 rounded-full bg-[#ff6b5a]" />
           <span>
-            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron y la administración
-            aún no lo sabe.
+            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
+            {enCurso.length === 1 ? 'salió' : 'salieron'} y la administración aún no lo sabe.
           </span>
         </div>
         <Boton variante="acento" ancho className="mt-2 min-h-[60px] !rounded-[18px] !text-[17px]" onClick={() => setVerReporte(true)}>
@@ -362,6 +378,24 @@ export function RegistroEquipoView() {
 
   // --- Historial ------------------------------------------------------------
 
+  /** «Editar» de una tarjeta, abierta o cerrada. Deshabilitado, dice por qué. */
+  const botonEditar = (t: TarjetaTurno, ancho: boolean) => {
+    const motivo = edicion.motivoSinEdicion(t);
+    return (
+      <Boton
+        variante="contorno"
+        ancho={ancho}
+        className="!min-h-10 !text-[13.5px]"
+        aria-label={`Editar tarjeta de ${t.equipo}${motivo ? `. ${motivo}` : ''}`}
+        title={motivo ?? undefined}
+        disabled={motivo != null}
+        onClick={() => edicion.abrirEdicion(t.id)}
+      >
+        <Pencil className="h-4 w-4" /> Editar
+      </Boton>
+    );
+  };
+
   const tarjeta = (t: TarjetaTurno) => {
     const cerrada = t.estado === 'cerrada';
     // Sin borde izquierdo de color: la tarjeta vive dentro del `BloqueTurno`,
@@ -388,7 +422,7 @@ export function RegistroEquipoView() {
             { label: 'Inicial', valor: fmt(t.inicial) },
             { label: 'Final', valor: fmt(t.final) },
             { label: 'Horas', valor: cerrada ? fmt(t.final! - t.inicial) : '—', destacado: true },
-            { label: 'Litros', valor: t.litros != null ? fmt(t.litros, 0) : '—' },
+            { label: 'Litros', valor: fmtLitros(t.litros) },
           ]}
         />
         {cerrada ? (
@@ -404,6 +438,8 @@ export function RegistroEquipoView() {
             Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
         )}
+        {botonEditar(t, true)}
+        {t.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />}
         {t.sinSincronizar && (
           <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
             <Clock className="h-[15px] w-[15px]" />
@@ -437,11 +473,12 @@ export function RegistroEquipoView() {
                 Sin sincronizar
               </div>
             )}
+            {t.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />}
           </td>
           <td className={`${TD} tabular text-right`}>{fmt(t.inicial)}</td>
           <td className={`${TD} tabular text-right`}>{fmt(t.final)}</td>
           <td className={`${TD} tabular text-right font-semibold`}>{cerrada ? fmt(t.final! - t.inicial) : '—'}</td>
-          <td className={`${TD} tabular text-right`}>{t.litros != null ? fmt(t.litros, 0) : '—'}</td>
+          <td className={`${TD} tabular text-right`}>{fmtLitros(t.litros)}</td>
           <td className={TD}>
             {cerrada ? <Camera className="h-4 w-4 text-[var(--success-soft-foreground)]" /> : <span className="text-[#9aa2ad]">—</span>}
           </td>
@@ -449,11 +486,14 @@ export function RegistroEquipoView() {
             <Chip tono={cerrada ? 'success' : 'info'}>{cerrada ? 'Cerrada' : 'En curso'}</Chip>
           </td>
           <td className={`${TD} text-right`}>
-            {!cerrada && (
-              <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirCierre(t.id)}>
-                Cerrar
-              </Boton>
-            )}
+            <div className="flex justify-end gap-2">
+              {botonEditar(t, false)}
+              {!cerrada && (
+                <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirCierre(t.id)}>
+                  Cerrar
+                </Boton>
+              )}
+            </div>
           </td>
         </tr>
       );
@@ -534,7 +574,7 @@ export function RegistroEquipoView() {
     );
 
   /**
-   * R4: la lista es la de tarjetas ABIERTAS. Las cerradas ya no piden nada al
+   * La lista es la de tarjetas ABIERTAS. Las cerradas ya no piden nada al
    * supervisor y son las que más crecen —al final de un turno son todas—, así
    * que viven detrás de un botón en vez de empujar hacia abajo lo único sobre
    * lo que todavía hay que actuar.
@@ -608,16 +648,24 @@ export function RegistroEquipoView() {
                     { label: 'Inicial', valor: fmt(t.inicial) },
                     { label: 'Final', valor: fmt(t.final) },
                     { label: 'Horas', valor: fmt(t.final! - t.inicial), destacado: true },
-                    { label: 'Litros', valor: fmt(t.litros, 0) },
+                    { label: 'Litros', valor: fmtLitros(t.litros) },
+                    { label: 'AdBlue', valor: t.adBlue ? fmtLitros(t.adBlueLitros) : '—' },
                   ]}
                 />
+                {t.sinSincronizar && <MarcaSinSincronizar />}
+                {t.edicionSinSincronizar && (
+                  <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[13px] text-muted-foreground">
                     Cerrada a las <span className="tabular">{t.cerradaA}</span>
                   </span>
-                  <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
-                    Ver detalle <ChevronRight className="h-4 w-4" />
-                  </Boton>
+                  <div className="flex gap-2">
+                    {botonEditar(t, false)}
+                    <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
+                      Ver detalle <ChevronRight className="h-4 w-4" />
+                    </Boton>
+                  </div>
                 </div>
               </Tarjeta>
             ))}
@@ -627,16 +675,24 @@ export function RegistroEquipoView() {
 
   const vistaDetalleCerrada = detalleCerrada && (
     <div className="flex flex-col gap-4">
-      <Boton variante="contorno" onClick={() => setDetalleCerrada(null)} className="self-start">
-        <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
-      </Boton>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Boton variante="contorno" onClick={() => setDetalleCerrada(null)}>
+          <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
+        </Boton>
+        {botonEditar(detalleCerrada, false)}
+      </div>
+      {detalleCerrada.sinSincronizar && <MarcaSinSincronizar />}
+      {detalleCerrada.edicionSinSincronizar && (
+        <MarcaSinSincronizar edicion requiereAtencion={detalleCerrada.edicionRequiereAtencion} />
+      )}
 
       <Cifras
         items={[
           { label: 'Inicial', valor: fmt(detalleCerrada.inicial) },
           { label: 'Final', valor: fmt(detalleCerrada.final) },
           { label: 'Horas', valor: fmt(detalleCerrada.final! - detalleCerrada.inicial), destacado: true },
-          { label: 'Litros', valor: fmt(detalleCerrada.litros, 0) },
+          { label: 'Litros', valor: fmtLitros(detalleCerrada.litros) },
+          { label: 'AdBlue', valor: detalleCerrada.adBlue ? fmtLitros(detalleCerrada.adBlueLitros) : '—' },
         ]}
       />
 
@@ -649,6 +705,7 @@ export function RegistroEquipoView() {
             ['Turno', turnoDe(detalleCerrada)],
             ['Supervisor', detalleCerrada.supervisor],
             ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
+            ['AdBlue', detalleCerrada.adBlue ? `${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No se cargó'],
             [
               'Foto del surtidor',
               <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
@@ -669,6 +726,13 @@ export function RegistroEquipoView() {
       </div>
     </div>
   );
+
+  /** Operadores activos, más el de la tarjeta si ya no lo está: se puede dejar, no elegir de nuevo. */
+  const opcionesOperadorEdicion = operadores.map((o) => ({ valor: o.id, titulo: o.name }));
+  const operadorActual = edicion.editando;
+  if (operadorActual?.operatorId && !opcionesOperadorEdicion.some((o) => o.valor === operadorActual.operatorId)) {
+    opcionesOperadorEdicion.unshift({ valor: operadorActual.operatorId, titulo: operadorActual.operador });
+  }
 
   // --- Cierre de tarjeta ----------------------------------------------------
 
@@ -703,6 +767,14 @@ export function RegistroEquipoView() {
         <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
       </Campo>
 
+      <AdBlueCampos
+        adBlue={cierre.adBlue}
+        litros={cierre.adBlueLitros}
+        resultado={adBlueCierre}
+        onAdBlue={(adBlue) => setCierre((c) => ({ ...c, adBlue }))}
+        onLitros={(adBlueLitros) => setCierre((c) => ({ ...c, adBlueLitros }))}
+      />
+
       {/*
         Foto, OCR y subida vienen enteros de Flota: el mismo bloque que usan
         la entrada, la salida y la carga de combustible. La foto del
@@ -713,7 +785,6 @@ export function RegistroEquipoView() {
       <FotoRespaldoField
         file={foto.file}
         isReadingPhoto={foto.isReadingPhoto}
-        isUploadingPhoto={foto.isUploadingPhoto}
         captureDate={foto.captureDate}
         onSelect={foto.handleSelectPhoto}
         onClear={foto.handleClearPhoto}
@@ -737,13 +808,13 @@ export function RegistroEquipoView() {
         disabled={
           !foto.file ||
           foto.isReadingPhoto ||
-          foto.isUploadingPhoto ||
           isCerrando ||
           finalNum == null ||
-          finalInvalido
+          finalInvalido ||
+          adBlueIncompletoCierre
         }
       >
-        {foto.isUploadingPhoto ? 'Subiendo la foto…' : isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
+        {isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       {!foto.file && (
@@ -766,8 +837,7 @@ export function RegistroEquipoView() {
         supervisor={supervisor}
         extra={
           <>
-            {/* Selector turno actual/siguiente (RFC "Supervisión en
-                Terreno" §Diseño): a las 07:30 el reloj todavía propone el
+            {/* Selector turno actual/siguiente: a las 07:30 el reloj todavía propone el
                 NOCTURNO de anoche, pero el supervisor ya está empezando el
                 DIURNO de hoy — este botón deja adelantarse UN turno sin
                 esperar a las 08:00. Solo visible cerca del cambio de turno
@@ -869,6 +939,15 @@ export function RegistroEquipoView() {
         }
       >
         {vistaDetalleCerrada || listaCerradas}
+      </ModalTerreno>
+
+      <ModalTerreno
+        abierto={edicion.editando != null}
+        onAbiertoChange={(abierto) => !abierto && edicion.cerrarEdicion()}
+        titulo={edicion.editando ? `Editar · ${edicion.editando.equipo} · ${edicion.editando.tipo}` : ''}
+        detalle={edicion.editando ? turnoDe(edicion.editando) : undefined}
+      >
+        <EditorTarjeta edicion={edicion} operadores={opcionesOperadorEdicion} />
       </ModalTerreno>
 
       {verReporte && (

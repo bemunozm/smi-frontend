@@ -264,13 +264,3 @@ export function ListCard({
     </div>
   );
 }
-
-/* ---------- Título de pantalla ---------- */
-export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="mb-5">
-      <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-      {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
-    </div>
-  );
-}

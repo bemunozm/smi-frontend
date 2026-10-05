@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
 import { EquiposView } from './EquiposView';
+import { DomainError } from '../lib/api-error';
+import { enviado, submitWriteMock } from '../test/office-write';
 
 // Rol controlable por test — `let` (no `const`) porque el componente puede
 // re-renderizar más de una vez por test; mismo patrón que
@@ -24,28 +26,20 @@ vi.mock('../hooks/useCurrentUser', () => ({
 // y `useEquipment.test.tsx`: el `mutate` real termina llamando a estas
 // funciones, así que verificar sus argumentos prueba el flujo completo
 // vista → hook → API.
-const { listMock, resumenMock, createMock, updateMock, updateStatusMock, removeMock, assignMock } = vi.hoisted(() => ({
+const { listMock, resumenMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   resumenMock: vi.fn(),
-  createMock: vi.fn(),
-  updateMock: vi.fn(),
-  updateStatusMock: vi.fn(),
-  removeMock: vi.fn(),
-  assignMock: vi.fn(),
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({
-  EquipmentAPI: {
-    list: listMock,
-    resumen: resumenMock,
-    getById: vi.fn(),
-    create: createMock,
-    update: updateMock,
-    updateStatus: updateStatusMock,
-    remove: removeMock,
-    assign: assignMock,
-  },
+  EquipmentAPI: { list: listMock, resumen: resumenMock, getById: vi.fn() },
 }));
+
+// Las escrituras van por la cola (`submitWrite`): lo que se verifica es lo que se
+// encola — endpoint, params, body, precondición y archivos —, no una llamada HTTP.
+vi.mock('../offline/submit-write', async (importOriginal) =>
+  (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
+);
 
 // Idem para Branch: `CamposEquipo` usa `useBranches`/`useBranch` reales — se
 // mockea `BranchAPI` para controlar qué sucursales existen (activas vs. la
@@ -56,13 +50,7 @@ const { branchListMock, branchGetByIdMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/BranchAPI', () => ({
-  BranchAPI: {
-    list: branchListMock,
-    getById: branchGetByIdMock,
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
-  },
+  BranchAPI: { list: branchListMock, getById: branchGetByIdMock },
 }));
 
 // `CamposEquipo` puebla el picker de supervisor (`useUsers({ role:
@@ -88,24 +76,8 @@ const { operatorListMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/OperatorAPI', () => ({
-  OperatorAPI: {
-    list: operatorListMock,
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
-  },
+  OperatorAPI: { list: operatorListMock },
 }));
-
-// Y la subida de foto (`EquipoPhotoBanner` → `uploadFile`) — `assetUrl` se
-// deja real porque es una función pura (no pega a la red).
-const { uploadFileMock } = vi.hoisted(() => ({
-  uploadFileMock: vi.fn(),
-}));
-
-vi.mock('../api/UploadsAPI', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
-  return { ...actual, uploadFile: uploadFileMock };
-});
 
 const ADMIN = {
   user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
@@ -114,7 +86,17 @@ const ADMIN = {
   isAuthenticated: true,
 };
 
+/** Lo encolado para un endpoint, en orden. */
+function escrituras(endpoint: string): Array<Record<string, unknown>> {
+  return submitWriteMock.mock.calls.filter(([clave]) => clave === endpoint).map(([, input]) => input);
+}
+
 beforeEach(() => {
+  // jsdom no implementa los object URL con los que el banner previsualiza la foto elegida.
+  URL.createObjectURL = vi.fn(() => 'blob:foto-nueva');
+  URL.revokeObjectURL = vi.fn();
+  submitWriteMock.mockReset();
+  submitWriteMock.mockImplementation(async () => enviado(null));
   currentUserResult = ADMIN;
   // Default sin operadores/supervisores — los tests que abren el picker de
   // asignación lo sobrescriben con `userListMock`/`operatorListMock`.
@@ -233,7 +215,12 @@ describe('EquiposView — menú de acciones', () => {
 
     fireEvent.click(await screen.findByText('Marcar como En taller'));
 
-    await waitFor(() => expect(updateStatusMock).toHaveBeenCalledWith('eq_1', 'IN_WORKSHOP'));
+    await waitFor(() => expect(escrituras('equipment.status')).toHaveLength(1));
+    expect(escrituras('equipment.status')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      body: { status: 'IN_WORKSHOP' },
+      expected: { status: 'OPERATIONAL' },
+    });
   });
 
   it('no ofrece "Marcar como…" a un rol sin permiso de cambiar estado (MANTENEDOR)', async () => {
@@ -256,6 +243,29 @@ describe('EquiposView — menú de acciones', () => {
     expect(screen.queryByText('Marcar como En taller')).toBeNull();
   });
 
+  it.each([
+    ['MANTENEDOR', false],
+    ['SUPERVISOR', true],
+  ])('en la hoja de acciones móvil, %s %s ve los registros de horómetro y combustible', async (rol, ve) => {
+    currentUserResult = {
+      user: { id: 'u2', name: 'Usuario', email: 'u@smi.local', role: rol },
+      role: rol,
+      isPending: false,
+      isAuthenticated: true,
+    };
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    const { container } = renderView();
+    await screen.findByRole('button', { name: `Acciones para ${EQUIPO.internalCode}` });
+    fireEvent.click(container.querySelector('button.block.w-full') as HTMLButtonElement);
+
+    expect(await screen.findByRole('button', { name: 'Ver ficha completa' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' }) !== null).toBe(ve);
+    expect(screen.queryByRole('button', { name: 'Registrar combustible' }) !== null).toBe(ve);
+  });
+
   it('elimina el equipo al confirmar el AlertDialog', async () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
@@ -269,7 +279,8 @@ describe('EquiposView — menú de acciones', () => {
     const dialogo = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Eliminar' }));
 
-    await waitFor(() => expect(removeMock).toHaveBeenCalledWith('eq_1'));
+    await waitFor(() => expect(escrituras('equipment.delete')).toHaveLength(1));
+    expect(escrituras('equipment.delete')[0]).toMatchObject({ params: { id: 'eq_1' } });
   });
 });
 
@@ -333,7 +344,6 @@ describe('EquiposView — editar equipo', () => {
     // El equipo ya está homed a `br_1` (activa) — `CamposEquipo` igual la pide
     // por id (ver Fix 2), así que hay que mockear la respuesta.
     branchGetByIdMock.mockResolvedValue(SUCURSAL_ACTIVA);
-    updateMock.mockResolvedValue({ ...EQUIPO, licensePlate: null, homeBranchId: null });
 
     renderView();
     await abrirMenuAcciones();
@@ -347,12 +357,15 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() =>
-      expect(updateMock).toHaveBeenCalledWith(
-        'eq_1',
-        expect.objectContaining({ licensePlate: null, homeBranchId: null }),
-      ),
-    );
+    // Solo viajan los campos tocados, con su valor anterior como precondición.
+    await waitFor(() => expect(escrituras('equipment.update')).toHaveLength(1));
+    const [edicion] = escrituras('equipment.update');
+    expect(edicion).toMatchObject({
+      params: { id: 'eq_1' },
+      body: { licensePlate: null, homeBranchId: null },
+      expected: { licensePlate: 'AB-CD-12', homeBranchId: 'br_1' },
+    });
+    expect(Object.keys(edicion!.body as object).sort()).toEqual(['homeBranchId', 'licensePlate']);
   });
 
   it('al elegir un operador y guardar, llama a EquipmentAPI.assign con su id (catálogo, no UserAPI) SIN supervisorId (no cambió)', async () => {
@@ -360,8 +373,6 @@ describe('EquiposView — editar equipo', () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO);
-    assignMock.mockResolvedValue({ ...EQUIPO, operator: OPERADOR });
     operatorListMock.mockResolvedValue([OPERADOR]);
 
     renderView();
@@ -382,7 +393,13 @@ describe('EquiposView — editar equipo', () => {
     // (no manda `null` de relleno): antes, mandar siempre las dos claves
     // revalidaba de más un campo intacto (ver el fix de "operador inactivo
     // bloquea guardar solo-supervisor" más abajo).
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_1' }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      body: { operatorId: 'op_1' },
+      expected: { operatorId: null },
+    });
+    expect(escrituras('equipment.assign')[0]!.body).toEqual({ operatorId: 'op_1' });
     // El picker de operador sale del catálogo propio (`OperatorAPI.list`,
     // solo activos) — ya no filtra `UserAPI` por `role: 'OPERADOR'` (ese rol
     // no existe más).
@@ -405,8 +422,6 @@ describe('EquiposView — editar equipo', () => {
     listMock.mockResolvedValue([EQUIPO_ASIGNADO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO_ASIGNADO);
-    assignMock.mockResolvedValue({ ...EQUIPO_ASIGNADO, supervisor: { id: 'u_sup2', name: 'Marta Ríos' } });
     // El catálogo de operadores ACTIVOS ya no trae a Ana Ruiz — se desactivó.
     operatorListMock.mockResolvedValue([]);
     userListMock.mockImplementation((filtros?: { role?: string }) =>
@@ -436,7 +451,12 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { supervisorId: 'u_sup2' }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      body: { supervisorId: 'u_sup2' },
+      expected: { supervisorId: 'u_sup1' },
+    });
+    expect(escrituras('equipment.assign')[0]!.body).toEqual({ supervisorId: 'u_sup2' });
   });
 
   it('el picker de supervisor sigue usando UserAPI (rol SUPERVISOR)', async () => {
@@ -466,7 +486,6 @@ describe('EquiposView — editar equipo', () => {
     listMock.mockResolvedValue([EQUIPO_CON_OPERADOR_INACTIVO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO_CON_OPERADOR_INACTIVO);
     // El catálogo de ACTIVOS ya no trae a Ana Ruiz — se desactivó.
     operatorListMock.mockResolvedValue([]);
 
@@ -483,8 +502,10 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    expect(assignMock).not.toHaveBeenCalled();
+    // Nada cambió: no se encola ninguna escritura y el operador sigue asignado.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Guardar cambios' })).toBeNull());
+    expect(escrituras('equipment.assign')).toHaveLength(0);
+    expect(escrituras('equipment.update')).toHaveLength(0);
   });
 
   it('al elegir "Sin operador asignado" y guardar, EquipmentAPI.assign recibe operatorId: null', async () => {
@@ -492,8 +513,6 @@ describe('EquiposView — editar equipo', () => {
     listMock.mockResolvedValue([EQUIPO_CON_OPERADOR]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO_CON_OPERADOR);
-    assignMock.mockResolvedValue({ ...EQUIPO_CON_OPERADOR, operator: null });
     operatorListMock.mockResolvedValue([{ id: 'op_1', name: 'Pedro Soto' }]);
 
     renderView();
@@ -509,14 +528,18 @@ describe('EquiposView — editar equipo', () => {
     // El supervisor de `EQUIPO_CON_OPERADOR` ya era `null` y no se tocó — el
     // `null` explícito de "liberar operador" viaja igual (sí cambió respecto
     // de `op_1`), pero `supervisorId` se omite (sin cambios).
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: null }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      body: { operatorId: null },
+      expected: { operatorId: 'op_1' },
+    });
+    expect(escrituras('equipment.assign')[0]!.body).toEqual({ operatorId: null });
   });
 
-  it('sin cambiar la asignación, guardar la edición NO llama a EquipmentAPI.assign', async () => {
+  it('sin cambiar nada, guardar la edición no encola ni la edición ni la asignación', async () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO);
 
     renderView();
     await abrirMenuAcciones();
@@ -525,15 +548,14 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    expect(assignMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Guardar cambios' })).toBeNull());
+    expect(submitWriteMock).not.toHaveBeenCalled();
   });
 
   it('un submit de creación sin patente no manda la clave (sigue omitiéndola, no manda null)', async () => {
     listMock.mockResolvedValue([]);
     resumenMock.mockResolvedValue({ total: 0, disponibles: 0, porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 } });
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    createMock.mockResolvedValue(EQUIPO);
 
     renderView();
     await screen.findByText('No hay equipos que coincidan');
@@ -547,18 +569,21 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear equipo' }));
 
-    await waitFor(() => expect(createMock).toHaveBeenCalled());
-    const payloadEnviado = createMock.mock.calls[0][0] as Record<string, unknown>;
+    await waitFor(() => expect(escrituras('equipment.create')).toHaveLength(1));
+    const [creacion] = escrituras('equipment.create');
+    const payloadEnviado = creacion!.body as Record<string, unknown>;
     expect('licensePlate' in payloadEnviado).toBe(false);
     expect('homeBranchId' in payloadEnviado).toBe(false);
-    // Sin foto elegida, `photoKey` se omite igual que patente/sucursal.
+    // El id lo genera el cliente: con él un reenvío no duplica el equipo.
+    expect(payloadEnviado.id).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
+    // Sin foto elegida, no hay archivo ni `photoKey`.
     expect('photoKey' in payloadEnviado).toBe(false);
+    expect(creacion!.files).toBeUndefined();
   });
 
-  // `EquipoPhotoBanner` sube la foto apenas se elige (`uploadFile`) y reporta
-  // la KEY al padre por fuera del form de RHF (ver Diseño del RFC
-  // R2-storage) — el submit de creación tiene que mandarla como `photoKey`.
-  it('un submit de creación con foto elegida manda photoKey (no photoUrl)', async () => {
+  // `EquipoPhotoBanner` NO sube la foto al elegirla (sin señal sería imposible): la
+  // deja como `File` y viaja como archivo de la escritura, que se sube al sincronizar.
+  it('un submit de creación con foto elegida la manda como archivo (no photoKey ni photoUrl en el body)', async () => {
     listMock.mockResolvedValue([]);
     resumenMock.mockResolvedValue({
       total: 0,
@@ -566,8 +591,6 @@ describe('EquiposView — editar equipo', () => {
       porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
     });
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    createMock.mockResolvedValue(EQUIPO);
-    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/nueva.jpg', url: 'https://minio.local/nueva.jpg' });
 
     renderView();
     await screen.findByText('No hay equipos que coincidan');
@@ -583,14 +606,15 @@ describe('EquiposView — editar equipo', () => {
     const input = document.querySelector('input[type="file"][accept="image/jpeg,image/png,image/webp"]');
     fireEvent.change(input as HTMLInputElement, { target: { files: [archivo] } });
 
-    await waitFor(() => expect(uploadFileMock).toHaveBeenCalledWith(archivo));
     await screen.findByRole('button', { name: 'Quitar foto' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear equipo' }));
 
-    await waitFor(() => expect(createMock).toHaveBeenCalled());
-    const payloadEnviado = createMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(payloadEnviado.photoKey).toBe('tmp/u1/nueva.jpg');
+    await waitFor(() => expect(escrituras('equipment.create')).toHaveLength(1));
+    const [creacion] = escrituras('equipment.create');
+    expect(creacion!.files).toEqual([{ field: 'photoKey', file: archivo }]);
+    const payloadEnviado = creacion!.body as Record<string, unknown>;
+    expect('photoKey' in payloadEnviado).toBe(false);
     expect('photoUrl' in payloadEnviado).toBe(false);
   });
 
@@ -630,8 +654,10 @@ describe('EquiposView — editar equipo', () => {
     listMock.mockResolvedValue([EQUIPO]);
     resumenMock.mockResolvedValue(RESUMEN_VACIO);
     branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
-    updateMock.mockResolvedValue(EQUIPO);
-    assignMock.mockRejectedValue(new Error('Ese operador ya no está activo.'));
+    submitWriteMock.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'equipment.assign') throw new DomainError('Ese operador ya no está activo.', { status: 409 });
+      return enviado(null);
+    });
     operatorListMock.mockResolvedValue([OPERADOR]);
 
     renderView();
@@ -645,7 +671,7 @@ describe('EquiposView — editar equipo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await waitFor(() => expect(assignMock).toHaveBeenCalledWith('eq_1', { operatorId: 'op_1' }));
+    await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
 
     // El update sí se guardó, pero el modal no debe cerrarse: si se cerrara
     // acá, el cambio de asignación fallido quedaría enmascarado detrás del

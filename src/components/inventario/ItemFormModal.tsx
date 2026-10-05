@@ -15,11 +15,8 @@ import {
 } from '@heroui/react';
 
 import { useCategories } from '../../hooks/useCategories';
-import {
-  useCreateItem,
-  useSetMinimum,
-  useUpdateItem,
-} from '../../hooks/useInventory';
+import { useCreateItem, useSaveItemWithMinimums } from '../../hooks/useInventory';
+import { formatDecimalInput } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
 import {
@@ -416,8 +413,7 @@ export function EditItemModal({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const updateItem = useUpdateItem();
-  const setMinimum = useSetMinimum();
+  const saveItem = useSaveItemWithMinimums();
   const { data: categories } = useCategories();
   const {
     control,
@@ -442,28 +438,10 @@ export function EditItemModal({
     Object.fromEntries(
       branches.map((branch) => [
         branch.id,
-        String(stockAt(item, branch.id)?.minimumQuantity ?? 0),
+        formatDecimalInput(stockAt(item, branch.id)?.minimumQuantity ?? 0),
       ]),
     ),
   );
-
-  async function saveMinimums(): Promise<void> {
-    const changed = branches.filter((branch) => {
-      const next = Number(minimums[branch.id]);
-      const current = stockAt(item, branch.id)?.minimumQuantity ?? 0;
-      return Number.isFinite(next) && next >= 0 && next !== current;
-    });
-
-    await Promise.all(
-      changed.map((branch) =>
-        setMinimum.mutateAsync({
-          itemId: item.id,
-          branchId: branch.id,
-          minimumQuantity: Number(minimums[branch.id]),
-        }),
-      ),
-    );
-  }
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -471,14 +449,10 @@ export function EditItemModal({
         <Modal.Dialog className="sm:max-w-lg">
           {({ close }) => {
             const onSubmit = (values: ItemEditFormValues): void => {
-              void (async () => {
-                await updateItem.mutateAsync({
-                  id: item.id,
-                  input: toUpdateItemPayload(values),
-                });
-                await saveMinimums();
-                close();
-              })();
+              saveItem.mutate(
+                { item, input: toUpdateItemPayload(values), minimums },
+                { onSuccess: close },
+              );
             };
 
             return (
@@ -554,7 +528,7 @@ export function EditItemModal({
                   </Button>
                   <Button
                     form="edit-item-form"
-                    isPending={updateItem.isPending}
+                    isPending={saveItem.isPending}
                     type="submit"
                   >
                     {({ isPending }) =>

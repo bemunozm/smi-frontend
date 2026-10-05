@@ -103,6 +103,57 @@ describe('NotificacionesView', () => {
     expect(screen.getByText('Stock bajo de filtro de aceite')).toBeTruthy();
   });
 
+  it('muestra la notificación de un registro corregido, con su etiqueta, y un filtro para ella', () => {
+    notificacionesResult = {
+      data: [
+        {
+          id: 'n9',
+          userId: 'u1',
+          tipo: 'record.edited',
+          titulo: 'Supervisor SMI modificó la tarjeta de turno de BD-005 del 04-10-2026',
+          cuerpo: 'Litros de combustible: 30.5 → 30.75',
+          data: { entity: 'shift_card', entityId: 'c1' },
+          leida: false,
+          createdAt: '2026-10-05T10:00:00.000Z',
+        },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+
+    renderView();
+
+    expect(screen.getByText(/modificó la tarjeta de turno de BD-005/)).toBeTruthy();
+    expect(screen.getAllByText('Registro corregido').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Registro corregido' }));
+    expect(screen.queryByText(/modificó la tarjeta de turno de BD-005/)).toBeNull();
+  });
+
+  it('un tipo que el cliente no conoce no desaparece de la lista', () => {
+    notificacionesResult = {
+      data: [
+        {
+          id: 'n10',
+          userId: 'u1',
+          tipo: 'algo.nuevo',
+          titulo: 'Aviso de un tipo futuro',
+          cuerpo: 'x',
+          data: null,
+          leida: false,
+          createdAt: '2026-10-05T10:00:00.000Z',
+        },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+
+    renderView();
+
+    expect(screen.getByText('Aviso de un tipo futuro')).toBeTruthy();
+  });
+
   it('muestra el estado vacío cuando no hay notificaciones', () => {
     notificacionesResult = { data: [], isPending: false, isError: false, error: null };
 

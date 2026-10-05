@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mensajeErrorOperacion } from './error-messages';
+import { FORBIDDEN_MESSAGE, mensajeErrorFormulario, mensajeErrorOperacion } from './error-messages';
 import { DomainError } from './api-error';
 
 describe('mensajeErrorOperacion', () => {
@@ -18,9 +18,40 @@ describe('mensajeErrorOperacion', () => {
     expect(mensajeErrorOperacion(error)).toBe('El operador tiene trabajos extraordinarios registrados.');
   });
 
-  it('HOURMETER_BELOW_INITIAL: usa el texto amigable mapeado por code', () => {
-    const error = new DomainError('mensaje técnico', { code: 'HOURMETER_BELOW_INITIAL' });
-    expect(mensajeErrorOperacion(error)).toBe('El horómetro final no puede ser menor que el inicial.');
+  it('HOURMETER_BELOW_INITIAL: muestra el mensaje del backend (trae las dos lecturas)', () => {
+    const error = new DomainError('La lectura final (1300) no puede ser menor que la inicial (1310)', {
+      code: 'HOURMETER_BELOW_INITIAL',
+    });
+    expect(mensajeErrorOperacion(error)).toBe('La lectura final (1300) no puede ser menor que la inicial (1310)');
+  });
+
+  it('INSUFFICIENT_STOCK: muestra el mensaje del backend (disponible, solicitado y otras sucursales)', () => {
+    const mensaje =
+      'Existencia insuficiente de "Aceite" en Casa Matriz: disponible 16, solicitado 20. Hay 5 en otras sucursales.';
+    expect(mensajeErrorOperacion(new DomainError(mensaje, { code: 'INSUFFICIENT_STOCK', status: 409 }))).toBe(mensaje);
+  });
+
+  it('un 403 (el backend lo manda en inglés) sale en español', () => {
+    const error = new DomainError('Insufficient permissions', { code: 'FORBIDDEN', status: 403 });
+    expect(mensajeErrorOperacion(error)).toBe(FORBIDDEN_MESSAGE);
+    expect(mensajeErrorFormulario(error)).toBe(FORBIDDEN_MESSAGE);
+  });
+
+  it('STALE_UPDATE en la hoja de sincronización: conserva los campos que nombra el servidor y dice qué elegir', () => {
+    const error = new DomainError('El registro cambió mientras lo editabas (existencia, estado). Revisa los datos.', {
+      code: 'STALE_UPDATE',
+      status: 409,
+    });
+    const mensaje = mensajeErrorOperacion(error);
+    expect(mensaje).toContain('(existencia, estado)');
+    expect(mensaje).toContain('Sobrescribir');
+  });
+
+  it('STALE_UPDATE sin campos en el mensaje del servidor: texto genérico', () => {
+    const mensaje = mensajeErrorOperacion(new DomainError('stale', { code: 'STALE_UPDATE', status: 409 }));
+    expect(mensaje).toBe(
+      'Otra persona cambió estos datos mientras tanto. Elegí Sobrescribir para aplicar tu cambio igual, o Descartar para quedarte con lo que hay.',
+    );
   });
 
   it('OPERATOR_INACTIVE: mismo texto compartido con la asignación de equipos y trabajos extra', () => {
@@ -35,10 +66,10 @@ describe('mensajeErrorOperacion', () => {
   });
 
   it.each([
-    ['ID_CONFLICT', 'Ya existe una tarjeta con ese identificador. Reintentá la acción.'],
+    ['ID_CONFLICT', 'Ya existe un registro con ese identificador. Descartá este registro en Sincronización y volvé a crearlo.'],
     ['INVALID_SHIFT_DATE', 'La fecha del turno no es válida — revisá la fecha y la hora del equipo.'],
     ['REPORT_RATE_LIMITED', 'Se mandaron demasiados reportes seguidos — esperá unos minutos y reintentá.'],
-    ['PHOTO_MISSING', 'Falta la foto guardada para este cierre — descartalo y volvé a cerrar la tarjeta.'],
+    ['PHOTO_MISSING', 'Falta la foto guardada de este registro — descartalo y volvé a registrarlo.'],
     ['INVALID_RESPONSE', 'Respuesta inesperada del servidor — reintentá más tarde o avisá si sigue pasando.'],
     [
       'CARD_NOT_FOUND',
@@ -48,8 +79,7 @@ describe('mensajeErrorOperacion', () => {
     expect(mensajeErrorOperacion(new DomainError('mensaje técnico', { code }))).toBe(esperado);
   });
 
-  // Anexo 3 (cierre): códigos nuevos que la revisión final pidió cubrir con
-  // mensaje amigable.
+  // Códigos de cierre de tarjeta y reporte de salida con mensaje amigable.
   it('SHIFT_CARD_CLOSE_ELSEWHERE: avisa que la tarjeta se cerró por otra vía', () => {
     const error = new DomainError('mensaje técnico', { code: 'SHIFT_CARD_CLOSE_ELSEWHERE' });
     expect(mensajeErrorOperacion(error)).toContain('se cerró por otra vía');
@@ -79,5 +109,54 @@ describe('mensajeErrorOperacion', () => {
     expect(mensajeErrorOperacion('rareza', 'No se pudo actualizar la asignación.')).toBe(
       'No se pudo actualizar la asignación.',
     );
+  });
+});
+
+describe('mensajeErrorFormulario', () => {
+  it('STALE_UPDATE: no manda a una hoja de sincronización que el formulario ya no tiene', () => {
+    const mensaje = mensajeErrorFormulario(new DomainError('x', { code: 'STALE_UPDATE', status: 409 }));
+
+    expect(mensaje).toContain('Actualizá la pantalla');
+    expect(mensaje).not.toContain('Sobrescribir');
+  });
+
+  it('STALE_UPDATE: nombra los campos que cambió la otra persona', () => {
+    const error = new DomainError('El registro cambió mientras lo editabas (Estado, Título). Revisa.', {
+      code: 'STALE_UPDATE',
+      status: 409,
+    });
+    expect(mensajeErrorFormulario(error)).toContain('(Estado, Título)');
+  });
+
+  it('ID_CONFLICT: tampoco habla de Sincronización', () => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code: 'ID_CONFLICT', status: 409 }))).not.toContain(
+      'Sincronización',
+    );
+  });
+
+  it.each([
+    ['ALREADY_CLOSED', 'ya fue cerrado'],
+    ['CARD_NOT_FOUND', 'ya no existe'],
+    ['SHIFT_CARD_CLOSE_ELSEWHERE', 'desde Terreno'],
+  ])('%s: texto del cierre de turno de Flota', (code, texto) => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code }))).toContain(texto);
+  });
+
+  it('INSUFFICIENT_STOCK: el formulario muestra lo que dice el servidor', () => {
+    const mensaje = 'Existencia insuficiente de "Aceite": disponible 16, solicitado 20.';
+    expect(mensajeErrorFormulario(new DomainError(mensaje, { code: 'INSUFFICIENT_STOCK', status: 409 }))).toBe(mensaje);
+  });
+
+  it('FILE_TYPE_NOT_ALLOWED: dice qué formatos sirven', () => {
+    expect(mensajeErrorFormulario(new DomainError('x', { code: 'FILE_TYPE_NOT_ALLOWED' }))).toContain(
+      'JPG, PNG, WebP o PDF',
+    );
+  });
+
+  it('lo demás se comporta como mensajeErrorOperacion (409 sin code: el mensaje del servidor)', () => {
+    expect(mensajeErrorFormulario(new DomainError('Ya existe una sucursal con ese nombre', { status: 409 }))).toBe(
+      'Ya existe una sucursal con ese nombre',
+    );
+    expect(mensajeErrorFormulario('rareza', 'Fallback propio')).toBe('Fallback propio');
   });
 });

@@ -20,8 +20,12 @@ import {
   TextField,
 } from '@heroui/react';
 
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { ActionTile } from '../components/ActionTile';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
+import { RECURSOS_DE_OPERADORES } from '../lib/pending-resources';
 import {
   useCreateOperator,
   useDeleteOperator,
@@ -29,7 +33,6 @@ import {
   useToggleOperatorActive,
   useUpdateOperator,
 } from '../hooks/useOperators';
-import { ROLES } from '../types/roles';
 import {
   OperatorFormSchema,
   toCreateOperatorPayload,
@@ -180,7 +183,7 @@ function EditOperatorModal({ operator, isOpen, onOpenChange }: OperatorModalProp
           {({ close }) => {
             const onSubmit = (values: OperatorFormValues): void => {
               updateOperator.mutate(
-                { id: operator.id, input: toUpdateOperatorPayload(values) },
+                { operator, input: toUpdateOperatorPayload(values) },
                 { onSuccess: () => close() },
               );
             };
@@ -325,8 +328,8 @@ function DeleteOperatorAlertDialog({
  * `config/nav-items.ts`).
  */
 function OperatorActionsMenu({ operator }: { operator: Operator }) {
-  const { role } = useCurrentUser();
-  const canDelete = role === ROLES.ADMIN;
+  const { can } = usePermissions();
+  const canDelete = can('operator.delete');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const toggleActive = useToggleOperatorActive();
@@ -346,7 +349,7 @@ function OperatorActionsMenu({ operator }: { operator: Operator }) {
             onAction={(key) => {
               if (key === 'edit') setIsEditOpen(true);
               if (key === 'toggle-active') {
-                toggleActive.mutate({ id: operator.id, isActive: !operator.isActive });
+                toggleActive.mutate({ operator, isActive: !operator.isActive });
               }
               if (key === 'delete') setIsDeleteOpen(true);
             }}
@@ -388,9 +391,9 @@ function OperatorActionsMenu({ operator }: { operator: Operator }) {
  * un operador nunca deja colgado el estado de otro. Las reglas de rol son las
  * de `OperatorActionsMenu` (solo ADMIN elimina).
  */
-function OperatorCardMobile({ operator }: { operator: Operator }) {
-  const { role } = useCurrentUser();
-  const canDelete = role === ROLES.ADMIN;
+function OperatorCardMobile({ operator, marca }: { operator: Operator; marca: Marca | null }) {
+  const { can } = usePermissions();
+  const canDelete = can('operator.delete');
   const toggleActive = useToggleOperatorActive();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -419,6 +422,7 @@ function OperatorCardMobile({ operator }: { operator: Operator }) {
                 <span className="max-w-full truncate text-base font-semibold text-foreground">{operator.name}</span>
                 <span className="font-mono text-xs text-muted-foreground">{operator.rut ?? 'Sin RUT'}</span>
                 {statusChip}
+                <MarcaPendiente marca={marca} />
               </div>
               <ChevronRight aria-hidden className="h-5 w-5 shrink-0 text-(--muted)" />
             </div>
@@ -455,7 +459,7 @@ function OperatorCardMobile({ operator }: { operator: Operator }) {
                   label={operator.isActive ? 'Desactivar' : 'Activar'}
                   onPress={() => {
                     setIsSheetOpen(false);
-                    toggleActive.mutate({ id: operator.id, isActive: !operator.isActive });
+                    toggleActive.mutate({ operator, isActive: !operator.isActive });
                   }}
                 />
                 {canDelete ? (
@@ -498,6 +502,7 @@ export function OperadoresView() {
     ...(q.trim() ? { q: q.trim() } : {}),
   };
   const { data: operators, isPending, isError, error } = useOperators(filtros);
+  const pendientes = usePendingWrites(RECURSOS_DE_OPERADORES);
 
   return (
     <div className="flex flex-col gap-4">
@@ -515,6 +520,8 @@ export function OperadoresView() {
         </div>
         <CreateOperatorModal />
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_OPERADORES} />
 
       <div className="flex flex-wrap items-center gap-3">
         <TextField className="w-full sm:w-72" value={q} onChange={setQ}>
@@ -570,7 +577,10 @@ export function OperadoresView() {
                     <Table.Collection items={operators}>
                       {(operator) => (
                         <Table.Row>
-                          <Table.Cell>{operator.name}</Table.Cell>
+                          <Table.Cell>
+                            {operator.name}
+                            <MarcaPendiente marca={pendientes.marcaDe('operator', operator.id)} />
+                          </Table.Cell>
                           <Table.Cell className="font-mono text-sm">{operator.rut ?? '—'}</Table.Cell>
                           <Table.Cell>
                             <Chip color={operator.isActive ? 'success' : 'default'} size="sm" variant="soft">
@@ -593,7 +603,7 @@ export function OperadoresView() {
 
           <div className="flex flex-col gap-3 xl:hidden">
             {operators.map((operator) => (
-              <OperatorCardMobile key={operator.id} operator={operator} />
+              <OperatorCardMobile key={operator.id} marca={pendientes.marcaDe('operator', operator.id)} operator={operator} />
             ))}
           </div>
         </>

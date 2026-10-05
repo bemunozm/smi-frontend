@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -24,6 +25,7 @@ import {
 import { useBranches } from '../hooks/useBranches';
 import { useMovements } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { RECURSOS_DE_MOVIMIENTOS } from '../lib/pending-resources';
 import type { Branch } from '../types/branch';
 import {
   MOVEMENT_REASON_LABELS,
@@ -181,6 +183,8 @@ export function MovimientosView() {
           </Link>
         </p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_MOVIMIENTOS} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select

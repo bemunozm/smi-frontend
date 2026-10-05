@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Camera, Check, Pencil } from 'lucide-react';
 
 import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/hallazgos';
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
-import { useAhora } from '../hooks/useAhora';
-import { contextoTurno } from '../lib/turno';
-import { useHallazgosList, useCreateHallazgo, useUpdateHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
+import { useTurnoActual } from '../hooks/useTurnoActual';
+import { useRegistrarHallazgo, useEditarHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
+import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
   Automatico,
@@ -73,6 +74,14 @@ const estadoColor: Record<string, string> = {
   EN_PROCESO: '#1a3a9c',
   CERRADO: '#156237',
 };
+/** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
+const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+/** Un cambio anterior del mismo hallazgo espera una acción: encadenar otro encima lo dejaría trabado. */
+const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
+
+const motivoSinEdicion = (h: { sinSincronizar?: boolean; edicionRequiereAtencion?: boolean }): string | undefined =>
+  h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : h.edicionRequiereAtencion ? MOTIVO_EDICION_ATENCION : undefined;
+
 const estadoLabel: Record<string, string> = {
   ABIERTO: 'ABIERTO',
   EN_PROCESO: 'EN PROCESO',
@@ -82,17 +91,16 @@ const estadoLabel: Record<string, string> = {
 export function HallazgosView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
-  const { data: hallazgos = [] } = useHallazgosList();
-  const crear = useCreateHallazgo();
+  const { hallazgos } = useHallazgosProjection();
+  const { registrar, isGuardando } = useRegistrarHallazgo();
 
-  /** Hallazgo que se está corrigiendo (R13); se lee de la lista para ver lo último. */
+  /** Hallazgo que se está corrigiendo; se lee de la lista para ver lo último. */
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const editando = hallazgos.find((h) => h.id === editandoId) ?? null;
 
-  // El turno del título sale del reloj, como en Registro: antes decía
-  // «DIURNO · 08–20» escrito a mano, también de noche.
-  const ahora = useAhora();
-  const turno = useMemo(() => contextoTurno(ahora), [ahora]);
+  // El mismo turno que muestra Registro de equipo, incluido el adelanto al
+  // turno siguiente.
+  const turno = useTurnoActual();
 
   const {
     register,
@@ -108,31 +116,18 @@ export function HallazgosView() {
 
   const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
   /**
-   * El OCR de litros no aplica acá —un hallazgo no tiene un display que leer—
-   * así que el callback de lectura no hace nada. Del flujo se usa el resto:
-   * EXIF para avisar si la foto es vieja, y la subida a storage privado.
+   * Un hallazgo no tiene un display que leer, así que el OCR de litros se
+   * apaga. Del flujo se usa el resto: EXIF para avisar si la foto es vieja.
+   * La foto NO se sube acá: viaja en el outbox junto al hallazgo y se sube
+   * en el replay, así que el formulario funciona igual sin señal.
    */
-  const foto = usePhotoCaptureFlow(() => {});
+  const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
 
   const onSubmit = async (values: HallazgoForm) => {
-    // La foto es opcional. Si hay, se sube antes: si la subida falla, el
-    // hallazgo no se crea a medias sin su respaldo.
-    let fotoKey: string | undefined;
-    if (foto.file) {
-      const key = await foto.upload(foto.file);
-      if (!key) return;
-      fotoKey = key;
-    }
-
-    crear.mutate(
-      { ...values, fotoKey },
-      {
-        onSuccess: () => {
-          reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
-          foto.resetPhoto();
-        },
-      },
-    );
+    const guardado = await registrar(values, foto.file);
+    if (!guardado) return;
+    reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
+    foto.resetPhoto();
   };
 
   const sinCerrar = hallazgos.filter((h) => h.estado !== 'CERRADO').length;
@@ -188,7 +183,6 @@ export function HallazgosView() {
           <FotoRespaldoField
             file={foto.file}
             isReadingPhoto={foto.isReadingPhoto}
-            isUploadingPhoto={foto.isUploadingPhoto}
             captureDate={foto.captureDate}
             onSelect={foto.handleSelectPhoto}
             onClear={foto.handleClearPhoto}
@@ -204,12 +198,12 @@ export function HallazgosView() {
             <Automatico label="Estado" valor={<ChipEstado color={estadoColor.ABIERTO}>ABIERTO</ChipEstado>} />
           </Automaticos>
 
-          <Boton ancho type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar hallazgo'}
+          <Boton ancho type="submit" disabled={isGuardando}>
+            {isGuardando ? 'Guardando…' : 'Registrar hallazgo'}
             <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           {/* Dice a quién llega para que el supervisor no lo avise además
-              por radio o WhatsApp (Acta N.° 004, R11). */}
+              por radio o WhatsApp. */}
           <p className="m-0 text-center text-[12.5px] text-muted-foreground">
             Al registrarlo se avisa a los mantenedores y al administrador, en el sistema y por correo.
           </p>
@@ -243,6 +237,12 @@ export function HallazgosView() {
             <tr key={h.id}>
               <td className={`${TD} tabular whitespace-nowrap`}>
                 {fmtDate(h.fecha)} · {fmtTime(h.fecha)}
+                {h.sinSincronizar && (
+                  <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
+                )}
+                {h.edicionSinSincronizar && (
+                  <MarcaSinSincronizar edicion requiereAtencion={h.edicionRequiereAtencion} />
+                )}
               </td>
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{h.equipo?.internalCode ?? h.equipoId}</b>
@@ -271,7 +271,9 @@ export function HallazgosView() {
                 <Boton
                   variante="contorno"
                   className="!min-h-10 !px-3 !text-[13.5px]"
-                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${motivoSinEdicion(h) ? `. ${motivoSinEdicion(h)}` : ''}`}
+                  title={motivoSinEdicion(h)}
+                  disabled={motivoSinEdicion(h) != null}
                   onClick={() => setEditandoId(h.id)}
                 >
                   <Pencil className="h-4 w-4" /> Editar
@@ -303,6 +305,12 @@ export function HallazgosView() {
                 </Chip>
               </div>
               <p className="m-0 text-[15px]">{h.descripcion}</p>
+              {h.sinSincronizar && (
+                <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
+              )}
+              {h.edicionSinSincronizar && (
+                <MarcaSinSincronizar edicion requiereAtencion={h.edicionRequiereAtencion} />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="tabular text-[13px] text-muted-foreground">
                   {fmtDate(h.fecha)}
@@ -317,10 +325,14 @@ export function HallazgosView() {
                 ancho
                 className="!min-h-11 !text-[14.5px]"
                 aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                disabled={motivoSinEdicion(h) != null}
                 onClick={() => setEditandoId(h.id)}
               >
                 <Pencil className="h-4 w-4" /> Editar
               </Boton>
+              {motivoSinEdicion(h) && (
+                <p className="m-0 text-center text-[12.5px] text-muted-foreground">{motivoSinEdicion(h)}</p>
+              )}
             </Tarjeta>
           ))}
         </div>
@@ -361,7 +373,7 @@ export function HallazgosView() {
 }
 
 /**
- * Corregir un hallazgo ya registrado (Acta N.° 004, R13): un error humano
+ * Corregir un hallazgo ya registrado: un error humano
  * —el equipo equivocado, una prioridad mal elegida— se arregla sin pedir
  * permiso, pero con el aviso al administrador arriba y el historial de quién
  * cambió qué abajo. La foto no se toca: es el respaldo de lo que se vio.
@@ -375,7 +387,7 @@ function EditorHallazgo({
   equipos: { id: string; internalCode: string; type: string }[];
   onCerrar: () => void;
 }) {
-  const actualizar = useUpdateHallazgo();
+  const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarHallazgo();
   const cambios = useCambiosHallazgo(hallazgo.id);
   const [form, setForm] = useState<CorreccionHallazgo>({
     equipoId: hallazgo.equipoId,
@@ -390,7 +402,7 @@ function EditorHallazgo({
     <div className="flex flex-col gap-4">
       {guardado && (
         <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
-          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+          <Check className="h-4 w-4 shrink-0" /> Cambio guardado en el equipo. Se avisa al administrador cuando se sincronice.
         </p>
       )}
       <AvisoEdicion />
@@ -435,15 +447,13 @@ function EditorHallazgo({
         </Campo>
         <Boton
           ancho
-          disabled={actualizar.isPending || descripcionCorta}
-          onClick={() =>
-            actualizar.mutate(
-              { id: hallazgo.id, payload: { ...form, descripcion: form.descripcion.trim() } },
-              { onSuccess: () => setGuardado(true) },
-            )
-          }
+          disabled={isActualizando || descripcionCorta}
+          onClick={async () => {
+            const ok = await guardarCambio(hallazgo, { ...form, descripcion: form.descripcion.trim() });
+            if (ok) setGuardado(true);
+          }}
         >
-          {actualizar.isPending ? 'Guardando…' : 'Guardar cambios'}
+          {isActualizando ? 'Guardando…' : 'Guardar cambios'}
           <ArrowRight className="h-[19px] w-[19px]" />
         </Boton>
         <Boton variante="contorno" ancho onClick={onCerrar}>

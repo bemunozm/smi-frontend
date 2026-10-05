@@ -3,8 +3,7 @@ import { z } from 'zod';
 /**
  * Contrato de datos del dashboard del bloque Núcleo.
  *
- * Terreno (Alexander) y Flota/Inventario (Benjamín/Joaquín) ya están
- * integrados a `main` con datos REALES. Terreno: sus 4 piezas (KPI "Hallazgos abiertos",
+ * Terreno, Flota e Inventario ya están integrados con datos REALES. Terreno: sus 4 piezas (KPI "Hallazgos abiertos",
  * lista de recientes, tendencia semanal, horas extraordinarias por mes) se
  * calculan en cliente desde `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts`
  * vía `config/dashboard-aggregations.ts` — ver `hooks/useDashboard.ts`. Los
@@ -21,8 +20,8 @@ import { z } from 'zod';
  * `types/equipment.ts` / `types/inventario.ts` — sin capa de agregación propia
  * (el backend ya agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`).
  *
- * Mantenimiento (Joaquín) sigue sin integrar (Fase 2, motor preventivo por
- * umbral de horómetro no existe aún) — `DashboardSummarySchema` de acá y el
+ * Mantenimiento sigue sin integrar (el motor preventivo por umbral de
+ * horómetro no existe aún) — `DashboardSummarySchema` de acá y el
  * mock de `api/DashboardAPI.ts` cubren solo esos 2 campos. Cuando exponga su
  * endpoint real, el patrón es el mismo: reemplazar el `mockResponse` por
  * `axiosInstance.get(...)`.
@@ -35,7 +34,6 @@ export const HALLAZGO_ESTADOS = ['ABIERTO', 'EN_PROCESO', 'CERRADO'] as const;
 export type HallazgoEstado = (typeof HALLAZGO_ESTADOS)[number];
 
 export const MANTENCION_TIPOS = ['PREVENTIVA', 'CORRECTIVA'] as const;
-export type MantencionTipo = (typeof MANTENCION_TIPOS)[number];
 
 /** Breakdown por prioridad de los hallazgos con `estado === 'ABIERTO'` —
  * complementa la card "Hallazgos abiertos" (mismo listado que ese KPI,
@@ -54,7 +52,7 @@ export const HallazgosPorCriticidadSchema = z.object({
 export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema>;
 
 /**
- * KPIs que siguen sin dueño integrado a `main` (Mantenimiento, Fase 2) —
+ * KPIs que siguen sin backend (Mantenimiento: motor preventivo) —
  * únicos campos que todavía sirve `api/DashboardAPI.ts` como mock.
  * `equiposDisponibles`/`insumosBajoMinimo` salieron de acá (ahora reales, ver
  * `hooks/useEquipment.ts#useResumenFleet` / `hooks/useInventario.ts#useResumenInventario`),
@@ -63,10 +61,10 @@ export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema
  * solo `totalHoras`, cubierto por el gráfico de horas extraordinarias).
  */
 export const DashboardSummarySchema = z.object({
-  /** ← Mantenimiento: motor preventivo por umbral de horómetro (Fase 2). */
+  /** ← Mantenimiento: motor preventivo por umbral de horómetro. */
   proximasMantenciones: z.number().int().nonnegative(),
   /** ← Mantenimiento: % de mantenciones preventivas ejecutadas dentro del
-   *  umbral de horómetro (a tiempo) sobre el total programado. Fase 2. */
+   *  umbral de horómetro (a tiempo) sobre el total programado. */
   cumplimientoPreventivoPct: z.number().min(0).max(100),
 });
 export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
@@ -87,7 +85,7 @@ export const HallazgoResumenSchema = z.object({
 });
 export type HallazgoResumen = z.infer<typeof HallazgoResumenSchema>;
 
-/** ← Mantenimiento: motor preventivo, próximos equipos a umbral (Fase 2). */
+/** ← Mantenimiento: motor preventivo, próximos equipos a umbral. */
 export const MantencionProximaSchema = z.object({
   id: z.string(),
   equipo: z.string(),

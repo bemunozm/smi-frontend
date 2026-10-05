@@ -1,13 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { OperatorAPI, type OperatorFiltros } from '../api/OperatorAPI';
-import type { CreateOperatorInput, UpdateOperatorInput } from '../types/operator';
+import { pickFields } from '../lib/edit-diff';
+import { OPERATORS_KEY } from '../lib/query-keys';
+import { buildQueuedEdit } from '../lib/queued-edit';
+import { operatorEntity } from '../offline/db';
+import type { CreateOperatorInput, Operator, OperatorFields, UpdateOperatorInput } from '../types/operator';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
-// Exportada: `components/terreno/SyncStatus.tsx` la usa para refetchear el
-// catálogo al "Preparar para uso sin señal" (RFC "Supervisión en Terreno"
-// §Diseño → Offline), sin repetir el literal `['operators']` a mano.
-export const OPERATORS_KEY = ['operators'] as const;
+// La key vive en `lib/query-keys.ts` (la comparten `offline/` y la precarga de
+// "Preparar para uso sin señal"); se re-exporta para los consumidores existentes.
+export { OPERATORS_KEY };
 
 /**
  * Lista de operadores — mismo patrón retrocompatible que `useBranches`/
@@ -24,75 +28,72 @@ export function useOperators(filtros: OperatorFiltros = {}) {
   });
 }
 
-function useInvalidarOperators() {
-  const queryClient = useQueryClient();
-  return () => void queryClient.invalidateQueries({ queryKey: OPERATORS_KEY });
-}
-
 export function useCreateOperator() {
-  const invalidar = useInvalidarOperators();
-
-  return useMutation({
-    mutationFn: (input: CreateOperatorInput) => OperatorAPI.create(input),
-    onSuccess: (operator) => {
-      invalidar();
-      toast.success('Operador creado', { description: operator.name });
+  return useQueuedCreate<'operator.create', CreateOperatorInput>({
+    endpoint: 'operator.create',
+    build: (input, id) => ({ params: {}, body: { ...input, id } }),
+    onSent: (operator, input) => {
+      toast.success('Operador creado', { description: operator?.name ?? input.name });
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo crear el operador.');
-    },
+    errorFallback: 'No se pudo crear el operador.',
   });
 }
 
-export function useUpdateOperator() {
-  const invalidar = useInvalidarOperators();
+const CAMPOS_DE_OPERADOR = ['name', 'rut', 'isActive'] as const;
 
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateOperatorInput }) => OperatorAPI.update(id, input),
-    onSuccess: (operator) => {
-      invalidar();
-      toast.success('Operador actualizado', { description: operator.name });
+export interface UpdateOperatorVars {
+  /** El operador tal como lo muestra la pantalla: la base de la edición. */
+  operator: Operator;
+  input: UpdateOperatorInput;
+}
+
+/** Arma la edición de un operador contra su base (lo que se ve más lo ya guardado
+ * sin enviar). Un RUT omitido es "sin cambio": el contrato no admite borrarlo. */
+async function edicionDeOperador({ operator, input }: UpdateOperatorVars) {
+  const edicion = await buildQueuedEdit<OperatorFields>({
+    entity: operatorEntity(operator.id),
+    ops: ['operator.update'],
+    base: pickFields(operator, CAMPOS_DE_OPERADOR),
+    next: input,
+    fields: CAMPOS_DE_OPERADOR,
+  });
+  if (!edicion.hayCambios) return null;
+  return { params: { id: operator.id }, body: edicion.cambios, expected: edicion.esperado };
+}
+
+export function useUpdateOperator() {
+  return useQueuedMutation<'operator.update', UpdateOperatorVars>({
+    endpoint: 'operator.update',
+    build: edicionDeOperador,
+    onSent: (data, { operator }) => {
+      toast.success('Operador actualizado', { description: data?.name ?? operator.name });
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar el operador.');
-    },
+    errorFallback: 'No se pudo actualizar el operador.',
   });
 }
 
 /** Toggle rápido activar/desactivar (sin abrir el modal de edición) —
- * `PATCH { isActive }`. Comparte mensajes con `useUpdateOperator` porque
+ * `PATCH { isActive }`. Comparte la escritura con `useUpdateOperator` porque
  * pega al mismo endpoint. */
 export function useToggleOperatorActive() {
-  const invalidar = useInvalidarOperators();
-
-  return useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      OperatorAPI.update(id, { isActive }),
-    onSuccess: (operator) => {
-      invalidar();
-      toast.success(operator.isActive ? 'Operador activado' : 'Operador desactivado', {
-        description: operator.name,
+  return useQueuedMutation<'operator.update', { operator: Operator; isActive: boolean }>({
+    endpoint: 'operator.update',
+    build: ({ operator, isActive }) => edicionDeOperador({ operator, input: { isActive } }),
+    onSent: (data, { operator, isActive }) => {
+      toast.success(isActive ? 'Operador activado' : 'Operador desactivado', {
+        description: data?.name ?? operator.name,
       });
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar el operador.');
-    },
+    errorFallback: 'No se pudo actualizar el operador.',
   });
 }
 
 export function useDeleteOperator() {
-  const invalidar = useInvalidarOperators();
-
-  return useMutation({
-    mutationFn: (id: string) => OperatorAPI.remove(id),
-    onSuccess: () => {
-      invalidar();
-      toast.success('Operador eliminado');
-    },
-    onError: (error: unknown) => {
-      // El backend rechaza con 409 si el operador está en uso y sugiere
-      // desactivarlo — ese mensaje llega tal cual (ver `OperatorAPI.remove`).
-      toast.danger(error instanceof Error ? error.message : 'No se pudo eliminar el operador.');
-    },
+  // El backend rechaza con 409 si el operador está en uso y sugiere desactivarlo:
+  // ese mensaje llega tal cual.
+  return useQueuedDelete({
+    endpoint: 'operator.delete',
+    sentMessage: 'Operador eliminado',
+    errorFallback: 'No se pudo eliminar el operador.',
   });
 }

@@ -1,6 +1,17 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+
+import { DomainError } from './api-error';
+import { markSessionEnded } from './cache-owner';
+
+/** Un 401 de la API quiere decir que la sesión ya no vale: se anota para que las
+ * cachés que quedaron no se le sirvan a la siguiente sesión (`lib/session-data.ts`). */
+function noteSessionEnded(error: unknown): void {
+  if (error instanceof DomainError && error.status === 401) markSessionEnded();
+}
 
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: noteSessionEnded }),
+  mutationCache: new MutationCache({ onError: noteSessionEnded }),
   defaultOptions: {
     queries: {
       retry: 1,
@@ -8,14 +19,23 @@ export const queryClient = new QueryClient({
       // `'offlineFirst'` (default es `'online'`): con `'online'` TanStack
       // Query directamente SALTA la request si `navigator.onLine` es
       // `false` y sirve lo que tenga en caché sin marcar error — en un
-      // arranque en frío sin señal (RFC "Supervisión en Terreno" §Diseño →
-      // Offline) eso deja la pantalla en `isPending` para siempre si el
-      // Service Worker todavía no alcanzó a responder. `'offlineFirst'`
-      // intenta la request igual (el SW `smi-api`, `NetworkFirst`, la
-      // resuelve desde su cache si la red falla) y solo cae a error si NI
-      // la red NI el cache tienen nada. Mutaciones sin tocar: siguen
-      // `'online'` — no tiene sentido "mutar desde caché".
+      // arranque en frío sin señal eso deja la pantalla en `isPending` para
+      // siempre si el Service Worker todavía no alcanzó a responder.
+      // `'offlineFirst'` intenta la request igual (el SW `smi-api`,
+      // `NetworkFirst`, la resuelve desde su cache si la red falla) y solo
+      // cae a error si NI la red NI el cache tienen nada. Las mutaciones se
+      // configuran aparte, abajo.
       networkMode: 'offlineFirst',
+    },
+    mutations: {
+      // `'always'` (default `'online'`): con `'online'` una mutación sin señal
+      // se PAUSA en silencio — `isPending` para siempre y ningún `onError` —,
+      // y el usuario cree que se está guardando. Las escrituras de datos pasan
+      // por la cola de `offline/` (`hooks/useQueuedMutation`), cuya mutación solo
+      // guarda en el equipo; las que NUNCA se encolan (usuarios, notificaciones,
+      // ver `offline/endpoints`) siguen siendo requests directas, y para ellas es
+      // mejor fallar rápido con el aviso de `toDomainError` ("Sin señal…") que esperar.
+      networkMode: 'always',
     },
   },
 });

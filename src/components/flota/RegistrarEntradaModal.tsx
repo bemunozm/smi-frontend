@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, FieldError, Label, ListBox, Modal, NumberField, Select, Spinner } from '@heroui/react';
+import { Button, Label, ListBox, Modal, Select, Spinner } from '@heroui/react';
 
+import { DecimalField } from '../DecimalField';
 import { useCreateHorometro } from '../../hooks/useHorometro';
 import { OperatorPicker } from '../operators/OperatorPicker';
 import type { HorometroForm } from '../../types/horometro';
@@ -23,7 +24,7 @@ const VALOR_INICIAL_LABEL: Record<ControlUnit, string> = {
 };
 
 // Schema local de la UI (no el `horometroFormSchema` de Terreno): acá los
-// campos numéricos son controlados por `NumberField` (necesita `number`, no
+// campos numéricos son controlados por `DecimalField` (necesita `number`, no
 // el `number | undefined` de los helpers `optNumber`/`nonNegNumber` pensados
 // para inputs nativos registrados con `valueAsNumber`). El payload final que
 // se envía a `useCreateHorometro` sí respeta el tipo `HorometroForm` real.
@@ -38,7 +39,7 @@ const EntradaSchema = z.object({
   operatorId: z.string().min(1, 'Seleccioná un operador'),
   turno: z.enum(['DIURNO', 'NOCTURNO']),
   valorInicial: z.number().nonnegative('Valor inválido'),
-  // Opcional de verdad: el `NumberField` necesita partir en 0 para quedar
+  // Opcional de verdad: el `DecimalField` necesita partir en 0 para quedar
   // controlado, pero eso es solo el valor de PANTALLA — `nivelTouched` (más
   // abajo) es lo que decide si 0 fue realmente ingresado por el usuario o si
   // nunca tocó el campo, así el payload no manda un 0% falso.
@@ -163,21 +164,14 @@ export function RegistrarEntradaModal({
                 control={control}
                 name="valorInicial"
                 render={({ field }) => (
-                  <NumberField
-                    fullWidth
+                  <DecimalField
+                    errorMessage={errors.valorInicial?.message}
                     isInvalid={!!errors.valorInicial}
-                    minValue={0}
+                    label={VALOR_INICIAL_LABEL[controlUnit]}
+                    onBlur={field.onBlur}
                     onChange={field.onChange}
                     value={field.value}
-                  >
-                    <Label>{VALOR_INICIAL_LABEL[controlUnit]}</Label>
-                    <NumberField.Group>
-                      <NumberField.DecrementButton />
-                      <NumberField.Input onBlur={field.onBlur} />
-                      <NumberField.IncrementButton />
-                    </NumberField.Group>
-                    {errors.valorInicial ? <FieldError>{errors.valorInicial.message}</FieldError> : null}
-                  </NumberField>
+                  />
                 )}
               />
 
@@ -230,25 +224,17 @@ export function RegistrarEntradaModal({
                   control={control}
                   name="nivelCombustible"
                   render={({ field }) => (
-                    <NumberField
-                      fullWidth
+                    <DecimalField
+                      errorMessage={errors.nivelCombustible?.message}
                       isInvalid={!!errors.nivelCombustible}
-                      maxValue={100}
-                      minValue={0}
+                      label="Nivel de combustible (%, opcional)"
+                      onBlur={field.onBlur}
                       onChange={(value) => {
                         field.onChange(value);
                         setNivelTouched(true);
                       }}
-                      value={field.value}
-                    >
-                      <Label>Nivel de combustible (%, opcional)</Label>
-                      <NumberField.Group>
-                        <NumberField.DecrementButton />
-                        <NumberField.Input onBlur={field.onBlur} />
-                        <NumberField.IncrementButton />
-                      </NumberField.Group>
-                      {errors.nivelCombustible ? <FieldError>{errors.nivelCombustible.message}</FieldError> : null}
-                    </NumberField>
+                      value={field.value ?? 0}
+                    />
                   )}
                 />
               </div>

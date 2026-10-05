@@ -1,27 +1,37 @@
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { liveQuery } from 'dexie';
 
 /**
- * Puente mínimo entre `Dexie.liveQuery` y React, sin depender del paquete
- * `dexie-react-hooks` (no aprobado — ver el plan "Supervisión en Terreno"
- * §Dependencias): `liveQuery` expone un `Observable` (suscripción con
- * `next`/`error`, sin snapshot síncrono), así que se cachea el último valor
- * emitido en un `ref` y se lo sirve a `useSyncExternalStore` — el mismo
- * patrón que documenta React para fuentes de datos externas asíncronas.
+ * Puente mínimo entre `Dexie.liveQuery` y React, sin sumar el paquete
+ * `dexie-react-hooks` como dependencia: `liveQuery` expone un `Observable`
+ * (suscripción con `next`/`error`, sin snapshot síncrono), así que se cachea el
+ * último valor emitido en un `ref` y se lo sirve a `useSyncExternalStore` — el
+ * mismo patrón que documenta React para fuentes de datos externas asíncronas.
  *
- * `deps` recrea la consulta (mismo criterio que `useMemo`/`useEffect`) — al
- * cambiar, el snapshot vuelve a `initialValue` hasta que la nueva consulta
- * emite su primer valor (una espera de microtask, invisible en la práctica).
+ * `key` es el parámetro de la consulta (`querier` lo recibe): al cambiar se
+ * recrea — el snapshot vuelve a `initialValue` hasta que la nueva consulta emite
+ * su primer valor (una espera de microtask, invisible en la práctica). `querier` y
+ * `initialValue` se leen por `ref`, así que cambiar de identidad en cada render del
+ * llamador no recrea nada.
  */
-export function useLiveQuery<T>(querier: () => T | Promise<T>, deps: unknown[], initialValue: T): T {
+export function useLiveQuery<T>(
+  querier: (key: string | undefined) => T | Promise<T>,
+  key: string | undefined,
+  initialValue: T,
+): T {
+  const querierRef = useRef(querier);
+  const initialRef = useRef(initialValue);
   const cacheRef = useRef<T>(initialValue);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `deps` es la API pública de este hook, no `querier` (que cambia de identidad en cada render del llamador).
+  useEffect(() => {
+    querierRef.current = querier;
+    initialRef.current = initialValue;
+  });
+
   const observable = useMemo(() => {
-    cacheRef.current = initialValue;
-    return liveQuery(querier);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+    cacheRef.current = initialRef.current;
+    return liveQuery(() => querierRef.current(key));
+  }, [key]);
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {

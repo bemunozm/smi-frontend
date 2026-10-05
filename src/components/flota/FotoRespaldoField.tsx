@@ -8,7 +8,6 @@ import { PhotoCaptureField } from './PhotoCaptureField';
 interface FotoRespaldoFieldProps {
   file: File | null;
   isReadingPhoto: boolean;
-  isUploadingPhoto: boolean;
   captureDate: Date | null;
   onSelect: (file: File) => void;
   onClear: () => void;
@@ -35,8 +34,8 @@ interface FotoRespaldoFieldProps {
 /**
  * Bloque "Foto de respaldo" completo (label + `PhotoCaptureField` + estado de
  * frescura EXIF) — antes triplicado verbatim entre `RegistrarEntradaModal`,
- * `RegistrarSalidaModal` y `RegistrarCargaCombustibleModal` (Fix F-MEDIA #1,
- * review adversarial). El estado (file/OCR/EXIF/subida) lo sigue
+ * `RegistrarSalidaModal` y `RegistrarCargaCombustibleModal`. El estado
+ * (file/OCR/EXIF) lo sigue
  * gestionando el modal vía `usePhotoCaptureFlow` — este componente solo
  * presenta ese estado, para que el DOM que produce (y los textos que buscan
  * los tests: "Analizando la foto…", "· reciente", etc.) quede idéntico al de
@@ -50,7 +49,6 @@ interface FotoRespaldoFieldProps {
 export function FotoRespaldoField({
   file,
   isReadingPhoto,
-  isUploadingPhoto,
   captureDate,
   onSelect,
   onClear,
@@ -73,7 +71,7 @@ export function FotoRespaldoField({
       <p className="mb-2 text-xs text-(--muted)">{guia}</p>
       <PhotoCaptureField
         file={file}
-        isBusy={isReadingPhoto || isUploadingPhoto}
+        isBusy={isReadingPhoto}
         onClear={onClear}
         onSelect={onSelect}
         subtitle={subtitle}

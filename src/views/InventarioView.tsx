@@ -42,11 +42,15 @@ import {
 } from '../components/inventario/shared';
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
+import { MOVEMENT_ACTIONS } from '../lib/permissions';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useItems } from '../hooks/useInventory';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
 import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { RECURSOS_DE_INVENTARIO } from '../lib/pending-resources';
 import { useUiStore } from '../store/ui';
-import { ROLES } from '../types/roles';
 import type { Branch } from '../types/branch';
 import {
   UNIT_SYMBOLS,
@@ -80,27 +84,26 @@ const MENU_ICON = 15;
 
 function ItemRow({
   item,
+  marca,
   branchId,
-  canWrite,
-  isAdmin,
   onOpen,
   onEdit,
 }: {
   item: InventoryItem;
+  marca: Marca | null;
   branchId: string;
-  canWrite: boolean;
-  isAdmin: boolean;
   onOpen: (view: ItemAction) => void;
   onEdit: () => void;
 }) {
   const navigate = useNavigate();
+  const { can, canAny } = usePermissions();
   const isAll = branchId === ALL_BRANCHES;
   const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
   const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
   const status = stockStatus(item, branchId);
 
   const options: RowMenuOption[] = [
-    ...(isAdmin
+    ...(can('item.update')
       ? [
           {
             id: 'edit',
@@ -109,7 +112,7 @@ function ItemRow({
           },
         ]
       : []),
-    ...(canWrite
+    ...(canAny(MOVEMENT_ACTIONS)
       ? [
           {
             id: 'movement',
@@ -119,7 +122,7 @@ function ItemRow({
         ]
       : []),
     { id: 'ficha', label: 'Ver ficha', icon: <FileText size={MENU_ICON} /> },
-    ...(isAdmin
+    ...(can('item.delete')
       ? [
           {
             id: 'delete',
@@ -147,6 +150,7 @@ function ItemRow({
             <span className="text-foreground">{item.name}</span>
             {item.isCritical ? <CriticalBadge /> : null}
           </div>
+          <MarcaPendiente marca={marca} />
           {item.partNumber ? (
             <span className="font-mono text-xs text-muted-foreground">
               {item.partNumber}
@@ -217,20 +221,17 @@ const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
 function ItemsList({
   items,
   branchId,
-  canWrite,
-  isAdmin,
   onOpen,
   onEdit,
 }: {
   items: InventoryItem[];
   branchId: string;
-  canWrite: boolean;
-  isAdmin: boolean;
   onOpen: (item: InventoryItem, view: ItemAction) => void;
   onEdit: (item: InventoryItem) => void;
 }) {
   const isDesktop = useMediaQuery(TABLE_LAYOUT_QUERY);
   const isAll = branchId === ALL_BRANCHES;
+  const pendientes = usePendingWrites(RECURSOS_DE_INVENTARIO);
 
   if (items.length === 0) return <EmptyState />;
 
@@ -243,6 +244,7 @@ function ItemsList({
             branchId={branchId}
             item={item}
             key={item.id}
+            marca={pendientes.marcaDe('item', item.id)}
             onOpen={() => onOpen(item, 'actions')}
           />
         ))}
@@ -274,10 +276,9 @@ function ItemsList({
             {items.map((item) => (
               <ItemRow
                 branchId={branchId}
-                canWrite={canWrite}
-                isAdmin={isAdmin}
                 item={item}
                 key={item.id}
+                marca={pendientes.marcaDe('item', item.id)}
                 onEdit={() => onEdit(item)}
                 onOpen={(view) => onOpen(item, view)}
               />
@@ -376,9 +377,7 @@ function PickItemModal({
 // --- Vista -----------------------------------------------------------------
 
 export function InventarioView() {
-  const { user } = useCurrentUser();
-  const isAdmin = user?.role === ROLES.ADMIN;
-  const canWrite = isAdmin || user?.role === ROLES.MANTENEDOR;
+  const { can, canAny } = usePermissions();
 
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const setSelectedBranchId = useUiStore((state) => state.setSelectedBranchId);
@@ -472,16 +471,18 @@ export function InventarioView() {
           <History size={16} />
           Historial general
         </Link>
-        {canWrite ? (
+        {canAny(MOVEMENT_ACTIONS) ? (
           <Button onPress={() => setIsPicking(true)} variant="secondary">
             Registrar movimiento
           </Button>
         ) : null}
-        {isAdmin ? <CategoriesModal /> : null}
-        {isAdmin ? (
+        {can('category.create') ? <CategoriesModal /> : null}
+        {can('item.create') ? (
           <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
         ) : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_INVENTARIO} />
 
       <Segmented
         label="Tipo de ítem"
@@ -609,8 +610,6 @@ export function InventarioView() {
       ) : (
         <ItemsList
           branchId={branchId}
-          canWrite={canWrite}
-          isAdmin={isAdmin}
           items={items}
           onEdit={openEdit}
           onOpen={(item, view) => setTarget({ item, view })}
@@ -633,9 +632,7 @@ export function InventarioView() {
         <ItemActionsModal
           branchId={branchId}
           branches={branches ?? []}
-          canWrite={canWrite}
           initialView={target.view}
-          isAdmin={isAdmin}
           isOpen
           item={target.item}
           onEdit={() => openEdit(target.item)}

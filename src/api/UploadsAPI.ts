@@ -2,60 +2,56 @@ import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 
 import { axiosInstance as api } from '../lib/axios';
-import { toDomainError } from '../lib/api-error';
+import { DomainError, toDomainError } from '../lib/api-error';
+import {
+  isAcceptedUploadType,
+  MAX_UPLOAD_BYTES,
+  UPLOAD_SIZE_ERROR_MESSAGE,
+  UPLOAD_TYPE_ERROR_MESSAGE,
+} from '../lib/upload-limits';
 import type { ApiResponse } from '../types/api';
-
-// `uploadImage`/`POST /api/uploads` se borró: subía a la carpeta que el
-// backend sirve en `/uploads/` SIN sesión. Todo el front sube ahora por
-// `uploadFile`/`POST /api/files` (bucket privado, URL firmada). El endpoint
-// legacy sigue vivo en el backend para las fotos ya cargadas.
 
 export interface UploadedFile {
   /** Key `tmp/<userId>/<uuid>.<ext>` — se manda tal cual en el `photoKey`/
-   * `fileKey`/`fotoKey` del formulario que reclama el archivo al guardar (ver
-   * Diseño del RFC R2-storage, "Claim en los servicios de dominio"). */
+   * `fileKey`/`fotoKey` del formulario que reclama el archivo al guardar. */
   key: string;
   /** URL firmada (válida ~1h) para previsualizar el archivo recién subido
    * antes de guardar el formulario. */
   url: string;
 }
 
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const ACCEPTED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-const SIZE_ERROR_MESSAGE = 'El archivo supera el máximo de 8 MB.';
-const TYPE_ERROR_MESSAGE = 'Formato no permitido. Solo se aceptan JPG, PNG, WebP o PDF.';
-
 /**
- * Sube un archivo a `POST /api/files` (bucket privado R2/MinIO, ver Diseño
- * del RFC R2-storage) — reemplaza a `uploadImage`/`POST /api/uploads` para
- * Flota (foto de equipo, documento de equipo, foto de carga de combustible).
- * `uploadImage`/`POST /api/uploads` se mantienen intactos para Terreno.
+ * Sube un archivo a `POST /api/files` (bucket privado R2/MinIO). Es la única vía
+ * de subida: el replay la usa para los archivos que una operación guardó en el
+ * equipo.
  *
- * Valida tamaño y tipo EN EL CLIENTE antes de la request (mismo límite/
+ * Valida tamaño y tipo EN EL CLIENTE antes de la request (mismo límite y
  * vocabulario que el backend) para dar un mensaje inmediato sin gastar el
- * round-trip — el backend igual revalida por BYTES reales (magic bytes,
- * `StorageService.putTmp`), así que este chequeo es solo una mejora de UX,
- * nunca la fuente de verdad. 413/415 del backend se mapean a los mismos
- * mensajes: el 413 por defecto de Multer/Nest no viene en español, y el 415
- * queda unificado con el pre-chequeo de acá.
+ * round-trip. El backend igual revalida por BYTES reales (magic bytes): este
+ * chequeo es una mejora de UX, nunca la fuente de verdad.
  *
- * `config` es opcional: el replay offline (`offline/replay.ts`) lo usa para
- * mandar un timeout de 60 s (subidas pesan más que un JSON) al resubir una
- * foto de cierre de tarjeta guardada en Dexie.
+ * Un archivo inválido es un rechazo de negocio, no un fallo de red: lanza un
+ * `DomainError` con `code` (`FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`), y el 413
+ * o 415 del servidor igual (con su `status`). El replay los manda a "requiere
+ * atención" en vez de reintentarlos para siempre. El 413 por defecto de Multer/
+ * Nest no viene en español y el 415 queda unificado con el pre-chequeo.
+ *
+ * `config` es opcional: el replay manda un timeout proporcional al tamaño del
+ * archivo, porque subir una foto pesa mucho más que un JSON.
  */
 export async function uploadFile(file: File, config?: AxiosRequestConfig): Promise<UploadedFile> {
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error(SIZE_ERROR_MESSAGE);
+    throw new DomainError(UPLOAD_SIZE_ERROR_MESSAGE, { code: 'FILE_TOO_LARGE' });
   }
-  if (!ACCEPTED_MIME_TYPES.has(file.type)) {
-    throw new Error(TYPE_ERROR_MESSAGE);
+  if (!isAcceptedUploadType(file.type)) {
+    throw new DomainError(UPLOAD_TYPE_ERROR_MESSAGE, { code: 'FILE_TYPE_NOT_ALLOWED' });
   }
 
   const form = new FormData();
   form.append('file', file);
   try {
-    // Mismo gotcha que `uploadImage`: hay que forzar el `Content-Type` para
-    // que axios arme el multipart en vez de serializar el `FormData` a JSON.
+    // Hay que forzar el `Content-Type` para que axios arme el multipart en vez
+    // de serializar el `FormData` a JSON.
     const res = await api.post<ApiResponse<UploadedFile>>('/api/files', form, {
       ...config,
       headers: { ...config?.headers, 'Content-Type': 'multipart/form-data' },
@@ -63,8 +59,9 @@ export async function uploadFile(file: File, config?: AxiosRequestConfig): Promi
     return res.data.data;
   } catch (error: unknown) {
     if (axios.isAxiosError(error)) {
-      if (error.response?.status === 413) throw new Error(SIZE_ERROR_MESSAGE);
-      if (error.response?.status === 415) throw new Error(TYPE_ERROR_MESSAGE);
+      const status = error.response?.status;
+      if (status === 413) throw new DomainError(UPLOAD_SIZE_ERROR_MESSAGE, { code: 'FILE_TOO_LARGE', status });
+      if (status === 415) throw new DomainError(UPLOAD_TYPE_ERROR_MESSAGE, { code: 'FILE_TYPE_NOT_ALLOWED', status });
     }
     throw toDomainError(error, 'No se pudo subir el archivo.');
   }

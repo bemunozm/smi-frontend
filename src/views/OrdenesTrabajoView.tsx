@@ -16,8 +16,12 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { usePermissions } from '../hooks/usePermissions';
 import { useActualizarOrden, useCrearOrden, useOrdenes, useToggleTarea } from '../hooks/useOrdenes';
+import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ESTADO_OT_LABELS,
   ESTADO_OT_OPTIONS,
@@ -30,7 +34,6 @@ import {
   estadoOTChipColor,
   prioridadOTChipColor,
 } from '../config/mantenimiento-colors';
-import { ROLES } from '../types/roles';
 import {
   CreateOrdenSchema,
   ORIGEN_OT,
@@ -336,7 +339,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
  * Tarjeta de una OT dentro de la grilla web: chips de prioridad/estado,
  * metadata compacta en 2 columnas, cambio de estado y checklist de tareas.
  */
-function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
+function OrdenCard({ orden, marca }: { orden: OrdenTrabajo; marca: Marca | null }) {
   const actualizarOrden = useActualizarOrden();
   const toggleTarea = useToggleTarea();
   const tareasHechas = orden.tareas.filter((tarea) => tarea.hecha).length;
@@ -351,6 +354,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
             <Card.Title className="font-display text-base font-semibold text-foreground">
               {orden.titulo}
             </Card.Title>
+            <MarcaPendiente marca={marca} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
@@ -397,7 +401,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
           value={orden.estado}
           onChange={(value) => {
             if (value && value !== orden.estado) {
-              actualizarOrden.mutate({ id: orden.id, input: { estado: value as EstadoOT } });
+              actualizarOrden.mutate({ orden, input: { estado: value as EstadoOT } });
             }
           }}
         >
@@ -457,9 +461,10 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
  * en los hooks).
  */
 export function OrdenesTrabajoView() {
-  const { role } = useCurrentUser();
+  const { can } = usePermissions();
   const [filtro, setFiltro] = useState<FiltroEstado>('TODAS');
   const { data: ordenes, isPending, isError, error } = useOrdenes(filtro === 'TODAS' ? undefined : filtro);
+  const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const stats = useMemo(() => {
     const lista = ordenes ?? [];
@@ -471,7 +476,7 @@ export function OrdenesTrabajoView() {
     };
   }, [ordenes]);
 
-  const puedeCrear = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const puedeCrear = can('orden.create');
 
   return (
     <div className="flex flex-col gap-4">
@@ -484,6 +489,8 @@ export function OrdenesTrabajoView() {
         </div>
         {puedeCrear ? <CreateOrdenModal /> : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Abiertas" value={stats.abiertas} />
@@ -545,7 +552,7 @@ export function OrdenesTrabajoView() {
       {!isPending && !isError && ordenes && ordenes.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {ordenes.map((orden) => (
-            <OrdenCard key={orden.id} orden={orden} />
+            <OrdenCard key={orden.id} marca={pendientes.marcaDe('orden', orden.id)} orden={orden} />
           ))}
         </div>
       ) : null}

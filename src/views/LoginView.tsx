@@ -5,7 +5,7 @@ import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { z } from 'zod';
 import { Button, Card, FieldError, Input, Label, Spinner, TextField } from '@heroui/react';
 
-import { signIn } from '../lib/auth-client';
+import { signInWithEmail } from '../lib/server-signout';
 
 /** `state` que `ProtectedRoute` adjunta al redirigir a `/login`
  * (`<Navigate state={{ from: location }} />`) — la ubicación a la que hay
@@ -40,7 +40,7 @@ export function LoginView() {
 
   const onSubmit = async (values: LoginFormValues): Promise<void> => {
     setFormError(null);
-    const { error } = await signIn.email({ email: values.email, password: values.password });
+    const { error } = await signInWithEmail({ email: values.email, password: values.password });
 
     if (error) {
       setFormError(error.message ?? 'No se pudo iniciar sesión. Verifica tus credenciales.');

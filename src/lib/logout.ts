@@ -1,92 +1,53 @@
-import { signOut } from './auth-client';
-import { queryClient } from './query-client';
+import { clearCacheOwner } from './cache-owner';
+import { markSessionClosed } from './pending-signout';
 import { clearSessionSnapshot } from './session-snapshot';
-import { countPending } from '../offline/outbox';
-
-/** Prefijo de los Cache Storage PRIVADOS de la app (ver `vite.config.ts`:
- * `smi-signed-files`, `smi-uploads`, `smi-api`) — todos arrancan con `smi-`.
- * El precache de Workbox (los assets del build — JS/CSS/HTML del shell, con
- * nombre tipo `workbox-precache-v2-...`) NO lleva este prefijo a propósito:
- * si se borrara, la app dejaría de abrir offline hasta el próximo `fetch`
- * exitoso del shell — acá solo interesa purgar los DATOS del usuario que se
- * fue, no el propio código de la app. */
-const PRIVATE_CACHE_PREFIX = 'smi-';
+import { signOutOrDefer } from './server-signout';
+import { purgeSessionData } from './session-data';
+import { queryClient } from './query-client';
 
 type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
 
 /**
- * El logout se bloqueó porque `userId` todavía tiene operaciones sin
- * sincronizar en el outbox (RFC "Supervisión en Terreno" §Diseño → Offline,
- * "logout() no borra el outbox y bloquea si hay pendientes"). `pendingCount`
- * — cuántas — para el mensaje de la UI ("Sincronizar ahora").
- */
-export class LogoutBlockedError extends Error {
-  readonly pendingCount: number;
-
-  constructor(pendingCount: number) {
-    super(`Hay ${pendingCount} registro(s) sin sincronizar — sincronizá antes de salir.`);
-    this.name = 'LogoutBlockedError';
-    this.pendingCount = pendingCount;
-  }
-}
-
-/**
- * Logout único para toda la app — reemplaza los `signOut()` sueltos que
- * vivían en `Topbar.tsx`/`TerrenoLayout.tsx` (único otro sitio que hoy
- * navega a `/login`; cualquier logout nuevo debe pasar por acá).
+ * Logout único para toda la app: cualquier cierre de sesión debe pasar por acá.
  *
- * Antes, `signOut()` + navegar dejaba dos fugas de datos privados
- * (SEGURIDAD M1, review QA del RFC R2-storage):
+ * Quien cierra sesión sin conexión no puede esperar a que se envíen sus
+ * registros. La cola (IndexedDB) NO se borra: las operaciones son por `userId`,
+ * así que otra persona que use el equipo nunca las ve ni las envía, y se mandan
+ * solas cuando su dueña vuelva a iniciar sesión. La UI avisa cuántos quedan antes
+ * de llamar acá (`components/sync/useLogoutConfirmation`).
+ *
+ * `signOut()` y `queryClient.clear()` solos dejaban dos fugas de datos privados:
  * - TanStack Query seguía sirviendo desde su caché en memoria los datos del
  *   usuario anterior (equipos, documentos, fotos) hasta el próximo refetch;
- * - el Service Worker (`vite.config.ts`, regla `smi-signed-files`) seguía
- *   sirviendo desde Cache Storage archivos privados de Flota YA firmados
- *   (foto de equipo, documento, foto de carga) — sobrevivían al logout hasta
- *   que la entrada expirara sola (antes 30 días; bajado a 7 en el mismo fix,
- *   ver `vite.config.ts`).
+ * - el Service Worker seguía sirviendo desde Cache Storage las lecturas de la API
+ *   y los archivos privados ya firmados de Flota hasta que la entrada expirara.
+ * `purgeSessionData` (`lib/session-data.ts`) limpia las dos.
  *
- * `userId` es opcional (sesiones sin outbox, ej. ADMIN/
- * MANTENEDOR, no tienen por qué pasarlo) — cuando viene y tiene operaciones
- * pendientes en Dexie (CUALQUIER estado, incluido `needs_attention`: esas
- * necesitan Reintentar o Descartar primero, ver `SyncStatus`), el logout se
- * BLOQUEA con `LogoutBlockedError` ANTES de tocar la sesión — nunca se borra
- * el outbox acá: las operaciones son por `userId`, así que otro usuario en
- * una tablet compartida nunca las ve ni las reintenta.
+ * Orden: `signOut()` primero (invalida la cookie de sesión en el backend antes de
+ * tocar nada del cliente), recién después se limpia el estado local y se navega —
+ * así ninguna pantalla intermedia llega a pintar con datos del usuario que se fue.
  *
- * Orden (sesión ya autorizada a salir): `signOut()` primero (invalida la
- * cookie de sesión en el backend antes de tocar nada del cliente), recién
- * después se limpia el estado local y se navega — así ninguna pantalla
- * intermedia llega a pintar con datos del usuario que se fue.
+ * Sin conexión `signOut()` no llega al servidor y el cierre se completa igual en el
+ * equipo, con una marca de "cierre pendiente" (`lib/pending-signout.ts`): la cookie de
+ * sesión es `HttpOnly`, el JavaScript no puede borrarla, y por eso la revocación se
+ * difiere hasta que haya señal. Mientras esté la marca la app trata al usuario como
+ * desconectado y no consulta la sesión.
  */
-export async function logout(navigate: NavigateFn, userId?: string): Promise<void> {
-  if (userId) {
-    const pending = await countPending(userId);
-    if (pending > 0) {
-      throw new LogoutBlockedError(pending);
-    }
-  }
-
-  await signOut();
-  queryClient.clear();
+export async function logout(navigate: NavigateFn): Promise<void> {
+  // Las queries en vuelo o por reintentar saldrían con la cookie ya invalidada (401).
+  await queryClient.cancelQueries();
+  // Desde acá no hay sesión en el equipo, con o sin señal: nada vuelve a escribir el
+  // snapshot mientras Better Auth todavía tenga al usuario anterior en memoria.
+  markSessionClosed();
+  await signOutOrDefer();
   // El snapshot offline (`lib/session-snapshot.ts`) es lo que le permite a
   // `useCurrentUser` seguir mostrando una sesión sin señal — un logout
   // explícito tiene que invalidarlo, si no el próximo arranque en frío sin
   // red "resucitaría" la sesión que el usuario cerró a propósito.
   clearSessionSnapshot();
-
-  if ('caches' in window) {
-    try {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.filter((name) => name.startsWith(PRIVATE_CACHE_PREFIX)).map((name) => caches.delete(name)),
-      );
-    } catch (error) {
-      // Best-effort: la cookie de sesión ya se invalidó arriba (lo que de
-      // verdad protege los datos) — un Cache Storage que falla (cuota,
-      // navegación privada de Safari) no debe bloquear la salida del usuario.
-      console.error('No se pudo limpiar el Cache Storage al cerrar sesión:', error);
-    }
-  }
-
+  await purgeSessionData();
+  // Las cachés quedaron vacías: no son de nadie. La próxima sesión las adopta
+  // sin purgar otra vez.
+  clearCacheOwner();
   navigate('/login', { replace: true });
 }

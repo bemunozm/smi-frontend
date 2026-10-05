@@ -1,20 +1,15 @@
 import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import {
-  DeleteEquipmentResponseSchema,
   EquipmentDetailResponseSchema,
   EquipmentListResponseSchema,
-  EquipmentResponseSchema,
   ResumenFleetResponseSchema,
-  type AssignEquipmentInput,
-  type CreateEquipmentInput,
   type Equipment,
   type EquipmentClass,
   type EquipmentDetail,
   type EquipmentStatus,
   type ControlUnit,
   type ResumenFleet,
-  type UpdateEquipmentInput,
 } from '../types/equipment';
 
 export interface EquipmentFiltros {
@@ -59,61 +54,8 @@ async function getById(id: string): Promise<EquipmentDetail> {
   }
 }
 
-async function create(input: CreateEquipmentInput): Promise<Equipment> {
-  try {
-    const response = await axiosInstance.post('/api/equipment', input);
-    return EquipmentResponseSchema.parse(response.data).data;
-  } catch (error: unknown) {
-    throw toDomainError(error, 'No se pudo crear el equipo.');
-  }
-}
-
-async function update(id: string, input: UpdateEquipmentInput): Promise<Equipment> {
-  try {
-    const response = await axiosInstance.patch(`/api/equipment/${id}`, input);
-    return EquipmentResponseSchema.parse(response.data).data;
-  } catch (error: unknown) {
-    throw toDomainError(error, 'No se pudo actualizar el equipo.');
-  }
-}
-
-/** Endpoint aparte del PATCH general: lo puede usar también el SUPERVISOR. */
-async function updateStatus(id: string, status: EquipmentStatus): Promise<Equipment> {
-  try {
-    const response = await axiosInstance.patch(`/api/equipment/${id}/status`, { status });
-    return EquipmentResponseSchema.parse(response.data).data;
-  } catch (error: unknown) {
-    throw toDomainError(error, 'No se pudo actualizar el estado del equipo.');
-  }
-}
-
-async function remove(id: string): Promise<void> {
-  try {
-    const response = await axiosInstance.delete(`/api/equipment/${id}`);
-    DeleteEquipmentResponseSchema.parse(response.data);
-  } catch (error: unknown) {
-    throw toDomainError(error, 'No se pudo eliminar el equipo.');
-  }
-}
-
-/** Asigna/libera operador y supervisor — endpoint aparte del PATCH general
- * (ver `AssignEquipmentInput`). */
-async function assign(id: string, input: AssignEquipmentInput): Promise<Equipment> {
-  try {
-    const response = await axiosInstance.patch(`/api/equipment/${id}/assignment`, input);
-    return EquipmentResponseSchema.parse(response.data).data;
-  } catch (error: unknown) {
-    throw toDomainError(error, 'No se pudo actualizar la asignación del equipo.');
-  }
-}
-
 export const EquipmentAPI = {
   list,
   resumen,
   getById,
-  create,
-  update,
-  updateStatus,
-  remove,
-  assign,
 };

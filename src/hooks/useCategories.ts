@@ -1,9 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { CategoryAPI, type CategoryFilters } from '../api/CategoryAPI';
+import { INVENTORY_KEY } from '../lib/query-keys';
+import { buildQueuedEdit } from '../lib/queued-edit';
+import { categoryEntity } from '../offline/db';
+import type { ItemCategory } from '../types/category';
+import { useQueuedCreate, useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
-const CATEGORIES_KEY = ['inventory', 'categories'] as const;
+const CATEGORIES_KEY = [...INVENTORY_KEY, 'categories'] as const;
 
 /**
  * Con `type`, solo las categorías que tienen ítems de esa clase — es lo que
@@ -21,66 +26,55 @@ export function useCategories(filters: CategoryFilters = {}) {
   });
 }
 
-/**
- * Renombrar o borrar una categoría cambia lo que muestra el listado de ítems
- * (columna «Categoría»), así que se invalida `['inventory']` entero y no solo
- * la lista de categorías.
- */
-function useInvalidateInventory() {
-  const queryClient = useQueryClient();
-  return () =>
-    void queryClient.invalidateQueries({ queryKey: ['inventory'] as const });
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}
+/* Renombrar o borrar una categoría cambia lo que muestra el listado de ítems
+ * (columna «Categoría»): el replay invalida `['inventory']` entero, no solo la
+ * lista de categorías. */
 
 export function useCreateCategory() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: (name: string) => CategoryAPI.create(name),
-    onSuccess: (category) => {
-      invalidate();
-      toast.success('Categoría creada', { description: category.name });
+  return useQueuedCreate<'category.create', string>({
+    endpoint: 'category.create',
+    build: (name, id) => ({ params: {}, body: { name, id } }),
+    onSent: (category, name) => {
+      toast.success('Categoría creada', { description: category?.name ?? name });
     },
-    onError: (error: unknown) => {
-      // El 409 del backend nombra la categoría con la que choca, incluso si
-      // difiere solo en mayúsculas — ese detalle es el que hace entender el error.
-      toast.danger(errorMessage(error, 'No se pudo crear la categoría.'));
-    },
+    // El 409 del backend nombra la categoría con la que choca, incluso si
+    // difiere solo en mayúsculas — ese detalle es el que hace entender el error.
+    errorFallback: 'No se pudo crear la categoría.',
   });
 }
 
-export function useUpdateCategory() {
-  const invalidate = useInvalidateInventory();
+export interface UpdateCategoryVars {
+  /** La categoría tal como la muestra la pantalla: la base de la edición. */
+  category: ItemCategory;
+  name: string;
+}
 
-  return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      CategoryAPI.update(id, name),
-    onSuccess: (category) => {
-      invalidate();
-      toast.success('Categoría actualizada', { description: category.name });
+export function useUpdateCategory() {
+  return useQueuedMutation<'category.update', UpdateCategoryVars>({
+    endpoint: 'category.update',
+    build: async ({ category, name }) => {
+      const edicion = await buildQueuedEdit({
+        entity: categoryEntity(category.id),
+        ops: ['category.update'],
+        base: { name: category.name },
+        next: { name },
+        fields: ['name'],
+      });
+      if (!edicion.hayCambios) return null;
+      return { params: { id: category.id }, body: edicion.cambios, expected: edicion.esperado };
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo renombrar la categoría.'));
+    onSent: (category, { name }) => {
+      toast.success('Categoría actualizada', { description: category?.name ?? name });
     },
+    errorFallback: 'No se pudo renombrar la categoría.',
   });
 }
 
 export function useDeleteCategory() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: (id: string) => CategoryAPI.remove(id),
-    onSuccess: () => {
-      invalidate();
-      toast.success('Categoría eliminada');
-    },
-    onError: (error: unknown) => {
-      // El 409 explica cuántos ítems la usan y que hay que reasignarlos.
-      toast.danger(errorMessage(error, 'No se pudo eliminar la categoría.'));
-    },
+  // El 409 explica cuántos ítems la usan y que hay que reasignarlos.
+  return useQueuedDelete({
+    endpoint: 'category.delete',
+    sentMessage: 'Categoría eliminada',
+    errorFallback: 'No se pudo eliminar la categoría.',
   });
 }

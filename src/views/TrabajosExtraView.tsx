@@ -9,21 +9,21 @@ import {
   actividadLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
-  type TrabajoExtraordinario,
 } from '../types/trabajosExtra';
-import { turnoDe } from '../lib/turno';
+import { useTurnoActual } from '../hooks/useTurnoActual';
 import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
 import {
-  useTrabajosExtraList,
-  useCreateTrabajoExtra,
-  useUpdateTrabajoExtra,
+  useRegistrarTrabajoExtra,
+  useEditarTrabajoExtra,
   useCambiosTrabajoExtra,
 } from '../hooks/useTrabajosExtra';
+import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { useOperators } from '../hooks/useOperators';
 import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
   Boton,
@@ -71,7 +71,7 @@ const TURNOS = [
  * placeholder «Ej: Rajo Norte», que producía «Patillo», «patillo» y «PAT» como
  * tres lugares distintos para la base de datos.
  *
- * Es provisorio: RFC-4 decide que la faena es una `Branch` de tipo `SITE`, así
+ * Es provisorio: la faena pasará a ser una `Branch` de tipo `SITE`, así
  * que cuando exista `branchId` esta lista sale del servidor y deja de estar
  * escrita acá.
  */
@@ -84,6 +84,11 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
     .map((a) => (a === 'OTRO' && r.otraActividad ? r.otraActividad : (actividadLabel[a] ?? a)))
     .join(', ');
 }
+
+/** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
+const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+/** Un cambio anterior del mismo trabajo espera una acción: encadenar otro encima lo dejaría trabado. */
+const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
 
 /** Por qué un equipo no se puede elegir, según su estado en Flota. */
 const ESTADO_NO_DISPONIBLE: Record<string, string> = {
@@ -99,31 +104,39 @@ const FAENAS = [
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
-  const { data: registros = [] } = useTrabajosExtraList();
+  const { registros } = useTrabajosExtraProjection();
   // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
   const { data: operadores = [] } = useOperators({ isActive: true });
-  const crear = useCreateTrabajoExtra();
+  const { registrar, isGuardando } = useRegistrarTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleId, setDetalleId] = useState<string | null>(null);
-  /** Modo edición del trabajo abierto en el detalle (Acta N.° 004, R13). */
+  /** Modo edición del trabajo abierto en el detalle. */
   const [editando, setEditando] = useState(false);
-  const actualizar = useUpdateTrabajoExtra();
-  const cambios = useCambiosTrabajoExtra(detalleId);
+  const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarTrabajoExtra();
   // Se lee de la lista y no de una copia: tras editar, la lista se refresca
-  // y el detalle muestra el dato nuevo sin tener que volver a abrirlo.
+  // y el detalle muestra el dato nuevo sin tener que volver a abrirlo. Un
+  // trabajo pendiente de sincronizar solo existe en el equipo: no tiene
+  // historial de cambios en el servidor ni se puede editar todavía.
   const detalle = registros.find((r) => r.id === detalleId) ?? null;
+  const cambios = useCambiosTrabajoExtra(detalle?.sinSincronizar ? null : detalleId);
+  const motivoSinEdicion = detalle?.sinSincronizar
+    ? MOTIVO_SIN_SINCRONIZAR
+    : detalle?.edicionRequiereAtencion
+      ? MOTIVO_EDICION_ATENCION
+      : undefined;
 
   /**
-   * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
-   * regla que Registro de equipo), no siempre en DIURNO: de noche el valor
-   * por defecto quedaba mal y había que acordarse de cambiarlo. Sigue siendo
-   * editable, porque un trabajo se puede cargar después de terminado.
+   * El turno arranca en el vigente de Terreno (`useTurnoActual`: el mismo que
+   * muestra Registro de equipo, con su adelanto al turno siguiente), no siempre
+   * en DIURNO. Sigue siendo editable, porque un trabajo se puede cargar después
+   * de terminado.
    */
+  const turnoActual = useTurnoActual();
   const vacio = (): Partial<TrabajoExtraFormInput> => ({
     equipoId: '',
     operatorId: '',
     faena: 'Patillo',
-    turno: turnoDe(new Date()),
+    turno: turnoActual.turno,
     actividades: [],
     otraActividad: '',
   });
@@ -133,10 +146,9 @@ export function TrabajosExtraView() {
    * que lo lleva. «Turno en curso» es `equipo.openShift`: la lectura de
    * horómetro sin `valorFinal`, la misma definición que usa el backend.
    *
-   * Hasta el Acta N.° 004 un equipo en turno no se podía elegir. El cliente lo
-   * corrigió (punto 4): el trabajo extra se registra al final del turno y usa
-   * la misma máquina, que tiene tiempos en ralentí. Ahora se puede elegir, y
-   * el turno abierto queda como **aviso** —para no tener que coordinarlo por
+   * Un equipo en turno se puede elegir: el trabajo extra se registra al final
+   * del turno y usa la misma máquina, que tiene tiempos en ralentí. El turno
+   * abierto queda como **aviso** —para no tener que coordinarlo por
    * radio—, no como bloqueo.
    */
   const enTurno = useMemo(
@@ -150,7 +162,7 @@ export function TrabajosExtraView() {
   );
 
   /**
-   * R10: el selector separa los equipos en terreno de los disponibles. Los que
+   * El selector separa los equipos en terreno de los disponibles. Los que
    * están en taller o fuera de servicio quedan al final, a la vista pero sin
    * poder elegirse, para que no parezca que desaparecieron.
    */
@@ -190,13 +202,17 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Registrar trabajo"
-        pendiente={crear.isPending}
-        onGuardar={(values) => crear.mutate(values, { onSuccess: () => setFormKey((k) => k + 1) })}
+        pendiente={isGuardando}
+        onGuardar={async (values) => {
+          // Siempre por el outbox (con o sin señal): el formulario vuelve a
+          // blanco solo si el trabajo quedó guardado en el equipo.
+          if (await registrar(values)) setFormKey((k) => k + 1);
+        }}
       />
     </Card>
   );
 
-  const codigo = (r: TrabajoExtraordinario) => r.equipo?.internalCode ?? r.equipoId;
+  const codigo = (r: TrabajoExtraProyectado) => r.equipo?.internalCode ?? r.equipoId;
 
   const lista =
     registros.length === 0 ? (
@@ -228,7 +244,11 @@ export function TrabajosExtraView() {
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
-              <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
+              <td className={`${TD} whitespace-nowrap`}>
+                {r.operador}
+                {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+                {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
+              </td>
               <td className={`${TD} tabular text-right font-semibold whitespace-nowrap`}>
                 {fmtNum(horasCobrables(r.totalHoras))} h
                 {cobraMinimo(r.totalHoras) && (
@@ -260,6 +280,8 @@ export function TrabajosExtraView() {
               <Chip tono="neutral">{r.faena}</Chip>
             </div>
             <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+                {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
             <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
               <span>
                 {fmtDate(r.fecha)} · {r.turno}
@@ -280,7 +302,7 @@ export function TrabajosExtraView() {
     );
 
   /**
-   * Editar un trabajo ya registrado (Acta N.° 004, R13): el mismo formulario
+   * Editar un trabajo ya registrado: el mismo formulario
    * del alta, con los datos guardados y el aviso de que el administrador se
    * entera. Vive en la misma ventana que el detalle, como lista y detalle.
    */
@@ -305,10 +327,10 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
-        pendiente={actualizar.isPending}
-        onGuardar={(payload) =>
-          actualizar.mutate({ id: detalle.id, payload }, { onSuccess: () => setEditando(false) })
-        }
+        pendiente={isActualizando}
+        onGuardar={async (payload) => {
+          if (await guardarCambio(detalle, payload)) setEditando(false);
+        }}
         onCancelar={() => setEditando(false)}
       />
     </div>
@@ -320,10 +342,25 @@ export function TrabajosExtraView() {
         <Boton variante="contorno" onClick={() => setDetalleId(null)}>
           <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
         </Boton>
-        <Boton variante="contorno" onClick={() => setEditando(true)}>
+        <Boton
+          variante="contorno"
+          disabled={motivoSinEdicion != null}
+          title={motivoSinEdicion}
+          onClick={() => setEditando(true)}
+        >
           <Pencil className="h-[17px] w-[17px]" /> Editar
         </Boton>
       </div>
+      {detalle.sinSincronizar && (
+        <>
+          <MarcaSinSincronizar requiereAtencion={detalle.requiereAtencion} />
+          <Hint>{MOTIVO_SIN_SINCRONIZAR}</Hint>
+        </>
+      )}
+      {detalle.edicionSinSincronizar && (
+        <MarcaSinSincronizar edicion requiereAtencion={detalle.edicionRequiereAtencion} />
+      )}
+      {detalle.edicionRequiereAtencion && <Hint>{MOTIVO_EDICION_ATENCION}</Hint>}
 
       <Cifras
         items={[
@@ -431,7 +468,7 @@ export function TrabajosExtraView() {
 
 /**
  * Los campos de un trabajo extraordinario, para registrarlo y para editarlo
- * (Acta N.° 004, R13). Es el mismo formulario en los dos casos a propósito:
+ * Es el mismo formulario en los dos casos a propósito:
  * corregir un dato no tiene por qué verse distinto de cargarlo, y las reglas
  * —horómetros, «Otro» con texto, cobro mínimo— no pueden quedar aplicadas en
  * uno y en el otro no.
@@ -456,7 +493,7 @@ function FormularioTrabajo({
   opcionesEquipo: OpcionSelector[];
   textoBoton: string;
   pendiente: boolean;
-  onGuardar: (values: TrabajoExtraForm) => void;
+  onGuardar: (values: TrabajoExtraForm) => void | Promise<void>;
   onCancelar?: () => void;
 }) {
   const {
@@ -547,7 +584,7 @@ function FormularioTrabajo({
         <Hint>Delimitan el trabajo, no el turno completo.</Hint>
 
         {/* Lo que se muestra es lo que se COBRA: el mínimo es una hora
-            máquina (Acta N.° 004). Las horas reales van en la nota cuando
+            máquina. Las horas reales van en la nota cuando
             son menos, para que se vea por qué la cifra no calza con la
             resta de los horómetros. */}
         <Calculado

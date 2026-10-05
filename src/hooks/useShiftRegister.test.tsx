@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { aNumero, lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
+import { lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
 import { contextoTurno } from '../lib/turno';
 import { ROLES } from '../types/roles';
 import type { OutboxOp } from '../offline/db';
@@ -69,14 +69,11 @@ vi.mock('../lib/usePhotoCaptureFlow', () => ({
   usePhotoCaptureFlow: () => ({
     file: mockFotoFile,
     isReadingPhoto: false,
-    isUploadingPhoto: false,
     captureDate: null,
     ocr: null,
     handleSelectPhoto: vi.fn(),
     handleClearPhoto: vi.fn(),
     resetPhoto: resetPhotoMock,
-    cancelar: vi.fn(),
-    upload: vi.fn(),
   }),
 }));
 
@@ -124,6 +121,8 @@ const CARD_ABIERTA_ACTUAL: ShiftCardResponse = {
   fuelLiters: null,
   pumpPhotoUrl: null,
   observaciones: null,
+  adBlue: false,
+  adBlueLiters: null,
   belowPreviousReading: false,
   fecha: '2026-09-24T09:00:00.000Z',
   fechaSalida: null,
@@ -160,6 +159,7 @@ function openOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
     status: 'pending',
     attempts: 0,
     createdAt: Date.now(),
+    seq: Date.now(),
     updatedAt: Date.now(),
     payload: {
       id: 'pend-open-1',
@@ -184,6 +184,7 @@ function closeOp(cardId: string, overrides: Partial<OutboxOp> = {}): OutboxOp {
     attempts: 0,
     photoId: 'pend-close-1',
     createdAt: Date.now(),
+    seq: Date.now(),
     updatedAt: Date.now(),
     payload: {
       cardId,
@@ -221,16 +222,7 @@ describe('mapCardToTarjeta', () => {
   });
 });
 
-// --- aNumero / lineaEstadoCorreo ---------------------------------------------
-
-describe('aNumero', () => {
-  it('parsea formato chileno (punto de miles, coma decimal)', () => {
-    expect(aNumero('12.487,3')).toBe(12487.3);
-  });
-  it('vacío devuelve null', () => {
-    expect(aNumero('   ')).toBeNull();
-  });
-});
+// --- lineaEstadoCorreo ---------------------------------------------------------
 
 describe('lineaEstadoCorreo', () => {
   it.each([
@@ -278,6 +270,44 @@ describe('useShiftRegister', () => {
     expect(payload.id).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
+  describe('horómetro inicial de la apertura', () => {
+    async function conEquipo(horometro: string) {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const hook = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(hook.result.current.disponibles).toHaveLength(1));
+      act(() => {
+        hook.result.current.setApertura((a) => ({ ...a, equipoId: 'eq_1', operatorId: 'op_1', horometro }));
+      });
+      await waitFor(() => expect(hook.result.current.equipoElegido?.id).toBe('eq_1'));
+      return hook.result;
+    }
+
+    it('vacío conserva la última lectura del equipo', async () => {
+      const result = await conEquipo('');
+      expect(result.current.valorInicialApertura).toBe(4218.7);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('un texto que no es un número es un error y NO cae a la última lectura', async () => {
+      const result = await conEquipo('2.130.5');
+      expect(result.current.horometroInvalido).toBe(true);
+      expect(result.current.valorInicialApertura).toBeNull();
+    });
+
+    it('menor que la última lectura avisa (bajoUltimaLectura), pero el valor sigue siendo válido', async () => {
+      const result = await conEquipo('2.130');
+      expect(result.current.valorInicialApertura).toBe(2.13);
+      expect(result.current.bajoUltimaLectura).toBe(true);
+      expect(result.current.horometroInvalido).toBe(false);
+    });
+
+    it('igual o mayor que la última lectura no avisa', async () => {
+      expect((await conEquipo('4218,7')).current.bajoUltimaLectura).toBe(false);
+      expect((await conEquipo('4300')).current.bajoUltimaLectura).toBe(false);
+    });
+  });
+
   it('abrir() no hace nada sin operador elegido (guardia silenciosa)', async () => {
     mockApis();
     const { Wrapper } = withQueryClient();
@@ -319,6 +349,75 @@ describe('useShiftRegister', () => {
     expect(file).toBe(mockFotoFile);
     expect(result.current.cerrandoId).toBeNull();
     expect(resetPhotoMock).toHaveBeenCalled();
+  });
+
+  describe('AdBlue al cerrar', () => {
+    const prepararCierre = async () => {
+      mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
+      mockFotoFile = new File(['x'], 'surtidor.jpg', { type: 'image/jpeg' });
+      enqueueCloseCardMock.mockResolvedValue(undefined);
+      const { Wrapper } = withQueryClient();
+      const hook = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(hook.result.current.abiertasActual).toHaveLength(1));
+      act(() => hook.result.current.abrirCierre('c1'));
+      await waitFor(() => expect(hook.result.current.cerrando?.id).toBe('c1'));
+      return hook;
+    };
+
+    it('sin AdBlue: manda adBlue:false y ningún litro de AdBlue', async () => {
+      const { result } = await prepararCierre();
+      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20' })));
+      await waitFor(() => expect(result.current.finalNum).toBe(130));
+
+      await act(async () => {
+        await result.current.cerrar();
+      });
+
+      const input = enqueueCloseCardMock.mock.calls[0]![2];
+      expect(input.adBlue).toBe(false);
+      expect('adBlueLiters' in input).toBe(false);
+    });
+
+    it('con AdBlue: manda adBlue:true y los litros', async () => {
+      const { result } = await prepararCierre();
+      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '12,5' })));
+      await waitFor(() => expect(result.current.adBlueCierre.litros).toBe(12.5));
+
+      await act(async () => {
+        await result.current.cerrar();
+      });
+
+      const input = enqueueCloseCardMock.mock.calls[0]![2];
+      expect(input.adBlue).toBe(true);
+      expect(input.adBlueLiters).toBe(12.5);
+    });
+
+    it('AdBlue marcado sin litros, en 0 o sobre 1000 L: no cierra', async () => {
+      const { result } = await prepararCierre();
+
+      for (const litros of ['', '0', '1001']) {
+        act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: litros })));
+        await waitFor(() => expect(result.current.adBlueIncompletoCierre).toBe(true));
+        await act(async () => {
+          await result.current.cerrar();
+        });
+      }
+
+      expect(enqueueCloseCardMock).not.toHaveBeenCalled();
+    });
+
+    it('más de 30 L avisa pero NO bloquea el cierre', async () => {
+      const { result } = await prepararCierre();
+      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '45' })));
+      await waitFor(() => expect(result.current.adBlueCierre.aviso).toContain('30 L'));
+      expect(result.current.adBlueIncompletoCierre).toBe(false);
+
+      await act(async () => {
+        await result.current.cerrar();
+      });
+
+      expect(enqueueCloseCardMock.mock.calls[0]![2].adBlueLiters).toBe(45);
+    });
   });
 
   it('cerrar() no hace nada sin foto (guardia silenciosa)', async () => {
@@ -497,6 +596,7 @@ describe('useShiftRegister', () => {
           status: 'pending',
           attempts: 0,
           createdAt: Date.now(),
+          seq: Date.now(),
           updatedAt: Date.now(),
           payload: {
             id: 'rep-1',
@@ -532,6 +632,7 @@ describe('useShiftRegister', () => {
           attempts: 1,
           lastError: { message: 'SHIFT_NOT_FOUND', code: 'SHIFT_NOT_FOUND' },
           createdAt: Date.now(),
+          seq: Date.now(),
           updatedAt: Date.now(),
           payload: {
             id: 'rep-1',
@@ -587,5 +688,100 @@ describe('useShiftRegister', () => {
       await waitFor(() => expect(result.current.enCurso).toHaveLength(2));
       expect(result.current.reportePuedeReenviar).toBe(true);
     });
+  });
+});
+
+describe('useShiftRegister — AdBlue y ediciones pendientes en la proyección', () => {
+  const CERRADA_SERVIDOR: ShiftCardResponse = {
+    ...CARD_ABIERTA_ACTUAL,
+    valorFinal: 130,
+    horasMaquina: 30,
+    fuelLiters: 20,
+    adBlue: true,
+    adBlueLiters: 12,
+    closedAt: '2026-09-24T16:00:00.000Z',
+  };
+
+  function ediciones(body: Record<string, unknown>, overrides: Partial<OutboxOp> = {}): OutboxOp {
+    return {
+      id: 'w-1',
+      type: 'httpWrite',
+      v: 1,
+      userId: 'u1',
+      status: 'pending',
+      attempts: 0,
+      seq: Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      endpoint: 'shiftCard.edit',
+      params: { id: 'c1' },
+      body,
+      label: 'Edición de tarjeta',
+      ...overrides,
+    } as OutboxOp;
+  }
+
+  it('una tarjeta cerrada trae su AdBlue del servidor', () => {
+    const t = mapCardToTarjeta(CERRADA_SERVIDOR, contextoTurno(new Date(2026, 8, 24, 10, 0)));
+
+    expect(t).toMatchObject({ adBlue: true, adBlueLitros: 12, operatorId: 'op_1' });
+  });
+
+  it('un cierre pendiente superpone su AdBlue sobre la tarjeta', async () => {
+    mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
+    mockOps = [closeOp('c1', { payload: { cardId: 'c1', input: { closeClientId: 'x', valorFinal: 130, fuelLiters: 20, adBlue: true, adBlueLiters: 8, capturedAt: '2026-09-24T16:00:00.000Z' } } } as Partial<OutboxOp>)];
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.cerradas).toHaveLength(1));
+    expect(result.current.cerradas[0]).toMatchObject({ adBlue: true, adBlueLitros: 8 });
+  });
+
+  it('una edición pendiente se superpone, marca "edición sin sincronizar" y no toca sinSincronizar', async () => {
+    mockApis({ tarjetas: [CERRADA_SERVIDOR] });
+    mockOps = [ediciones({ valorFinal: 140, fuelLiters: 25, adBlue: false, observaciones: 'Revisado' })];
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.cerradas).toHaveLength(1));
+    expect(result.current.cerradas[0]).toMatchObject({
+      final: 140,
+      litros: 25,
+      adBlue: false,
+      adBlueLitros: undefined,
+      observaciones: 'Revisado',
+      edicionSinSincronizar: true,
+    });
+    expect(result.current.cerradas[0]!.sinSincronizar).toBeUndefined();
+  });
+
+  it('una edición en atención marca la tarjeta y deja a la UI explicar por qué no se puede editar de nuevo', async () => {
+    mockApis({ tarjetas: [CERRADA_SERVIDOR] });
+    mockOps = [ediciones({ valorFinal: 140 }, { status: 'needs_attention' })];
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.cerradas).toHaveLength(1));
+    expect(result.current.cerradas[0]!.edicionRequiereAtencion).toBe(true);
+    expect(result.current.edicion.motivoSinEdicion(result.current.cerradas[0]!)).toMatch(/Sincronización/);
+  });
+
+  it('el detalle de una cerrada se lee en vivo: tras una edición muestra el valor nuevo', async () => {
+    mockApis({ tarjetas: [CERRADA_SERVIDOR] });
+    mockOps = [];
+    const { Wrapper } = withQueryClient();
+
+    const { result, rerender } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.cerradas).toHaveLength(1));
+    act(() => result.current.setDetalleCerrada(result.current.cerradas[0]!));
+    expect(result.current.detalleCerrada?.final).toBe(130);
+
+    mockOps = [ediciones({ valorFinal: 150 })];
+    rerender();
+
+    await waitFor(() => expect(result.current.detalleCerrada?.final).toBe(150));
   });
 });

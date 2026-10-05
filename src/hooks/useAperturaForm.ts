@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from '@heroui/react';
 
-import { aNumero } from './shift-register-helpers';
+import { parseDecimal } from '../lib/decimal';
 import { enqueueOpenCard } from '../offline/outbox';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
@@ -25,24 +25,37 @@ export interface UseAperturaFormResult {
   apertura: AperturaState;
   setApertura: Dispatch<SetStateAction<AperturaState>>;
   equipoElegido: Equipment | undefined;
-  /** `aNumero(apertura.horometro) ?? equipoElegido?.currentHourmeter`, SIN
+  /** el horómetro tipeado, o el último registrado si el campo está vacío, SIN
    * fallback a `0` — `null` cuando no hay ningún valor válido, así el botón
    * de agregar se deshabilita en vez de abrir una tarjeta con horómetro 0
    * sin que el supervisor lo haya pedido. */
   valorInicialApertura: number | null;
+  /** Escribió algo que no es un número: se avisa y no se puede agregar. */
+  horometroInvalido: boolean;
+  /** El valor es menor que la última lectura del equipo: se avisa, no bloquea
+   * (el servidor lo acepta y lo marca). */
+  bajoUltimaLectura: boolean;
   abrir: () => void;
   isAbriendo: boolean;
 }
 
 /**
- * Formulario de apertura de tarjeta — sub-hook de `useShiftRegister` (Anexo
- * 3, revisión final). `abrir()` SIEMPRE encola vía `enqueueOpenCard` (online
+ * Formulario de apertura de tarjeta — sub-hook de `useShiftRegister`.
+ * `abrir()` SIEMPRE encola vía `enqueueOpenCard` (online
  * u offline, un único camino) — nunca llama a la API directo.
  */
 export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
-  const valorInicialApertura = aNumero(apertura.horometro) ?? equipoElegido?.currentHourmeter ?? null;
+  // Vacío conserva la lectura previa del equipo (lo esperado al precargar); un
+  // texto que no es un número NO cae en silencio a ella: es un error.
+  const textoHorometro = apertura.horometro.trim();
+  const horometroInvalido = textoHorometro !== '' && parseDecimal(textoHorometro) == null;
+  const valorInicialApertura =
+    textoHorometro === '' ? (equipoElegido?.currentHourmeter ?? null) : parseDecimal(textoHorometro);
+  const ultimaLectura = equipoElegido?.currentHourmeter ?? null;
+  const bajoUltimaLectura =
+    valorInicialApertura != null && ultimaLectura != null && valorInicialApertura < ultimaLectura;
 
   // Solo cubre el ENCOLADO (rápido, un `put` a Dexie) — la subida y el POST
   // real pasan en segundo plano en el replay. Igual queda la protección
@@ -73,5 +86,14 @@ export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormPar
       .finally(() => setIsAbriendo(false));
   };
 
-  return { apertura, setApertura, equipoElegido, valorInicialApertura, abrir, isAbriendo };
+  return {
+    apertura,
+    setApertura,
+    equipoElegido,
+    valorInicialApertura,
+    horometroInvalido,
+    bajoUltimaLectura,
+    abrir,
+    isAbriendo,
+  };
 }

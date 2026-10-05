@@ -46,6 +46,17 @@ describe('seccionesDelFormulario', () => {
     const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: '1.200', vueltasInternos: '1' });
     expect(vueltasDeSeccion(internos)).toBe(1200);
   });
+
+  /** Un conteo no tiene decimales: no existen 2,5 camiones. */
+  it.each(['2.5', '2,5'])('%s no es un conteo válido y vale cero', (camiones) => {
+    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: camiones, vueltasInternos: '4' });
+    expect(vueltasDeSeccion(internos)).toBe(0);
+  });
+
+  it('un texto que no es un número vale cero', () => {
+    const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: 'abc', vueltasInternos: '4' });
+    expect(vueltasDeSeccion(internos)).toBe(0);
+  });
 });
 
 describe('ReporteDiarioView · producción del turno', () => {
@@ -81,6 +92,19 @@ describe('ReporteDiarioView · producción del turno', () => {
     expect(screen.getByText('Mina Caleta').parentElement?.textContent).toContain('54');
     expect(screen.getByText('Mineras').parentElement?.textContent).toContain('38');
     expect(screen.queryByText('Total vueltas')).toBeNull();
+  });
+
+  it('"1.200" camiones son 1200 y no avisa de agrupación; un decimal marca error', () => {
+    render(<ReporteDiarioView />);
+
+    const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(camionesInternos, { target: { value: '1.200' } });
+    expect(screen.getByText('Internos').parentElement?.textContent).toContain('6.000');
+    expect(screen.queryByText(/Se guardará/)).toBeNull();
+    expect(screen.queryByText('Escribí un número entero, sin decimales.')).toBeNull();
+
+    fireEvent.change(camionesInternos, { target: { value: '2,5' } });
+    expect(screen.getByText('Escribí un número entero, sin decimales.')).toBeTruthy();
   });
 
   it('recalcula el contador de la sección al cambiar sus camiones', () => {

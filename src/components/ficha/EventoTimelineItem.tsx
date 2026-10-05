@@ -7,6 +7,7 @@ import {
   PRIORIDAD_OT_LABELS,
   TIPO_OT_LABELS,
 } from '../../config/mantenimiento-colors';
+import { fmtLitros } from '../../lib/format';
 import { CRITICIDADES, HALLAZGO_ESTADOS } from '../../types/dashboard';
 import type { EventoFicha } from '../../types/ficha';
 import { ESTADOS_ACTIVIDAD, ORIGENES_ACTIVIDAD, PRIORIDADES_OT, TIPOS_OT } from '../../types/mantenimiento';
@@ -55,7 +56,7 @@ function metaFields(evento: EventoFicha): MetaField[] {
     case 'COMBUSTIBLE': {
       const litros = asNumber(meta.litros);
       const tipoCombustible = asString(meta.tipo);
-      if (litros !== null) fields.push({ label: 'Litros', value: `${NUMERO.format(litros)} L` });
+      if (litros !== null) fields.push({ label: 'Litros', value: `${fmtLitros(litros)} L` });
       if (tipoCombustible) fields.push({ label: 'Tipo', value: tipoCombustible });
       break;
     }

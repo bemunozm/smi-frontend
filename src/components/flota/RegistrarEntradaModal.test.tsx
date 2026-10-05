@@ -56,11 +56,9 @@ function elegirOperador(nombre = 'Juan Pérez') {
   fireEvent.click(opcion);
 }
 
-/** El registro es manual (sin foto/OCR) — usa el stepper del `NumberField`,
- * mismo patrón ya validado para "Nivel de combustible" en este archivo. */
-function incrementar(label: string, veces = 1) {
-  const boton = screen.getByRole('button', { name: `Increase ${label}` });
-  for (let i = 0; i < veces; i += 1) fireEvent.click(boton);
+/** El registro es manual (sin foto/OCR): se escribe en el campo, con punto o coma decimal. */
+function escribir(label: string, texto: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value: texto } });
 }
 
 describe('RegistrarEntradaModal', () => {
@@ -95,7 +93,7 @@ describe('RegistrarEntradaModal', () => {
   it('guarda con el payload esperado a partir de la selección del operador, con operatorId y sin operador/fotoUrl (sin nivel de combustible tocado, no lo manda)', async () => {
     const { onOpenChange } = renderModal();
     elegirOperador();
-    incrementar('Horómetro total al iniciar (h)', 3);
+    escribir('Horómetro total al iniciar (h)', '3');
 
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     expect(guardar.hasAttribute('disabled')).toBe(false);
@@ -117,7 +115,7 @@ describe('RegistrarEntradaModal', () => {
     expect(payload.valorFinal).toBeUndefined();
     // Sin foto: ya no se manda `fotoUrl`.
     expect(payload.fotoUrl).toBeUndefined();
-    // El usuario nunca tocó el stepper de nivel de combustible — no debe
+    // El usuario nunca tocó el campo de nivel de combustible — no debe
     // mandarse un 0% falso que enmascare el "último nivel" real de la ficha.
     expect(payload.nivelCombustible).toBeUndefined();
 
@@ -126,10 +124,21 @@ describe('RegistrarEntradaModal', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it.each(['12.5', '12,5'])('la lectura %s vale doce y medio: el punto NO es separador de miles', async (texto) => {
+    renderModal();
+    elegirOperador();
+    escribir('Horómetro total al iniciar (h)', texto);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar entrada' }));
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    expect(mutateMock.mock.calls[0][0]).toMatchObject({ valorInicial: 12.5 });
+  });
+
   it('si el usuario sí ingresa un nivel de combustible, lo incluye en el payload', async () => {
     renderModal();
     elegirOperador();
-    incrementar('Nivel de combustible (%, opcional)');
+    escribir('Nivel de combustible (%, opcional)', '1');
 
     const guardar = screen.getByRole('button', { name: 'Registrar entrada' });
     expect(guardar.hasAttribute('disabled')).toBe(false);
@@ -143,7 +152,7 @@ describe('RegistrarEntradaModal', () => {
   it('Cancelar limpia el estado — reabrir el mismo modal para otro equipo no arrastra el operador/lectura anterior', () => {
     const { onOpenChange, qc, rerender } = renderModal('eq_1');
     elegirOperador();
-    incrementar('Horómetro total al iniciar (h)', 3);
+    escribir('Horómetro total al iniciar (h)', '3');
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);

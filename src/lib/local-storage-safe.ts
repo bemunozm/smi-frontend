@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 /**
  * Wrappers genéricos de `localStorage` — best-effort: `localStorage` puede
  * fallar (cuota, navegación privada de Safari) o el contenido guardado
@@ -19,7 +21,7 @@ export function safeGet<T>(key: string, isValid: (value: unknown) => value is T)
     const parsed: unknown = JSON.parse(raw);
     return isValid(parsed) ? parsed : null;
   } catch (error) {
-    console.error(`No se pudo leer "${key}" de localStorage:`, error);
+    logger.error(`No se pudo leer "${key}" de localStorage:`, error);
     return null;
   }
 }
@@ -30,7 +32,7 @@ export function safeSet<T>(key: string, value: T): void {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error(`No se pudo guardar "${key}" en localStorage:`, error);
+    logger.error(`No se pudo guardar "${key}" en localStorage:`, error);
   }
 }
 
@@ -38,6 +40,6 @@ export function safeRemove(key: string): void {
   try {
     window.localStorage.removeItem(key);
   } catch (error) {
-    console.error(`No se pudo limpiar "${key}" de localStorage:`, error);
+    logger.error(`No se pudo limpiar "${key}" de localStorage:`, error);
   }
 }

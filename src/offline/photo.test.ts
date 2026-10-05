@@ -7,7 +7,7 @@ function makeFile(bytes: number[] = [1, 2, 3, 4], name = 'surtidor.jpg', type = 
 }
 
 describe('compressPhoto', () => {
-  it('reduce al lado mayor a 1600 px y produce un JPEG q0.8 — inyecta el pipeline, sin canvas real', async () => {
+  it('reduce al lado mayor a 1280 px y produce un JPEG q0.72 — inyecta el pipeline, sin canvas real', async () => {
     const bitmap: ImageBitmapLike = { width: 3200, height: 1600, close: vi.fn() };
     const encodeJpeg = vi.fn().mockResolvedValue(new Blob([new Uint8Array([9, 9, 9])], { type: 'image/jpeg' }));
     const deps: PhotoCompressionDeps = {
@@ -17,7 +17,7 @@ describe('compressPhoto', () => {
 
     const result = await compressPhoto(makeFile(), deps);
 
-    expect(encodeJpeg).toHaveBeenCalledWith(bitmap, 1600, 800, 0.8);
+    expect(encodeJpeg).toHaveBeenCalledWith(bitmap, 1280, 640, 0.72);
     expect(result.mime).toBe('image/jpeg');
     expect(result.name).toBe('surtidor.jpg');
     expect(result.data.byteLength).toBe(3);
@@ -31,7 +31,7 @@ describe('compressPhoto', () => {
 
     await compressPhoto(makeFile(), deps);
 
-    expect(encodeJpeg).toHaveBeenCalledWith(bitmap, 800, 600, 0.8);
+    expect(encodeJpeg).toHaveBeenCalledWith(bitmap, 800, 600, 0.72);
   });
 
   it('cambia la extensión a .jpg aunque el original sea .png', async () => {

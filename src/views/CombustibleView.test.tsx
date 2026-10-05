@@ -2,18 +2,13 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CombustibleView } from './CombustibleView';
+import { encolado, submitWriteMock, ultimaEscritura } from '../test/office-write';
 
-// Terreno dejó el flujo legacy (`PhotoDropzone` + `uploadImage` + `POST
-// /api/uploads`, que servía la foto sin sesión) y usa el mismo que Flota:
-// `usePhotoCaptureFlow` sube por `uploadFile` al bucket privado y el submit
-// manda `fotoKey`. Se mockea la capa de API (no el hook) para que
-// `useCreateCombustible` corra de verdad, mismo criterio que
-// `EquiposView.interactions.test.tsx`.
-const { uploadFileMock } = vi.hoisted(() => ({ uploadFileMock: vi.fn() }));
-vi.mock('../api/UploadsAPI', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/UploadsAPI')>();
-  return { ...actual, uploadFile: uploadFileMock };
-});
+// La carga va por la cola de escrituras (`submitWrite`): la foto viaja como
+// archivo de la operación y se sube al sincronizar, no al elegirla.
+vi.mock('../offline/submit-write', async (importOriginal) =>
+  (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
+);
 
 // El OCR de litros no se ejercita acá; sin mock pegaría contra `/api/ocr`.
 const { fuelReadingOcrMock } = vi.hoisted(() => ({ fuelReadingOcrMock: vi.fn() }));
@@ -21,15 +16,7 @@ vi.mock('../api/OcrAPI', () => ({
   fuelReadingOcr: (...args: unknown[]) => fuelReadingOcrMock(...args),
 }));
 
-const { createCombustibleMock } = vi.hoisted(() => ({ createCombustibleMock: vi.fn() }));
-vi.mock('../api/CombustibleAPI', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/CombustibleAPI')>();
-  return {
-    ...actual,
-    listCombustible: () => Promise.resolve([]),
-    createCombustible: (...args: unknown[]) => createCombustibleMock(...args),
-  };
-});
+vi.mock('../api/CombustibleAPI', () => ({ listCombustible: () => Promise.resolve([]) }));
 
 afterEach(() => {
   cleanup();
@@ -70,9 +57,9 @@ describe('CombustibleView', () => {
     expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
   });
 
-  it('sube la foto al bucket privado y manda fotoKey, no fotoUrl', async () => {
+  it('encola la carga con la foto como archivo y sin fotoKey ni fotoUrl en el body', async () => {
     fuelReadingOcrMock.mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 });
-    uploadFileMock.mockResolvedValue({ key: 'tmp/u1/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpg', url: 'https://firmada' });
+    submitWriteMock.mockResolvedValue(encolado());
 
     renderView();
 
@@ -83,17 +70,18 @@ describe('CombustibleView', () => {
     const foto = new File(['x'], 'surtidor.jpg', { type: 'image/jpeg' });
     fireEvent.change(fileInput, { target: { files: [foto] } });
 
-    // La subida ocurre al enviar, no al elegir la foto: si el supervisor se
-    // arrepiente, no quedó nada en el bucket.
     await waitFor(() => expect(screen.getByText('Registrar carga')).not.toHaveProperty('disabled', true));
     fireEvent.click(screen.getByText('Registrar carga'));
 
-    await waitFor(() => expect(createCombustibleMock).toHaveBeenCalledTimes(1));
-    expect(uploadFileMock).toHaveBeenCalledWith(foto);
-
-    const [body] = createCombustibleMock.mock.calls[0];
-    expect(body).toMatchObject({ equipoId: 'e1', litros: 10 });
-    expect(body.fotoUrl).toBeUndefined();
+    await waitFor(() => expect(submitWriteMock).toHaveBeenCalledTimes(1));
+    const { endpoint, input } = ultimaEscritura();
+    expect(endpoint).toBe('combustible.create');
+    expect(input).toMatchObject({
+      body: { equipoId: 'e1', litros: 10, tipo: 'PETROLEO', id: expect.any(String) },
+      files: [{ field: 'fotoKey', file: foto }],
+    });
+    expect(input.body).not.toHaveProperty('fotoKey');
+    expect(input.body).not.toHaveProperty('fotoUrl');
   });
 
   /**
@@ -109,7 +97,7 @@ describe('CombustibleView', () => {
 
     fireEvent.click(screen.getByText('Registrar carga'));
 
-    expect(createCombustibleMock).not.toHaveBeenCalled();
+    expect(submitWriteMock).not.toHaveBeenCalled();
     expect(screen.getByText('Falta la foto del surtidor para registrar la carga.')).toBeTruthy();
   });
 });

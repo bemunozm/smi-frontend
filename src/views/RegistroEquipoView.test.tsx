@@ -23,6 +23,7 @@ const setCerrandoId = vi.fn();
 const setVerReporte = vi.fn();
 const setHistorialAbierto = vi.fn();
 const setDetalleCerrada = vi.fn();
+const abrirEdicionMock = vi.fn();
 const enviarReporteMock = vi.fn();
 const reporteUrlMock = vi.fn((id: string) => `/api/shift-reports/${id}/file`);
 
@@ -108,6 +109,27 @@ const CTX = {
   fechaHora: '24/09/2026 08:35',
 };
 
+const EDICION_INACTIVA: UseShiftRegisterResult['edicion'] = {
+  editando: null,
+  abrirEdicion: abrirEdicionMock,
+  cerrarEdicion: vi.fn(),
+  motivoSinEdicion: () => null,
+  form: { operatorId: '', inicial: '', final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+  setForm: vi.fn(),
+  esCerrada: false,
+  soloEnElEquipo: false,
+  adBlue: { litros: null, error: null, aviso: null },
+  finalInvalido: false,
+  faltante: null,
+  puedeGuardar: false,
+  guardar: vi.fn(),
+  isGuardando: false,
+  guardado: false,
+  cambios: [],
+  cargandoCambios: false,
+  historialDisponible: false,
+};
+
 let mockResult: UseShiftRegisterResult;
 
 function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRegisterResult {
@@ -136,12 +158,17 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     setApertura,
     equipoElegido: EQUIPOS_DISPONIBLES[0],
     valorInicialApertura: 4218.7,
+    horometroInvalido: false,
+    bajoUltimaLectura: false,
     abrir: abrirMock,
     isAbriendo: false,
     cerrandoId: null,
     setCerrandoId,
     cerrando: null,
-    cierre: { final: '', litros: '', observaciones: '' },
+    cierre: { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+    adBlueCierre: { litros: null, error: null, aviso: null },
+    adBlueIncompletoCierre: false,
+    edicion: EDICION_INACTIVA,
     setCierre,
     abrirCierre: setCerrandoId,
     cerrar: cerrarMock,
@@ -152,14 +179,11 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     foto: {
       file: null,
       isReadingPhoto: false,
-      isUploadingPhoto: false,
       captureDate: null,
       ocr: null,
       handleSelectPhoto: vi.fn(),
       handleClearPhoto: vi.fn(),
       resetPhoto: vi.fn(),
-      cancelar: vi.fn(),
-      upload: vi.fn(),
     },
     verReporte: false,
     setVerReporte,
@@ -198,6 +222,39 @@ describe('RegistroEquipoView', () => {
     const lista = within(screen.getByRole('listbox'));
     expect(lista.getByRole('option', { name: /EX-005/ })).toBeTruthy();
     expect(lista.getByRole('option', { name: /PE-009/ })).toBeTruthy();
+  });
+
+  describe('horómetro inicial: avisos y errores', () => {
+    it('un texto que no es un número se marca como error', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130.5' }, horometroInvalido: true, valorInicialApertura: null });
+
+      expect(screen.getByRole('alert').textContent).toMatch(/Escribí un número/);
+      expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('menor que la última lectura: avisa mostrando esa lectura, sin bloquear', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, bajoUltimaLectura: true, valorInicialApertura: 2.13 });
+
+      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      expect(aviso).toMatch(/Es menor que la última lectura registrada \(4\.218,7 h\)/);
+      expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('un valor con aspecto de miles ("2.130") avisa cómo se leerá', () => {
+      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, valorInicialApertura: 2.13 });
+
+      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      expect(aviso).toContain('Se guardará 2,13. Si querías 2130, escribilo sin punto ni coma.');
+    });
+
+    it('elegir un equipo precarga el horómetro SIN separador de miles', () => {
+      renderView('phone');
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /PE-009/ }));
+
+      const precargado = setApertura.mock.calls.at(-1)![0]({ equipoId: '', operatorId: '', horometro: '' });
+      expect(precargado.horometro).toBe('3120,4');
+    });
   });
 
   it('propone el último horómetro registrado del equipo elegido', () => {
@@ -274,14 +331,11 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-        isUploadingPhoto: false,
-        captureDate: null,
+          captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
         resetPhoto: vi.fn(),
-        cancelar: vi.fn(),
-        upload: vi.fn(),
       },
       finalNum: 12500,
     });
@@ -334,14 +388,11 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-        isUploadingPhoto: false,
-        captureDate: null,
+          captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
         resetPhoto: vi.fn(),
-        cancelar: vi.fn(),
-        upload: vi.fn(),
       },
     });
 
@@ -502,6 +553,213 @@ describe('RegistroEquipoView', () => {
       });
 
       expect(screen.getByText(/Quedó en curso al terminar el turno anterior/)).toBeTruthy();
+    });
+  });
+
+  describe('AdBlue en el cierre', () => {
+    it('muestra el selector Sí/No y los litros solo cuando se marca que cargó', () => {
+      const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
+      expect(screen.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
+      expect(screen.queryByLabelText(/AdBlue cargado/)).toBeNull();
+      unmount();
+
+      renderView('desktop', {
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
+        cierre: { final: '', litros: '', adBlue: true, adBlueLitros: '', observaciones: '' },
+      });
+      expect(screen.getByLabelText(/AdBlue cargado/)).toBeTruthy();
+    });
+
+    it('marcar "Sí" avisa al estado del formulario', () => {
+      renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Sí' }));
+
+      expect(setCierre).toHaveBeenCalled();
+      const actualizar = setCierre.mock.calls[0]![0] as (c: { adBlue: boolean }) => { adBlue: boolean };
+      expect(actualizar({ adBlue: false }).adBlue).toBe(true);
+    });
+
+    it('más de 30 L muestra el aviso, sin deshabilitar el cierre', () => {
+      renderView('desktop', {
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
+        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
+        finalNum: 12500,
+        foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
+      });
+
+      expect(screen.getByRole('status').textContent).toMatch(/Es más de lo que cabe en un estanque de 30 L: revisá el dato/);
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('con AdBlue marcado explica el estanque de 30 L; el aviso de exceso reemplaza esa nota', () => {
+      const conAdBlue = { final: '', litros: '', adBlue: true, adBlueLitros: '12', observaciones: '' };
+      const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, cierre: conAdBlue });
+      expect(
+        screen.getByText('Los cargadores SEM 3, 4, 5 y 6 tienen estanque de 30 L y gastan cerca de 1 L por hora.'),
+      ).toBeTruthy();
+      unmount();
+
+      renderView('desktop', {
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
+        cierre: { ...conAdBlue, adBlueLitros: '45' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
+      });
+      expect(screen.queryByText(/gastan cerca de 1 L por hora/)).toBeNull();
+    });
+
+    it('AdBlue marcado sin litros válidos deshabilita el cierre y muestra el error', () => {
+      renderView('desktop', {
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
+        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '', observaciones: '' },
+        adBlueCierre: { litros: null, error: 'Indicá cuántos litros de AdBlue se cargaron.', aviso: null },
+        adBlueIncompletoCierre: true,
+        finalNum: 12500,
+        foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
+      });
+
+      expect(screen.getByText('Indicá cuántos litros de AdBlue se cargaron.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('el detalle de una cerrada muestra el AdBlue', () => {
+      renderView('desktop', {
+        historialAbierto: true,
+        detalleCerrada: { ...TARJETA_CERRADA, adBlue: true, adBlueLitros: 12.5 },
+      });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('12,5 L')).toBeTruthy();
+    });
+
+    it('los litros de AdBlue y de combustible no se redondean al entero, ni en el historial ni en el detalle', () => {
+      const tarjeta = { ...TARJETA_CERRADA, litros: 164.25, adBlue: true, adBlueLitros: 12.5 };
+      const { unmount } = renderView('phone', { historialAbierto: true, cerradas: [tarjeta] });
+
+      let ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('12,5')).toBeTruthy();
+      expect(ventana.getByText('164,25')).toBeTruthy();
+      unmount();
+
+      renderView('desktop', { historialAbierto: true, cerradas: [tarjeta] });
+      ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('12,5')).toBeTruthy();
+      expect(ventana.getByText('164,25')).toBeTruthy();
+    });
+
+    it('una tarjeta cerrada sin señal muestra "Sin sincronizar" en el historial y en su detalle', () => {
+      const sinEnviar = { ...TARJETA_CERRADA, sinSincronizar: true };
+      const { unmount } = renderView('phone', { historialAbierto: true, cerradas: [sinEnviar] });
+      expect(within(screen.getByRole('dialog')).getByText('Sin sincronizar')).toBeTruthy();
+      unmount();
+
+      renderView('phone', { historialAbierto: true, cerradas: [sinEnviar], detalleCerrada: sinEnviar });
+      expect(within(screen.getByRole('dialog')).getByText('Sin sincronizar')).toBeTruthy();
+    });
+
+    it('una tarjeta cerrada ya confirmada no lleva la marca', () => {
+      renderView('phone', { historialAbierto: true });
+      expect(within(screen.getByRole('dialog')).queryByText('Sin sincronizar')).toBeNull();
+    });
+  });
+
+  describe('Editar una tarjeta ya enviada', () => {
+    it('cada tarjeta, abierta o cerrada, ofrece Editar y lo avisa al hook', () => {
+      renderView('phone', { historialAbierto: false });
+
+      fireEvent.click(screen.getByRole('button', { name: /Editar tarjeta de CA-011/ }));
+
+      expect(abrirEdicionMock).toHaveBeenCalledWith('c1');
+    });
+
+    it('con una edición anterior esperando atención, Editar queda deshabilitado y dice por qué', () => {
+      renderView('phone', {
+        edicion: {
+          ...EDICION_INACTIVA,
+          motivoSinEdicion: () => 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.',
+        },
+      });
+
+      const boton = screen.getByRole('button', { name: /Editar tarjeta de CA-011/ });
+      expect(boton.hasAttribute('disabled')).toBe(true);
+      expect(boton.getAttribute('title')).toMatch(/Sincronización/);
+    });
+
+    it('una tarjeta con edición guardada muestra "Edición sin sincronizar"', () => {
+      renderView('phone', { abiertasActual: [{ ...TARJETA_ABIERTA, edicionSinSincronizar: true }] });
+
+      expect(screen.getByText('Edición sin sincronizar')).toBeTruthy();
+    });
+
+    it('con una tarjeta en edición, abre el editor con el aviso al administrador y el historial', () => {
+      renderView('desktop', {
+        edicion: {
+          ...EDICION_INACTIVA,
+          editando: TARJETA_CERRADA,
+          esCerrada: true,
+          historialDisponible: true,
+          cambios: [
+            { id: 'k1', userName: 'José Pérez', createdAt: '2026-10-01T22:10:00.000Z', changes: [{ field: 'fuelLiters', label: 'Litros', before: '20', after: '25' }] },
+          ],
+          form: { operatorId: 'op_1', inicial: '12487,3', final: '12500', litros: '20', adBlue: false, adBlueLitros: '', observaciones: '' },
+        },
+      });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
+      expect(ventana.getByLabelText(/Horómetro final/)).toBeTruthy();
+      expect(ventana.getByText('José Pérez')).toBeTruthy();
+    });
+
+    it('una tarjeta que solo vive en el equipo no ofrece historial y avisa que no genera aviso', () => {
+      renderView('desktop', {
+        edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA, soloEnElEquipo: true },
+      });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText(/todavía no se envió/)).toBeTruthy();
+      expect(ventana.queryByText('Historial de cambios')).toBeNull();
+      expect(ventana.queryByText(/necesita señal/)).toBeNull();
+    });
+
+    it('sin señal explica que el historial necesita conexión', () => {
+      renderView('desktop', { edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA } });
+
+      expect(within(screen.getByRole('dialog')).getByText(/historial de cambios necesita señal/)).toBeTruthy();
+    });
+
+    it('el editor de una cerrada aclara que la foto no se cambia y qué falta para guardar', () => {
+      renderView('desktop', {
+        edicion: {
+          ...EDICION_INACTIVA,
+          editando: TARJETA_CERRADA,
+          esCerrada: true,
+          finalInvalido: true,
+          faltante: 'Indicá los litros de combustible (cero si no cargó).',
+          form: { operatorId: 'op_1', inicial: '12487,3', final: '12480', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+        },
+      });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.')).toBeTruthy();
+      expect(ventana.getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
+      expect(ventana.getByText('Indicá los litros de combustible (cero si no cargó).')).toBeTruthy();
+      expect(ventana.getByText('Cero si no cargó en el turno.')).toBeTruthy();
+      expect(ventana.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
+    });
+
+    it('una tarjeta abierta no muestra horómetro final, litros ni AdBlue en el editor', () => {
+      renderView('desktop', { edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA } });
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.queryByLabelText(/Horómetro final/)).toBeNull();
+      expect(ventana.queryByRole('group', { name: '¿Se cargó AdBlue?' })).toBeNull();
+      expect(ventana.getByLabelText(/Observaciones/)).toBeTruthy();
     });
   });
 });

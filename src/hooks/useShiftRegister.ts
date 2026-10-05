@@ -7,11 +7,13 @@ import { useShiftCardsMine } from './useShiftCards';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useAperturaForm, type AperturaState } from './useAperturaForm';
 import { useCierreForm, type CierreState } from './useCierreForm';
+import { useEditarTarjeta, type UseEditarTarjetaResult } from './useEditarTarjeta';
 import { useExitReportState } from './useExitReportState';
 import { useShiftProjection } from './useShiftProjection';
 import { useTurnoSelector } from './useTurnoSelector';
 import type { EstadoReporte, TarjetaTurno } from './shift-register-helpers';
 import type { OutboxLastError } from '../offline/db';
+import type { ResultadoAdBlue } from '../lib/adblue';
 import type { ContextoTurno, Turno } from '../lib/turno';
 import type { UsePhotoCaptureFlowResult } from '../lib/usePhotoCaptureFlow';
 import type { Equipment } from '../types/equipment';
@@ -22,14 +24,12 @@ import type { ShiftCardExitReport } from '../types/shift';
 // Re-exportados tal cual (ver `shift-register-helpers.ts`): mismo import
 // path (`./useShiftRegister`) que ya usaban `views/RegistroEquipoView.tsx`
 // y `hooks/useShiftRegister.test.tsx` antes de separar el archivo.
-export { aNumero, lineaEstadoCorreo, mapCardToTarjeta } from './shift-register-helpers';
+export { lineaEstadoCorreo, mapCardToTarjeta } from './shift-register-helpers';
 export type { Estado, EstadoReporte, Grupo, TarjetaTurno } from './shift-register-helpers';
 
 /**
- * Adaptador de datos de Registro de equipo (Módulo A) — RFC "Supervisión en
- * Terreno" §Diseño ("Pantalla: `useShiftRegister()` devuelve el mismo
- * view-model que la maqueta"). `views/RegistroEquipoView.tsx` (de Joaquín)
- * consume ESTE shape tal cual — el JSX no se tocó.
+ * Adaptador de datos de Registro de equipo: devuelve el mismo view-model que la
+ * maqueta. `views/RegistroEquipoView.tsx` consume ESTE shape tal cual.
  *
  * Es "offline-first": proyecta el servidor (`useShiftCardsMine`) MÁS las
  * operaciones pendientes del outbox (`useOutboxOps`, Dexie `liveQuery`) en
@@ -81,11 +81,13 @@ export interface UseShiftRegisterResult {
   apertura: AperturaState;
   setApertura: Dispatch<SetStateAction<AperturaState>>;
   equipoElegido: Equipment | undefined;
-  /** `aNumero(apertura.horometro) ?? equipoElegido?.currentHourmeter`, SIN
+  /** `parseDecimal(apertura.horometro) ?? equipoElegido?.currentHourmeter`, SIN
    * fallback a `0` — `null` cuando no hay ningún valor válido, así el botón
    * de agregar se deshabilita en vez de abrir una tarjeta con horómetro 0
    * sin que el supervisor lo haya pedido. */
   valorInicialApertura: number | null;
+  horometroInvalido: boolean;
+  bajoUltimaLectura: boolean;
   abrir: () => void;
   isAbriendo: boolean;
 
@@ -99,8 +101,13 @@ export interface UseShiftRegisterResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  adBlueCierre: ResultadoAdBlue;
+  adBlueIncompletoCierre: boolean;
   isCerrando: boolean;
   foto: UsePhotoCaptureFlowResult;
+
+  /** Editar una tarjeta (abierta o cerrada) — ver `useEditarTarjeta`. */
+  edicion: UseEditarTarjetaResult;
 
   verReporte: boolean;
   setVerReporte: Dispatch<SetStateAction<boolean>>;
@@ -153,6 +160,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
   });
   const apertura = useAperturaForm({ disponibles: proyeccion.disponibles, ctx: turno.ctx, userId: user?.id });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, userId: user?.id });
+  const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id });
   const reporte = useExitReportState({
     tarjetasServidor,
     ctx: turno.ctx,
@@ -164,6 +172,11 @@ export function useShiftRegister(): UseShiftRegisterResult {
   const [verReporte, setVerReporte] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
+  // El detalle abierto se lee de la proyeccion, no de la copia guardada: tras
+  // editar, muestra el dato nuevo sin volver a abrirlo.
+  const detalleCerradaVivo = detalleCerrada
+    ? (proyeccion.tarjetas.find((t) => t.id === detalleCerrada.id) ?? detalleCerrada)
+    : null;
 
   return {
     ...turno,
@@ -179,11 +192,12 @@ export function useShiftRegister(): UseShiftRegisterResult {
     enCurso: proyeccion.enCurso,
     ...apertura,
     ...cierre,
+    edicion,
     verReporte,
     setVerReporte,
     historialAbierto,
     setHistorialAbierto,
-    detalleCerrada,
+    detalleCerrada: detalleCerradaVivo,
     setDetalleCerrada,
     ...reporte,
   };

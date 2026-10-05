@@ -7,16 +7,17 @@ import type { OpenShift } from '../../types/equipment';
 
 const mutateMock = vi.fn();
 let isPending = false;
+let puedeCerrarTurnoDeTerreno = true;
+vi.mock('../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ canCloseShiftCardFromFleet: puedeCerrarTurnoDeTerreno }),
+}));
 vi.mock('../../hooks/useHorometro', () => ({
   useCerrarHorometro: () => ({ mutate: mutateMock, isPending }),
 }));
 
 afterEach(cleanup);
 
-// Lectura inicial chica a propósito: el registro es manual (sin foto/OCR),
-// así que estos tests suben la lectura final con el stepper del
-// `NumberField` (mismo patrón ya validado para "Nivel de combustible") — un
-// `valorInicial` de miles habría exigido cientos de clicks para superarlo.
+// Lectura inicial chica a propósito: el registro es manual (sin foto/OCR).
 const OPEN_SHIFT: OpenShift = {
   id: 'h_abierto',
   valorInicial: 5,
@@ -45,15 +46,15 @@ function renderModal(openShift: OpenShift = OPEN_SHIFT, controlUnit: 'HOURS' | '
   return { onOpenChange, qc, ...utils };
 }
 
-function incrementar(label: string, veces = 1) {
-  const boton = screen.getByRole('button', { name: `Increase ${label}` });
-  for (let i = 0; i < veces; i += 1) fireEvent.click(boton);
+function escribir(label: string, texto: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value: texto } });
 }
 
 describe('RegistrarSalidaModal', () => {
   beforeEach(() => {
     mutateMock.mockReset();
     isPending = false;
+    puedeCerrarTurnoDeTerreno = true;
   });
 
   it('muestra el contexto del turno abierto: operador, turno y lectura inicial', () => {
@@ -77,7 +78,7 @@ describe('RegistrarSalidaModal', () => {
 
   it('muestra el preview de uso en vivo (verde) cuando la lectura final es válida', () => {
     renderModal();
-    incrementar('Horómetro total al terminar (h)', 8);
+    escribir('Horómetro total al terminar (h)', '8');
 
     // 8 (final) − 5 (inicial) = 3 h de uso.
     expect(screen.getByText(/Uso: 3/)).toBeTruthy();
@@ -86,7 +87,7 @@ describe('RegistrarSalidaModal', () => {
 
   it('marca la lectura final como inválida (y deshabilita guardar) si es menor que la inicial', () => {
     renderModal();
-    incrementar('Horómetro total al terminar (h)', 2);
+    escribir('Horómetro total al terminar (h)', '2');
 
     expect(screen.getByText(/no puede ser menor que la inicial/)).toBeTruthy();
     const guardar = screen.getByRole('button', { name: 'Registrar salida' });
@@ -95,7 +96,7 @@ describe('RegistrarSalidaModal', () => {
 
   it('guarda con el payload esperado (id del turno abierto, sin fotoUrlSalida, sin nivel de combustible si no se tocó)', async () => {
     const { onOpenChange } = renderModal();
-    incrementar('Horómetro total al terminar (h)', 8);
+    escribir('Horómetro total al terminar (h)', '8');
 
     const guardar = screen.getByRole('button', { name: 'Registrar salida' });
     expect(guardar.hasAttribute('disabled')).toBe(false);
@@ -118,8 +119,8 @@ describe('RegistrarSalidaModal', () => {
 
   it('si el usuario sí ingresa un nivel de combustible, lo incluye en el payload', async () => {
     renderModal();
-    incrementar('Horómetro total al terminar (h)', 8);
-    incrementar('Nivel de combustible (%, opcional)');
+    escribir('Horómetro total al terminar (h)', '8');
+    escribir('Nivel de combustible (%, opcional)', '1');
 
     const guardar = screen.getByRole('button', { name: 'Registrar salida' });
     expect(guardar.hasAttribute('disabled')).toBe(false);
@@ -132,7 +133,7 @@ describe('RegistrarSalidaModal', () => {
 
   it('Cancelar limpia el estado y no queda arrastrado al reabrir', () => {
     const { onOpenChange, qc, rerender } = renderModal();
-    incrementar('Horómetro total al terminar (h)', 8);
+    escribir('Horómetro total al terminar (h)', '8');
     expect(screen.getByText(/Uso: 3/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -163,8 +164,8 @@ describe('RegistrarSalidaModal', () => {
 
     // El preview vuelve a su estado inicial (valorFinal en 0, por debajo de
     // la lectura inicial) — no queda arrastrado el "Uso: 3" del intento
-    // anterior. El chip en sí sigue presente (danger, "—") porque el
-    // `NumberField` siempre parte controlado en 0, igual que antes de tocarlo.
+    // anterior. El chip en sí sigue presente (danger, "—") porque el campo
+    // siempre parte en 0.
     expect(screen.queryByText(/Uso: 3/)).toBeNull();
     const guardar = screen.getByRole('button', { name: 'Registrar salida' });
     expect(guardar.hasAttribute('disabled')).toBe(true);
@@ -175,6 +176,25 @@ describe('RegistrarSalidaModal', () => {
     expect(screen.queryByText(/Registro de turno/)).toBeNull();
   });
 
+  it.each(['12.5', '12,5'])('la lectura final %s vale doce y medio: el punto NO es separador de miles', async (texto) => {
+    renderModal();
+    escribir('Horómetro total al terminar (h)', texto);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar salida' }));
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    expect(mutateMock.mock.calls[0][0].payload.valorFinal).toBe(12.5);
+  });
+
+  it('con shiftId y sin permiso (supervisor): explica que se cierra en Terreno y no deja guardar', () => {
+    puedeCerrarTurnoDeTerreno = false;
+    renderModal({ ...OPEN_SHIFT, shiftId: 'sh_1' });
+
+    expect(screen.getByText(/la cierra el supervisor desde Terreno/)).toBeTruthy();
+    escribir('Horómetro total al terminar (h)', '8');
+    expect(screen.getByRole('button', { name: 'Registrar salida' }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('con shiftId (tarjeta de Registro de turno), avisa que cerrar acá no registra litros ni foto', () => {
     renderModal({ ...OPEN_SHIFT, shiftId: 'sh_1' });
 
@@ -183,9 +203,9 @@ describe('RegistrarSalidaModal', () => {
         /Esta tarjeta es del Registro de turno\. Cerrarla acá no registra litros ni la foto del surtidor/,
       ),
     ).toBeTruthy();
-    // El aviso no bloquea la acción — el backend sigue siendo el guardián
-    // real (409 salvo ADMIN).
-    incrementar('Horómetro total al terminar (h)', 8);
+    // Al administrador el aviso no le bloquea la acción: el backend solo
+    // la acepta de él.
+    escribir('Horómetro total al terminar (h)', '8');
     expect(screen.getByRole('button', { name: 'Registrar salida' }).hasAttribute('disabled')).toBe(false);
   });
 

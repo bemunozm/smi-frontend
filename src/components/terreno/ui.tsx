@@ -1,4 +1,6 @@
 import { cloneElement, useId } from 'react';
+import { avisoDeAgrupacion } from '../../lib/decimal';
+
 import type { ReactElement, ReactNode } from 'react';
 import {
   Button as AriaButton,
@@ -20,7 +22,7 @@ import type { Turno } from '../../lib/turno';
 import type { EntradaCambios } from '../../types/cambios';
 
 /**
- * Kit visual de Terreno, según la maqueta aprobada el 23/09/2026.
+ * Kit visual de Terreno, según la maqueta aprobada.
  *
  * Convive con `mobile.tsx` a propósito: ese archivo es el kit anterior y las
  * vistas todavía sin migrar lo siguen usando. La migración va vista por vista;
@@ -292,19 +294,29 @@ export function Campo({
   label,
   requerido,
   hint,
+  aviso,
+  error,
   unidad,
   children,
 }: {
   label?: ReactNode;
   requerido?: boolean;
   hint?: ReactNode;
+  /** Advertencia que no impide guardar. */
+  aviso?: ReactNode;
+  /** Lo escrito no vale: se muestra en rojo bajo el campo. */
+  error?: ReactNode;
   /** Sufijo fijo dentro del campo: `h`, `L`, `t`, `%`. */
   unidad?: string;
-  children: ReactElement<{ id?: string; 'aria-describedby'?: string }>;
+  children: ReactElement<{ id?: string; 'aria-describedby'?: string; numerico?: boolean; value?: unknown }>;
 }) {
   const base = useId();
   const idCampo = `${base}-campo`;
   const idHint = `${base}-hint`;
+
+  // Un campo numérico con aspecto de "2.130" avisa cómo se va a leer.
+  const valor = children.props.numerico ? children.props.value : undefined;
+  const avisoAgrupacion = typeof valor === 'string' ? avisoDeAgrupacion(valor) : null;
 
   const control = cloneElement(children, {
     id: children.props.id ?? idCampo,
@@ -333,20 +345,40 @@ export function Campo({
           <Hint>{hint}</Hint>
         </span>
       )}
+      {error && (
+        <span className="text-[12.5px] leading-snug font-semibold text-[var(--danger)]" role="alert">
+          {error}
+        </span>
+      )}
+      {[aviso, avisoAgrupacion].map((texto, i) =>
+        texto ? (
+          <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" key={i} role="status">
+            {texto}
+          </span>
+        ) : null,
+      )}
     </div>
   );
 }
 
+/**
+ * `numerico`: medida con decimales (teclado decimal, avisa de un posible
+ * separador de miles). `entero`: conteo (teclado numérico, sin aviso: ahí el
+ * punto o la coma solo pueden ser miles).
+ */
 export function Input({
   numerico,
+  entero,
   className = '',
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { numerico?: boolean }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & { numerico?: boolean; entero?: boolean }) {
+  const esNumero = numerico || entero;
+  const modo = numerico ? 'decimal' : entero ? 'numeric' : props.inputMode;
   return (
     <input
       {...props}
-      inputMode={numerico ? 'decimal' : props.inputMode}
-      className={`${INPUT} ${numerico ? 'tabular pr-11 text-[17px]' : ''} ${className}`}
+      inputMode={modo}
+      className={`${INPUT} ${esNumero ? 'tabular pr-11 text-[17px]' : ''} ${className}`}
     />
   );
 }
@@ -939,7 +971,7 @@ export function Filas({ filas }: { filas: [string, ReactNode][] }) {
   );
 }
 
-/* ---------- Edición de registros enviados (Acta N.° 004, R13) ---------- */
+/* ---------- Edición de registros enviados ---------- */
 
 /**
  * Lo que se le dice a quien edita algo ya enviado, siempre en el mismo

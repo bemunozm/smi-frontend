@@ -6,7 +6,7 @@ export const ACTIVIDADES = [
   { value: 'LIMPIEZA_CANCHA', label: 'Limpieza de cancha' },
   { value: 'SOLTAR_MATERIAL', label: 'Soltar material' },
   { value: 'LIMPIEZA_SILOS', label: 'Limpieza de silos' },
-  // «Pretil», no «petril» (Acta N.° 004, punto 3). Solo cambia la etiqueta:
+  // «Pretil», no «petril». Solo cambia la etiqueta:
   // el valor guardado en la base sigue siendo `HACER_PETRIL`.
   { value: 'HACER_PETRIL', label: 'Hacer pretil' },
   { value: 'ARREGLO_CANCHA', label: 'Arreglo cancha' },
@@ -55,6 +55,14 @@ export const trabajoExtraFormSchema = z
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
 export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
+/** Body de `POST /api/trabajos-extra` y payload del outbox: el formulario
+ * validado + `id` (clave de idempotencia, uuid v4 del cliente) + `capturedAt`
+ * (hora del dispositivo). */
+export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
+  id: string;
+  capturedAt: string;
+}
+
 export interface TrabajoExtraordinario {
   id: string;
   equipoId: string;
@@ -77,3 +85,25 @@ export interface TrabajoExtraordinario {
   fecha: string;
   equipo?: { internalCode: string };
 }
+
+/** Forma de un trabajo extraordinario en las respuestas del servidor. */
+export const TrabajoExtraordinarioSchema = z.object({
+  id: z.string(),
+  equipoId: z.string(),
+  operatorId: z.string().nullable(),
+  operador: z.string(),
+  faena: z.string(),
+  turno: z.string(),
+  horometroInicial: z.number(),
+  horometroFinal: z.number(),
+  totalHoras: z.number(),
+  actividades: z.array(z.string()),
+  otraActividad: z.string().nullable(),
+  descripcion: z.string(),
+  observaciones: z.string().nullable(),
+  fecha: z.string(),
+  equipo: z.object({ internalCode: z.string() }).optional(),
+});
+
+/** `PATCH /api/trabajos-extra/:id`: solo los campos que cambiaron. */
+export type EditTrabajoExtraBody = Partial<TrabajoExtraForm>;

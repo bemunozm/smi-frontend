@@ -32,10 +32,18 @@ export interface UseTurnoSelectorResult {
   mostrarSelectorTurno: boolean;
 }
 
+/** ¿El usuario tiene un "adelantar turno" guardado que todavía corresponde al turno del reloj? */
+function overrideVigente(userId: string | undefined, clockCtx: ContextoTurno): boolean {
+  if (!userId) return false;
+  const guardado = readTurnoOverride(userId);
+  return !!guardado && guardado.baseTurno === clockCtx.turno && guardado.baseFecha === toDateOnly(clockCtx.fecha);
+}
+
 /**
- * Selector de turno "actual / siguiente" de Registro de equipo — sub-hook de
- * `useShiftRegister` (Anexo 3, revisión final: extraído para que el resto
- * del hook no dependa del reloj/`localStorage` directamente).
+ * Selector de turno "actual / siguiente" de Terreno — sub-hook de
+ * `useShiftRegister`; aísla el reloj y `localStorage` para que el resto del
+ * hook no dependa de ellos. El turno elegido es uno solo para todo Terreno:
+ * las pantallas que solo lo leen usan `useTurnoActual`.
  */
 export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorResult {
   // El turno sale del reloj, no de un valor escrito en la pantalla — ver
@@ -47,14 +55,15 @@ export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorRe
   // el momento en que se pidió adelantar, así que queda obsoleto solo en
   // cuanto el reloj avanza más allá de ese par — no hay override "de ayer"
   // que se arrastre al turno de hoy.
-  const [overrideActivo, setOverrideActivo] = useState(false);
+  // Se lee ya en el primer render: las demás pantallas de Terreno montan este
+  // hook después de que se adelantó el turno en Registro, y no deben pintar un
+  // instante el turno del reloj antes de corregirse.
+  const [overrideActivo, setOverrideActivo] = useState(() => overrideVigente(userId, clockCtx));
   useEffect(() => {
     if (!userId) return;
-    const guardado = readTurnoOverride(userId);
-    const vigente =
-      !!guardado && guardado.baseTurno === clockCtx.turno && guardado.baseFecha === toDateOnly(clockCtx.fecha);
+    const vigente = overrideVigente(userId, clockCtx);
     setOverrideActivo(vigente);
-    if (guardado && !vigente) clearTurnoOverride(userId);
+    if (!vigente) clearTurnoOverride(userId);
   }, [userId, clockCtx]);
 
   const siguiente = useMemo(() => turnoSiguiente(clockCtx.turno, clockCtx.fecha), [clockCtx]);

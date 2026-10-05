@@ -17,7 +17,7 @@ import {
  * Solo lectura — el dashboard no tiene mutaciones, así que no hay feedback
  * de toasts que centralizar acá (a diferencia de `hooks/useUsers.ts`).
  *
- * Terreno (Alexander) ya está integrado a `main` con datos reales: los
+ * Terreno ya está integrado con datos reales: los
  * hooks de sus 4 piezas (`useHallazgosAbiertosResumen`,
  * `useHallazgosRecientes`, `useHallazgosTendencia`,
  * `useTrabajosExtraordinariosMensual`) NO llaman a `DashboardAPI` — envuelven

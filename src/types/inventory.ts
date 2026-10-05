@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+import { parseDecimal } from '../lib/decimal';
+
 /**
  * Contrato del dominio Inventario (`/api/inventory/items`,
- * `/api/inventory/movements`) — RFC-3, modelo en inglés.
+ * `/api/inventory/movements`), modelo en inglés.
  *
  * El cambio de fondo respecto del contrato anterior: el ítem ya NO trae un
  * saldo propio. Trae `stocks[]`, una fila por bodega donde tiene existencia, y
@@ -105,21 +107,11 @@ export const ItemListResponseSchema = z.object({
   message: z.string(),
 });
 
-export const ItemResponseSchema = z.object({
-  data: InventoryItemSchema,
-  message: z.string(),
-});
-
 export const KardexResponseSchema = z.object({
   data: z.object({
     item: InventoryItemSchema,
     movements: z.array(StockMovementSchema),
   }),
-  message: z.string(),
-});
-
-export const MovementResponseSchema = z.object({
-  data: StockMovementSchema,
   message: z.string(),
 });
 
@@ -129,18 +121,22 @@ export const MovementListResponseSchema = z.object({
 });
 
 /** El ajuste devuelve el ítem y el asiento, que es `null` si el conteo coincidía. */
-export const AdjustResponseSchema = z.object({
-  data: z.object({
-    item: InventoryItemSchema,
-    movement: StockMovementSchema.nullable(),
-  }),
-  message: z.string(),
+export const AdjustResultSchema = z.object({
+  item: InventoryItemSchema,
+  movement: StockMovementSchema.nullable(),
 });
+export type AdjustResult = z.infer<typeof AdjustResultSchema>;
 
-export const DeleteItemResponseSchema = z.object({
-  data: z.object({ id: z.string() }).nullable(),
-  message: z.string(),
+/** Traspaso: el asiento de salida y el de entrada, con los nombres de las bodegas.
+ * Un reenvío del mismo `id` devuelve lo mismo. */
+export const TransferResultSchema = z.object({
+  reference: z.string(),
+  out: StockMovementSchema,
+  in: StockMovementSchema,
+  sourceBranchName: z.string(),
+  destinationBranchName: z.string(),
 });
+export type TransferResult = z.infer<typeof TransferResultSchema>;
 
 // --- Lecturas derivadas ----------------------------------------------------
 
@@ -232,6 +228,20 @@ export type UpdateItemInput = Omit<
   isActive?: boolean;
 };
 
+/** Los campos de la ficha de un ítem tal como los guarda el servidor (los textos
+ * opcionales vacíos son `null`): la forma de la base de una edición. */
+export interface ItemFields {
+  name: string;
+  description: string | null;
+  unit: UnitOfMeasure;
+  type: ItemType;
+  categoryId: string | null;
+  partNumber: string | null;
+  defaultSupplier: string | null;
+  isCritical: boolean;
+  isActive: boolean;
+}
+
 export interface CreateMovementInput {
   itemId: string;
   branchId: string;
@@ -248,6 +258,10 @@ export interface AdjustStockInput {
   branchId: string;
   countedQuantity: number;
   notes?: string;
+  /** Existencia que el usuario veía al empezar a contar: si otra persona movió
+   * stock mientras tanto, el servidor responde 409 `STALE_UPDATE` en vez de
+   * ajustar sobre un saldo que ya no es ese. */
+  expectedQuantity?: number;
 }
 
 // --- Formularios (RHF + zodResolver) --------------------------------------
@@ -257,7 +271,7 @@ const quantityField = (message: string) =>
   z
     .string()
     .min(1, message)
-    .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+    .refine((value) => (parseDecimal(value) ?? -1) >= 0, {
       message: 'Ingresa un número válido',
     });
 
@@ -324,7 +338,7 @@ export function toCreateItemPayload(
   values: ItemFormValues,
   branchId: string,
 ): CreateItemInput {
-  const initialQuantity = Number(values.initialQuantity);
+  const initialQuantity = parseDecimal(values.initialQuantity) ?? 0;
   return {
     sku: values.sku.trim().toUpperCase(),
     ...toCardPayload(values),
@@ -360,26 +374,3 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     isActive: item.isActive,
   };
 }
-
-export const MovementFormSchema = z.object({
-  quantity: quantityField('La cantidad es obligatoria').refine(
-    (value) => Number(value) > 0,
-    { message: 'La cantidad debe ser mayor a 0' },
-  ),
-  reason: z.enum(MOVEMENT_REASONS),
-  equipmentId: z.string(),
-  documentNumber: z.string().max(60, 'Máximo 60 caracteres').or(z.literal('')),
-  notes: z.string().max(240).or(z.literal('')),
-});
-export type MovementFormValues = z.infer<typeof MovementFormSchema>;
-
-export const MinimumFormSchema = z.object({
-  minimumQuantity: quantityField('Ingresa el mínimo'),
-});
-export type MinimumFormValues = z.infer<typeof MinimumFormSchema>;
-
-export const AdjustFormSchema = z.object({
-  countedQuantity: quantityField('Ingresa la cantidad contada'),
-  notes: z.string().max(240).or(z.literal('')),
-});
-export type AdjustFormValues = z.infer<typeof AdjustFormSchema>;
