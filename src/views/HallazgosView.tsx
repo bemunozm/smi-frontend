@@ -7,7 +7,7 @@ import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/h
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
 import { useAhora } from '../hooks/useAhora';
 import { contextoTurno } from '../lib/turno';
-import { useRegistrarHallazgo, useUpdateHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
+import { useRegistrarHallazgo, useEditarHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
 import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -77,6 +77,11 @@ const estadoColor: Record<string, string> = {
 };
 /** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+/** Un cambio anterior del mismo hallazgo espera una acción: encadenar otro encima lo dejaría trabado. */
+const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
+
+const motivoSinEdicion = (h: { sinSincronizar?: boolean; edicionRequiereAtencion?: boolean }): string | undefined =>
+  h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : h.edicionRequiereAtencion ? MOTIVO_EDICION_ATENCION : undefined;
 
 const estadoLabel: Record<string, string> = {
   ABIERTO: 'ABIERTO',
@@ -238,6 +243,9 @@ export function HallazgosView() {
                 {h.sinSincronizar && (
                   <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
                 )}
+                {h.edicionSinSincronizar && (
+                  <MarcaSinSincronizar edicion requiereAtencion={h.edicionRequiereAtencion} />
+                )}
               </td>
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{h.equipo?.internalCode ?? h.equipoId}</b>
@@ -266,9 +274,9 @@ export function HallazgosView() {
                 <Boton
                   variante="contorno"
                   className="!min-h-10 !px-3 !text-[13.5px]"
-                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${h.sinSincronizar ? `. ${MOTIVO_SIN_SINCRONIZAR}` : ''}`}
-                  title={h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : undefined}
-                  disabled={h.sinSincronizar}
+                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${motivoSinEdicion(h) ? `. ${motivoSinEdicion(h)}` : ''}`}
+                  title={motivoSinEdicion(h)}
+                  disabled={motivoSinEdicion(h) != null}
                   onClick={() => setEditandoId(h.id)}
                 >
                   <Pencil className="h-4 w-4" /> Editar
@@ -303,6 +311,9 @@ export function HallazgosView() {
               {h.sinSincronizar && (
                 <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
               )}
+              {h.edicionSinSincronizar && (
+                <MarcaSinSincronizar edicion requiereAtencion={h.edicionRequiereAtencion} />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="tabular text-[13px] text-muted-foreground">
                   {fmtDate(h.fecha)}
@@ -317,13 +328,13 @@ export function HallazgosView() {
                 ancho
                 className="!min-h-11 !text-[14.5px]"
                 aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
-                disabled={h.sinSincronizar}
+                disabled={motivoSinEdicion(h) != null}
                 onClick={() => setEditandoId(h.id)}
               >
                 <Pencil className="h-4 w-4" /> Editar
               </Boton>
-              {h.sinSincronizar && (
-                <p className="m-0 text-center text-[12.5px] text-muted-foreground">{MOTIVO_SIN_SINCRONIZAR}</p>
+              {motivoSinEdicion(h) && (
+                <p className="m-0 text-center text-[12.5px] text-muted-foreground">{motivoSinEdicion(h)}</p>
               )}
             </Tarjeta>
           ))}
@@ -379,7 +390,7 @@ function EditorHallazgo({
   equipos: { id: string; internalCode: string; type: string }[];
   onCerrar: () => void;
 }) {
-  const actualizar = useUpdateHallazgo();
+  const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarHallazgo();
   const cambios = useCambiosHallazgo(hallazgo.id);
   const [form, setForm] = useState<CorreccionHallazgo>({
     equipoId: hallazgo.equipoId,
@@ -394,7 +405,7 @@ function EditorHallazgo({
     <div className="flex flex-col gap-4">
       {guardado && (
         <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
-          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+          <Check className="h-4 w-4 shrink-0" /> Cambio guardado en el equipo. Se avisa al administrador cuando se sincronice.
         </p>
       )}
       <AvisoEdicion />
@@ -439,15 +450,13 @@ function EditorHallazgo({
         </Campo>
         <Boton
           ancho
-          disabled={actualizar.isPending || descripcionCorta}
-          onClick={() =>
-            actualizar.mutate(
-              { id: hallazgo.id, payload: { ...form, descripcion: form.descripcion.trim() } },
-              { onSuccess: () => setGuardado(true) },
-            )
-          }
+          disabled={isActualizando || descripcionCorta}
+          onClick={async () => {
+            const ok = await guardarCambio(hallazgo, { ...form, descripcion: form.descripcion.trim() });
+            if (ok) setGuardado(true);
+          }}
         >
-          {actualizar.isPending ? 'Guardando…' : 'Guardar cambios'}
+          {isActualizando ? 'Guardando…' : 'Guardar cambios'}
           <ArrowRight className="h-[19px] w-[19px]" />
         </Boton>
         <Boton variante="contorno" ancho onClick={onCerrar}>

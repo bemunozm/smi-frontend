@@ -4,7 +4,7 @@ import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-li
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { db } from '../offline/db';
 import { TrabajosExtraView } from './TrabajosExtraView';
-import { updateTrabajoExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
+import { listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 
 /**
  * El alta ya no llama a la API: encola en el outbox (Dexie, con
@@ -18,7 +18,6 @@ import { updateTrabajoExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtr
  */
 vi.mock('../api/TrabajosExtraAPI', async (original) => ({
   ...(await original<typeof import('../api/TrabajosExtraAPI')>()),
-  updateTrabajoExtra: vi.fn(async ({ id }: { id: string }) => ({ id })),
   listCambiosTrabajoExtra: vi.fn(async () => [
     {
       id: 'c1',
@@ -492,23 +491,27 @@ describe('TrabajosExtraView', () => {
       fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Pedro Soto' }));
       fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
 
-      await waitFor(() => expect(updateTrabajoExtra).toHaveBeenCalled());
-      const [{ id, payload }] = vi.mocked(updateTrabajoExtra).mock.calls[0];
-      expect(id).toBe('r1');
-      expect(payload.operatorId).toBe('op_3');
-      // El operador viaja como `operatorId` del catálogo, nunca como texto libre.
-      expect((payload as Record<string, unknown>).operador).toBeUndefined();
-      // Lo que no se tocó viaja igual: el servidor compara el registro entero.
-      expect(payload.horometroFinal).toBe(5400);
+      await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+      const [op] = await db.outbox.toArray();
+      expect(op).toMatchObject({
+        type: 'httpWrite',
+        endpoint: 'trabajoExtra.edit',
+        params: { id: 'r1' },
+        // Solo lo tocado, y como `operatorId` del catálogo, nunca como texto libre.
+        body: { operatorId: 'op_3' },
+        expected: { operatorId: 'op_1' },
+        entityKey: 'trabajo-extra:r1',
+      });
+      expect(Object.keys(op!.type === 'httpWrite' ? op.body : {})).toEqual(['operatorId']);
     });
 
-    it('cancelar vuelve al detalle sin guardar', () => {
+    it('cancelar vuelve al detalle sin guardar', async () => {
       const ventana = abrirDetalle();
       fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
       fireEvent.click(ventana.getByRole('button', { name: 'Cancelar' }));
 
       expect(ventana.getByRole('button', { name: /Editar/ })).toBeTruthy();
-      expect(updateTrabajoExtra).not.toHaveBeenCalled();
+      expect(await db.outbox.count()).toBe(0);
     });
   });
 });

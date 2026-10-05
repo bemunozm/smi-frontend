@@ -4,7 +4,7 @@ import { useCurrentUser } from './useCurrentUser';
 import { useEquipment } from './useEquipment';
 import { useOperators } from './useOperators';
 import { useTrabajosExtraList } from './useTrabajosExtra';
-import type { CreateTrabajoExtraOp, OutboxOp } from '../offline/db';
+import type { CreateTrabajoExtraOp, HttpWriteOp, OutboxOp } from '../offline/db';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
@@ -18,6 +18,10 @@ export interface TrabajoExtraProyectado extends TrabajoExtraordinario {
   /** El servidor lo rechazó por una razón de negocio — espera una acción en
    * la hoja de `SyncStatus` (Reintentar/Descartar). */
   requiereAtencion?: boolean;
+  /** Tiene una edición guardada en el equipo que el servidor todavía no confirmó. */
+  edicionSinSincronizar?: boolean;
+  /** Esa edición espera una acción en `SyncStatus` — no se encadena otra encima. */
+  edicionRequiereAtencion?: boolean;
 }
 
 /** Mismo redondeo a 2 decimales con el que el servidor calcula `totalHoras`. */
@@ -66,7 +70,58 @@ export function proyectarTrabajosExtra(
     .filter((op): op is CreateTrabajoExtraOp => op.type === 'createTrabajoExtra' && !idsServidor.has(op.id))
     .map((op) => mapOpToTrabajo(op, equipos, operadores))
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
-  return [...pendientes, ...servidor];
+  const lista: TrabajoExtraProyectado[] = [...pendientes, ...servidor];
+  const ediciones = ops.filter(
+    (op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'trabajoExtra.edit',
+  );
+  return ediciones.length === 0 ? lista : aplicarEdiciones(lista, ediciones, equipos, operadores);
+}
+
+const texto = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+const numero = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+
+/** Superpone las ediciones pendientes (en orden `seq`: la última gana) sobre los
+ * trabajos que ya existen en el servidor. */
+function aplicarEdiciones(
+  lista: TrabajoExtraProyectado[],
+  ediciones: HttpWriteOp[],
+  equipos: Equipment[],
+  operadores: Operator[],
+): TrabajoExtraProyectado[] {
+  return lista.map((r) => {
+    if (r.sinSincronizar) return r;
+    const propias = ediciones.filter((op) => op.params.id === r.id);
+    if (propias.length === 0) return r;
+    let editado: TrabajoExtraProyectado = { ...r, edicionSinSincronizar: true };
+    for (const { body, status } of propias) {
+      const equipoId = texto(body.equipoId);
+      const equipo = equipoId ? equipos.find((e) => e.id === equipoId) : undefined;
+      const operatorId = texto(body.operatorId);
+      const horometroInicial = numero(body.horometroInicial) ?? editado.horometroInicial;
+      const horometroFinal = numero(body.horometroFinal) ?? editado.horometroFinal;
+      editado = {
+        ...editado,
+        equipoId: equipoId ?? editado.equipoId,
+        ...(equipoId ? { equipo: equipo ? { internalCode: equipo.internalCode } : undefined } : {}),
+        ...(operatorId
+          ? { operatorId, operador: operadores.find((o) => o.id === operatorId)?.name ?? editado.operador }
+          : {}),
+        faena: texto(body.faena) ?? editado.faena,
+        turno: texto(body.turno) ?? editado.turno,
+        horometroInicial,
+        horometroFinal,
+        totalHoras: horasTotales(horometroInicial, horometroFinal),
+        actividades: Array.isArray(body.actividades)
+          ? body.actividades.filter((a): a is string => typeof a === 'string')
+          : editado.actividades,
+        otraActividad: 'otraActividad' in body ? texto(body.otraActividad)?.trim() || null : editado.otraActividad,
+        descripcion: texto(body.descripcion) ?? editado.descripcion,
+        observaciones: 'observaciones' in body ? texto(body.observaciones)?.trim() || null : editado.observaciones,
+        edicionRequiereAtencion: editado.edicionRequiereAtencion || status === 'needs_attention',
+      };
+    }
+    return editado;
+  });
 }
 
 export function useTrabajosExtraProjection(): { registros: TrabajoExtraProyectado[] } {
