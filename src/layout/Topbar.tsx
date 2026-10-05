@@ -1,14 +1,20 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Button, Chip, Dropdown, Label, toast } from '@heroui/react';
 import type { Key } from '@heroui/react';
 
 import { logout, LogoutBlockedError } from '../lib/logout';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { requestSync } from '../offline/replay';
+import { requestSync, useSyncState } from '../offline/replay';
+import { useOutboxOps } from '../offline/useOutboxOps';
 import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
 import { roleChipColor } from '../config/role-colors';
 import { NotificationBell } from '../components/notifications/NotificationBell';
+import { PrepChecklist } from '../components/sync/PrepChecklist';
+import { SyncBadge } from '../components/sync/SyncBadge';
+import { SyncOpsList } from '../components/sync/SyncOpsList';
+import { SyncSheet } from '../components/sync/SyncSheet';
 
 function initialsFrom(name: string | undefined, email: string): string {
   const source = name?.trim() || email;
@@ -50,12 +56,19 @@ export function Topbar() {
   const { user } = useCurrentUser();
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const navigate = useNavigate();
+  const sync = useSyncState(user?.id);
+  const ops = useOutboxOps(user?.id);
+  const [syncAbierta, setSyncAbierta] = useState(false);
 
   const role = user && isRole(user.role) ? user.role : null;
 
   const handleAction = (key: Key): void => {
     if (key === 'profile') {
       navigate('/perfil');
+      return;
+    }
+    if (key === 'sync') {
+      setSyncAbierta(true);
       return;
     }
     if (key === 'logout') {
@@ -103,6 +116,7 @@ export function Topbar() {
 
       {user ? (
         <div className="flex items-center gap-1">
+          <SyncBadge sync={sync} onPress={() => setSyncAbierta(true)} />
           <NotificationBell />
 
           <Dropdown>
@@ -138,6 +152,9 @@ export function Topbar() {
                   <UserIcon />
                   <Label>Ver perfil</Label>
                 </Dropdown.Item>
+                <Dropdown.Item id="sync" textValue="Sincronización y uso sin señal">
+                  <Label>Sincronización y uso sin señal</Label>
+                </Dropdown.Item>
                 <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
                   <SignOutIcon />
                   <Label>Cerrar sesión</Label>
@@ -146,6 +163,16 @@ export function Topbar() {
             </Dropdown.Popover>
           </Dropdown>
         </div>
+      ) : null}
+      {syncAbierta ? (
+        <SyncSheet sync={sync} onClose={() => setSyncAbierta(false)}>
+          <SyncOpsList ops={ops} userId={user?.id} />
+          <PrepChecklist
+            role={role}
+            titulo="Antes de trabajar sin señal"
+            descripcion="Precarga las listas de las pantallas de tu rol (equipos, inventario, sucursales, operadores, mantenimiento) para que abran igual sin señal."
+          />
+        </SyncSheet>
       ) : null}
     </header>
   );
