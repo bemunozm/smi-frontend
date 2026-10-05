@@ -1,4 +1,5 @@
 import { axiosInstance as api } from '../lib/axios';
+import { toDomainError } from '../lib/api-error';
 import type { ApiResponse } from '../types/api';
 import type { CombustibleForm, RegistroCombustible } from '../types/combustible';
 
@@ -14,6 +15,10 @@ export async function createCombustible(payload: CombustibleForm): Promise<Regis
   // `uploadFile`) tiene prioridad; `fotoUrl` (Terreno legacy, vía
   // `uploadImage`) solo se manda cuando no hay key.
   const body = { ...rest, ...(fotoKey ? { fotoKey } : fotoUrl ? { fotoUrl } : {}) };
-  const res = await api.post<ApiResponse<RegistroCombustible>>('/api/combustible', body);
-  return res.data.data;
+  try {
+    const res = await api.post<ApiResponse<RegistroCombustible>>('/api/combustible', body);
+    return res.data.data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo registrar la carga de combustible.');
+  }
 }

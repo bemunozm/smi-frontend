@@ -1,21 +1,23 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DomainError, OPERATOR_INACTIVE_MESSAGE } from '../lib/api-error';
+import { db } from '../offline/db';
 import { TrabajosExtraView } from './TrabajosExtraView';
-import { updateTrabajoExtra } from '../api/TrabajosExtraAPI';
+import { updateTrabajoExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 
 /**
- * Crear, editar y el historial de cambios van al servidor; acá se simulan
- * (`createTrabajoExtra` con un mock controlable para probar el flujo completo
- * vista → hook → API, incluido el mapeo de errores a toast). Lo demás del API
- * queda real: `listTrabajosExtra` se alimenta por la caché de las pruebas.
+ * El alta ya no llama a la API: encola en el outbox (Dexie, con
+ * `fake-indexeddb`) y el replay lo manda en segundo plano. Sin usuario fijado
+ * en el motor (`setCurrentUser`), `requestSync` no procesa nada, así que acá
+ * solo se prueba lo que ve la vista: la operación encolada y su proyección en
+ * el historial. El replay y los errores de negocio (`OPERATOR_INACTIVE`, 404)
+ * los cubre `offline/replay.test.ts`.
+ *
+ * La edición y el historial de cambios sí van al servidor; acá se simulan.
  */
-const { createTrabajoExtraMock } = vi.hoisted(() => ({ createTrabajoExtraMock: vi.fn() }));
-
 vi.mock('../api/TrabajosExtraAPI', async (original) => ({
   ...(await original<typeof import('../api/TrabajosExtraAPI')>()),
-  createTrabajoExtra: createTrabajoExtraMock,
   updateTrabajoExtra: vi.fn(async ({ id }: { id: string }) => ({ id })),
   listCambiosTrabajoExtra: vi.fn(async () => [
     {
@@ -27,8 +29,14 @@ vi.mock('../api/TrabajosExtraAPI', async (original) => ({
   ]),
 }));
 
-const { toastDangerMock } = vi.hoisted(() => ({ toastDangerMock: vi.fn() }));
-vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
+const { toastDangerMock, toastSuccessMock } = vi.hoisted(() => ({
+  toastDangerMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
+}));
+vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: toastSuccessMock } }));
+vi.mock('../hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({ user: { id: 'u1' }, role: null, isOfflineSnapshot: false }),
+}));
 
 afterEach(cleanup);
 
@@ -93,9 +101,10 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
 }
 
 describe('TrabajosExtraView', () => {
-  beforeEach(() => {
-    createTrabajoExtraMock.mockReset();
+  beforeEach(async () => {
+    await db.outbox.clear();
     toastDangerMock.mockClear();
+    toastSuccessMock.mockClear();
   });
 
   afterEach(() => vi.useRealTimers());
@@ -322,26 +331,27 @@ describe('TrabajosExtraView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Juan Rojas')).toBeTruthy();
   });
 
-  it('no deja enviar sin elegir un operador: muestra el error y no llama a la API', async () => {
+  it('no deja enviar sin elegir un operador: muestra el error y no encola nada', async () => {
     renderConRegistro();
 
     completarFormularioValido({ conOperador: false });
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
     await waitFor(() => expect(screen.getByText('Elegí el operador')).toBeTruthy());
-    expect(createTrabajoExtraMock).not.toHaveBeenCalled();
+    expect(await db.outbox.count()).toBe(0);
   });
 
-  it('al guardar, manda operatorId del operador elegido y no manda operador', async () => {
-    createTrabajoExtraMock.mockResolvedValueOnce({ ...REGISTRO, id: 'r2' });
+  it('al guardar, encola con id y capturedAt del cliente, manda operatorId y no manda operador', async () => {
     renderConRegistro();
 
     completarFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
-    await waitFor(() => expect(createTrabajoExtraMock).toHaveBeenCalledTimes(1));
-    const payload = createTrabajoExtraMock.mock.calls[0][0];
-    expect(payload).toMatchObject({
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op).toMatchObject({ userId: 'u1', status: 'pending' });
+    expect(op.payload).toMatchObject({
       equipoId: 'e1',
       operatorId: 'op_1',
       horometroInicial: 100,
@@ -349,25 +359,103 @@ describe('TrabajosExtraView', () => {
       actividades: ['SOLTAR_MATERIAL'],
       descripcion: 'Carga de material extra',
     });
-    expect(payload.operador).toBeUndefined();
+    expect(op.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(op.payload.id).toBe(op.id);
+    expect(Date.parse(op.payload.capturedAt)).not.toBeNaN();
+    expect('operador' in op.payload).toBe(false);
   });
 
-  // El operador es un `operatorId` validado contra el catálogo
-  // (`OperatorsService.assertActive`, backend): guardar puede fallar con 409
-  // `OPERATOR_INACTIVE` si se desactivó entre que se abrió el formulario y
-  // se guardó — mismo texto que `hooks/useShiftCards.ts`/`hooks/useEquipment.ts`
-  // (ver `lib/api-error.ts#OPERATOR_INACTIVE_MESSAGE`), no el mensaje técnico
-  // del backend.
-  it('un 409 OPERATOR_INACTIVE al guardar muestra un toast claro', async () => {
-    createTrabajoExtraMock.mockRejectedValueOnce(
-      new DomainError('Operator op_1 is inactive', { code: 'OPERATOR_INACTIVE', status: 409 }),
+  it('un equipo en turno se encola igual, con su operador propuesto y las horas reales sin redondear', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(
+      ['equipment'],
+      [
+        {
+          id: 'e1',
+          internalCode: 'CM-003',
+          type: 'Camión',
+          status: 'OPERATIONAL',
+          openShift: { operador: 'Rodrigo Paredes', operatorId: 'op_1' },
+        },
+      ],
     );
+    qc.setQueryData(['trabajos-extra'], []);
+    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+    render(
+      <QueryClientProvider client={qc}>
+        <TrabajosExtraView />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Equipo'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-003/ }));
+    fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Soltar material' }));
+    fireEvent.change(screen.getByLabelText('Descripción de la tarea'), { target: { value: 'Despeje' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op.payload.operatorId).toBe('op_1');
+    // El mínimo de cobro se aplica al leer, no al guardar.
+    expect(op.payload.horometroFinal - op.payload.horometroInicial).toBeCloseTo(0.3);
+  });
+
+  it('tras guardar avisa, limpia el formulario y vuelve a habilitar el botón', async () => {
     renderConRegistro();
 
     completarFormularioValido();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
-    await waitFor(() => expect(toastDangerMock).toHaveBeenCalledWith(OPERATOR_INACTIVE_MESSAGE));
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringContaining('Guardado')));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Descripción de la tarea') as HTMLTextAreaElement).value).toBe(''),
+    );
+    expect((screen.getByRole('button', { name: 'Registrar trabajo' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(toastDangerMock).not.toHaveBeenCalled();
+  });
+
+  it('el trabajo pendiente aparece en el historial como "Sin sincronizar", con el nombre del operador del catálogo', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+    const ventana = within(screen.getByRole('dialog'));
+    await waitFor(() => expect(ventana.getByText('Sin sincronizar')).toBeTruthy());
+    expect(ventana.getByText('Rodrigo Paredes')).toBeTruthy();
+    expect(ventana.getByText('Soltar material')).toBeTruthy();
+    // El registro del servidor sigue ahí.
+    expect(ventana.getByText('Juan Rojas')).toBeTruthy();
+  });
+
+  /**
+   * Un trabajo guardado solo en el equipo todavía no existe en el servidor:
+   * no se puede editar ni tiene historial de cambios hasta que sincronice.
+   */
+  it('el detalle de un pendiente muestra la marca de sin sincronizar y no deja editar', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+    const ventana = within(screen.getByRole('dialog'));
+    await waitFor(() => expect(ventana.getAllByRole('button', { name: /Ver detalle/ })).toHaveLength(2));
+    // El pendiente va primero en la lista.
+    fireEvent.click(ventana.getAllByRole('button', { name: /Ver detalle/ })[0]!);
+
+    const detalle = within(screen.getByRole('dialog'));
+    expect(detalle.getByText('Sin sincronizar')).toBeTruthy();
+    expect(detalle.getByRole('button', { name: /Editar/ }).hasAttribute('disabled')).toBe(true);
+    expect(detalle.getByText(/Se puede editar cuando termine de sincronizarse/)).toBeTruthy();
+    const idPendiente = (await db.outbox.toArray())[0]!.id;
+    expect(listCambiosTrabajoExtra).not.toHaveBeenCalledWith(idPendiente);
   });
 
   /**

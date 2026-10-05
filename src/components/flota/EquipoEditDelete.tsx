@@ -49,9 +49,7 @@ import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from './modal-styles';
  */
 
 /**
- * Banner de foto del equipo — header visual del modal de crear/editar (§2 de
- * la auditoría de fidelidad, PC): antes era un campo chico inline
- * (`EquipoPhotoField`, thumb + botón al lado, ver historial); ahora es una
+ * Banner de foto del equipo — header visual del modal de crear/editar: una
  * franja ancha "cover" que sangra por fuera del padding del diálogo
  * (`-mx-6 -mt-6`, cancela el `p-6` de `Modal.Dialog`) hasta sus bordes —
  * mismo truco que un cover de perfil. Vive FUERA de `CamposEquipo` (se

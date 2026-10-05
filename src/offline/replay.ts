@@ -2,16 +2,29 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import type { AxiosRequestConfig } from 'axios';
 
-import { db, pendingStatusFor, type CloseCardOp, type OutboxLastError, type OutboxOp } from './db';
+import {
+  db,
+  pendingStatusFor,
+  type CloseCardOp,
+  type CreateHallazgoOp,
+  type OutboxLastError,
+  type OutboxOp,
+  type PhotoOp,
+} from './db';
 import { useOutboxOps } from './useOutboxOps';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
+import { createHallazgo } from '../api/HallazgosAPI';
+import { createTrabajoExtra } from '../api/TrabajosExtraAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { DomainError, toDomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { queryClient } from '../lib/query-client';
-import { SHIFT_CARDS_MINE_KEY } from '../lib/query-keys';
+import { EQUIPMENT_KEY, HALLAZGOS_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
+import type { Equipment } from '../types/equipment';
+import type { Hallazgo } from '../types/hallazgos';
 import type { ShiftCardResponse, ShiftReportResponse } from '../types/shift';
+import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
 /**
  * Motor de sincronización del outbox offline (RFC "Supervisión en Terreno"
@@ -245,6 +258,15 @@ export function useSyncEngine(userId: string | null): void {
 
 type ProcessOutcome = 'continue' | 'stop' | 'auth-required';
 
+/** El 404 de estos dos endpoints no trae `code` propio (equipo u operador
+ * que ya no existe en el catálogo) — se redacta por tipo de operación en vez
+ * de mostrar el mensaje técnico del servidor. */
+const NOT_FOUND_MESSAGES: Partial<Record<OutboxOp['type'], string>> = {
+  createHallazgo: 'El equipo elegido ya no existe en el catálogo. Descartá este hallazgo y registralo de nuevo.',
+  createTrabajoExtra:
+    'El equipo o el operador elegido ya no existe en el catálogo. Descartá este trabajo y registralo de nuevo.',
+};
+
 function replayConfig(timeoutMs: number): AxiosRequestConfig {
   // `capturedAt`/`requestedAt` del PAYLOAD son la hora original del
   // dispositivo — este header es aparte, la hora del REINTENTO, para que el
@@ -262,6 +284,39 @@ function applyCardToCache(card: ShiftCardResponse): void {
     next[index] = card;
     return next;
   });
+}
+
+/** Upsert por `id` al frente de la lista (el servidor las entrega de la más
+ * nueva a la más vieja) — el registro recién sincronizado aparece sin esperar
+ * el refetch. */
+function upsertFirst<T extends { id: string }>(list: T[] | undefined, item: T): T[] {
+  const current = list ?? [];
+  const index = current.findIndex((x) => x.id === item.id);
+  if (index === -1) return [item, ...current];
+  const next = current.slice();
+  next[index] = item;
+  return next;
+}
+
+/** Si el servidor no incluyó `equipo` en la respuesta, lo completa desde el
+ * catálogo ya cacheado: sin esto la fila recién sincronizada mostraría el
+ * `equipoId` crudo hasta que llegue el refetch. */
+function withEquipo<T extends { equipoId: string; equipo?: { internalCode: string } }>(record: T): T {
+  if (record.equipo) return record;
+  const internalCode = queryClient
+    .getQueryData<Equipment[]>(EQUIPMENT_KEY)
+    ?.find((e) => e.id === record.equipoId)?.internalCode;
+  return internalCode ? { ...record, equipo: { internalCode } } : record;
+}
+
+function applyHallazgoToCache(hallazgo: Hallazgo): void {
+  const completo = withEquipo(hallazgo);
+  queryClient.setQueryData<Hallazgo[]>(HALLAZGOS_KEY, (old) => upsertFirst(old, completo));
+}
+
+function applyTrabajoExtraToCache(trabajo: TrabajoExtraordinario): void {
+  const completo = withEquipo(trabajo);
+  queryClient.setQueryData<TrabajoExtraordinario[]>(TRABAJOS_EXTRA_KEY, (old) => upsertFirst(old, completo));
 }
 
 /** Upsert del reporte en `shift.exitReports` de cada tarjeta incluida —
@@ -305,7 +360,7 @@ function applyReportToCache(cardIds: readonly string[], report: ShiftReportRespo
  * `undefined` (sin `status` HTTP) normalmente significa error de red o
  * timeout — axios nunca llegó a recibir una respuesta. PERO dos códigos
  * PROPIOS del frontend (no vienen de axios) también llegan sin `status`:
- * `PHOTO_MISSING` (`uploadClosePhoto`, más abajo: no hay nada que reintentar
+ * `PHOTO_MISSING` (`uploadOpPhoto`, más abajo: no hay nada que reintentar
  * solo, falta la foto) e `INVALID_RESPONSE` (`toDomainError`, `lib/
  * api-error.ts`: el servidor SÍ contestó — puede haber aplicado el cambio
  * igual — pero el body no calza con el contrato; reintentar a ciegas
@@ -328,6 +383,15 @@ function classify(error: DomainError): 'auth' | 'business' | 'transient' {
   return 'business';
 }
 
+/** `toDomainError` redacta el error de red como fallo de un guardado de
+ * oficina ("no se pudo guardar…"), que en el outbox es falso: el registro
+ * SÍ está guardado y se reintenta solo. */
+function transientMessage(error: DomainError): string {
+  return error.status == null
+    ? 'Sin señal: se reintentará automáticamente.'
+    : 'El servidor no respondió bien: se reintentará automáticamente.';
+}
+
 /**
  * Clasifica el error de UNA operación y decide qué hacer con la cola
  * entera:
@@ -346,10 +410,12 @@ function classify(error: DomainError): 'auth' | 'business' | 'transient' {
 async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutcome> {
   const domainError = error instanceof DomainError ? error : toDomainError(error, 'No se pudo sincronizar.');
   const kind = classify(domainError);
+  const notFoundMessage = domainError.status === 404 && !domainError.code ? NOT_FOUND_MESSAGES[op.type] : undefined;
   const lastError: OutboxLastError = {
     code: domainError.code,
     status: domainError.status,
-    message: mensajeErrorOperacion(domainError),
+    message:
+      notFoundMessage ?? (kind === 'transient' ? transientMessage(domainError) : mensajeErrorOperacion(domainError)),
   };
 
   // `put()` (reemplazo completo) en vez de `update()`: el `UpdateSpec` de
@@ -378,19 +444,20 @@ async function handleOpError(op: OutboxOp, error: unknown): Promise<ProcessOutco
   return 'stop';
 }
 
-async function uploadClosePhoto(op: CloseCardOp): Promise<string> {
-  const photoRow = await db.photos.get(op.photoId);
+/**
+ * Sube la foto guardada de una operación (cierre de tarjeta o hallazgo) y
+ * deja la operación en `pending_claim` con la `tmpKey` resultante.
+ */
+async function uploadOpPhoto(op: PhotoOp, photoId: string, missingMessage: string): Promise<string> {
+  const photoRow = await db.photos.get(photoId);
   if (!photoRow) {
     // No debería pasar (se guardan en la misma transacción que la
-    // operación, ver `offline/outbox.ts#enqueueCloseCard`) — si pasa, es un
-    // error de negocio: no hay una foto que resubir, así que no tiene
-    // sentido reintentar solo. `code: 'PHOTO_MISSING'` — sin esto,
-    // `classify()` lo trataba como error de red (sin `status`) y trababa la
-    // cola entera reintentando para siempre algo que un reintento nunca
-    // arregla.
-    throw new DomainError('Falta la foto guardada para cerrar esta tarjeta — hay que volver a tomarla.', {
-      code: 'PHOTO_MISSING',
-    });
+    // operación, ver `offline/outbox.ts`) — si pasa, es un error de negocio:
+    // no hay una foto que resubir, así que no tiene sentido reintentar solo.
+    // `code: 'PHOTO_MISSING'` — sin esto, `classify()` lo trataba como error
+    // de red (sin `status`) y trababa la cola entera reintentando para
+    // siempre algo que un reintento nunca arregla.
+    throw new DomainError(missingMessage, { code: 'PHOTO_MISSING' });
   }
   const file = new File([photoRow.data], photoRow.name, { type: photoRow.mime });
   const uploaded = await uploadFile(file, replayConfig(UPLOAD_TIMEOUT_MS));
@@ -398,32 +465,38 @@ async function uploadClosePhoto(op: CloseCardOp): Promise<string> {
   return uploaded.key;
 }
 
-async function processCloseCard(op: CloseCardOp, allowExpiredRetry = true): Promise<ProcessOutcome> {
+/**
+ * Pipeline común de las operaciones con foto: subir (si falta la `tmpKey`) →
+ * mandar el POST con la key → borrar foto y operación. `send` hace el POST y
+ * el upsert en caché; recibe la `tmpKey` (o `undefined` si la operación no
+ * lleva foto, caso del hallazgo sin adjunto).
+ */
+async function processPhotoOp<T extends PhotoOp>(
+  op: T,
+  missingPhotoMessage: string,
+  send: (op: T, tmpKey: string | undefined) => Promise<void>,
+  allowExpiredRetry = true,
+): Promise<ProcessOutcome> {
   // `currentOp` (no el `op` del parámetro) es lo que se manda a
   // `handleOpError`/se reintenta de acá en más: si la subida de la foto
-  // tuvo éxito pero el POST de cierre que sigue falla, `handleOpError`
-  // guarda el objeto que se le pasa con `put()` (reemplazo completo) — pasar
-  // el `op` VIEJO (sin `tmpKey`) borraría la key recién subida, y el próximo
-  // intento la resubiría de nuevo (un objeto `tmp/` huérfano cada vez).
+  // tuvo éxito pero el POST que sigue falla, `handleOpError` guarda el objeto
+  // que se le pasa con `put()` (reemplazo completo) — pasar el `op` VIEJO
+  // (sin `tmpKey`) borraría la key recién subida, y el próximo intento la
+  // resubiría de nuevo (un objeto `tmp/` huérfano cada vez).
   let currentOp = op;
   let tmpKey = currentOp.tmpKey;
-  if (!tmpKey) {
+  if (!tmpKey && currentOp.photoId) {
     try {
-      tmpKey = await uploadClosePhoto(currentOp);
-      currentOp = { ...currentOp, tmpKey, status: 'pending_claim' };
+      tmpKey = await uploadOpPhoto(currentOp, currentOp.photoId, missingPhotoMessage);
+      currentOp = { ...currentOp, tmpKey, status: 'pending_claim' } as T;
     } catch (error) {
       return handleOpError(currentOp, error);
     }
   }
 
   try {
-    const card = await ShiftCardAPI.closeCard(
-      currentOp.payload.cardId,
-      { ...currentOp.payload.input, tmpPhotoKey: tmpKey },
-      replayConfig(JSON_TIMEOUT_MS),
-    );
-    applyCardToCache(card);
-    await db.photos.delete(currentOp.photoId);
+    await send(currentOp, tmpKey);
+    if (currentOp.photoId) await db.photos.delete(currentOp.photoId);
     await db.outbox.delete(currentOp.id);
     return 'continue';
   } catch (error) {
@@ -433,34 +506,63 @@ async function processCloseCard(op: CloseCardOp, allowExpiredRetry = true): Prom
       // mismo run, no en el próximo trigger (si volviera a expirar en el
       // segundo intento, algo más grave está pasando y se trata como
       // cualquier otro error de negocio).
-      await db.outbox.put({ ...currentOp, tmpKey: undefined, status: 'pending_upload', updatedAt: Date.now() });
-      return processCloseCard({ ...currentOp, tmpKey: undefined }, false);
+      const cleared = { ...currentOp, tmpKey: undefined, status: 'pending_upload' } as T;
+      await db.outbox.put({ ...cleared, updatedAt: Date.now() });
+      return processPhotoOp(cleared, missingPhotoMessage, send, false);
     }
     return handleOpError(currentOp, error);
   }
 }
 
+function processCloseCard(op: CloseCardOp): Promise<ProcessOutcome> {
+  return processPhotoOp(
+    op,
+    'Falta la foto guardada para cerrar esta tarjeta — hay que volver a tomarla.',
+    async (current, tmpKey) => {
+      // Un cierre siempre lleva foto (`photoId` es obligatorio), así que el
+      // pipeline ya subió la foto antes de llegar acá.
+      if (!tmpKey) throw new DomainError('Falta la foto del cierre.', { code: 'PHOTO_MISSING' });
+      const card = await ShiftCardAPI.closeCard(
+        current.payload.cardId,
+        { ...current.payload.input, tmpPhotoKey: tmpKey },
+        replayConfig(JSON_TIMEOUT_MS),
+      );
+      applyCardToCache(card);
+    },
+  );
+}
+
+function processCreateHallazgo(op: CreateHallazgoOp): Promise<ProcessOutcome> {
+  return processPhotoOp(
+    op,
+    'Falta la foto guardada de este hallazgo — descartalo y volvé a registrarlo.',
+    async (current, tmpKey) => {
+      // `capturedAt` viaja dentro del payload: es la hora ORIGINAL del
+      // dispositivo, nunca la del reintento.
+      const hallazgo = await createHallazgo(
+        { ...current.payload, ...(tmpKey ? { fotoKey: tmpKey } : {}) },
+        replayConfig(JSON_TIMEOUT_MS),
+      );
+      applyHallazgoToCache(hallazgo);
+    },
+  );
+}
+
 async function processOp(op: OutboxOp): Promise<ProcessOutcome> {
   await db.outbox.put({ ...op, status: 'syncing', updatedAt: Date.now() });
 
-  if (op.type === 'openCard') {
-    try {
-      const card = await ShiftCardAPI.openCard(op.payload, replayConfig(JSON_TIMEOUT_MS));
-      applyCardToCache(card);
-      await db.outbox.delete(op.id);
-      return 'continue';
-    } catch (error) {
-      return handleOpError(op, error);
-    }
-  }
-
-  if (op.type === 'closeCard') {
-    return processCloseCard(op);
-  }
+  if (op.type === 'closeCard') return processCloseCard(op);
+  if (op.type === 'createHallazgo') return processCreateHallazgo(op);
 
   try {
-    const report = await ShiftReportAPI.sendExitReport(op.payload, replayConfig(JSON_TIMEOUT_MS));
-    applyReportToCache(op.payload.cardIds, report);
+    if (op.type === 'openCard') {
+      applyCardToCache(await ShiftCardAPI.openCard(op.payload, replayConfig(JSON_TIMEOUT_MS)));
+    } else if (op.type === 'createTrabajoExtra') {
+      applyTrabajoExtraToCache(await createTrabajoExtra(op.payload, replayConfig(JSON_TIMEOUT_MS)));
+    } else {
+      const report = await ShiftReportAPI.sendExitReport(op.payload, replayConfig(JSON_TIMEOUT_MS));
+      applyReportToCache(op.payload.cardIds, report);
+    }
     await db.outbox.delete(op.id);
     return 'continue';
   } catch (error) {
@@ -562,6 +664,8 @@ async function runReplay(userId: string): Promise<void> {
     if (processedAny) {
       void queryClient.invalidateQueries({ queryKey: SHIFT_CARDS_MINE_KEY });
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+      void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
     }
   } finally {
     useEngineStore.setState({ syncing: false });

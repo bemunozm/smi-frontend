@@ -35,8 +35,8 @@ export interface UseCierreFormResult {
 }
 
 /**
- * Formulario de cierre de tarjeta — sub-hook de `useShiftRegister` (Anexo 3,
- * revisión final). `cerrar()` SIEMPRE encola vía `enqueueCloseCard` (la
+ * Formulario de cierre de tarjeta — sub-hook de `useShiftRegister`.
+ * `cerrar()` SIEMPRE encola vía `enqueueCloseCard` (la
  * subida de la foto pasa en segundo plano en el replay, ver
  * `offline/replay.ts`).
  */

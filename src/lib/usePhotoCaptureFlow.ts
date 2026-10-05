@@ -74,6 +74,13 @@ export interface UsePhotoCaptureFlowResult {
   upload: (file: File) => Promise<string | null>;
 }
 
+export interface UsePhotoCaptureFlowOptions {
+  /** `false` para una foto que no tiene un display que leer (ej. un
+   * hallazgo): se salta la request de OCR — gasta datos y demora la
+   * selección sin devolver nada útil. Default `true`. */
+  ocr?: boolean;
+}
+
 /**
  * Orquestación del flujo foto→OCR→EXIF de trazabilidad anti-falsificación,
  * antes triplicada casi verbatim entre `RegistrarEntradaModal`,
@@ -97,7 +104,10 @@ export interface UsePhotoCaptureFlowResult {
  * (`valorInicial`/`valorFinal`/`litros`), vía el
  * `setValue(..., { shouldValidate: true })` propio de cada modal.
  */
-export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void): UsePhotoCaptureFlowResult {
+export function usePhotoCaptureFlow(
+  onReadingDetected: (value: number) => void,
+  { ocr: runOcr = true }: UsePhotoCaptureFlowOptions = {},
+): UsePhotoCaptureFlowResult {
   const [file, setFile] = useState<File | null>(null);
   const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -115,7 +125,10 @@ export function usePhotoCaptureFlow(onReadingDetected: (value: number) => void):
     setCaptureDate(null);
     setIsReadingPhoto(true);
     try {
-      const [fecha, lectura] = await Promise.all([readCaptureDate(selected), ocrConTimeout(selected)]);
+      const [fecha, lectura] = await Promise.all([
+        readCaptureDate(selected),
+        runOcr ? ocrConTimeout(selected) : Promise.resolve(SIN_SUGERENCIA),
+      ]);
       setCaptureDate(fecha);
       // Se guarda el resultado completo aunque `value` sea `null` — el modal
       // lo necesita para distinguir "sin sugerencia" (muestra aviso de baja

@@ -7,11 +7,13 @@ import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/h
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
 import { useAhora } from '../hooks/useAhora';
 import { contextoTurno } from '../lib/turno';
-import { useHallazgosList, useCreateHallazgo, useUpdateHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
+import { useRegistrarHallazgo, useUpdateHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
+import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
   Automatico,
@@ -73,6 +75,9 @@ const estadoColor: Record<string, string> = {
   EN_PROCESO: '#1a3a9c',
   CERRADO: '#156237',
 };
+/** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
+const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+
 const estadoLabel: Record<string, string> = {
   ABIERTO: 'ABIERTO',
   EN_PROCESO: 'EN PROCESO',
@@ -82,8 +87,8 @@ const estadoLabel: Record<string, string> = {
 export function HallazgosView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
-  const { data: hallazgos = [] } = useHallazgosList();
-  const crear = useCreateHallazgo();
+  const { hallazgos } = useHallazgosProjection();
+  const { registrar, isGuardando } = useRegistrarHallazgo();
 
   /** Hallazgo que se está corrigiendo (R13); se lee de la lista para ver lo último. */
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -108,31 +113,18 @@ export function HallazgosView() {
 
   const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
   /**
-   * El OCR de litros no aplica acá —un hallazgo no tiene un display que leer—
-   * así que el callback de lectura no hace nada. Del flujo se usa el resto:
-   * EXIF para avisar si la foto es vieja, y la subida a storage privado.
+   * Un hallazgo no tiene un display que leer, así que el OCR de litros se
+   * apaga. Del flujo se usa el resto: EXIF para avisar si la foto es vieja.
+   * La foto NO se sube acá: viaja en el outbox junto al hallazgo y se sube
+   * en el replay, así que el formulario funciona igual sin señal.
    */
-  const foto = usePhotoCaptureFlow(() => {});
+  const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
 
   const onSubmit = async (values: HallazgoForm) => {
-    // La foto es opcional. Si hay, se sube antes: si la subida falla, el
-    // hallazgo no se crea a medias sin su respaldo.
-    let fotoKey: string | undefined;
-    if (foto.file) {
-      const key = await foto.upload(foto.file);
-      if (!key) return;
-      fotoKey = key;
-    }
-
-    crear.mutate(
-      { ...values, fotoKey },
-      {
-        onSuccess: () => {
-          reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
-          foto.resetPhoto();
-        },
-      },
-    );
+    const guardado = await registrar(values, foto.file);
+    if (!guardado) return;
+    reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
+    foto.resetPhoto();
   };
 
   const sinCerrar = hallazgos.filter((h) => h.estado !== 'CERRADO').length;
@@ -204,8 +196,8 @@ export function HallazgosView() {
             <Automatico label="Estado" valor={<ChipEstado color={estadoColor.ABIERTO}>ABIERTO</ChipEstado>} />
           </Automaticos>
 
-          <Boton ancho type="submit" disabled={crear.isPending}>
-            {crear.isPending ? 'Guardando…' : 'Registrar hallazgo'}
+          <Boton ancho type="submit" disabled={isGuardando}>
+            {isGuardando ? 'Guardando…' : 'Registrar hallazgo'}
             <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           {/* Dice a quién llega para que el supervisor no lo avise además
@@ -243,6 +235,9 @@ export function HallazgosView() {
             <tr key={h.id}>
               <td className={`${TD} tabular whitespace-nowrap`}>
                 {fmtDate(h.fecha)} · {fmtTime(h.fecha)}
+                {h.sinSincronizar && (
+                  <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
+                )}
               </td>
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{h.equipo?.internalCode ?? h.equipoId}</b>
@@ -271,7 +266,9 @@ export function HallazgosView() {
                 <Boton
                   variante="contorno"
                   className="!min-h-10 !px-3 !text-[13.5px]"
-                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${h.sinSincronizar ? `. ${MOTIVO_SIN_SINCRONIZAR}` : ''}`}
+                  title={h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : undefined}
+                  disabled={h.sinSincronizar}
                   onClick={() => setEditandoId(h.id)}
                 >
                   <Pencil className="h-4 w-4" /> Editar
@@ -303,6 +300,9 @@ export function HallazgosView() {
                 </Chip>
               </div>
               <p className="m-0 text-[15px]">{h.descripcion}</p>
+              {h.sinSincronizar && (
+                <MarcaSinSincronizar requiereAtencion={h.requiereAtencion} fotoPendiente={h.fotoPendiente} />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="tabular text-[13px] text-muted-foreground">
                   {fmtDate(h.fecha)}
@@ -317,10 +317,14 @@ export function HallazgosView() {
                 ancho
                 className="!min-h-11 !text-[14.5px]"
                 aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                disabled={h.sinSincronizar}
                 onClick={() => setEditandoId(h.id)}
               >
                 <Pencil className="h-4 w-4" /> Editar
               </Boton>
+              {h.sinSincronizar && (
+                <p className="m-0 text-center text-[12.5px] text-muted-foreground">{MOTIVO_SIN_SINCRONIZAR}</p>
+              )}
             </Tarjeta>
           ))}
         </div>

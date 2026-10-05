@@ -9,21 +9,21 @@ import {
   actividadLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
-  type TrabajoExtraordinario,
 } from '../types/trabajosExtra';
 import { turnoDe } from '../lib/turno';
 import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
 import {
-  useTrabajosExtraList,
-  useCreateTrabajoExtra,
+  useRegistrarTrabajoExtra,
   useUpdateTrabajoExtra,
   useCambiosTrabajoExtra,
 } from '../hooks/useTrabajosExtra';
+import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { useOperators } from '../hooks/useOperators';
 import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
+import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
   Boton,
@@ -85,6 +85,9 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
     .join(', ');
 }
 
+/** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
+const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
+
 /** Por qué un equipo no se puede elegir, según su estado en Flota. */
 const ESTADO_NO_DISPONIBLE: Record<string, string> = {
   IN_WORKSHOP: 'En taller',
@@ -99,19 +102,21 @@ const FAENAS = [
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
-  const { data: registros = [] } = useTrabajosExtraList();
+  const { registros } = useTrabajosExtraProjection();
   // Mismo catálogo (solo activos) que `RegistroEquipoView`/`OperatorPicker`.
   const { data: operadores = [] } = useOperators({ isActive: true });
-  const crear = useCreateTrabajoExtra();
+  const { registrar, isGuardando } = useRegistrarTrabajoExtra();
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleId, setDetalleId] = useState<string | null>(null);
   /** Modo edición del trabajo abierto en el detalle (Acta N.° 004, R13). */
   const [editando, setEditando] = useState(false);
   const actualizar = useUpdateTrabajoExtra();
-  const cambios = useCambiosTrabajoExtra(detalleId);
   // Se lee de la lista y no de una copia: tras editar, la lista se refresca
-  // y el detalle muestra el dato nuevo sin tener que volver a abrirlo.
+  // y el detalle muestra el dato nuevo sin tener que volver a abrirlo. Un
+  // trabajo pendiente de sincronizar solo existe en el equipo: no tiene
+  // historial de cambios en el servidor ni se puede editar todavía.
   const detalle = registros.find((r) => r.id === detalleId) ?? null;
+  const cambios = useCambiosTrabajoExtra(detalle?.sinSincronizar ? null : detalleId);
 
   /**
    * El turno arranca en el que corre según el reloj (`lib/turno`, la misma
@@ -190,13 +195,17 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Registrar trabajo"
-        pendiente={crear.isPending}
-        onGuardar={(values) => crear.mutate(values, { onSuccess: () => setFormKey((k) => k + 1) })}
+        pendiente={isGuardando}
+        onGuardar={async (values) => {
+          // Siempre por el outbox (con o sin señal): el formulario vuelve a
+          // blanco solo si el trabajo quedó guardado en el equipo.
+          if (await registrar(values)) setFormKey((k) => k + 1);
+        }}
       />
     </Card>
   );
 
-  const codigo = (r: TrabajoExtraordinario) => r.equipo?.internalCode ?? r.equipoId;
+  const codigo = (r: TrabajoExtraProyectado) => r.equipo?.internalCode ?? r.equipoId;
 
   const lista =
     registros.length === 0 ? (
@@ -228,7 +237,10 @@ export function TrabajosExtraView() {
               <td className={TD}>
                 <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
-              <td className={`${TD} whitespace-nowrap`}>{r.operador}</td>
+              <td className={`${TD} whitespace-nowrap`}>
+                {r.operador}
+                {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
+              </td>
               <td className={`${TD} tabular text-right font-semibold whitespace-nowrap`}>
                 {fmtNum(horasCobrables(r.totalHoras))} h
                 {cobraMinimo(r.totalHoras) && (
@@ -260,6 +272,7 @@ export function TrabajosExtraView() {
               <Chip tono="neutral">{r.faena}</Chip>
             </div>
             <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
             <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
               <span>
                 {fmtDate(r.fecha)} · {r.turno}
@@ -320,10 +333,21 @@ export function TrabajosExtraView() {
         <Boton variante="contorno" onClick={() => setDetalleId(null)}>
           <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
         </Boton>
-        <Boton variante="contorno" onClick={() => setEditando(true)}>
+        <Boton
+          variante="contorno"
+          disabled={detalle.sinSincronizar}
+          title={detalle.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : undefined}
+          onClick={() => setEditando(true)}
+        >
           <Pencil className="h-[17px] w-[17px]" /> Editar
         </Boton>
       </div>
+      {detalle.sinSincronizar && (
+        <>
+          <MarcaSinSincronizar requiereAtencion={detalle.requiereAtencion} />
+          <Hint>{MOTIVO_SIN_SINCRONIZAR}</Hint>
+        </>
+      )}
 
       <Cifras
         items={[
@@ -456,7 +480,7 @@ function FormularioTrabajo({
   opcionesEquipo: OpcionSelector[];
   textoBoton: string;
   pendiente: boolean;
-  onGuardar: (values: TrabajoExtraForm) => void;
+  onGuardar: (values: TrabajoExtraForm) => void | Promise<void>;
   onCancelar?: () => void;
 }) {
   const {

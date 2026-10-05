@@ -1,10 +1,13 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import { SyncStatus } from './SyncStatus';
 import type { OutboxOp } from '../../offline/db';
 import type { SyncState } from '../../offline/replay';
+import { queryClient } from '../../lib/query-client';
+import { EQUIPMENT_KEY } from '../../hooks/useEquipment';
 
 const { retryOpMock, discardOpMock } = vi.hoisted(() => ({
   retryOpMock: vi.fn(),
@@ -37,20 +40,31 @@ vi.mock('../../hooks/useCurrentUser', () => ({
 let mockOnline = true;
 vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => mockOnline }));
 
-const { equipmentListMock, operatorListMock, listMineMock } = vi.hoisted(() => ({
-  equipmentListMock: vi.fn(),
-  operatorListMock: vi.fn(),
-  listMineMock: vi.fn(),
-}));
+const { equipmentListMock, operatorListMock, listMineMock, listHallazgosMock, listTrabajosMock, listHorometroMock } =
+  vi.hoisted(() => ({
+    equipmentListMock: vi.fn(),
+    operatorListMock: vi.fn(),
+    listMineMock: vi.fn(),
+    listHallazgosMock: vi.fn(),
+    listTrabajosMock: vi.fn(),
+    listHorometroMock: vi.fn(),
+  }));
+vi.mock('../../api/HallazgosAPI', () => ({ listHallazgos: listHallazgosMock }));
+vi.mock('../../api/TrabajosExtraAPI', () => ({ listTrabajosExtra: listTrabajosMock }));
+vi.mock('../../api/HorometroAPI', () => ({ listHorometro: listHorometroMock }));
 vi.mock('../../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
 vi.mock('../../api/OperatorAPI', () => ({ OperatorAPI: { list: operatorListMock } }));
 vi.mock('../../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
 
+let mockEquipos: Array<{ id: string; internalCode: string }> = [];
+
 function renderBar() {
   return render(
-    <MemoryRouter>
-      <SyncStatus />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <SyncStatus />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -100,9 +114,18 @@ function pendingCloseOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
   } as OutboxOp;
 }
 
+beforeEach(() => {
+  mockEquipos = [];
+  equipmentListMock.mockImplementation(async () => mockEquipos);
+  listHallazgosMock.mockResolvedValue([]);
+  listTrabajosMock.mockResolvedValue([]);
+  listHorometroMock.mockResolvedValue([]);
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  queryClient.clear();
   mockSyncState = {
     pendingCount: 0,
     attentionCount: 0,
@@ -240,9 +263,17 @@ describe('SyncStatus — hoja de detalle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Preparar para uso sin señal' }));
 
     expect(await screen.findByText('Equipos precargados')).toBeTruthy();
-    expect(equipmentListMock).toHaveBeenCalledTimes(1);
+    // El propio componente también consulta el catálogo (`useEquipment`) al
+    // montar, por eso no se fija el número exacto de llamadas.
+    expect(equipmentListMock).toHaveBeenCalled();
     expect(operatorListMock).toHaveBeenCalledWith({ isActive: true });
     expect(listMineMock).toHaveBeenCalledTimes(1);
+    expect(listHallazgosMock).toHaveBeenCalledTimes(1);
+    expect(listTrabajosMock).toHaveBeenCalledTimes(1);
+    expect(listHorometroMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Hallazgos precargados')).toBeTruthy();
+    expect(screen.getByText('Trabajos extra precargados')).toBeTruthy();
+    expect(screen.getByText('Equipos en turno precargados')).toBeTruthy();
   });
 
   it('"Preparar para uso sin señal" avisa si un catálogo falla al precargar', async () => {
@@ -254,7 +285,9 @@ describe('SyncStatus — hoja de detalle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Preparar para uso sin señal' }));
 
-    expect(await screen.findByText('Operadores precargados')).toBeTruthy();
+    // El fetch de `useEquipment` (montado en el componente) ya está en vuelo
+    // con su reintento, y `fetchQuery` se cuelga de él — tarda ~1 s en fallar.
+    expect(await screen.findByText('Operadores precargados', {}, { timeout: 4000 })).toBeTruthy();
     // El ítem de equipos quedó marcado como error — mismo bloque, ícono
     // distinto (ver `PrepItemRow`); confirmamos que el checklist completo
     // (los 3 catálogos) se muestra aunque uno haya fallado.
@@ -294,5 +327,93 @@ describe('SyncStatus — un cierre cuya apertura falló', () => {
     expect(screen.getByText(/Se descarta la apertura y también su cierre guardado con la foto/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }));
     expect(discardOpMock).toHaveBeenCalledWith('op-1', 'u1');
+  });
+});
+
+describe('SyncStatus — etiquetas de hallazgos y trabajos extra', () => {
+  function atencion(op: { id?: string; type: OutboxOp['type']; payload: object }): OutboxOp {
+    return {
+      id: 'x-1',
+      v: 1,
+      userId: 'u1',
+      status: 'needs_attention',
+      attempts: 1,
+      lastError: { message: 'Rechazado por el servidor', code: 'OPERATOR_INACTIVE' },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...op,
+    } as OutboxOp;
+  }
+
+  const HALLAZGO_PAYLOAD = {
+    id: 'x-1',
+    equipoId: 'eq-1',
+    descripcion: 'Fuga',
+    prioridad: 'ALTA',
+    capturedAt: '2026-09-24T09:00:00.000Z',
+  };
+  const TRABAJO_PAYLOAD = {
+    id: 'x-1',
+    equipoId: 'eq-1',
+    operatorId: 'op-1',
+    faena: 'Patillo',
+    turno: 'DIURNO',
+    horometroInicial: 1,
+    horometroFinal: 2,
+    actividades: ['SOLTAR_MATERIAL'],
+    descripcion: 'Carga',
+    capturedAt: '2026-09-24T09:00:00.000Z',
+  };
+
+  it('"Hallazgo · <equipo>" con el código del catálogo cacheado', () => {
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-1', internalCode: 'EX-005' }]);
+    mockEquipos = [{ id: 'eq-1', internalCode: 'EX-005' }];
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [atencion({ type: 'createHallazgo', payload: HALLAZGO_PAYLOAD })];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByText('Hallazgo · EX-005')).toBeTruthy();
+    expect(screen.getByText('Rechazado por el servidor')).toBeTruthy();
+  });
+
+  it('la etiqueta se actualiza sola cuando el catálogo llega después de abrir la hoja', async () => {
+    mockEquipos = [{ id: 'eq-1', internalCode: 'EX-005' }];
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [atencion({ type: 'createHallazgo', payload: HALLAZGO_PAYLOAD })];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    // Sin catálogo cacheado al abrir: arranca genérica y se completa al resolver la query.
+    expect(screen.getByText('Hallazgo')).toBeTruthy();
+    expect(await screen.findByText('Hallazgo · EX-005')).toBeTruthy();
+  });
+
+  it('"Trabajo extra · <equipo>" con el código del catálogo cacheado', () => {
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-1', internalCode: 'EX-005' }]);
+    mockEquipos = [{ id: 'eq-1', internalCode: 'EX-005' }];
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [atencion({ type: 'createTrabajoExtra', payload: TRABAJO_PAYLOAD })];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByText('Trabajo extra · EX-005')).toBeTruthy();
+  });
+
+  it('sin el equipo en el catálogo, la etiqueta queda genérica', () => {
+    mockSyncState = { ...mockSyncState, attentionCount: 2 };
+    mockOps = [
+      atencion({ id: 'a', type: 'createHallazgo', payload: HALLAZGO_PAYLOAD }),
+      atencion({ id: 'b', type: 'createTrabajoExtra', payload: TRABAJO_PAYLOAD }),
+    ];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /2 registros requieren atención/ }));
+
+    expect(screen.getByText('Hallazgo')).toBeTruthy();
+    expect(screen.getByText('Trabajo extra')).toBeTruthy();
   });
 });

@@ -4,6 +4,7 @@ import { toast } from '@heroui/react';
 import { EquipmentAPI, type EquipmentFiltros } from '../api/EquipmentAPI';
 import { DomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
+import { EQUIPMENT_KEY } from '../lib/query-keys';
 import type {
   AssignEquipmentInput,
   CreateEquipmentInput,
@@ -11,10 +12,9 @@ import type {
   UpdateEquipmentInput,
 } from '../types/equipment';
 
-// Exportada: `components/terreno/SyncStatus.tsx` la usa para refetchear el
-// catálogo al "Preparar para uso sin señal" (RFC "Supervisión en Terreno"
-// §Diseño → Offline), sin repetir el literal `['equipment']` a mano.
-export const EQUIPMENT_KEY = ['equipment'] as const;
+// La key vive en `lib/query-keys.ts` (la comparte `offline/replay.ts`, que no
+// puede importar de `hooks/`); se re-exporta para los consumidores existentes.
+export { EQUIPMENT_KEY };
 
 /**
  * Lista de equipos (Flota). Fuente única del dominio — la usan tanto las

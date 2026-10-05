@@ -34,8 +34,8 @@ export interface UseTurnoSelectorResult {
 
 /**
  * Selector de turno "actual / siguiente" de Registro de equipo — sub-hook de
- * `useShiftRegister` (Anexo 3, revisión final: extraído para que el resto
- * del hook no dependa del reloj/`localStorage` directamente).
+ * `useShiftRegister`; aísla el
+ * reloj y `localStorage` para que el resto del hook no dependa de ellos.
  */
 export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorResult {
   // El turno sale del reloj, no de un valor escrito en la pantalla — ver
