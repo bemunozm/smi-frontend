@@ -69,6 +69,7 @@ export function syncStatusPresentation(
         <>
           <b>{plural(sync.attentionCount, 'registro', 'registros')}</b>{' '}
           {sync.attentionCount === 1 ? 'requiere' : 'requieren'} atención.
+          {sync.pendingCount > 0 && <> {sync.pendingCount} por sincronizar.</>}
         </>
       ),
     };

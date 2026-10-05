@@ -59,7 +59,7 @@ export function SyncEngineMount() {
     if (!userId || otherAccountCount <= 0 || avisadoPara.current === userId) return;
     avisadoPara.current = userId;
     toast(
-      `Este equipo guarda ${plural(otherAccountCount, 'registro', 'registros')} sin enviar de otra cuenta: se enviarán cuando esa persona vuelva a iniciar sesión.`,
+      `Este equipo guarda ${plural(otherAccountCount, 'registro', 'registros')} sin enviar de otra cuenta: ${otherAccountCount === 1 ? 'se enviará' : 'se enviarán'} cuando esa persona vuelva a iniciar sesión.`,
     );
   }, [userId, otherAccountCount]);
 

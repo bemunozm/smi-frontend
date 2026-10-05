@@ -165,6 +165,16 @@ describe('Topbar — cerrar sesión', () => {
     await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
   });
 
+  it('con un solo registro la frase va en singular', async () => {
+    countPendingMock.mockResolvedValue(1);
+    renderTopbar();
+
+    await pedirCerrarSesion();
+
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo.textContent).toContain('Hay 1 registro sin enviar; se enviará cuando vuelvas');
+  });
+
   it('cancelar la confirmación deja la sesión abierta', async () => {
     countPendingMock.mockResolvedValue(1);
     renderTopbar();

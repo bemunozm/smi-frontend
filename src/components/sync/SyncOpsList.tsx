@@ -3,6 +3,7 @@ import { Circle } from 'lucide-react';
 import { Button } from '@heroui/react';
 
 import { FORBIDDEN_MESSAGE } from '../../lib/error-messages';
+import { cachedEquipoCode, cachedName } from '../../offline/cache-upserts';
 import { arrastradasAlDescartar, type OutboxOp } from '../../offline/db';
 import { discardOp, overwriteOp, retryOp } from '../../offline/outbox';
 import { isNonRetryable } from '../../offline/retryable';
@@ -12,24 +13,27 @@ import type { Equipment } from '../../types/equipment';
  * uso sin señal") — sin él la etiqueta queda genérica en vez de esperar una
  * request que, sin señal, no iba a llegar. */
 function codigoEquipo(equipos: Equipment[] | undefined, equipoId: string): string | undefined {
-  return equipos?.find((e) => e.id === equipoId)?.internalCode;
+  return equipos?.find((e) => e.id === equipoId)?.internalCode ?? cachedName('equipment', equipoId);
+}
+
+/** `Título · CÓDIGO`, o solo el título si el equipo no está en ningún caché. */
+function conCodigo(titulo: string, codigo: string | undefined): string {
+  return codigo ? `${titulo} · ${codigo}` : titulo;
 }
 
 function labelOp(op: OutboxOp, equipos: Equipment[] | undefined): string {
   switch (op.type) {
     case 'openCard':
-      return 'Apertura de tarjeta';
+      return conCodigo('Apertura de tarjeta', codigoEquipo(equipos, op.payload.equipoId));
     case 'closeCard':
-      return 'Cierre de tarjeta';
+      return conCodigo('Cierre de tarjeta', cachedEquipoCode('shift-card', op.payload.cardId));
     case 'sendExitReport':
       return 'Reporte de salida';
     case 'createHallazgo': {
-      const codigo = codigoEquipo(equipos, op.payload.equipoId);
-      return codigo ? `Hallazgo · ${codigo}` : 'Hallazgo';
+      return conCodigo('Hallazgo', codigoEquipo(equipos, op.payload.equipoId));
     }
     case 'createTrabajoExtra': {
-      const codigo = codigoEquipo(equipos, op.payload.equipoId);
-      return codigo ? `Trabajo extra · ${codigo}` : 'Trabajo extra';
+      return conCodigo('Trabajo extra', codigoEquipo(equipos, op.payload.equipoId));
     }
     case 'httpWrite':
       // La etiqueta la armó el registro de endpoints al encolar.

@@ -20,6 +20,8 @@ const { usePrepareMock } = vi.hoisted(() => ({ usePrepareMock: vi.fn() }));
 vi.mock('../../hooks/usePrepareOffline', () => ({ usePrepareOffline: usePrepareMock }));
 
 import { usePendingWrites } from '../../hooks/usePendingWrites';
+import { queryClient } from '../../lib/query-client';
+import { EQUIPMENT_KEY } from '../../lib/query-keys';
 import { MarcaPendiente } from './MarcaPendiente';
 import { PendientesStrip } from './PendientesStrip';
 import { PREP_DETAIL_LIMITATION, PrepChecklist } from './PrepChecklist';
@@ -278,9 +280,48 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
     renderHoja(sync({ pendingCount: 2 }), [write(), write()]);
 
     expect(screen.getByRole('dialog', { name: 'Registros sin señal' })).toBeTruthy();
-    expect(screen.getByText('Pendientes por sincronizar')).toBeTruthy();
+    expect(screen.getByText('Sin sincronizar')).toBeTruthy();
     expect(screen.getAllByText('2').length).toBeGreaterThan(0);
+    expect(screen.getByText('2 esperando señal')).toBeTruthy();
     expect(screen.getByText('Ningún registro requiere atención.')).toBeTruthy();
+  });
+
+  it('con algo en atención, la hoja cuenta lo mismo que el badge y separa los dos tipos', () => {
+    renderHoja(sync({ pendingCount: 0, attentionCount: 1 }), [write({ status: 'needs_attention' })]);
+
+    expect(screen.getByText('1 requiere atención')).toBeTruthy();
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+  });
+
+  it('el nombre de una apertura incluye el código del equipo (del catálogo cacheado)', () => {
+    const op = {
+      id: 'a1', type: 'openCard', v: 1, userId: 'u1', status: 'pending', attempts: 0, seq: 1, createdAt: 1, updatedAt: 1,
+      payload: { id: 'a1', equipoId: 'eq-9' },
+    } as unknown as OutboxOp;
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-9', internalCode: 'EX-009' }]);
+    renderHoja(sync({ pendingCount: 1 }), [op]);
+
+    expect(screen.getByText('Apertura de tarjeta · EX-009')).toBeTruthy();
+    queryClient.clear();
+  });
+
+  it('tras "Preparar para uso sin señal" el foco sigue dentro de la hoja y Escape la cierra', () => {
+    usePrepareMock.mockReturnValue({ preparando: true, resultadoPrep: null, handlePreparar: vi.fn() });
+    mockOps = [];
+    render(
+      <MemoryRouter>
+        <SyncSheet sync={sync()} isOpen onClose={onClose}>
+          <PrepChecklist role="ADMIN" titulo="t" descripcion="d" />
+        </SyncSheet>
+      </MemoryRouter>,
+    );
+
+    const boton = screen.getByRole('button', { name: 'Preparando…' });
+    expect(boton.hasAttribute('disabled')).toBe(false);
+    boton.focus();
+    fireEvent.keyDown(boton, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('es un diálogo accesible: Escape y el botón Cerrar la cierran', () => {

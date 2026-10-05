@@ -52,7 +52,15 @@ export function PrepChecklist({ role, titulo, descripcion }: { role: Role | null
     <div className="flex flex-col gap-2 border-t border-border pt-3.5">
       <span className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{titulo}</span>
       <p className="m-0 text-[13px] text-muted-foreground">{descripcion}</p>
-      <Button isDisabled={preparando} variant="secondary" className="min-h-12" onPress={() => void handlePreparar()}>
+      {/* No `isDisabled`: un botón que se deshabilita pierde el foco, y con el foco en <body> Escape deja de cerrar la hoja. */}
+      <Button
+        aria-disabled={preparando}
+        variant="secondary"
+        className={`min-h-12 ${preparando ? 'opacity-60' : ''}`}
+        onPress={() => {
+          if (!preparando) void handlePreparar();
+        }}
+      >
         {preparando ? 'Preparando…' : 'Preparar para uso sin señal'}
       </Button>
 

@@ -20,7 +20,7 @@ export function SyncSheet({
   onClose,
   children,
 }: {
-  sync: Pick<SyncState, 'authRequired' | 'pendingCount' | 'otherAccountCount'>;
+  sync: Pick<SyncState, 'authRequired' | 'pendingCount' | 'attentionCount' | 'otherAccountCount'>;
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -62,9 +62,21 @@ export function SyncSheet({
             )}
 
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-border px-3.5 py-3 text-sm">
-              <span className="text-muted-foreground">Pendientes por sincronizar</span>
-              <b className="tabular text-foreground">{sync.pendingCount}</b>
+              <span className="text-muted-foreground">Sin sincronizar</span>
+              <b className="tabular text-foreground">{sync.pendingCount + sync.attentionCount}</b>
             </div>
+            {sync.pendingCount + sync.attentionCount > 0 && (
+              <p className="m-0 text-[12.5px] text-muted-foreground">
+                {[
+                  sync.pendingCount > 0 ? `${sync.pendingCount} esperando señal` : null,
+                  sync.attentionCount > 0
+                    ? `${sync.attentionCount} ${sync.attentionCount === 1 ? 'requiere' : 'requieren'} atención`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
 
             {sync.otherAccountCount > 0 && (
               <p className="m-0 text-[12.5px] text-muted-foreground">

@@ -70,8 +70,8 @@ export function useLogoutConfirmation(userId: string | undefined, navigate: Navi
               </AlertDialog.Header>
               <AlertDialog.Body>
                 <p>
-                  Hay {plural(pendingCount ?? 0, 'registro', 'registros')} sin enviar; se enviarán cuando vuelvas a
-                  iniciar sesión en este equipo.
+                  Hay {plural(pendingCount ?? 0, 'registro', 'registros')} sin enviar; {pendingCount === 1 ? 'se enviará' : 'se enviarán'} cuando
+                  vuelvas a iniciar sesión en este equipo.
                 </p>
               </AlertDialog.Body>
               <AlertDialog.Footer>

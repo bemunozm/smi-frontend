@@ -288,8 +288,8 @@ export function RegistroEquipoView() {
       <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisá el detalle en el panel de sincronización.'}</>
     ) : (
       <>
-        <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron en este turno y la
-        administración todavía no lo sabe.
+        <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
+        {enCurso.length === 1 ? 'salió' : 'salieron'} en este turno y la administración todavía no lo sabe.
       </>
     );
 
@@ -343,8 +343,8 @@ export function RegistroEquipoView() {
         <div className="flex items-center gap-2 text-[12.5px] text-white/80">
           <i className="h-2 w-2 shrink-0 rounded-full bg-[#ff6b5a]" />
           <span>
-            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b> salieron y la administración
-            aún no lo sabe.
+            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
+            {enCurso.length === 1 ? 'salió' : 'salieron'} y la administración aún no lo sabe.
           </span>
         </div>
         <Boton variante="acento" ancho className="mt-2 min-h-[60px] !rounded-[18px] !text-[17px]" onClick={() => setVerReporte(true)}>
