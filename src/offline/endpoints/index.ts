@@ -16,11 +16,15 @@ export type { EndpointDef, HttpParams } from './define';
  * agregar un módulo nuevo a la cola es agregar una entrada en el archivo de su
  * dominio (`terreno`, `flota`, `inventario`, `mantenimiento`, `catalogos`).
  *
- * `EndpointMap` es la parte tipada que ve quien encola (`submitWrite`); la
- * operación guardada, en cambio, solo conserva JSON (`HttpParams`/`JsonObject`).
+ * `EndpointMap` es la parte tipada que ve quien encola (`submitWrite`) y la que
+ * usa cada entrada para tipar sus `params`/`body` (`defineDomain`); la operación
+ * guardada, en cambio, solo conserva JSON (`HttpParams`/`JsonObject`).
  *
  * Toda entrada que CREA su entidad declara `creates: true` y la `entity` que
  * crea: lo que se encole después sobre esa entidad queda detrás (`dependsOn`).
+ * Las que hacen referencia a una entidad de otro catálogo (la categoría de un
+ * ítem, la sucursal de un movimiento, el operador de una asignación) lo declaran
+ * en `parents`, para que también queden detrás de la creación de ese catálogo.
  */
 export interface EndpointMap
   extends TerrenoEndpointMap,
@@ -56,8 +60,8 @@ export const ENDPOINTS: EndpointRegistry = {
  * - `/api/notifications/*`: marcar leída es un estado de la bandeja del momento.
  *
  * Las descargas y los redirects (`GET`) tampoco entran: el registro solo admite
- * `POST`/`PATCH`/`PUT`/`DELETE`. `offline/endpoints.test.ts` verifica que ningún
- * endpoint del registro caiga en esta lista.
+ * `POST`/`PATCH`/`PUT`/`DELETE`. `offline/office-writes.test.ts` verifica que
+ * ningún endpoint del registro caiga en esta lista.
  */
 export const RUTAS_QUE_NUNCA_SE_ENCOLAN = [
   '/api/auth',

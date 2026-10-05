@@ -8,7 +8,7 @@ import {
 } from '../../types/trabajosExtra';
 import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache, cachedEquipoCode } from '../cache-upserts';
 import { hallazgoEntity, shiftCardEntity, trabajoExtraEntity } from '../db';
-import { defineEndpoint, etiqueta, param, type DomainRegistry } from './define';
+import { defineDomain, entityOf, etiqueta, param, parseWith } from './define';
 
 export interface TerrenoEndpointMap {
   'shiftCard.edit': { params: { id: string }; body: EditShiftCardBody; result: ShiftCardResponse };
@@ -16,50 +16,41 @@ export interface TerrenoEndpointMap {
   'trabajoExtra.edit': { params: { id: string }; body: EditTrabajoExtraBody; result: TrabajoExtraordinario };
 }
 
-export const TERRENO_ENDPOINTS: DomainRegistry<TerrenoEndpointMap> = {
-  'shiftCard.edit': defineEndpoint({
+export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
+  'shiftCard.edit': {
     method: 'PATCH',
     path: (params) => `/api/shift-cards/${param(params, 'id')}`,
     failMessage: 'No se pudo guardar el cambio de la tarjeta.',
-    parse: (data) => {
-      const parsed = ShiftCardResponseSchema.safeParse(data);
-      return parsed.success ? parsed.data : null;
-    },
+    parse: parseWith(ShiftCardResponseSchema),
     apply: applyCardToCache,
     invalidate: ['shiftCards', 'equipment'],
-    label: (params) => etiqueta('Edición de tarjeta', cachedEquipoCode('shift-card', params.id ?? '')),
+    label: (params) => etiqueta('Edición de tarjeta', cachedEquipoCode('shift-card', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? shiftCardEntity(params.id) : undefined),
-  }),
-  'hallazgo.edit': defineEndpoint({
+    entity: (params) => entityOf(shiftCardEntity, params.id),
+  },
+  'hallazgo.edit': {
     method: 'PATCH',
     path: (params) => `/api/hallazgos/${param(params, 'id')}`,
     failMessage: 'No se pudo guardar el cambio del hallazgo.',
-    parse: (data) => {
-      const parsed = HallazgoSchema.safeParse(data);
-      return parsed.success ? parsed.data : null;
-    },
+    parse: parseWith(HallazgoSchema),
     apply: applyHallazgoToCache,
     invalidate: ['hallazgos'],
-    label: (params) => etiqueta('Edición de hallazgo', cachedEquipoCode('hallazgo', params.id ?? '')),
+    label: (params) => etiqueta('Edición de hallazgo', cachedEquipoCode('hallazgo', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? hallazgoEntity(params.id) : undefined),
-  }),
-  'trabajoExtra.edit': defineEndpoint({
+    entity: (params) => entityOf(hallazgoEntity, params.id),
+  },
+  'trabajoExtra.edit': {
     method: 'PATCH',
     path: (params) => `/api/trabajos-extra/${param(params, 'id')}`,
     failMessage: 'No se pudo guardar el cambio del trabajo.',
-    parse: (data) => {
-      const parsed = TrabajoExtraordinarioSchema.safeParse(data);
-      return parsed.success ? parsed.data : null;
-    },
+    parse: parseWith(TrabajoExtraordinarioSchema),
     apply: applyTrabajoExtraToCache,
     invalidate: ['trabajosExtra'],
-    label: (params) => etiqueta('Edición de trabajo extra', cachedEquipoCode('trabajo-extra', params.id ?? '')),
+    label: (params) => etiqueta('Edición de trabajo extra', cachedEquipoCode('trabajo-extra', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? trabajoExtraEntity(params.id) : undefined),
-  }),
-};
+    entity: (params) => entityOf(trabajoExtraEntity, params.id),
+  },
+});

@@ -1,10 +1,12 @@
 /**
- * Compresión de la foto de cierre ANTES de guardarla en Dexie (ver
+ * Compresión de una foto ANTES de guardarla en Dexie (ver
  * `offline/outbox.ts#enqueueCloseCard`) — una tablet puede acumular varias
- * fotos de 8 MB sin señal, y son las que más pesan en `IndexedDB`.
- * `createImageBitmap` + canvas → JPEG q0.8, máx. 1600 px de lado mayor; si
- * el navegador no soporta el pipeline, se guardan los bytes originales tal
- * cual (nunca se bloquea el cierre de la tarjeta por esto).
+ * fotos de 8 MB sin señal, y son las que más pesan en `IndexedDB` y las que más
+ * tardan en subir con poca cobertura.
+ * `createImageBitmap` + canvas → JPEG q0.72, máx. 1280 px de lado mayor: el
+ * número del surtidor y el horómetro siguen legibles y la foto baja a unos
+ * cientos de KB. Si el navegador no soporta el pipeline, se guardan los bytes
+ * originales tal cual y el llamador valida tipo y tamaño sobre el resultado.
  *
  * La fecha EXIF (`foto.captureDate`) se lee ANTES de este paso, sobre el
  * archivo ORIGINAL (`lib/usePhotoCaptureFlow.ts` ya lo hace al seleccionar
@@ -12,8 +14,8 @@
  * trazabilidad nunca depende de sobrevivir a este paso.
  */
 
-const MAX_SIDE_PX = 1600;
-const JPEG_QUALITY = 0.8;
+const MAX_SIDE_PX = 1280;
+const JPEG_QUALITY = 0.72;
 
 export interface CompressedPhoto {
   data: ArrayBuffer;
@@ -85,11 +87,11 @@ async function toRawBytes(file: File): Promise<CompressedPhoto> {
 }
 
 /**
- * Comprime `file` a JPEG q0.8, máx. 1600 px de lado mayor. Nunca lanza: si
+ * Comprime `file` a JPEG q0.72, máx. 1280 px de lado mayor. Nunca lanza: si
  * `createImageBitmap` no existe, si el canvas no está disponible, o si
  * cualquier paso del pipeline falla, cae a `toRawBytes` (los bytes
- * originales) — un fallo de compresión NUNCA debe bloquear el cierre de una
- * tarjeta sin señal.
+ * originales) — un fallo de compresión no debe impedir guardar sin señal; si el
+ * original no se puede subir, el que encola lo rechaza al guardar.
  */
 export async function compressPhoto(
   file: File,

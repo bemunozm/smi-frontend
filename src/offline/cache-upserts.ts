@@ -19,7 +19,7 @@ import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 /**
  * Escrituras en el caché de TanStack Query tras sincronizar una operación: el
  * registro recién confirmado aparece sin esperar el refetch. Viven acá (no en
- * `replay.ts`) porque el registro de endpoints (`offline/endpoints.ts`) las
+ * `replay.ts`) porque el registro de endpoints (`offline/endpoints/`) las
  * necesita también, y `replay.ts` importa de él.
  */
 
@@ -112,7 +112,7 @@ export function cachedName(kind: NombreCacheable, id: string): string | undefine
 }
 
 /** Código del equipo de una tarjeta, hallazgo o trabajo ya cacheado — para la
- * etiqueta de `SyncStatus` de una operación que se encola sin señal. */
+ * etiqueta de la hoja de sincronización de una operación que se encola sin señal. */
 export function cachedEquipoCode(kind: 'shift-card' | 'hallazgo' | 'trabajo-extra', id: string): string | undefined {
   if (kind === 'shift-card') {
     return queryClient.getQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY)?.find((c) => c.id === id)?.equipo

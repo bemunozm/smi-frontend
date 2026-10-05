@@ -15,10 +15,14 @@ export interface SyncStatusPresentation {
 /**
  * Deriva tono/ícono/texto de la barra de `components/terreno/SyncStatus.tsx`
  * a partir del estado de sync — función PURA (sin hooks, sin efectos) para
- * poder testear las 8 prioridades directamente, sin renderizar el
+ * poder testear las prioridades directamente, sin renderizar el
  * componente completo. La prioridad del `if/else` es la regla de negocio:
  * sesión expirada > snapshot sin señal > requiere atención > sincronizando >
  * pendientes > sin señal (nada pendiente todavía) > sincronizado > inicial.
+ *
+ * "Sin señal · sesión guardada" (arranque en frío con la sesión del snapshot)
+ * no esconde la cola: sigue contando lo que espera y lo que requiere atención,
+ * porque es justo cuando una tablet reiniciada en faena necesita saberlo.
  */
 export function syncStatusPresentation(
   sync: SyncState,
@@ -39,11 +43,19 @@ export function syncStatusPresentation(
 
   if (isOfflineSnapshot) {
     return {
-      tono: 'warning',
+      tono: sync.attentionCount > 0 ? 'danger' : 'warning',
       icono: <WifiOff className="mt-0.5 h-[18px] w-[18px] shrink-0" />,
       texto: (
         <>
           <b>Sin señal</b> · sesión guardada.
+          {sync.pendingCount > 0 && <> {plural(sync.pendingCount, 'registro', 'registros')} por sincronizar.</>}
+          {sync.attentionCount > 0 && (
+            <>
+              {' '}
+              {plural(sync.attentionCount, 'registro', 'registros')}{' '}
+              {sync.attentionCount === 1 ? 'requiere' : 'requieren'} atención.
+            </>
+          )}
         </>
       ),
     };

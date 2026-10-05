@@ -9,6 +9,7 @@ afterEach(cleanup);
 const BASE: SyncState = {
   pendingCount: 0,
   attentionCount: 0,
+  otherAccountCount: 0,
   syncing: false,
   authRequired: false,
   lastSyncAt: null,
@@ -35,6 +36,20 @@ describe('syncStatusPresentation — prioridad de estados', () => {
     expect(tono).toBe('warning');
     expect(textoVisible(texto)).toContain('Sin señal');
     expect(textoVisible(texto)).toContain('sesión guardada');
+  });
+
+  it('"Sin señal · sesión guardada" sigue contando lo que espera en la cola', () => {
+    const { tono, texto } = syncStatusPresentation({ ...BASE, pendingCount: 3 }, true, false);
+    expect(tono).toBe('warning');
+    expect(textoVisible(texto)).toBe('Sin señal · sesión guardada. 3 registros por sincronizar.');
+  });
+
+  it('"Sin señal · sesión guardada" no esconde lo que requiere atención', () => {
+    const { tono, texto } = syncStatusPresentation({ ...BASE, pendingCount: 1, attentionCount: 2 }, true, false);
+    expect(tono).toBe('danger');
+    expect(textoVisible(texto)).toBe(
+      'Sin señal · sesión guardada. 1 registro por sincronizar. 2 registros requieren atención.',
+    );
   });
 
   it('attentionCount > 0: singular ("1 registro requiere atención")', () => {

@@ -17,14 +17,22 @@ import {
   type UpdateActividadInput,
 } from '../../types/mantenimiento';
 import { cachedName } from '../cache-upserts';
-import { actividadEntity, intervencionEntity, ordenEntity, umbralEntity } from '../db';
+import {
+  actividadEntity,
+  equipmentEntity,
+  hallazgoEntity,
+  intervencionEntity,
+  ordenEntity,
+  umbralEntity,
+} from '../db';
 import {
   bodyText,
-  defineEndpoint,
+  defineDomain,
+  entityOf,
   etiqueta,
   param,
   parseWith,
-  type DomainRegistry,
+  referencias,
   type NoParams,
   type WithId,
 } from './define';
@@ -48,8 +56,8 @@ export interface MantenimientoEndpointMap {
   'umbral.create': { params: NoParams; body: WithId<CreateUmbralInput>; result: Umbral };
 }
 
-export const MANTENIMIENTO_ENDPOINTS: DomainRegistry<MantenimientoEndpointMap> = {
-  'orden.create': defineEndpoint({
+export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
+  'orden.create': {
     method: 'POST',
     path: () => '/api/mantenimiento/ordenes',
     failMessage: 'No se pudo crear la orden de trabajo.',
@@ -59,51 +67,46 @@ export const MANTENIMIENTO_ENDPOINTS: DomainRegistry<MantenimientoEndpointMap> =
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? ordenEntity(id) : undefined;
-    },
-  }),
-  'orden.update': defineEndpoint({
+    entity: (_params, body) => entityOf(ordenEntity, bodyText(body, 'id')),
+    parents: (_params, body) => referencias(entityOf(equipmentEntity, bodyText(body, 'equipoId'))),
+  },
+  'orden.update': {
     method: 'PATCH',
     path: (params) => `/api/mantenimiento/ordenes/${param(params, 'id')}`,
     failMessage: 'No se pudo actualizar la orden de trabajo.',
     parse: parseWith(OrdenTrabajoSchema),
     invalidate: ['ordenes'],
-    label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id ?? '')),
+    label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? ordenEntity(params.id) : undefined),
-  }),
-  'orden.toggleTarea': defineEndpoint({
+    entity: (params) => entityOf(ordenEntity, params.id),
+  },
+  'orden.toggleTarea': {
     method: 'PATCH',
     path: (params) =>
       `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
     failMessage: 'No se pudo actualizar la tarea.',
     parse: parseWith(TareaSchema),
     invalidate: ['ordenes'],
-    label: (params) => etiqueta('Tarea de orden de trabajo', cachedName('orden', params.ordenId ?? '')),
+    label: (params) => etiqueta('Tarea de orden de trabajo', cachedName('orden', params.ordenId)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.ordenId ? ordenEntity(params.ordenId) : undefined),
-  }),
-  'intervencion.create': defineEndpoint({
+    entity: (params) => entityOf(ordenEntity, params.ordenId),
+  },
+  'intervencion.create': {
     method: 'POST',
     path: (params) => `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/intervenciones`,
     failMessage: 'No se pudo registrar la intervención.',
     parse: parseWith(IntervencionSchema),
     invalidate: ['intervenciones', 'ordenes'],
-    label: (params) => etiqueta('Intervención', cachedName('orden', params.ordenId ?? '')),
+    label: (params) => etiqueta('Intervención', cachedName('orden', params.ordenId)),
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? intervencionEntity(id) : undefined;
-    },
-    parents: (params) => (params.ordenId ? [ordenEntity(params.ordenId)] : []),
-  }),
-  'actividad.create': defineEndpoint({
+    entity: (_params, body) => entityOf(intervencionEntity, bodyText(body, 'id')),
+    parents: (params) => referencias(entityOf(ordenEntity, params.ordenId)),
+  },
+  'actividad.create': {
     method: 'POST',
     path: () => '/api/mantenimiento/actividades',
     failMessage: 'No se pudo crear la actividad.',
@@ -113,23 +116,25 @@ export const MANTENIMIENTO_ENDPOINTS: DomainRegistry<MantenimientoEndpointMap> =
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? actividadEntity(id) : undefined;
-    },
-  }),
-  'actividad.update': defineEndpoint({
+    entity: (_params, body) => entityOf(actividadEntity, bodyText(body, 'id')),
+    parents: (_params, body) =>
+      referencias(
+        entityOf(equipmentEntity, bodyText(body, 'equipoId')),
+        entityOf(hallazgoEntity, bodyText(body, 'hallazgoId')),
+      ),
+  },
+  'actividad.update': {
     method: 'PATCH',
     path: (params) => `/api/mantenimiento/actividades/${param(params, 'id')}`,
     failMessage: 'No se pudo actualizar la actividad.',
     parse: parseWith(ActividadSchema),
     invalidate: ['actividades'],
-    label: (params) => etiqueta('Edición de actividad', cachedName('actividad', params.id ?? '')),
+    label: (params) => etiqueta('Edición de actividad', cachedName('actividad', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? actividadEntity(params.id) : undefined),
-  }),
-  'umbral.create': defineEndpoint({
+    entity: (params) => entityOf(actividadEntity, params.id),
+  },
+  'umbral.create': {
     method: 'POST',
     path: () => '/api/mantenimiento/umbrales',
     failMessage: 'No se pudo crear el umbral.',
@@ -139,9 +144,6 @@ export const MANTENIMIENTO_ENDPOINTS: DomainRegistry<MantenimientoEndpointMap> =
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? umbralEntity(id) : undefined;
-    },
-  }),
-};
+    entity: (_params, body) => entityOf(umbralEntity, bodyText(body, 'id')),
+  },
+});

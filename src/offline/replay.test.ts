@@ -247,22 +247,43 @@ describe('replay — éxito', () => {
 
 describe('replay — errores transitorios (red/5xx/429)', () => {
   it.each([
-    ['error de red (sin status)', new DomainError('Network Error')],
+    ['error de red (sin status) con señal', new DomainError('Network Error')],
     ['500', new DomainError('boom', { status: 500 })],
+    ['503', new DomainError('boom', { status: 503 })],
     ['429', new DomainError('too many', { status: 429 })],
-  ])('%s: la operación queda pending, suma un intento, y el run se corta', async (_label, error) => {
-    openCardMock.mockRejectedValueOnce(error);
+  ])(
+    '%s: la operación queda pending, suma un intento, y el run SIGUE con las que no dependen de ella',
+    async (_label, error) => {
+      openCardMock.mockRejectedValueOnce(error);
+      openCardMock.mockResolvedValueOnce(baseCard({ id: 'c-2' }));
+      await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+      await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+
+      await syncAndSettle();
+
+      const op1 = await db.outbox.get('c-1');
+      expect(op1?.status).toBe('pending');
+      expect(op1?.attempts).toBe(1);
+      // La operación independiente de atrás sale en el MISMO run.
+      expect(openCardMock).toHaveBeenCalledTimes(2);
+      expect(await db.outbox.get('c-2')).toBeUndefined();
+      // La que falló NO se reintenta dentro del mismo run.
+      expect(openCardMock.mock.calls.filter(([payload]) => payload.id === 'c-1')).toHaveLength(1);
+      expect(useEngineStoreForTests.getState().lastError?.message).toBeTruthy();
+    },
+  );
+
+  it('sin red en absoluto (navigator.onLine === false) el run SÍ se corta: la segunda ni se toca', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    openCardMock.mockRejectedValueOnce(new DomainError('Network Error'));
     await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
     await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
 
     await syncAndSettle();
 
-    const op1 = await db.outbox.get('c-1');
-    expect(op1?.status).toBe('pending');
-    expect(op1?.attempts).toBe(1);
-    // El run se corta: la SEGUNDA operación ni se tocó.
+    expect((await db.outbox.get('c-1'))?.attempts).toBe(1);
     expect(openCardMock).toHaveBeenCalledTimes(1);
-    expect(useEngineStoreForTests.getState().lastError?.message).toBeTruthy();
+    expect((await db.outbox.get('c-2'))?.attempts).toBe(0);
   });
 });
 

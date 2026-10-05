@@ -13,17 +13,17 @@ import {
   type StockMovement,
   type TransferResult,
 } from '../../types/inventory';
-import type { JsonObject } from '../../types/json';
 import { cachedName } from '../cache-upserts';
-import { categoryEntity, itemEntity } from '../db';
+import { branchEntity, categoryEntity, equipmentEntity, itemEntity } from '../db';
 import {
   aceptarCualquiera,
   bodyText,
-  defineEndpoint,
+  defineDomain,
+  entityOf,
   etiqueta,
   param,
   parseWith,
-  type DomainRegistry,
+  referencias,
   type NoParams,
   type WithId,
 } from './define';
@@ -61,13 +61,12 @@ export interface InventarioEndpointMap {
 
 /** El ítem agrupa todo lo que toca su existencia: un conteo, un movimiento o un
  * mínimo no se mandan por delante de una edición suya que siga esperando. */
-function itemDelBody(body: JsonObject): string | undefined {
-  const itemId = bodyText(body, 'itemId');
-  return itemId ? itemEntity(itemId) : undefined;
+function itemDelBody(body: { itemId: string }): string | undefined {
+  return entityOf(itemEntity, bodyText(body, 'itemId'));
 }
 
-export const INVENTARIO_ENDPOINTS: DomainRegistry<InventarioEndpointMap> = {
-  'item.create': defineEndpoint({
+export const INVENTARIO_ENDPOINTS = defineDomain<InventarioEndpointMap>({
+  'item.create': {
     method: 'POST',
     path: () => '/api/inventory/items',
     failMessage: 'No se pudo crear el ítem.',
@@ -77,78 +76,94 @@ export const INVENTARIO_ENDPOINTS: DomainRegistry<InventarioEndpointMap> = {
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? itemEntity(id) : undefined;
-    },
-  }),
-  'item.update': defineEndpoint({
+    entity: (_params, body) => entityOf(itemEntity, bodyText(body, 'id')),
+    parents: (_params, body) =>
+      referencias(
+        entityOf(categoryEntity, bodyText(body, 'categoryId')),
+        entityOf(branchEntity, bodyText(body, 'branchId')),
+      ),
+  },
+  'item.update': {
     method: 'PATCH',
     path: (params) => `/api/inventory/items/${param(params, 'id')}`,
     failMessage: 'No se pudo actualizar el ítem.',
     parse: parseWith(InventoryItemSchema),
     invalidate: ['inventory'],
-    label: (params) => etiqueta('Edición de ítem', cachedName('item', params.id ?? '')),
+    label: (params) => etiqueta('Edición de ítem', cachedName('item', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? itemEntity(params.id) : undefined),
-  }),
-  'item.delete': defineEndpoint({
+    entity: (params) => entityOf(itemEntity, params.id),
+    parents: (_params, body) => referencias(entityOf(categoryEntity, bodyText(body, 'categoryId'))),
+  },
+  'item.delete': {
     method: 'DELETE',
     path: (params) => `/api/inventory/items/${param(params, 'id')}`,
     failMessage: 'No se pudo eliminar el ítem.',
     parse: aceptarCualquiera,
     invalidate: ['inventory'],
-    label: (params) => etiqueta('Eliminación de ítem', cachedName('item', params.id ?? '')),
+    label: (params) => etiqueta('Eliminación de ítem', cachedName('item', params.id)),
     notFoundIsDone: true,
     carriesFiles: false,
-    entity: (params) => (params.id ? itemEntity(params.id) : undefined),
-  }),
-  'item.adjust': defineEndpoint({
+    entity: (params) => entityOf(itemEntity, params.id),
+  },
+  'item.adjust': {
     method: 'POST',
     path: (params) => `/api/inventory/items/${param(params, 'id')}/adjust`,
     failMessage: 'No se pudo ajustar la existencia.',
     parse: parseWith(AdjustResultSchema),
     invalidate: ['inventory'],
-    label: (params) => etiqueta('Conteo físico', cachedName('item', params.id ?? '')),
+    label: (params) => etiqueta('Conteo físico', cachedName('item', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? itemEntity(params.id) : undefined),
-  }),
-  'item.setMinimum': defineEndpoint({
+    entity: (params) => entityOf(itemEntity, params.id),
+    parents: (_params, body) => referencias(entityOf(branchEntity, bodyText(body, 'branchId'))),
+    bodyPreconditions: ['expectedQuantity'],
+  },
+  'item.setMinimum': {
     method: 'PUT',
     path: () => '/api/inventory/stock/minimum',
     failMessage: 'No se pudo actualizar el stock mínimo.',
     parse: aceptarCualquiera,
     invalidate: ['inventory'],
-    label: (_params, body) => etiqueta('Stock mínimo', cachedName('item', bodyText(body, 'itemId') ?? '')),
+    label: (_params, body) => etiqueta('Stock mínimo', cachedName('item', body.itemId)),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (_params, body) => itemDelBody(body),
-  }),
-  'movement.create': defineEndpoint({
+    parents: (_params, body) => referencias(entityOf(branchEntity, bodyText(body, 'branchId'))),
+  },
+  'movement.create': {
     method: 'POST',
     path: () => '/api/inventory/movements',
     failMessage: 'No se pudo registrar el movimiento.',
     parse: parseWith(StockMovementSchema),
     invalidate: ['inventory', 'equipment'],
-    label: (_params, body) => etiqueta('Movimiento de stock', cachedName('item', bodyText(body, 'itemId') ?? '')),
+    label: (_params, body) => etiqueta('Movimiento de stock', cachedName('item', body.itemId)),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (_params, body) => itemDelBody(body),
-  }),
-  'stock.transfer': defineEndpoint({
+    parents: (_params, body) =>
+      referencias(
+        entityOf(branchEntity, bodyText(body, 'branchId')),
+        entityOf(equipmentEntity, bodyText(body, 'equipmentId')),
+      ),
+  },
+  'stock.transfer': {
     method: 'POST',
     path: () => '/api/inventory/stock/transfer',
     failMessage: 'No se pudo registrar el traspaso.',
     parse: parseWith(TransferResultSchema),
     invalidate: ['inventory'],
-    label: (_params, body) => etiqueta('Traspaso de stock', cachedName('item', bodyText(body, 'itemId') ?? '')),
+    label: (_params, body) => etiqueta('Traspaso de stock', cachedName('item', body.itemId)),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (_params, body) => itemDelBody(body),
-  }),
-  'category.create': defineEndpoint({
+    parents: (_params, body) =>
+      referencias(
+        entityOf(branchEntity, bodyText(body, 'sourceBranchId')),
+        entityOf(branchEntity, bodyText(body, 'destinationBranchId')),
+      ),
+  },
+  'category.create': {
     method: 'POST',
     path: () => '/api/inventory/categories',
     failMessage: 'No se pudo crear la categoría.',
@@ -158,31 +173,28 @@ export const INVENTARIO_ENDPOINTS: DomainRegistry<InventarioEndpointMap> = {
     notFoundIsDone: false,
     carriesFiles: false,
     creates: true,
-    entity: (_params, body) => {
-      const id = bodyText(body, 'id');
-      return id ? categoryEntity(id) : undefined;
-    },
-  }),
-  'category.update': defineEndpoint({
+    entity: (_params, body) => entityOf(categoryEntity, bodyText(body, 'id')),
+  },
+  'category.update': {
     method: 'PATCH',
     path: (params) => `/api/inventory/categories/${param(params, 'id')}`,
     failMessage: 'No se pudo renombrar la categoría.',
     parse: parseWith(ItemCategorySchema),
     invalidate: ['inventory'],
-    label: (params) => etiqueta('Edición de categoría', cachedName('category', params.id ?? '')),
+    label: (params) => etiqueta('Edición de categoría', cachedName('category', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
-    entity: (params) => (params.id ? categoryEntity(params.id) : undefined),
-  }),
-  'category.delete': defineEndpoint({
+    entity: (params) => entityOf(categoryEntity, params.id),
+  },
+  'category.delete': {
     method: 'DELETE',
     path: (params) => `/api/inventory/categories/${param(params, 'id')}`,
     failMessage: 'No se pudo eliminar la categoría.',
     parse: aceptarCualquiera,
     invalidate: ['inventory'],
-    label: (params) => etiqueta('Eliminación de categoría', cachedName('category', params.id ?? '')),
+    label: (params) => etiqueta('Eliminación de categoría', cachedName('category', params.id)),
     notFoundIsDone: true,
     carriesFiles: false,
-    entity: (params) => (params.id ? categoryEntity(params.id) : undefined),
-  }),
-};
+    entity: (params) => entityOf(categoryEntity, params.id),
+  },
+});

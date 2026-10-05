@@ -550,8 +550,9 @@ describe('submitWrite de oficina', () => {
     expect(await db.outbox.count()).toBe(0);
   });
 
-  it('INSUFFICIENT_STOCK sale con un texto claro', async () => {
-    sendWriteMock.mockRejectedValueOnce(new DomainError('Existencia insuficiente', { code: 'INSUFFICIENT_STOCK', status: 409 }));
+  it('INSUFFICIENT_STOCK sale con el texto del servidor: lo disponible y lo pedido', async () => {
+    const textoDelServidor = 'Existencia insuficiente de "Filtro" en Casa Matriz: disponible 3, solicitado 5.';
+    sendWriteMock.mockRejectedValueOnce(new DomainError(textoDelServidor, { code: 'INSUFFICIENT_STOCK', status: 409 }));
     setCurrentUser('u1');
 
     await expect(
@@ -560,6 +561,6 @@ describe('submitWrite de oficina', () => {
         { params: {}, body: { id: 'm-1', itemId: 'i-1', branchId: 'b-1', direction: 'OUT', reason: 'ACTIVITY', quantity: 5 } },
         { waitMs: 3000 },
       ),
-    ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK', message: expect.stringContaining('existencia suficiente') });
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK', message: textoDelServidor });
   });
 });
