@@ -43,7 +43,11 @@ import {
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useItems } from '../hooks/useInventory';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { itemEntity } from '../offline/db';
 import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useUiStore } from '../store/ui';
 import { ROLES } from '../types/roles';
@@ -80,6 +84,7 @@ const MENU_ICON = 15;
 
 function ItemRow({
   item,
+  marca,
   branchId,
   canWrite,
   isAdmin,
@@ -87,6 +92,7 @@ function ItemRow({
   onEdit,
 }: {
   item: InventoryItem;
+  marca: Marca | null;
   branchId: string;
   canWrite: boolean;
   isAdmin: boolean;
@@ -147,6 +153,7 @@ function ItemRow({
             <span className="text-foreground">{item.name}</span>
             {item.isCritical ? <CriticalBadge /> : null}
           </div>
+          <MarcaPendiente marca={marca} />
           {item.partNumber ? (
             <span className="font-mono text-xs text-muted-foreground">
               {item.partNumber}
@@ -212,6 +219,9 @@ function EmptyState() {
   );
 }
 
+/** Escrituras que esta pantalla muestra como pendientes (ver `usePendingWrites`). */
+const RECURSOS_DE_INVENTARIO = ['item', 'movement', 'stock', 'category'] as const;
+
 const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
 
 function ItemsList({
@@ -231,6 +241,7 @@ function ItemsList({
 }) {
   const isDesktop = useMediaQuery(TABLE_LAYOUT_QUERY);
   const isAll = branchId === ALL_BRANCHES;
+  const pendientes = usePendingWrites(RECURSOS_DE_INVENTARIO);
 
   if (items.length === 0) return <EmptyState />;
 
@@ -243,6 +254,7 @@ function ItemsList({
             branchId={branchId}
             item={item}
             key={item.id}
+            marca={pendientes.marcaDe(itemEntity(item.id))}
             onOpen={() => onOpen(item, 'actions')}
           />
         ))}
@@ -278,6 +290,7 @@ function ItemsList({
                 isAdmin={isAdmin}
                 item={item}
                 key={item.id}
+                marca={pendientes.marcaDe(itemEntity(item.id))}
                 onEdit={() => onEdit(item)}
                 onOpen={(view) => onOpen(item, view)}
               />
@@ -482,6 +495,8 @@ export function InventarioView() {
           <Button onPress={() => setIsCreating(true)}>Nuevo ítem</Button>
         ) : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_INVENTARIO} />
 
       <Segmented
         label="Tipo de ítem"

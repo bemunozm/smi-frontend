@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
@@ -346,6 +347,8 @@ function MovementHistory({
  * 40 o si quedan 2 — y quien abre el historial de un ítem viene, casi siempre,
  * a decidir si repone.
  */
+const RECURSOS_DE_FICHA_ITEM = ['item', 'movement', 'stock'] as const;
+
 export function FichaItemView() {
   const { id = '' } = useParams<{ id: string }>();
   const { user } = useCurrentUser();
@@ -394,6 +397,8 @@ export function FichaItemView() {
       <Link className="text-sm text-(--accent) hover:underline" to="/inventario">
         ← Volver a Inventario
       </Link>
+
+      <PendientesStrip recursos={RECURSOS_DE_FICHA_ITEM} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">

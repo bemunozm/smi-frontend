@@ -102,6 +102,10 @@ function MovementPanel({
   const [reason, setReason] = useState<MovementReason>('PURCHASE');
   const [documentNumber, setDocumentNumber] = useState('');
   const [notes, setNotes] = useState('');
+  // La existencia que se veía al empezar a contar: el conteo se declara contra ella,
+  // no contra la que haya cuando se confirme (si alguien mueve stock en el medio,
+  // el servidor lo detecta y rechaza el conteo).
+  const [countBase, setCountBase] = useState<{ branchId: string; quantity: number } | null>(null);
 
   const symbol = UNIT_SYMBOLS[item.unit];
   const here = quantityAt(item, branchId);
@@ -165,6 +169,7 @@ function MovementPanel({
           input: {
             branchId,
             countedQuantity: counted,
+            expectedQuantity: countBase?.branchId === branchId ? countBase.quantity : here,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
           },
         },
@@ -204,6 +209,7 @@ function MovementPanel({
             onChange={(next) => {
               setMode(next);
               setAmount(next === 'count' ? String(here) : '');
+              setCountBase(next === 'count' ? { branchId, quantity: here } : null);
               setReason(next === 'in' ? 'PURCHASE' : 'INTERVENTION');
             }}
             options={[

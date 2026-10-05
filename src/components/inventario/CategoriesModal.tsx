@@ -56,7 +56,7 @@ function CategoryRow({ category }: { category: ItemCategory }) {
           isDisabled={!changed || updateCategory.isPending}
           size="sm"
           variant="secondary"
-          onPress={() => updateCategory.mutate({ id: category.id, name: trimmed })}
+          onPress={() => updateCategory.mutate({ category, name: trimmed })}
         >
           Guardar
         </Button>

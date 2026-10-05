@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -132,6 +133,8 @@ function MovementCard({ movement }: { movement: StockMovement }) {
   );
 }
 
+const RECURSOS_DE_MOVIMIENTOS = ['movement', 'stock', 'item'] as const;
+
 export function MovimientosView() {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const { data: branches } = useBranches({ isActive: true });
@@ -181,6 +184,8 @@ export function MovimientosView() {
           </Link>
         </p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_MOVIMIENTOS} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select

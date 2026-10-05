@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import {
@@ -6,16 +6,25 @@ import {
   type ItemFilters,
   type MovementFilters,
 } from '../api/InventoryAPI';
+import { DomainError } from '../lib/api-error';
+import { mensajeErrorFormulario } from '../lib/error-messages';
+import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { INVENTORY_KEY } from '../lib/query-keys';
+import { existenciaConPendientes } from '../lib/stock-pending';
+import { generateUuid } from '../lib/uuid';
+import { itemEntity } from '../offline/db';
+import type { SetMinimumBody, TransferStockBody } from '../offline/endpoints/inventario';
+import { cambiosPendientes, escriturasPendientes } from '../offline/outbox';
 import {
   UNIT_SYMBOLS,
   type AdjustStockInput,
   type CreateItemInput,
   type CreateMovementInput,
+  type ItemFields,
   type InventoryItem,
   type UpdateItemInput,
 } from '../types/inventory';
-
-const INVENTORY_KEY = ['inventory'] as const;
+import { useOfficeMutation } from './useOfficeMutation';
 
 export function useItems(filters: ItemFilters = {}) {
   return useQuery({
@@ -44,65 +53,94 @@ export function useKardex(itemId: string | null, branchId?: string) {
   });
 }
 
-/**
- * Invalida todo `['inventory', ...]`. Cualquier movimiento cambia a la vez el
+/* Las escrituras van por la cola (`useOfficeMutation`). Al terminar, el replay
+ * invalida todo `['inventory', ...]`: cualquier movimiento cambia a la vez el
  * saldo del listado y el kardex del ítem; invalidar solo uno dejaría la
- * pantalla mostrando cifras que ya no cuadran entre sí.
- */
-function useInvalidateInventory() {
-  const queryClient = useQueryClient();
-  return () => void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY });
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}
+ * pantalla mostrando cifras que ya no cuadran entre sí. */
 
 export function useCreateItem() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: (input: CreateItemInput) => InventoryAPI.createItem(input),
-    onSuccess: (item) => {
-      invalidate();
-      toast.success('Ítem creado', { description: `${item.sku} · ${item.name}` });
+  return useOfficeMutation<'item.create', CreateItemInput>({
+    endpoint: 'item.create',
+    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    onSent: (item, input) => {
+      toast.success('Ítem creado', { description: item ? `${item.sku} · ${item.name}` : `${input.sku} · ${input.name}` });
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo crear el ítem.'));
-    },
+    errorFallback: 'No se pudo crear el ítem.',
   });
 }
 
-export function useUpdateItem() {
-  const invalidate = useInvalidateInventory();
+const CAMPOS_DE_ITEM = [
+  'name',
+  'description',
+  'unit',
+  'type',
+  'categoryId',
+  'partNumber',
+  'defaultSupplier',
+  'isCritical',
+  'isActive',
+] as const satisfies readonly (keyof ItemFields)[];
 
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateItemInput }) =>
-      InventoryAPI.updateItem(id, input),
-    onSuccess: (item) => {
-      invalidate();
-      toast.success('Ítem actualizado', { description: item.name });
+export interface UpdateItemVars {
+  /** El ítem tal como lo muestra la pantalla: la base de la edición. */
+  item: InventoryItem;
+  input: UpdateItemInput;
+}
+
+export function useUpdateItem() {
+  return useOfficeMutation<'item.update', UpdateItemVars>({
+    endpoint: 'item.update',
+    build: async ({ item, input }) => {
+      const pendiente = await cambiosPendientes(itemEntity(item.id), ['item.update']);
+      const base = conPendientes<ItemFields>(
+        {
+          name: item.name,
+          description: item.description,
+          unit: item.unit,
+          type: item.type,
+          categoryId: item.categoryId,
+          partNumber: item.partNumber,
+          defaultSupplier: item.defaultSupplier,
+          isCritical: item.isCritical,
+          isActive: item.isActive,
+        },
+        pendiente,
+        CAMPOS_DE_ITEM,
+      );
+      // Un texto vacío no se manda (el formulario lo omite): no se puede limpiar
+      // desde acá, así que "omitido" es "sin cambio", no "borrar".
+      const nuevo: ItemFields = {
+        name: input.name,
+        unit: input.unit,
+        type: input.type,
+        isCritical: input.isCritical ?? base.isCritical,
+        isActive: input.isActive ?? base.isActive,
+        categoryId: input.categoryId === undefined ? base.categoryId : input.categoryId,
+        description: input.description ?? base.description,
+        partNumber: input.partNumber ?? base.partNumber,
+        defaultSupplier: input.defaultSupplier ?? base.defaultSupplier,
+      };
+      const { cambios, esperado } = diferenciaEdicion(base, nuevo, CAMPOS_DE_ITEM);
+      if (Object.keys(cambios).length === 0) return null;
+      return { params: { id: item.id }, body: cambios, expected: precondicion(esperado) };
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo actualizar el ítem.'));
+    onSent: (data, { item }) => {
+      toast.success('Ítem actualizado', { description: data?.name ?? item.name });
     },
+    errorFallback: 'No se pudo actualizar el ítem.',
   });
 }
 
 export function useDeleteItem() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: (id: string) => InventoryAPI.removeItem(id),
-    onSuccess: () => {
-      invalidate();
+  return useOfficeMutation<'item.delete', string>({
+    endpoint: 'item.delete',
+    build: (id) => ({ params: { id }, body: {} }),
+    onSent: () => {
       toast.success('Ítem eliminado');
     },
-    onError: (error: unknown) => {
-      // El 409 del backend explica que tiene kardex y sugiere la baja lógica;
-      // ese mensaje es más útil que cualquier texto genérico.
-      toast.danger(errorMessage(error, 'No se pudo eliminar el ítem.'));
-    },
+    // El 409 del backend explica que tiene kardex y sugiere la baja lógica;
+    // ese mensaje es más útil que cualquier texto genérico.
+    errorFallback: 'No se pudo eliminar el ítem.',
   });
 }
 
@@ -110,25 +148,21 @@ export function useDeleteItem() {
  * Entrada o salida manual. El aviso de mínimo se da **en el momento de la
  * acción**: si la salida deja la bodega en o bajo su umbral, el toast lo dice.
  * Esperar a que el usuario mire la fila pintada es tarde — ya se llevó el
- * material.
+ * material. Solo es posible si el servidor alcanzó a responder; encolado, no hay
+ * un saldo resultante que mostrar.
  */
 export function useCreateMovement() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: ({
-      input,
-      item,
-    }: {
-      input: CreateMovementInput;
-      item: InventoryItem;
-    }) => InventoryAPI.createMovement(input).then((movement) => ({ movement, item })),
-    onSuccess: ({ movement, item }) => {
-      invalidate();
+  return useOfficeMutation<'movement.create', { input: CreateMovementInput; item: InventoryItem }>({
+    endpoint: 'movement.create',
+    build: ({ input }) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    onSent: (movement, { item }) => {
+      if (!movement) {
+        toast.success('Movimiento registrado');
+        return;
+      }
       const symbol = UNIT_SYMBOLS[item.unit];
       const minimum =
-        item.stocks.find((stock) => stock.branchId === movement.branchId)
-          ?.minimumQuantity ?? 0;
+        item.stocks.find((stock) => stock.branchId === movement.branchId)?.minimumQuantity ?? 0;
 
       if (minimum > 0 && movement.resultingBalance <= minimum) {
         toast.warning('Movimiento registrado · quedaste bajo el mínimo', {
@@ -141,79 +175,86 @@ export function useCreateMovement() {
         description: `Saldo en esta bodega: ${movement.resultingBalance} ${symbol}`,
       });
     },
-    onError: (error: unknown) => {
-      // El 409 por existencia insuficiente trae el detalle exacto (disponible
-      // vs. solicitado, y cuánto hay en otras sucursales) — se muestra tal cual.
-      toast.danger(errorMessage(error, 'No se pudo registrar el movimiento.'));
-    },
+    // El 409 por existencia insuficiente (`INSUFFICIENT_STOCK`) llega con su texto.
+    errorFallback: 'No se pudo registrar el movimiento.',
   });
+}
+
+export interface AdjustStockVars {
+  id: string;
+  /** `expectedQuantity` = la existencia que se veía al empezar a contar. */
+  input: AdjustStockInput;
 }
 
 export function useAdjustStock() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: AdjustStockInput }) =>
-      InventoryAPI.adjustStock(id, input),
-    onSuccess: (result) => {
-      invalidate();
-      // Dos resultados válidos: hubo diferencia, o el conteo coincidía. El
-      // backend ya redacta el mensaje correcto para cada caso.
-      if (result.movement) {
-        toast.success(result.message, {
+  return useOfficeMutation<'item.adjust', AdjustStockVars>({
+    endpoint: 'item.adjust',
+    build: async ({ id, input }) => {
+      // Lo que ya tengo guardado sin enviar mueve la existencia antes de que
+      // llegue este conteo: se declara la que habrá, no la que se ve.
+      const pendientes = await escriturasPendientes(itemEntity(id), [
+        'movement.create',
+        'stock.transfer',
+        'item.adjust',
+      ]);
+      const expectedQuantity =
+        input.expectedQuantity === undefined
+          ? undefined
+          : existenciaConPendientes(input.expectedQuantity, input.branchId, pendientes);
+      return {
+        params: { id },
+        body: { ...input, ...(expectedQuantity === undefined ? {} : { expectedQuantity }), id: generateUuid() },
+      };
+    },
+    onSent: (result) => {
+      // Dos resultados válidos: hubo diferencia, o el conteo coincidía.
+      if (result?.movement) {
+        toast.success('Existencia ajustada', {
           description: `${result.item.name}: saldo ahora en ${result.movement.resultingBalance}`,
         });
       } else {
-        toast.info(result.message);
+        toast.info('El conteo coincide con la existencia registrada: no se movió nada.');
       }
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo ajustar la existencia.'));
-    },
+    errorFallback: 'No se pudo ajustar la existencia.',
+    errorMessage: (error) =>
+      error instanceof DomainError && error.code === 'STALE_UPDATE'
+        ? 'Alguien movió el stock de este ítem mientras contabas. Revisá la existencia actual y volvé a contar.'
+        : mensajeErrorFormulario(error, 'No se pudo ajustar la existencia.'),
   });
 }
 
-export function useSetMinimum() {
-  const invalidate = useInvalidateInventory();
+export interface SetMinimumVars {
+  input: SetMinimumBody;
+  /** Operaciones que deben terminar antes (p. ej. la edición del mismo ítem). */
+  dependsOn?: string[];
+}
 
-  return useMutation({
-    mutationFn: (input: {
-      itemId: string;
-      branchId: string;
-      minimumQuantity: number;
-    }) => InventoryAPI.setMinimum(input),
-    onSuccess: (_data, input) => {
-      invalidate();
+/** Fija el umbral de una bodega (`PUT`, last-write-wins). */
+export function useSetMinimum() {
+  return useOfficeMutation<'item.setMinimum', SetMinimumVars>({
+    endpoint: 'item.setMinimum',
+    build: ({ input, dependsOn }) => ({ params: {}, body: input, dependsOn }),
+    onSent: (_data, { input }) => {
       toast.success(
-        input.minimumQuantity > 0
-          ? 'Stock mínimo actualizado'
-          : 'Esta bodega ya no alerta por este ítem',
+        input.minimumQuantity > 0 ? 'Stock mínimo actualizado' : 'Esta bodega ya no alerta por este ítem',
       );
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo actualizar el mínimo.'));
-    },
+    errorFallback: 'No se pudo actualizar el mínimo.',
   });
 }
 
 export function useTransferStock() {
-  const invalidate = useInvalidateInventory();
-
-  return useMutation({
-    mutationFn: (input: {
-      itemId: string;
-      sourceBranchId: string;
-      destinationBranchId: string;
-      quantity: number;
-      documentNumber?: string;
-      notes?: string;
-    }) => InventoryAPI.transfer(input),
-    onSuccess: (message) => {
-      invalidate();
-      toast.success(message);
+  return useOfficeMutation<'stock.transfer', TransferStockBody>({
+    endpoint: 'stock.transfer',
+    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    onSent: (result) => {
+      toast.success(
+        result
+          ? `Traspaso registrado: de ${result.sourceBranchName} a ${result.destinationBranchName}`
+          : 'Traspaso registrado',
+      );
     },
-    onError: (error: unknown) => {
-      toast.danger(errorMessage(error, 'No se pudo registrar el traspaso.'));
-    },
+    errorFallback: 'No se pudo registrar el traspaso.',
   });
 }

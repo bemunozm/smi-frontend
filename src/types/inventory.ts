@@ -129,13 +129,27 @@ export const MovementListResponseSchema = z.object({
 });
 
 /** El ajuste devuelve el ítem y el asiento, que es `null` si el conteo coincidía. */
+export const AdjustResultSchema = z.object({
+  item: InventoryItemSchema,
+  movement: StockMovementSchema.nullable(),
+});
+export type AdjustResult = z.infer<typeof AdjustResultSchema>;
+
 export const AdjustResponseSchema = z.object({
-  data: z.object({
-    item: InventoryItemSchema,
-    movement: StockMovementSchema.nullable(),
-  }),
+  data: AdjustResultSchema,
   message: z.string(),
 });
+
+/** Traspaso: el asiento de salida y el de entrada, con los nombres de las bodegas.
+ * Un reenvío del mismo `id` devuelve lo mismo. */
+export const TransferResultSchema = z.object({
+  reference: z.string(),
+  out: StockMovementSchema,
+  in: StockMovementSchema,
+  sourceBranchName: z.string(),
+  destinationBranchName: z.string(),
+});
+export type TransferResult = z.infer<typeof TransferResultSchema>;
 
 export const DeleteItemResponseSchema = z.object({
   data: z.object({ id: z.string() }).nullable(),
@@ -232,6 +246,20 @@ export type UpdateItemInput = Omit<
   isActive?: boolean;
 };
 
+/** Los campos de la ficha de un ítem tal como los guarda el servidor (los textos
+ * opcionales vacíos son `null`): la forma de la base de una edición. */
+export interface ItemFields {
+  name: string;
+  description: string | null;
+  unit: UnitOfMeasure;
+  type: ItemType;
+  categoryId: string | null;
+  partNumber: string | null;
+  defaultSupplier: string | null;
+  isCritical: boolean;
+  isActive: boolean;
+}
+
 export interface CreateMovementInput {
   itemId: string;
   branchId: string;
@@ -248,6 +276,10 @@ export interface AdjustStockInput {
   branchId: string;
   countedQuantity: number;
   notes?: string;
+  /** Existencia que el usuario veía al empezar a contar: si otra persona movió
+   * stock mientras tanto, el servidor responde 409 `STALE_UPDATE` en vez de
+   * ajustar sobre un saldo que ya no es ese. */
+  expectedQuantity?: number;
 }
 
 // --- Formularios (RHF + zodResolver) --------------------------------------

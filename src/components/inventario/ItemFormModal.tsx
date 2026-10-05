@@ -447,7 +447,7 @@ export function EditItemModal({
     ),
   );
 
-  async function saveMinimums(): Promise<void> {
+  async function saveMinimums(dependsOn?: string[]): Promise<void> {
     const changed = branches.filter((branch) => {
       const next = Number(minimums[branch.id]);
       const current = stockAt(item, branch.id)?.minimumQuantity ?? 0;
@@ -457,9 +457,12 @@ export function EditItemModal({
     await Promise.all(
       changed.map((branch) =>
         setMinimum.mutateAsync({
-          itemId: item.id,
-          branchId: branch.id,
-          minimumQuantity: Number(minimums[branch.id]),
+          input: {
+            itemId: item.id,
+            branchId: branch.id,
+            minimumQuantity: Number(minimums[branch.id]),
+          },
+          dependsOn,
         }),
       ),
     );
@@ -472,12 +475,17 @@ export function EditItemModal({
           {({ close }) => {
             const onSubmit = (values: ItemEditFormValues): void => {
               void (async () => {
-                await updateItem.mutateAsync({
-                  id: item.id,
-                  input: toUpdateItemPayload(values),
-                });
-                await saveMinimums();
-                close();
+                try {
+                  const edicion = await updateItem.mutateAsync({
+                    item,
+                    input: toUpdateItemPayload(values),
+                  });
+                  // Si la edición quedó esperando señal, los mínimos van detrás de ella.
+                  await saveMinimums(edicion.status === 'queued' ? [edicion.opId] : undefined);
+                  close();
+                } catch {
+                  // Cada mutación ya avisó su error; el modal queda abierto.
+                }
               })();
             };
 
