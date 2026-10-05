@@ -1,3 +1,7 @@
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites } from '../hooks/usePendingWrites';
+import { actividadEntity } from '../offline/db';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -204,10 +208,13 @@ function AsignarActividadForm() {
  * (`useActualizarActividad`). Sin try/catch ni toasts acá — viven en los
  * hooks.
  */
+const RECURSOS_DE_ACTIVIDADES = ['actividad'] as const;
+
 export function ActividadesView() {
   const { role } = useCurrentUser();
   const { data: actividades, isPending, isError, error } = useActividades();
   const actualizarActividad = useActualizarActividad();
+  const pendientes = usePendingWrites(RECURSOS_DE_ACTIVIDADES);
 
   const stats = useMemo(() => {
     const lista = actividades ?? [];
@@ -225,6 +232,8 @@ export function ActividadesView() {
         <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">Actividades</h2>
         <p className="text-sm text-muted-foreground">Asigna y da seguimiento a tareas fuera de una orden de trabajo.</p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_ACTIVIDADES} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {puedeAsignar ? (
@@ -283,7 +292,7 @@ export function ActividadesView() {
                         isSelected={actividad.estado === 'COMPLETADA'}
                         onChange={(isCompletada) => {
                           actualizarActividad.mutate({
-                            id: actividad.id,
+                            actividad,
                             input: {
                               estado: isCompletada ? ESTADO_ACTIVIDAD.COMPLETADA : ESTADO_ACTIVIDAD.PENDIENTE,
                             },
@@ -306,6 +315,7 @@ export function ActividadesView() {
                         >
                           {actividad.descripcion}
                         </p>
+                        <MarcaPendiente marca={pendientes.marcaDe(actividadEntity(actividad.id))} />
                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>{ORIGEN_ACTIVIDAD_LABELS[actividad.origen]}</span>
                           {actividad.referencia ? <span>· {actividad.referencia}</span> : null}

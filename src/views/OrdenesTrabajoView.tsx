@@ -1,3 +1,7 @@
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
+import { ordenEntity } from '../offline/db';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
@@ -336,7 +340,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
  * Tarjeta de una OT dentro de la grilla web: chips de prioridad/estado,
  * metadata compacta en 2 columnas, cambio de estado y checklist de tareas.
  */
-function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
+function OrdenCard({ orden, marca }: { orden: OrdenTrabajo; marca: Marca | null }) {
   const actualizarOrden = useActualizarOrden();
   const toggleTarea = useToggleTarea();
   const tareasHechas = orden.tareas.filter((tarea) => tarea.hecha).length;
@@ -351,6 +355,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
             <Card.Title className="font-display text-base font-semibold text-foreground">
               {orden.titulo}
             </Card.Title>
+            <MarcaPendiente marca={marca} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
@@ -397,7 +402,7 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
           value={orden.estado}
           onChange={(value) => {
             if (value && value !== orden.estado) {
-              actualizarOrden.mutate({ id: orden.id, input: { estado: value as EstadoOT } });
+              actualizarOrden.mutate({ orden, input: { estado: value as EstadoOT } });
             }
           }}
         >
@@ -456,10 +461,13 @@ function OrdenCard({ orden }: { orden: OrdenTrabajo }) {
  * `useActualizarOrden`/`useToggleTarea` — sin try/catch ni toasts acá (viven
  * en los hooks).
  */
+const RECURSOS_DE_ORDENES = ['orden', 'intervencion'] as const;
+
 export function OrdenesTrabajoView() {
   const { role } = useCurrentUser();
   const [filtro, setFiltro] = useState<FiltroEstado>('TODAS');
   const { data: ordenes, isPending, isError, error } = useOrdenes(filtro === 'TODAS' ? undefined : filtro);
+  const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const stats = useMemo(() => {
     const lista = ordenes ?? [];
@@ -484,6 +492,8 @@ export function OrdenesTrabajoView() {
         </div>
         {puedeCrear ? <CreateOrdenModal /> : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Abiertas" value={stats.abiertas} />
@@ -545,7 +555,7 @@ export function OrdenesTrabajoView() {
       {!isPending && !isError && ordenes && ordenes.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {ordenes.map((orden) => (
-            <OrdenCard key={orden.id} orden={orden} />
+            <OrdenCard key={orden.id} marca={pendientes.marcaDe(ordenEntity(orden.id))} orden={orden} />
           ))}
         </div>
       ) : null}

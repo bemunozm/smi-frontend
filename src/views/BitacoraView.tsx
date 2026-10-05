@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
@@ -277,6 +278,8 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
  * trabajo desde la lista real (`useOrdenes`) y luego se carga/registra su
  * bitácora (`useIntervenciones`/`useCrearIntervencion`).
  */
+const RECURSOS_DE_BITACORA = ['intervencion'] as const;
+
 export function BitacoraView() {
   const { role } = useCurrentUser();
   const { data: ordenes } = useOrdenes();
@@ -299,6 +302,8 @@ export function BitacoraView() {
           Registra el trabajo realizado sobre una orden de trabajo y consulta su historial.
         </p>
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_BITACORA} />
 
       <Select
         className="w-full sm:max-w-md"

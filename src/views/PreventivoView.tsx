@@ -1,3 +1,4 @@
+import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -208,6 +209,8 @@ function EquiposCercaUmbralSection() {
  *  2. Umbrales configurados (horas por tipo de equipo/mantención) — CRUD real
  *     vía `useUmbrales` / `useCrearUmbral`, renderizados como grid de cards.
  */
+const RECURSOS_DE_UMBRALES = ['umbral'] as const;
+
 export function PreventivoView() {
   const { role } = useCurrentUser();
   const { data: umbrales, isPending, isError, error } = useUmbrales();
@@ -227,6 +230,8 @@ export function PreventivoView() {
         </div>
         {puedeCrear ? <CreateUmbralModal /> : null}
       </div>
+
+      <PendientesStrip recursos={RECURSOS_DE_UMBRALES} />
 
       <EquiposCercaUmbralSection />
 

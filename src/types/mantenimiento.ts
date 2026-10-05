@@ -292,3 +292,12 @@ export const UpdateActividadSchema = z.object({
   estado: z.enum(ESTADO_ACTIVIDAD),
 });
 export type UpdateActividadInput = z.infer<typeof UpdateActividadSchema>;
+
+/** Los campos editables de una orden tal como los guarda el servidor: la forma de
+ * la base de una edición (sin asignado es `null`). */
+export interface OrdenFields {
+  estado: EstadoOT;
+  asignadoAId: string | null;
+  prioridad: PrioridadOT;
+  titulo: string;
+}

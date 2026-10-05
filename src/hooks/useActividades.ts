@@ -1,10 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { ActividadesAPI } from '../api/MantenimientoAPI';
-import type { CreateActividadInput, UpdateActividadInput } from '../types/mantenimiento';
-
-const ACTIVIDADES_QUERY_KEY = ['actividades'] as const;
+import { conPendientes, diferenciaEdicion, precondicion } from '../lib/edit-diff';
+import { ACTIVIDADES_KEY as ACTIVIDADES_QUERY_KEY } from '../lib/query-keys';
+import { generateUuid } from '../lib/uuid';
+import { actividadEntity } from '../offline/db';
+import { cambiosPendientes } from '../offline/outbox';
+import type { Actividad, CreateActividadInput, UpdateActividadInput } from '../types/mantenimiento';
+import { useOfficeMutation } from './useOfficeMutation';
 
 export function useActividades() {
   return useQuery({
@@ -14,32 +18,35 @@ export function useActividades() {
 }
 
 export function useCrearActividad() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CreateActividadInput) => ActividadesAPI.create(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ACTIVIDADES_QUERY_KEY });
+  return useOfficeMutation<'actividad.create', CreateActividadInput>({
+    endpoint: 'actividad.create',
+    build: (input) => ({ params: {}, body: { ...input, id: generateUuid() } }),
+    onSent: () => {
       toast.success('Actividad asignada');
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo crear la actividad.');
-    },
+    errorFallback: 'No se pudo crear la actividad.',
   });
 }
 
-export function useActualizarActividad() {
-  const queryClient = useQueryClient();
+export interface ActualizarActividadVars {
+  /** La actividad tal como la muestra la pantalla: la base de la edición. */
+  actividad: Actividad;
+  input: UpdateActividadInput;
+}
 
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateActividadInput }) =>
-      ActividadesAPI.update(id, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ACTIVIDADES_QUERY_KEY });
+export function useActualizarActividad() {
+  return useOfficeMutation<'actividad.update', ActualizarActividadVars>({
+    endpoint: 'actividad.update',
+    build: async ({ actividad, input }) => {
+      const pendiente = await cambiosPendientes(actividadEntity(actividad.id), ['actividad.update']);
+      const base = conPendientes<UpdateActividadInput>({ estado: actividad.estado }, pendiente, ['estado']);
+      const { cambios, esperado } = diferenciaEdicion(base, input, ['estado']);
+      if (Object.keys(cambios).length === 0) return null;
+      return { params: { id: actividad.id }, body: cambios, expected: precondicion(esperado) };
+    },
+    onSent: () => {
       toast.success('Actividad actualizada');
     },
-    onError: (error: unknown) => {
-      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar la actividad.');
-    },
+    errorFallback: 'No se pudo actualizar la actividad.',
   });
 }
