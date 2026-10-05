@@ -1,4 +1,4 @@
-import { parseDecimal } from './decimal';
+import { parseInteger } from './decimal';
 
 /**
  * Cálculos del reporte diario del supervisor.
@@ -11,12 +11,12 @@ import { parseDecimal } from './decimal';
  */
 
 /**
- * Lee un campo numérico del formulario (`parseDecimal`). Un campo vacío o a
- * medio escribir vale cero en vez de `null`: el supervisor borra un campo para
+ * Lee un conteo del formulario (`parseInteger`: `1.200` es 1200). Un campo vacío, a
+ * medio escribir o con decimales vale cero en vez de `null`: el supervisor borra un campo para
  * corregirlo y el total no tiene por qué romperse mientras tanto.
  */
-export function numeroOCero(valor: string): number {
-  return parseDecimal(valor) ?? 0;
+export function enteroOCero(valor: string): number {
+  return parseInteger(valor) ?? 0;
 }
 
 export interface SeccionesCamiones {
@@ -58,8 +58,8 @@ export function vueltasDeSeccion(s: SeccionNumerica): number {
  */
 export function seccionesDelFormulario(s: SeccionesCamiones): SeccionNumerica[] {
   return [
-    { camiones: numeroOCero(s.camionesInternos), vueltas: numeroOCero(s.vueltasInternos) },
-    { camiones: numeroOCero(s.camionesMinaCaleta), vueltas: numeroOCero(s.vueltasMinaCaleta) },
-    { camiones: numeroOCero(s.camionesMinera), vueltas: numeroOCero(s.vueltasMinera) },
+    { camiones: enteroOCero(s.camionesInternos), vueltas: enteroOCero(s.vueltasInternos) },
+    { camiones: enteroOCero(s.camionesMinaCaleta), vueltas: enteroOCero(s.vueltasMinaCaleta) },
+    { camiones: enteroOCero(s.camionesMinera), vueltas: enteroOCero(s.vueltasMinera) },
   ];
 }

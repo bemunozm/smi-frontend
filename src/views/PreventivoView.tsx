@@ -9,11 +9,11 @@ import {
   Input,
   Label,
   Modal,
-  NumberField,
   Spinner,
   TextField,
 } from '@heroui/react';
 
+import { IntegerField } from '../components/IntegerField';
 import { usePermissions } from '../hooks/usePermissions';
 import { useMantencionesProximas } from '../hooks/useDashboard';
 import { useCrearUmbral, useUmbrales } from '../hooks/useUmbrales';
@@ -108,21 +108,14 @@ function CreateUmbralModal() {
                         control={control}
                         name="umbralHoras"
                         render={({ field }) => (
-                          <NumberField
-                            fullWidth
-                            formatOptions={{ maximumFractionDigits: 0 }}
-                            minValue={1}
-                            value={field.value}
+                          <IntegerField
+                            errorMessage={errors.umbralHoras?.message}
+                            isInvalid={!!errors.umbralHoras}
+                            label="Umbral (horas)"
+                            onBlur={field.onBlur}
                             onChange={field.onChange}
-                          >
-                            <Label>Umbral (horas)</Label>
-                            <NumberField.Group>
-                              <NumberField.DecrementButton />
-                              <NumberField.Input onBlur={field.onBlur} />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                            {errors.umbralHoras ? <FieldError>{errors.umbralHoras.message}</FieldError> : null}
-                          </NumberField>
+                            value={field.value}
+                          />
                         )}
                       />
                     </form>

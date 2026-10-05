@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { avisoDeAgrupacion, formatDecimalInput, parseDecimal } from './decimal';
+import { avisoDeAgrupacion, errorDeEntero, formatDecimalInput, parseDecimal, parseInteger } from './decimal';
 
 describe('parseDecimal', () => {
   it.each([
@@ -31,6 +31,47 @@ describe('parseDecimal', () => {
       expect(parseDecimal(texto)).toBeNull();
     },
   );
+});
+
+describe('parseInteger', () => {
+  it.each([
+    ['1200', 1200],
+    ['1.200', 1200],
+    ['1,200', 1200],
+    ['12.345', 12345],
+    ['1.200.000', 1200000],
+    ['0', 0],
+    ['007', 7],
+    ['  8 ', 8],
+  ])('lee %j como %d', (texto, esperado) => {
+    expect(parseInteger(texto)).toBe(esperado);
+  });
+
+  it.each(['1.20', '12.3456', '12,5', '12.5', '1.200,5', '1,200.5', '0.200', '-3', 'abc', '', '   ', '1 200', '1..200', '1.2000'])(
+    'devuelve null para %j: ni decimales ni grupos mal formados se adivinan',
+    (texto) => {
+      expect(parseInteger(texto)).toBeNull();
+    },
+  );
+
+  it('un valor formateado para el campo vuelve igual', () => {
+    for (const valor of [0, 8, 250, 1200, 1234567]) {
+      expect(parseInteger(formatDecimalInput(valor, 0))).toBe(valor);
+    }
+  });
+});
+
+describe('errorDeEntero', () => {
+  it('no marca error en un campo vacío ni en un entero', () => {
+    expect(errorDeEntero('')).toBeNull();
+    expect(errorDeEntero('  ')).toBeNull();
+    expect(errorDeEntero('1.200')).toBeNull();
+  });
+
+  it('marca error cuando hay algo escrito que no es un entero', () => {
+    expect(errorDeEntero('2,5')).toBe('Escribí un número entero, sin decimales.');
+    expect(errorDeEntero('abc')).not.toBeNull();
+  });
 });
 
 describe('formatDecimalInput', () => {

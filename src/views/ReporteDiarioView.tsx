@@ -3,13 +3,13 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { useAhora } from '../hooks/useAhora';
+import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { formatDecimalInput } from '../lib/decimal';
-import { numeroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
+import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
+import { enteroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { diferencias } from '../lib/cambios';
 import type { EntradaCambios } from '../types/cambios';
-import { contextoTurno, turnoAnterior, type Turno } from '../lib/turno';
+import { turnoAnterior, type Turno } from '../lib/turno';
 import {
   AvisoEdicion,
   Boton,
@@ -400,8 +400,7 @@ function CabeceraFicha({ turno, fecha, supervisor }: { turno: string; fecha: str
 export function ReporteDiarioView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
-  const ahora = useAhora();
-  const ctx = useMemo(() => contextoTurno(ahora), [ahora]);
+  const ctx = useTurnoActual();
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
@@ -456,10 +455,10 @@ export function ReporteDiarioView() {
       personal: r.personal.map(([cargo], i) => [cargo, edicion.personal[i].trim()]),
       secciones: r.secciones.map((s, i) => ({
         label: s.label,
-        camiones: numeroOCero(edicion.secciones[i].camiones),
-        vueltas: numeroOCero(edicion.secciones[i].vueltas),
+        camiones: enteroOCero(edicion.secciones[i].camiones),
+        vueltas: enteroOCero(edicion.secciones[i].vueltas),
       })),
-      tolvas: edicion.tolvas.map((tolva) => numeroOCero(tolva)),
+      tolvas: edicion.tolvas.map((tolva) => enteroOCero(tolva)),
       plantas: PLANTAS.filter((p) => edicion.plantas[p].trim()).map((p) => [p, edicion.plantas[p].trim()]),
       traspasos: r.traspasos.map(([label], i) => [label, edicion.traspasos[i].trim()]),
       empresas: [...EMPRESAS, ...EMPRESAS_EN_DUDA].filter((e) => edicion.empresas.includes(e)),
@@ -632,7 +631,7 @@ export function ReporteDiarioView() {
                 <span className="text-right text-xs text-muted-foreground">{t.detalle}</span>
               </div>
               <Input
-                numerico
+                entero
                 aria-label={t.label}
                 value={traspasos[t.clave]}
                 className="!pr-3.5"
@@ -685,9 +684,9 @@ export function ReporteDiarioView() {
                 </div>
                 <Hint>Referencia: {seccion.referencia}</Hint>
                 <div className="grid grid-cols-2 gap-2.5">
-                  <Campo label="Cantidad de camiones">
+                  <Campo label="Cantidad de camiones" error={errorDeEntero(prod[seccion.camiones])}>
                     <Input
-                      numerico
+                      entero
                       value={prod[seccion.camiones]}
                       className="!pr-3.5"
                       onChange={(e) =>
@@ -695,9 +694,9 @@ export function ReporteDiarioView() {
                       }
                     />
                   </Campo>
-                  <Campo label="Vueltas por camión">
+                  <Campo label="Vueltas por camión" error={errorDeEntero(prod[seccion.vueltas])}>
                     <Input
-                      numerico
+                      entero
                       value={prod[seccion.vueltas]}
                       className="!pr-3.5"
                       onChange={(e) =>
@@ -728,9 +727,9 @@ export function ReporteDiarioView() {
             <Hint>Planta Producto Envasado. Cargas que cada tolva descargó a la planta en el turno.</Hint>
             <div className="grid grid-cols-3 gap-2.5">
               {TOLVAS.map((tolva) => (
-                <Campo key={tolva.clave} label={tolva.label}>
+                <Campo key={tolva.clave} label={tolva.label} error={errorDeEntero(prod[tolva.clave])}>
                   <Input
-                    numerico
+                    entero
                     value={prod[tolva.clave]}
                     className="!pr-3.5"
                     onChange={(e) => setProd((p) => ({ ...p, [tolva.clave]: e.target.value }))}
@@ -860,9 +859,13 @@ export function ReporteDiarioView() {
             <TituloSeccion>{s.label}</TituloSeccion>
             <div className="grid grid-cols-2 gap-2.5">
               {(['camiones', 'vueltas'] as const).map((campo) => (
-                <Campo key={campo} label={campo === 'camiones' ? 'Cantidad de camiones' : 'Vueltas por camión'}>
+                <Campo
+                  key={campo}
+                  label={campo === 'camiones' ? 'Cantidad de camiones' : 'Vueltas por camión'}
+                  error={errorDeEntero(edicion.secciones[i][campo])}
+                >
                   <Input
-                    numerico
+                    entero
                     className="!pr-3.5"
                     value={edicion.secciones[i][campo]}
                     onChange={(ev) =>
@@ -883,9 +886,9 @@ export function ReporteDiarioView() {
         <GrupoHead titulo="Alimentación Planta PPE" detalle="cargas por tolva" />
         <div className="grid grid-cols-3 gap-2.5">
           {edicion.tolvas.map((v, i) => (
-            <Campo key={i} label={`Tolva ${i + 1}`}>
+            <Campo key={i} label={`Tolva ${i + 1}`} error={errorDeEntero(v)}>
               <Input
-                numerico
+                entero
                 className="!pr-3.5"
                 value={v}
                 onChange={(ev) => editar((b) => ({ ...b, tolvas: b.tolvas.map((x, j) => (j === i ? ev.target.value : x)) }))}
@@ -917,7 +920,7 @@ export function ReporteDiarioView() {
           {detalle.traspasos.map(([label], i) => (
             <Campo key={label} label={label}>
               <Input
-                numerico
+                entero
                 className="!pr-3.5"
                 value={edicion.traspasos[i]}
                 onChange={(ev) => editar((b) => ({ ...b, traspasos: b.traspasos.map((x, j) => (j === i ? ev.target.value : x)) }))}

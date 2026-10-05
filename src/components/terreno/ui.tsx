@@ -361,16 +361,24 @@ export function Campo({
   );
 }
 
+/**
+ * `numerico`: medida con decimales (teclado decimal, avisa de un posible
+ * separador de miles). `entero`: conteo (teclado numérico, sin aviso: ahí el
+ * punto o la coma solo pueden ser miles).
+ */
 export function Input({
   numerico,
+  entero,
   className = '',
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { numerico?: boolean }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & { numerico?: boolean; entero?: boolean }) {
+  const esNumero = numerico || entero;
+  const modo = numerico ? 'decimal' : entero ? 'numeric' : props.inputMode;
   return (
     <input
       {...props}
-      inputMode={numerico ? 'decimal' : props.inputMode}
-      className={`${INPUT} ${numerico ? 'tabular pr-11 text-[17px]' : ''} ${className}`}
+      inputMode={modo}
+      className={`${INPUT} ${esNumero ? 'tabular pr-11 text-[17px]' : ''} ${className}`}
     />
   );
 }

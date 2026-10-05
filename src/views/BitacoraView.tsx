@@ -9,7 +9,6 @@ import {
   Input,
   Label,
   ListBox,
-  NumberField,
   Select,
   Spinner,
   TextArea,
@@ -18,6 +17,7 @@ import {
 
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { DecimalField } from '../components/DecimalField';
+import { IntegerField } from '../components/IntegerField';
 import { usePermissions } from '../hooks/usePermissions';
 import { useOrdenes } from '../hooks/useOrdenes';
 import { useCrearIntervencion, useIntervenciones } from '../hooks/useIntervenciones';
@@ -57,7 +57,7 @@ const EMPTY_INTERVENCION: CreateIntervencionInput = {
 
 /**
  * Form de registro de intervención — RHF + `zodResolver` + `useCrearIntervencion`.
- * `insumos` es un `useFieldArray` (cantidad con stepper `NumberField`, insumo
+ * `insumos` es un `useFieldArray` (cantidad con `IntegerField`, insumo
  * como texto libre — Inventario no expone todavía un selector real, ver TODO
  * inline). El "stock antes→después" NO se calcula: el backend no decrementa
  * stock ni lo devuelve en este endpoint, así que cada fila solo muestra la
@@ -218,21 +218,16 @@ function IntervencionForm({ ordenId, disabled }: { ordenId: string; disabled: bo
                   control={control}
                   name={`insumos.${index}.cantidad`}
                   render={({ field }) => (
-                    <NumberField
+                    <IntegerField
                       className="w-36"
-                      formatOptions={{ maximumFractionDigits: 0 }}
+                      errorMessage={errors.insumos?.[index]?.cantidad?.message}
                       isDisabled={disabled}
-                      minValue={1}
-                      value={field.value}
+                      isInvalid={!!errors.insumos?.[index]?.cantidad}
+                      label="Cantidad"
+                      onBlur={field.onBlur}
                       onChange={field.onChange}
-                    >
-                      <Label>Cantidad</Label>
-                      <NumberField.Group>
-                        <NumberField.DecrementButton />
-                        <NumberField.Input onBlur={field.onBlur} />
-                        <NumberField.IncrementButton />
-                      </NumberField.Group>
-                    </NumberField>
+                      value={field.value ?? Number.NaN}
+                    />
                   )}
                 />
                 <div className="flex flex-col gap-1">
