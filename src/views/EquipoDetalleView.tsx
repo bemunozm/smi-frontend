@@ -51,6 +51,7 @@ import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { StatusChip } from '../components/flota/StatusChip';
 import { DeleteEquipoAlertDialog, EditEquipoModal } from '../components/flota/EquipoEditDelete';
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
+import { fmtLitros } from '../lib/format';
 import { buildAssignmentDiff, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
@@ -1037,7 +1038,7 @@ export function EquipoDetalleView() {
                                     </Table.Cell>
                                     <Table.Cell>{TIPO_COMBUSTIBLE_LABEL[registro.tipo] ?? registro.tipo}</Table.Cell>
                                     <Table.Cell className="text-right font-mono text-sm font-semibold">
-                                      {NUMERO.format(registro.litros)} L
+                                      {fmtLitros(registro.litros)} L
                                     </Table.Cell>
                                   </Table.Row>
                                 )}

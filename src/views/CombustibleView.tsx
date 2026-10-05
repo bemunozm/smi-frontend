@@ -5,7 +5,7 @@ import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput 
 import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
-import { fmtDate, fmtNum, fmtTime } from '../lib/format';
+import { fmtDate, fmtLitros, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
@@ -150,7 +150,7 @@ export function CombustibleView() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="tabular font-bold text-foreground">{fmtNum(r.litros)} L</div>
+                    <div className="tabular font-bold text-foreground">{fmtLitros(r.litros)} L</div>
                     <Chip tone="neutral" className="mt-1">
                       {tipoLabel[r.tipo] ?? r.tipo}
                     </Chip>
@@ -182,7 +182,7 @@ export function CombustibleView() {
                       <Miniatura fotoUrl={r.fotoUrl} />
                     </Table.Cell>
                     <Table.Cell className="tabular font-bold whitespace-nowrap text-foreground">
-                      {fmtNum(r.litros)} L
+                      {fmtLitros(r.litros)} L
                     </Table.Cell>
                     <Table.Cell>
                       <Chip tone="neutral">{tipoLabel[r.tipo] ?? r.tipo}</Chip>

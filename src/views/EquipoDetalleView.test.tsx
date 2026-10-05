@@ -181,7 +181,7 @@ const COMBUSTIBLES = [
   {
     id: 'c_1',
     equipoId: 'eq_1',
-    litros: 80,
+    litros: 30.75,
     tipo: 'PETROLEO',
     fotoUrl: null,
     fecha: '2026-08-04T09:00:00.000Z',
@@ -302,7 +302,8 @@ describe('EquipoDetalleView', () => {
 
     // Combustible: historial de cargas.
     expect(screen.getByText('Petróleo')).toBeTruthy();
-    expect(screen.getByText('80 L')).toBeTruthy();
+    // Hasta dos decimales: 30,75 no se redondea a 30,8.
+    expect(screen.getByText('30,75 L')).toBeTruthy();
 
     // Consumos de inventario — lee `stockMovements`/`item` (shape real del
     // backend, Inventario en inglés), no el `movimientos`/`insumo` inventado.
