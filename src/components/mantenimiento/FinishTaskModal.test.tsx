@@ -201,7 +201,7 @@ describe('FinishTaskModal', () => {
       () => screen.getByPlaceholderText('Busca por código o nombre…') as HTMLInputElement,
     );
     // Abrir la lista (patrón OperatorPicker.test) y recién ahí escribir.
-    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    const trigger = screen.getAllByRole('button', { name: 'Abrir Insumo' })[0] as HTMLButtonElement;
     fireEvent.click(trigger);
     await waitFor(() => screen.getByRole('option', { name: /AC-1540/ }));
 
@@ -224,7 +224,7 @@ describe('FinishTaskModal', () => {
     openModal();
     fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
     await waitFor(() => screen.getByPlaceholderText('Busca por código o nombre…'));
-    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    const trigger = screen.getAllByRole('button', { name: 'Abrir Insumo' })[0] as HTMLButtonElement;
     fireEvent.click(trigger);
 
     // Cabeceras de grupo, con cada ítem bajo la suya.
@@ -238,7 +238,7 @@ describe('FinishTaskModal', () => {
     openModal();
     fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
     await waitFor(() => screen.getByPlaceholderText('Busca por código o nombre…'));
-    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    const trigger = screen.getAllByRole('button', { name: 'Abrir Insumo' })[0] as HTMLButtonElement;
     fireEvent.click(trigger);
 
     // El filtro (4 u en Faena) se puede elegir y lo dice.

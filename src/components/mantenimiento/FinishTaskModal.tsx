@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { Controller, useFieldArray, useForm } from 'react-hook-form';
+import { Check, CircleCheck, Plus, Trash2 } from 'lucide-react';
+
+import { FotoRespaldoField } from '../flota/FotoRespaldoField';
 import {
-  Button,
-  ComboBox,
-  FieldError,
+  Automatico,
+  Automaticos,
+  Boton,
+  Campo,
+  Chip,
+  ChipEstado,
+  Form,
   Input,
   Label,
-  ListBox,
-  Modal,
-  NumberField,
-  Spinner,
-  TextArea,
-  TextField,
-} from '@heroui/react';
-import { Header } from 'react-aria-components';
-import { Check, CircleCheck, Plus, Trash2, Warehouse } from 'lucide-react';
-
-import { PhotoCaptureField } from '../flota/PhotoCaptureField';
-import { StatusChip } from '../flota/StatusChip';
+  ModalTerreno,
+  SelectorBuscable,
+  Textarea,
+  type OpcionSelector,
+} from '../terreno/ui';
+import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useBranches } from '../../hooks/useBranches';
 import { useFinishTask } from '../../hooks/useIntervenciones';
 import { useItems } from '../../hooks/useInventory';
@@ -28,46 +29,14 @@ import {
   type CreateIntervencionInput,
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
-import {
-  UNIT_SYMBOLS,
-  quantityAt,
-  totalQuantity,
-  type InventoryItem,
-} from '../../types/inventory';
+import { UNIT_SYMBOLS, quantityAt, type InventoryItem } from '../../types/inventory';
 import { equipmentLabel, type EquipmentRef } from './workshop';
 
 /**
- * Stock ACTUAL del insumo en la bodega elegida (de ahí sale el descuento al
- * guardar); sin bodega elegida todavía, el consolidado de la empresa.
- */
-function CurrentStock({
-  item,
-  branchId,
-}: {
-  item: InventoryItem | undefined;
-  branchId: string | undefined;
-}) {
-  return (
-    <div className="flex min-w-20 flex-col gap-1">
-      <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-        {branchId ? 'Stock en bodega' : 'Stock total'}
-      </span>
-      {/* Misma altura que los campos del lado (48px): el valor queda a la
-          altura de los inputs de la fila, no colgando del label. */}
-      <span className="flex h-12 items-center font-mono text-sm text-foreground">
-        {item
-          ? `${branchId ? quantityAt(item, branchId) : totalQuantity(item)} ${UNIT_SYMBOLS[item.unit]}`
-          : '—'}
-      </span>
-    </div>
-  );
-}
-
-/**
- * Pop-up "Finalizar tarea": qué se hizo + qué se utilizó + horómetro de
- * cierre. Registra la intervención y pasa la OT a COMPLETADA (useFinishTask).
- * La vista solo lo renderiza para MANTENEDOR (el backend restringe el POST
- * de intervenciones a ese rol).
+ * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
+ * insumos (SelectorBuscable con grupos y stock en Faena) + horómetro.
+ * Registra la intervención y pasa la OT a COMPLETADA (`useFinishTask`, por la
+ * cola). La bodega es SIEMPRE la de faena — no hay opción de cambiarla.
  */
 export function FinishTaskModal({
   orden,
@@ -79,7 +48,9 @@ export function FinishTaskModal({
   const finishTask = useFinishTask();
   const { data: items } = useItems({ isActive: true });
   const { data: branches } = useBranches({ isActive: true });
-  const [foto, setFoto] = useState<File | null>(null);
+  const [abierto, setAbierto] = useState(false);
+  // Misma captura de foto que los hallazgos de Terreno (EXIF, sin OCR).
+  const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
 
   const {
     control,
@@ -101,55 +72,12 @@ export function FinishTaskModal({
     },
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'insumos' });
-  const insumosValues = useWatch({ control, name: 'insumos' });
-  const branchId = useWatch({ control, name: 'branchId' });
 
-  // Regla del taller: los insumos salen SIEMPRE de la bodega de FAENA — no
-  // hay opción de descontar desde Casa Matriz. Se resuelve por nombre entre
-  // las bodegas activas y queda fija en el formulario.
+  // Regla del taller: los insumos salen SIEMPRE de la bodega de FAENA.
   const faenaBranch = useMemo(
     () => branches?.find((branch) => /faena/i.test(branch.name)),
     [branches],
   );
-
-  // La distinción de Inventario (suministro vs repuesto) se refleja en el
-  // desplegable: dos secciones con cabecera, no una lista plana.
-  const supplies = useMemo(() => (items ?? []).filter((item) => item.type === 'SUPPLY'), [items]);
-  const parts = useMemo(() => (items ?? []).filter((item) => item.type === 'PART'), [items]);
-
-  // Opción al estilo del Selector de Terreno: código en seminegrita + nombre
-  // en gris, y debajo la existencia en Faena; sin stock queda visible pero
-  // apagada con el motivo (de ahí va a salir el descuento, elegirla sería
-  // chocar con el 409 del backend).
-  const renderItemOption = (item: InventoryItem) => {
-    const stock = faenaBranch ? quantityAt(item, faenaBranch.id) : null;
-    const sinStock = stock !== null && stock <= 0;
-    return (
-      <ListBox.Item
-        key={item.id}
-        id={item.id}
-        isDisabled={sinStock}
-        textValue={`${item.sku} · ${item.name}`}
-      >
-        <span className="flex min-w-0 flex-col leading-tight">
-          <span>
-            <span className="font-mono text-sm font-semibold">{item.sku}</span>
-            <span className="text-sm text-muted-foreground"> · {item.name}</span>
-          </span>
-          {stock !== null ? (
-            <span
-              className={`mt-0.5 text-[12.5px] font-semibold ${
-                sinStock ? 'text-warning-soft-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              {sinStock ? 'Sin stock en Faena' : `${stock} ${UNIT_SYMBOLS[item.unit]} en Faena`}
-            </span>
-          ) : null}
-        </span>
-        <ListBox.ItemIndicator />
-      </ListBox.Item>
-    );
-  };
   useEffect(() => {
     const target = faenaBranch?.id;
     if (target && getValues('branchId') !== target) {
@@ -157,293 +85,241 @@ export function FinishTaskModal({
     }
   }, [faenaBranch, getValues, setValue]);
 
+  // Opciones del selector: la distinción de Inventario como grupos, y la
+  // existencia en Faena como aviso — sin stock queda apagado con el motivo.
+  const opcionesInsumo: OpcionSelector[] = useMemo(() => {
+    const opcion = (item: InventoryItem, grupo: string): OpcionSelector => {
+      const stock = faenaBranch ? quantityAt(item, faenaBranch.id) : null;
+      const sinStock = stock !== null && stock <= 0;
+      return {
+        valor: item.id,
+        titulo: item.sku,
+        detalle: item.name,
+        grupo,
+        ...(sinStock
+          ? { motivo: 'Sin stock en Faena' }
+          : stock !== null
+            ? { aviso: `${stock} ${UNIT_SYMBOLS[item.unit]} en Faena` }
+            : {}),
+      };
+    };
+    const lista = items ?? [];
+    return [
+      ...lista.filter((item) => item.type === 'SUPPLY').map((item) => opcion(item, 'Suministros')),
+      ...lista.filter((item) => item.type === 'PART').map((item) => opcion(item, 'Repuestos')),
+    ];
+  }, [items, faenaBranch]);
+
+  const cerrar = () => setAbierto(false);
+
+  const onSubmit = (values: CreateIntervencionInput): void => {
+    finishTask.mutate(
+      { orden, intervencion: values, foto: foto.file },
+      {
+        onSuccess: () => {
+          reset();
+          foto.handleClearPhoto();
+          cerrar();
+        },
+      },
+    );
+  };
+
   return (
-    <Modal>
-      <Button className="w-full lg:w-fit" size="sm">
-        <Check className="size-4" />
+    <>
+      <Boton ancho variante="acento" onClick={() => setAbierto(true)}>
+        <Check className="h-5 w-5" />
         Finalizar tarea
-      </Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-xl">
-            {({ close }) => {
-              const onSubmit = (values: CreateIntervencionInput): void => {
-                finishTask.mutate(
-                  { orden, intervencion: values, foto },
-                  {
-                    onSuccess: () => {
-                      reset();
-                      setFoto(null);
-                      close();
-                    },
-                  },
-                );
-              };
+      </Boton>
+      <ModalTerreno
+        abierto={abierto}
+        detalle="Registra qué hiciste y qué utilizaste para cerrar la operación."
+        titulo="Finalizar tarea"
+        onAbiertoChange={setAbierto}
+      >
+        <form
+          className="flex flex-col gap-3.5"
+          id={`finish-task-${orden.id}`}
+          noValidate
+          onSubmit={(e) => void handleSubmit(onSubmit)(e)}
+        >
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-[#fafbfc] px-3.5 py-3">
+            <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>
+              {TIPO_OT_LABELS[orden.tipo]}
+            </Chip>
+            <span className="tabular text-xs text-muted-foreground">
+              {equipmentLabel(orden.equipoId, equipment)}
+            </span>
+            <strong className="min-w-0 flex-1 truncate text-sm">{orden.titulo}</strong>
+            <ChipEstado color="#1a3a9c">En proceso</ChipEstado>
+          </div>
 
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Finalizar tarea
-                    </Modal.Heading>
-                    <p className="text-sm text-muted-foreground">
-                      Registra qué hiciste y qué utilizaste para cerrar la operación.
-                    </p>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id={`finish-task-${orden.id}`}
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-3">
-                        <StatusChip tone="secondary">
-                          {TIPO_OT_LABELS[orden.tipo]}
-                        </StatusChip>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {equipmentLabel(orden.equipoId, equipment)}
-                        </span>
-                        <strong className="text-sm">{orden.titulo}</strong>
-                        <StatusChip className="ms-auto" tone="warning">
-                          En proceso
-                        </StatusChip>
-                      </div>
+          <Form>
+            <Controller
+              control={control}
+              name="detalle"
+              render={({ field }) => (
+                <Campo error={errors.detalle?.message} label="¿Qué se hizo?" requerido>
+                  <Textarea
+                    name={field.name}
+                    placeholder="Describe el trabajo realizado..."
+                    value={field.value}
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                  />
+                </Campo>
+              )}
+            />
 
-                      <Controller
-                        control={control}
-                        name="detalle"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.detalle}
-                            name={field.name}
-                            onBlur={field.onBlur}
+            <FotoRespaldoField
+              captureDate={foto.captureDate}
+              file={foto.file}
+              guia="Encuadra el trabajo terminado o los insumos ocupados, con luz."
+              isReadingPhoto={foto.isReadingPhoto}
+              requerida={false}
+              staleQuestion="¿Es la foto del trabajo recién terminado?"
+              subtitle="Respalda el trabajo o los insumos ocupados."
+              title="Foto de lo realizado"
+              onClear={foto.handleClearPhoto}
+              onSelect={(file) => void foto.handleSelectPhoto(file)}
+            />
+
+            <div className="flex items-center justify-between gap-2">
+              <Label>¿Qué se utilizó?</Label>
+              <Boton
+                className="min-h-[44px] px-4 text-sm"
+                type="button"
+                variante="contorno"
+                onClick={() => append({ insumoId: '', cantidad: 1 })}
+              >
+                <Plus className="h-4 w-4" />
+                Agregar insumo
+              </Boton>
+            </div>
+
+            {fields.length === 0 ? (
+              <p className="m-0 text-sm text-muted-foreground">
+                Sin insumos registrados en esta operación.
+              </p>
+            ) : (
+              <>
+                {faenaBranch ? (
+                  <Automaticos>
+                    <Automatico label="Bodega" nota="Fija del taller" valor={faenaBranch.name} />
+                  </Automaticos>
+                ) : (
+                  <div
+                    className="rounded-2xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm text-[var(--danger-soft-foreground)]"
+                    role="alert"
+                  >
+                    No hay una bodega de faena activa en Inventario — no se puede descontar stock.
+                    Crea o reactiva la bodega "Faena" antes de cerrar con insumos.
+                  </div>
+                )}
+
+                {fields.map((row, index) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[minmax(0,1fr)_6.5rem_52px] items-end gap-2.5 rounded-2xl border border-border bg-[#fafbfc] p-3"
+                  >
+                    <Controller
+                      control={control}
+                      name={`insumos.${index}.insumoId`}
+                      render={({ field }) => (
+                        <Campo error={errors.insumos?.[index]?.insumoId?.message} label="Insumo">
+                          <SelectorBuscable
+                            etiqueta="Insumo"
+                            opciones={opcionesInsumo}
+                            placeholder="Busca por código o nombre…"
+                            tituloTabular
+                            valor={field.value ?? ''}
                             onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>¿Qué se hizo?</Label>
-                            <TextArea placeholder="Describe el trabajo realizado..." rows={3} />
-                            {errors.detalle ? <FieldError>{errors.detalle.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <PhotoCaptureField
-                        file={foto}
-                        subtitle="Respalda el trabajo o los insumos ocupados."
-                        title="Foto de lo realizado"
-                        onClear={() => setFoto(null)}
-                        onSelect={setFoto}
-                      />
-
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                            ¿Qué se utilizó?
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onPress={() => append({ insumoId: '', cantidad: 1 })}
-                          >
-                            <Plus className="size-4" />
-                            Agregar insumo
-                          </Button>
-                        </div>
-
-                        {fields.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Sin insumos registrados en esta operación.
-                          </p>
-                        ) : (
-                          <div className="flex flex-col gap-3">
-                            {/* Bodega FIJA: regla del taller — el descuento
-                                sale SIEMPRE de la faena, sin opción de cambiarla. */}
-                            {faenaBranch ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                                  Bodega
-                                </span>
-                                <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium">
-                                  <Warehouse className="size-4 text-muted-foreground" />
-                                  {faenaBranch.name}
-                                </span>
-                              </div>
-                            ) : (
-                              <div
-                                className="rounded-lg bg-danger-soft px-3.5 py-3 text-sm text-danger-soft-foreground"
-                                role="alert"
-                              >
-                                No hay una bodega de faena activa en Inventario — no se puede
-                                descontar stock. Crea o reactiva la bodega "Faena" antes de
-                                cerrar con insumos.
-                              </div>
-                            )}
-                            {fields.map((row, index) => {
-                              const selectedItem = items?.find(
-                                (item) => item.id === insumosValues?.[index]?.insumoId,
-                              );
-                              return (
-                                <div
-                                  key={row.id}
-                                  className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-start gap-3 rounded-lg border border-border bg-muted p-3"
-                                >
-                                  <Controller
-                                    control={control}
-                                    name={`insumos.${index}.insumoId`}
-                                    render={({ field }) => (
-                                      <ComboBox
-                                        fullWidth
-                                        isInvalid={!!errors.insumos?.[index]?.insumoId}
-                                        selectedKey={field.value || null}
-                                        onSelectionChange={(key) =>
-                                          field.onChange(key == null ? '' : String(key))
-                                        }
-                                      >
-                                        <Label>Insumo</Label>
-                                        {/* h-12: a la altura exacta del stepper
-                                            de al lado (el grupo trae min-h-9). */}
-                                        <ComboBox.InputGroup className="h-12">
-                                          <Input placeholder="Busca por código o nombre…" />
-                                          <ComboBox.Trigger />
-                                        </ComboBox.InputGroup>
-                                        <ComboBox.Popover>
-                                          <ListBox
-                                            renderEmptyState={() => (
-                                              <div className="p-3 text-sm text-muted-foreground">
-                                                Ningún insumo calza con la búsqueda
-                                              </div>
-                                            )}
-                                          >
-                                            {supplies.length > 0 ? (
-                                              <ListBox.Section className="not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5">
-                                                <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-                                                  Suministros
-                                                </Header>
-                                                {supplies.map(renderItemOption)}
-                                              </ListBox.Section>
-                                            ) : null}
-                                            {parts.length > 0 ? (
-                                              <ListBox.Section className="not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5">
-                                                <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-                                                  Repuestos
-                                                </Header>
-                                                {parts.map(renderItemOption)}
-                                              </ListBox.Section>
-                                            ) : null}
-                                          </ListBox>
-                                        </ComboBox.Popover>
-                                        {errors.insumos?.[index]?.insumoId ? (
-                                          <FieldError>
-                                            {errors.insumos[index]?.insumoId?.message}
-                                          </FieldError>
-                                        ) : null}
-                                      </ComboBox>
-                                    )}
-                                  />
-                                  <Controller
-                                    control={control}
-                                    name={`insumos.${index}.cantidad`}
-                                    render={({ field }) => (
-                                      <NumberField
-                                        className="w-36"
-                                        isInvalid={!!errors.insumos?.[index]?.cantidad}
-                                        minValue={0.01}
-                                        value={field.value}
-                                        onChange={field.onChange}
-                                      >
-                                        <Label>Cant.</Label>
-                                        <NumberField.Group>
-                                          <NumberField.DecrementButton />
-                                          <NumberField.Input onBlur={field.onBlur} />
-                                          <NumberField.IncrementButton />
-                                        </NumberField.Group>
-                                        {errors.insumos?.[index]?.cantidad ? (
-                                          <FieldError>
-                                            {errors.insumos[index]?.cantidad?.message}
-                                          </FieldError>
-                                        ) : null}
-                                      </NumberField>
-                                    )}
-                                  />
-                                  <CurrentStock branchId={branchId} item={selectedItem} />
-                                  <Button
-                                    isIconOnly
-                                    aria-label="Quitar insumo"
-                                    className="self-end"
-                                    variant="tertiary"
-                                    onPress={() => remove(index)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="horometro"
-                          render={({ field }) => (
-                            <NumberField
-                              fullWidth
-                              isInvalid={!!errors.horometro}
-                              minValue={0}
-                              // NaN = campo vacío para react-aria; al schema viaja
-                              // `undefined` (es opcional), nunca un 0 inventado.
-                              value={field.value ?? NaN}
-                              onChange={(value) => field.onChange(Number.isNaN(value) ? undefined : value)}
-                            >
-                              <Label>Horómetro de cierre (opcional)</Label>
-                              <NumberField.Group>
-                                <NumberField.DecrementButton />
-                                <NumberField.Input onBlur={field.onBlur} />
-                                <NumberField.IncrementButton />
-                              </NumberField.Group>
-                              {errors.horometro ? (
-                                <FieldError>{errors.horometro.message}</FieldError>
-                              ) : null}
-                            </NumberField>
-                          )}
-                        />
-                      </div>
-
-                      <div className="flex items-start gap-2.5 rounded-lg bg-success-soft px-3.5 py-3 text-[13px] leading-5 text-success-soft-foreground">
-                        <CircleCheck className="mt-0.5 size-4 shrink-0" />
-                        <span>
-                          Al guardar <strong>se descuenta el stock</strong> de la bodega elegida
-                          (movimientos trazables en Inventario) y la operación pasa a{' '}
-                          <strong>Finalizado</strong>, en solo lectura. Si un insumo no alcanza, no
-                          se guarda nada.
-                        </span>
-                      </div>
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button
-                      form={`finish-task-${orden.id}`}
-                      isPending={finishTask.isPending}
-                      type="submit"
+                          />
+                        </Campo>
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name={`insumos.${index}.cantidad`}
+                      render={({ field }) => (
+                        <Campo error={errors.insumos?.[index]?.cantidad?.message} label="Cantidad">
+                          <Input
+                            entero
+                            value={
+                              field.value === undefined || Number.isNaN(field.value)
+                                ? ''
+                                : String(field.value)
+                            }
+                            onBlur={field.onBlur}
+                            onChange={(e) => {
+                              const texto = e.target.value;
+                              field.onChange(texto === '' ? undefined : Number(texto));
+                            }}
+                          />
+                        </Campo>
+                      )}
+                    />
+                    <Boton
+                      aria-label="Quitar insumo"
+                      className="h-[52px] w-[52px] min-h-0 px-0"
+                      type="button"
+                      variante="contorno"
+                      onClick={() => remove(index)}
                     >
-                      {({ isPending }) =>
-                        isPending ? <Spinner color="current" size="sm" /> : 'Guardar y finalizar'
-                      }
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+                      <Trash2 className="h-5 w-5" />
+                    </Boton>
+                  </div>
+                ))}
+              </>
+            )}
+
+            <Controller
+              control={control}
+              name="horometro"
+              render={({ field }) => (
+                <Campo
+                  error={errors.horometro?.message}
+                  hint="Opcional — la lectura del medidor al cerrar."
+                  label="Horómetro de cierre"
+                  unidad="h"
+                >
+                  <Input
+                    numerico
+                    value={
+                      field.value === undefined || Number.isNaN(field.value)
+                        ? ''
+                        : String(field.value)
+                    }
+                    onBlur={field.onBlur}
+                    onChange={(e) => {
+                      const texto = e.target.value.replace(',', '.');
+                      field.onChange(texto === '' ? undefined : Number(texto));
+                    }}
+                  />
+                </Campo>
+              )}
+            />
+          </Form>
+
+          <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
+            <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Al guardar <strong>se descuenta el stock</strong> de la bodega elegida (movimientos
+              trazables en Inventario) y la operación pasa a <strong>Finalizado</strong>, en solo
+              lectura. Si un insumo no alcanza, no se guarda nada.
+            </span>
+          </div>
+
+          <div className="mt-1 flex gap-2.5">
+            <Boton ancho type="button" variante="contorno" onClick={cerrar}>
+              Cancelar
+            </Boton>
+            <Boton ancho disabled={finishTask.isPending} type="submit" variante="acento">
+              {finishTask.isPending ? 'Guardando…' : 'Guardar y finalizar'}
+            </Boton>
+          </div>
+        </form>
+      </ModalTerreno>
+    </>
   );
 }
