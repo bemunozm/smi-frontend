@@ -208,6 +208,20 @@ describe('FinishTaskModal', () => {
     expect(intervencion.insumos?.[0]?.insumoId).toBe('item-2');
   });
 
+  it('el desplegable separa Suministros de Repuestos (la distinción de Inventario)', async () => {
+    openModal();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+    await waitFor(() => screen.getByPlaceholderText('Busca por código o nombre…'));
+    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    fireEvent.click(trigger);
+
+    // Cabeceras de grupo, con cada ítem bajo la suya.
+    await waitFor(() => expect(screen.getByText('Suministros')).toBeTruthy());
+    expect(screen.getByText('Repuestos')).toBeTruthy();
+    expect(screen.getByRole('option', { name: /AC-1540/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /FL-220/ })).toBeTruthy();
+  });
+
   it('un insumo sin seleccionar bloquea el guardado CON mensaje visible (no en silencio)', async () => {
     openModal();
     fillDetalle();

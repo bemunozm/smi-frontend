@@ -14,6 +14,7 @@ import {
   TextArea,
   TextField,
 } from '@heroui/react';
+import { Header } from 'react-aria-components';
 import { Check, CircleCheck, Plus, Trash2, Warehouse } from 'lucide-react';
 
 import { PhotoCaptureField } from '../flota/PhotoCaptureField';
@@ -111,6 +112,11 @@ export function FinishTaskModal({
     () => branches?.find((branch) => /faena/i.test(branch.name)),
     [branches],
   );
+
+  // La distinción de Inventario (suministro vs repuesto) se refleja en el
+  // desplegable: dos secciones con cabecera, no una lista plana.
+  const supplies = useMemo(() => (items ?? []).filter((item) => item.type === 'SUPPLY'), [items]);
+  const parts = useMemo(() => (items ?? []).filter((item) => item.type === 'PART'), [items]);
   useEffect(() => {
     const target = faenaBranch?.id;
     if (target && getValues('branchId') !== target) {
@@ -278,16 +284,40 @@ export function FinishTaskModal({
                                               </div>
                                             )}
                                           >
-                                            {(items ?? []).map((item) => (
-                                              <ListBox.Item
-                                                key={item.id}
-                                                id={item.id}
-                                                textValue={`${item.sku} · ${item.name}`}
-                                              >
-                                                {item.sku} · {item.name}
-                                                <ListBox.ItemIndicator />
-                                              </ListBox.Item>
-                                            ))}
+                                            {supplies.length > 0 ? (
+                                              <ListBox.Section>
+                                                <Header className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                                                  Suministros
+                                                </Header>
+                                                {supplies.map((item) => (
+                                                  <ListBox.Item
+                                                    key={item.id}
+                                                    id={item.id}
+                                                    textValue={`${item.sku} · ${item.name}`}
+                                                  >
+                                                    {item.sku} · {item.name}
+                                                    <ListBox.ItemIndicator />
+                                                  </ListBox.Item>
+                                                ))}
+                                              </ListBox.Section>
+                                            ) : null}
+                                            {parts.length > 0 ? (
+                                              <ListBox.Section>
+                                                <Header className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                                                  Repuestos
+                                                </Header>
+                                                {parts.map((item) => (
+                                                  <ListBox.Item
+                                                    key={item.id}
+                                                    id={item.id}
+                                                    textValue={`${item.sku} · ${item.name}`}
+                                                  >
+                                                    {item.sku} · {item.name}
+                                                    <ListBox.ItemIndicator />
+                                                  </ListBox.Item>
+                                                ))}
+                                              </ListBox.Section>
+                                            ) : null}
                                           </ListBox>
                                         </ComboBox.Popover>
                                         {errors.insumos?.[index]?.insumoId ? (
