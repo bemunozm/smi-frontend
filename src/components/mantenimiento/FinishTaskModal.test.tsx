@@ -57,7 +57,14 @@ vi.mock('../../hooks/useInventory', () => ({
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
-        stocks: [],
+        stocks: [
+          {
+            branchId: 'br-2',
+            quantity: 4,
+            minimumQuantity: 0,
+            branch: { id: 'br-2', name: 'Faena' },
+          },
+        ],
       },
     ],
     isPending: false,
@@ -220,6 +227,22 @@ describe('FinishTaskModal', () => {
     expect(screen.getByText('Repuestos')).toBeTruthy();
     expect(screen.getByRole('option', { name: /AC-1540/ })).toBeTruthy();
     expect(screen.getByRole('option', { name: /FL-220/ })).toBeTruthy();
+  });
+
+  it('cada opción muestra su stock en Faena, y sin stock queda apagada (formato Terreno)', async () => {
+    openModal();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+    await waitFor(() => screen.getByPlaceholderText('Busca por código o nombre…'));
+    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    fireEvent.click(trigger);
+
+    // El filtro (4 u en Faena) se puede elegir y lo dice.
+    const conStock = await waitFor(() => screen.getByRole('option', { name: /FL-220/ }));
+    expect(conStock.textContent).toContain('4 u en Faena');
+    // El aceite no tiene existencia en Faena: visible pero no elegible, con el motivo.
+    const sinStock = screen.getByRole('option', { name: /AC-1540/ });
+    expect(sinStock.textContent).toContain('Sin stock en Faena');
+    expect(sinStock.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('un insumo sin seleccionar bloquea el guardado CON mensaje visible (no en silencio)', async () => {

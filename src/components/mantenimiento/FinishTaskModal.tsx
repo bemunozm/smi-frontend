@@ -117,6 +117,40 @@ export function FinishTaskModal({
   // desplegable: dos secciones con cabecera, no una lista plana.
   const supplies = useMemo(() => (items ?? []).filter((item) => item.type === 'SUPPLY'), [items]);
   const parts = useMemo(() => (items ?? []).filter((item) => item.type === 'PART'), [items]);
+
+  // Opción al estilo del Selector de Terreno: código en seminegrita + nombre
+  // en gris, y debajo la existencia en Faena; sin stock queda visible pero
+  // apagada con el motivo (de ahí va a salir el descuento, elegirla sería
+  // chocar con el 409 del backend).
+  const renderItemOption = (item: InventoryItem) => {
+    const stock = faenaBranch ? quantityAt(item, faenaBranch.id) : null;
+    const sinStock = stock !== null && stock <= 0;
+    return (
+      <ListBox.Item
+        key={item.id}
+        id={item.id}
+        isDisabled={sinStock}
+        textValue={`${item.sku} · ${item.name}`}
+      >
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span>
+            <span className="font-mono text-sm font-semibold">{item.sku}</span>
+            <span className="text-sm text-muted-foreground"> · {item.name}</span>
+          </span>
+          {stock !== null ? (
+            <span
+              className={`mt-0.5 text-[12.5px] font-semibold ${
+                sinStock ? 'text-warning-soft-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              {sinStock ? 'Sin stock en Faena' : `${stock} ${UNIT_SYMBOLS[item.unit]} en Faena`}
+            </span>
+          ) : null}
+        </span>
+        <ListBox.ItemIndicator />
+      </ListBox.Item>
+    );
+  };
   useEffect(() => {
     const target = faenaBranch?.id;
     if (target && getValues('branchId') !== target) {
@@ -285,37 +319,19 @@ export function FinishTaskModal({
                                             )}
                                           >
                                             {supplies.length > 0 ? (
-                                              <ListBox.Section>
-                                                <Header className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                                              <ListBox.Section className="not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5">
+                                                <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
                                                   Suministros
                                                 </Header>
-                                                {supplies.map((item) => (
-                                                  <ListBox.Item
-                                                    key={item.id}
-                                                    id={item.id}
-                                                    textValue={`${item.sku} · ${item.name}`}
-                                                  >
-                                                    {item.sku} · {item.name}
-                                                    <ListBox.ItemIndicator />
-                                                  </ListBox.Item>
-                                                ))}
+                                                {supplies.map(renderItemOption)}
                                               </ListBox.Section>
                                             ) : null}
                                             {parts.length > 0 ? (
-                                              <ListBox.Section>
-                                                <Header className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                                              <ListBox.Section className="not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5">
+                                                <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
                                                   Repuestos
                                                 </Header>
-                                                {parts.map((item) => (
-                                                  <ListBox.Item
-                                                    key={item.id}
-                                                    id={item.id}
-                                                    textValue={`${item.sku} · ${item.name}`}
-                                                  >
-                                                    {item.sku} · {item.name}
-                                                    <ListBox.ItemIndicator />
-                                                  </ListBox.Item>
-                                                ))}
+                                                {parts.map(renderItemOption)}
                                               </ListBox.Section>
                                             ) : null}
                                           </ListBox>
