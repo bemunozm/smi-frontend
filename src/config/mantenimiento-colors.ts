@@ -40,8 +40,12 @@ export const ESTADO_OT_OPTIONS: ReadonlyArray<{ value: EstadoOT; label: string }
   Object.values(ESTADO_OT) as EstadoOT[]
 ).map((estado) => ({ value: estado, label: ESTADO_OT_LABELS[estado] }));
 
+/**
+ * Escala semáforo: un color PROPIO por nivel, sin compartir el gris `default`
+ * (que usan muchos otros chips) — la prioridad se distingue de un vistazo.
+ */
 const PRIORIDAD_OT_COLOR: Record<PrioridadOT, StatusChipColor> = {
-  [PRIORIDAD_OT.BAJA]: 'default',
+  [PRIORIDAD_OT.BAJA]: 'success',
   [PRIORIDAD_OT.MEDIA]: 'accent',
   [PRIORIDAD_OT.ALTA]: 'warning',
   [PRIORIDAD_OT.CRITICA]: 'danger',
