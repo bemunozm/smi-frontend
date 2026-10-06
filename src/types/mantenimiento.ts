@@ -199,6 +199,46 @@ export const CreateIntervencionSchema = z.object({
 export type CreateIntervencionInput = z.infer<typeof CreateIntervencionSchema>;
 
 // ---------------------------------------------------------------------------
+// Bitácora del taller — form "Nueva operación" (diseño Mantenedor Taller)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que pide el formulario de la Bitácora: equipo + tipo + nombre, y el
+ * hallazgo asociado solo cuando es correctiva. La prioridad no se pide (el
+ * diseño no la muestra); `toCreateOrdenInput` fija MEDIA.
+ */
+export const LogOperationFormSchema = z.object({
+  equipoId: z.string().min(1, 'El equipo es obligatorio'),
+  tipo: z.enum(TIPO_OT),
+  hallazgo: z.string().optional(),
+  titulo: z.string().min(1, 'El nombre es obligatorio'),
+});
+export type LogOperationFormValues = z.infer<typeof LogOperationFormSchema>;
+
+/**
+ * Traduce el form al body real de `POST /ordenes`: correctiva con hallazgo →
+ * origen HALLAZGO (con el texto como `origenDetalle`); correctiva sin
+ * hallazgo → MANUAL; preventiva → PREVENTIVO (el hallazgo no aplica y se
+ * descarta). `origenDetalle` se omite en vez de mandarse vacío — el backend
+ * corre con `forbidNonWhitelisted`.
+ */
+export function toCreateOrdenInput(values: LogOperationFormValues): CreateOrdenInput {
+  const hallazgo = values.hallazgo?.trim();
+  const base = {
+    equipoId: values.equipoId,
+    titulo: values.titulo.trim(),
+    prioridad: PRIORIDAD_OT.MEDIA,
+    tipo: values.tipo,
+  };
+  if (values.tipo === TIPO_OT.PREVENTIVA) {
+    return { ...base, origen: ORIGEN_OT.PREVENTIVO };
+  }
+  return hallazgo
+    ? { ...base, origen: ORIGEN_OT.HALLAZGO, origenDetalle: hallazgo }
+    : { ...base, origen: ORIGEN_OT.MANUAL };
+}
+
+// ---------------------------------------------------------------------------
 // Umbral preventivo
 // ---------------------------------------------------------------------------
 

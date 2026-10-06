@@ -1,12 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { OrdenesAPI } from '../api/MantenimientoAPI';
+import { mensajeErrorFormulario } from '../lib/error-messages';
+import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
 import { buildQueuedEdit } from '../lib/queued-edit';
+import { generateUuid } from '../lib/uuid';
 import { ordenEntity } from '../offline/db';
 import type { CreateOrdenInput, EstadoOT, OrdenFields, OrdenTrabajo, UpdateOrdenInput } from '../types/mantenimiento';
-import { useQueuedCreate, useQueuedMutation } from './useQueuedMutation';
+import { useQueuedCreate, useQueuedMutation, writeQueued } from './useQueuedMutation';
 
 /** Lista de OT, opcionalmente filtrada por `estado` (mismo query param que el backend). */
 export function useOrdenes(estado?: EstadoOT) {
@@ -39,6 +42,41 @@ export interface ActualizarOrdenVars {
   /** La orden tal como la muestra la pantalla: la base de la edición. */
   orden: OrdenTrabajo;
   input: UpdateOrdenInput;
+}
+
+/**
+ * "Nueva operación" de la Bitácora del taller: encola la creación de la OT y,
+ * detrás, su paso a EN_PROCESO (el diseño no tiene un estado intermedio
+ * "pendiente" cuando se registra trabajo que ya se está haciendo). El `id` lo
+ * genera el cliente, así el PATCH puede encolarse aunque el POST todavía no
+ * haya viajado; la cola conserva el orden y el replay invalida `['ordenes']`
+ * (registro `offline/endpoints`). Si el PATCH fallara, la orden igual existe
+ * como PENDIENTE y aparece en la bandeja.
+ */
+export function useLogOperation() {
+  return useMutation({
+    mutationFn: async (input: CreateOrdenInput) => {
+      const id = generateUuid();
+      const created = await writeQueued('orden.create', { params: {}, body: { ...input, id } });
+      const started = await writeQueued('orden.update', {
+        params: { id },
+        body: { estado: 'EN_PROCESO' },
+      });
+      return { created, started };
+    },
+    onSuccess: ({ created, started }, input) => {
+      if (created.status === 'queued' || started.status === 'queued') {
+        avisarGuardadoEnCola();
+        return;
+      }
+      toast.success('Operación iniciada', {
+        description: created.data?.titulo ?? input.titulo,
+      });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la operación.'));
+    },
+  });
 }
 
 export function useActualizarOrden() {
