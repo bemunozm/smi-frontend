@@ -3,12 +3,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import {
   Button,
+  ComboBox,
   FieldError,
+  Input,
   Label,
   ListBox,
   Modal,
   NumberField,
-  Select,
   Spinner,
   TextArea,
   TextField,
@@ -252,23 +253,27 @@ export function FinishTaskModal({
                                     control={control}
                                     name={`insumos.${index}.insumoId`}
                                     render={({ field }) => (
-                                      <Select
+                                      <ComboBox
                                         className="min-w-44 flex-1"
                                         isInvalid={!!errors.insumos?.[index]?.insumoId}
-                                        name={field.name}
-                                        placeholder="Selecciona un insumo"
-                                        value={field.value}
-                                        onChange={(value) => {
-                                          if (typeof value === 'string') field.onChange(value);
-                                        }}
+                                        selectedKey={field.value || null}
+                                        onSelectionChange={(key) =>
+                                          field.onChange(key == null ? '' : String(key))
+                                        }
                                       >
                                         <Label>Insumo</Label>
-                                        <Select.Trigger>
-                                          <Select.Value />
-                                          <Select.Indicator />
-                                        </Select.Trigger>
-                                        <Select.Popover>
-                                          <ListBox>
+                                        <ComboBox.InputGroup>
+                                          <Input placeholder="Busca por código o nombre…" />
+                                          <ComboBox.Trigger />
+                                        </ComboBox.InputGroup>
+                                        <ComboBox.Popover>
+                                          <ListBox
+                                            renderEmptyState={() => (
+                                              <div className="p-3 text-sm text-muted-foreground">
+                                                Ningún insumo calza con la búsqueda
+                                              </div>
+                                            )}
+                                          >
                                             {(items ?? []).map((item) => (
                                               <ListBox.Item
                                                 key={item.id}
@@ -280,13 +285,13 @@ export function FinishTaskModal({
                                               </ListBox.Item>
                                             ))}
                                           </ListBox>
-                                        </Select.Popover>
+                                        </ComboBox.Popover>
                                         {errors.insumos?.[index]?.insumoId ? (
                                           <FieldError>
                                             {errors.insumos[index]?.insumoId?.message}
                                           </FieldError>
                                         ) : null}
-                                      </Select>
+                                      </ComboBox>
                                     )}
                                   />
                                   <Controller

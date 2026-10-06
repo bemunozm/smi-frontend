@@ -42,6 +42,23 @@ vi.mock('../../hooks/useInventory', () => ({
         updatedAt: '2026-01-01T00:00:00.000Z',
         stocks: [],
       },
+      {
+        id: 'item-2',
+        sku: 'FL-220',
+        name: 'Filtro de aceite',
+        description: null,
+        unit: 'UNIT',
+        type: 'PART',
+        categoryId: null,
+        category: null,
+        partNumber: null,
+        defaultSupplier: null,
+        isCritical: false,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        stocks: [],
+      },
     ],
     isPending: false,
   }),
@@ -161,6 +178,34 @@ describe('FinishTaskModal', () => {
   it('ofrece adjuntar la foto de lo realizado', () => {
     openModal();
     expect(screen.getByText(/Foto de lo realizado/)).toBeTruthy();
+  });
+
+  it('el insumo se busca ESCRIBIENDO: filtra por código/nombre y al elegir viaja su id', async () => {
+    openModal();
+    fillDetalle();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+
+    const buscador = await waitFor(
+      () => screen.getByPlaceholderText('Busca por código o nombre…') as HTMLInputElement,
+    );
+    // Abrir la lista (patrón OperatorPicker.test) y recién ahí escribir.
+    const trigger = document.querySelector('.combo-box__trigger') as HTMLButtonElement;
+    fireEvent.click(trigger);
+    await waitFor(() => screen.getByRole('option', { name: /AC-1540/ }));
+
+    fireEvent.change(buscador, { target: { value: 'filtro' } });
+
+    // Solo el que calza queda en la lista.
+    const opcion = await waitFor(() => screen.getByRole('option', { name: /FL-220/ }));
+    expect(screen.queryByRole('option', { name: /AC-1540/ })).toBeNull();
+    fireEvent.click(opcion);
+
+    submitForm();
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    const { intervencion } = mutateMock.mock.calls[0][0] as {
+      intervencion: { insumos?: { insumoId: string }[] };
+    };
+    expect(intervencion.insumos?.[0]?.insumoId).toBe('item-2');
   });
 
   it('un insumo sin seleccionar bloquea el guardado CON mensaje visible (no en silencio)', async () => {
