@@ -89,6 +89,17 @@ const HALLAZGOS = [
     fecha: '2026-10-01T07:50:00.000Z',
     equipo: { internalCode: 'EX-014' },
   },
+  // ABIERTO pero SIN equipo asociado: al mantenedor solo le llegan hallazgos
+  // de un equipo concreto — este no entra a la bandeja.
+  {
+    id: 'h-3',
+    equipoId: '',
+    descripcion: 'Observación general sin equipo',
+    prioridad: 'MEDIA',
+    estado: 'ABIERTO',
+    fotoUrl: null,
+    fecha: '2026-10-06T08:00:00.000Z',
+  },
 ];
 
 // Permisos como los resuelve `lib/permissions` para cada rol (espejo del
@@ -211,6 +222,8 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(within(backlog).getAllByText('Hallazgo').length).toBeGreaterThan(0);
     // El cerrado no vuelve a la bandeja.
     expect(screen.queryByText('Vidrio trizado')).toBeNull();
+    // Y uno sin equipo asociado tampoco llega al mantenedor.
+    expect(screen.queryByText('Observación general sin equipo')).toBeNull();
   });
 
   it('una preventiva pendiente se distingue con su propio chip', () => {

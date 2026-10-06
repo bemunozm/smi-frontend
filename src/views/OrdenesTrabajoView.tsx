@@ -474,9 +474,14 @@ export function OrdenesTrabajoView() {
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
   // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
   // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
-  // en el tablero lo toma la OT ligada.
+  // en el tablero lo toma la OT ligada. Regla del taller: al mantenedor SOLO
+  // le llegan hallazgos con un equipo asociado — una operación sin unidad no
+  // tiene sobre qué trabajarse ni a qué imputar el consumo.
   const openFindings = useMemo(
-    () => (hallazgos ?? []).filter((hallazgo) => hallazgo.estado === 'ABIERTO'),
+    () =>
+      (hallazgos ?? []).filter(
+        (hallazgo) => hallazgo.estado === 'ABIERTO' && hallazgo.equipoId.trim() !== '',
+      ),
     [hallazgos],
   );
 
