@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { SelectorBuscable, type OpcionSelector } from './ui';
+
+afterEach(cleanup);
 
 const OPCIONES: OpcionSelector[] = [
   { valor: 'i1', titulo: 'AC-1540', detalle: 'Aceite motor 15W-40', grupo: 'Suministros', motivo: 'Sin stock en Faena' },
