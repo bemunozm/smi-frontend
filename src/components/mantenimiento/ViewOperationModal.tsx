@@ -164,7 +164,7 @@ export function ViewOperationModal({
 
   return (
     <Modal>
-      <Button size="sm" variant="tertiary">
+      <Button className="w-full lg:w-fit" size="sm" variant="tertiary">
         Ver operación
       </Button>
       <Modal.Backdrop>

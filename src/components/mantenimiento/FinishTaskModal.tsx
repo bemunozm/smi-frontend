@@ -159,7 +159,7 @@ export function FinishTaskModal({
 
   return (
     <Modal>
-      <Button size="sm">
+      <Button className="w-full lg:w-fit" size="sm">
         <Check className="size-4" />
         Finalizar tarea
       </Button>

@@ -226,7 +226,7 @@ export function OrdenesTrabajoView() {
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         <StatCard label="Hallazgos pendientes" value={openFindings.length} />
         <StatCard label="En proceso" tone="warning" value={stats.inProgress} />
         <StatCard label="Finalizadas hoy" tone="success" value={stats.finishedToday} />
@@ -266,7 +266,9 @@ export function OrdenesTrabajoView() {
       {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length > 0 ? (
         // El tablero se dibuja aunque los hallazgos hayan fallado: esa mitad
         // ya avisó arriba y las órdenes no tienen por qué esconderse.
-        <div className="grid items-start gap-4 lg:grid-cols-3">
+        // Tablet es el dispositivo principal del taller: las TRES columnas se
+        // quedan en pantalla desde md (834px de una tablet vertical incluida).
+        <div className="grid items-start gap-3 md:grid-cols-3 lg:gap-4">
           <BoardColumn
             color="default"
             count={openFindings.length + board.backlog.length}
@@ -282,7 +284,7 @@ export function OrdenesTrabajoView() {
             ))}
             {board.backlog.map((orden) => (
               <BoardCard key={orden.id}>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {equipmentLabel(orden.equipoId, fleet)}
                   </span>
@@ -315,7 +317,7 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="warning" count={board.inProgress.length} title="Operaciones en proceso">
             {board.inProgress.map((orden) => (
               <BoardCard key={orden.id}>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {equipmentLabel(orden.equipoId, fleet)}
                   </span>
@@ -348,7 +350,7 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="success" count={board.finished.length} title="Finalizadas">
             {board.finished.map((orden) => (
               <BoardCard key={orden.id} muted>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {equipmentLabel(orden.equipoId, fleet)}
                   </span>

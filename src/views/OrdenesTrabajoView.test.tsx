@@ -201,6 +201,15 @@ function renderView() {
 }
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
+  it('en tablet las TRES columnas siguen en pantalla (grid desde md)', () => {
+    renderView();
+    const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;
+    expect(board?.className).toContain('md:grid-cols-3');
+    // Y los KPI pasan a fila de 4 desde tablet, como el artboard.
+    const kpis = screen.getByText('Hallazgos pendientes').closest('.grid');
+    expect(kpis?.className).toContain('md:grid-cols-4');
+  });
+
   it('reparte las órdenes en las tres columnas del tablero', () => {
     renderView();
 

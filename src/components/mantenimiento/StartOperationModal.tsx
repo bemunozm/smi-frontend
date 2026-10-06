@@ -31,7 +31,7 @@ export function StartOperationModal({
 
   return (
     <Modal>
-      <Button size="sm">
+      <Button className="w-full lg:w-fit" size="sm">
         <ArrowRight className="size-4" />
         Iniciar operación
       </Button>
