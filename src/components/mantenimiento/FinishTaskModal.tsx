@@ -3,7 +3,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import {
   Button,
-  Chip,
   FieldError,
   Label,
   ListBox,
@@ -17,6 +16,7 @@ import {
 import { Check, CircleCheck, Plus, Trash2 } from 'lucide-react';
 
 import { PhotoCaptureField } from '../flota/PhotoCaptureField';
+import { StatusChip } from '../flota/StatusChip';
 import { useBranches } from '../../hooks/useBranches';
 import { useFinishTask } from '../../hooks/useIntervenciones';
 import { useItems } from '../../hooks/useInventory';
@@ -155,16 +155,16 @@ export function FinishTaskModal({
                       onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                     >
                       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-3">
-                        <Chip size="sm" variant="secondary">
+                        <StatusChip tone="secondary">
                           {TIPO_OT_LABELS[orden.tipo]}
-                        </Chip>
+                        </StatusChip>
                         <span className="font-mono text-xs text-muted-foreground">
                           {equipmentLabel(orden.equipoId, equipment)}
                         </span>
                         <strong className="text-sm">{orden.titulo}</strong>
-                        <Chip className="ms-auto" color="warning" size="sm" variant="soft">
+                        <StatusChip className="ms-auto" tone="warning">
                           En proceso
-                        </Chip>
+                        </StatusChip>
                       </div>
 
                       <Controller

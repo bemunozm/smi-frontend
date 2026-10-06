@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { Button, Chip, Modal, Spinner } from '@heroui/react';
+import { Button, Modal, Spinner } from '@heroui/react';
+
+import { StatusChip } from '../flota/StatusChip';
 import { Lock, Package } from 'lucide-react';
 
 import { useIntervenciones } from '../../hooks/useIntervenciones';
@@ -40,16 +42,16 @@ function OperationDetail({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-3">
-        <Chip size="sm" variant="secondary">
+        <StatusChip tone="secondary">
           {TIPO_OT_LABELS[orden.tipo]}
-        </Chip>
-        <Chip color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+        </StatusChip>
+        <StatusChip tone={estadoOTChipColor(orden.estado)}>
           {ESTADO_OT_LABELS[orden.estado]}
-        </Chip>
-        <Chip className="ms-auto" color="default" size="sm" variant="soft">
+        </StatusChip>
+        <StatusChip className="ms-auto gap-1" tone="default">
           <Lock className="size-3" />
           Solo lectura
-        </Chip>
+        </StatusChip>
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">

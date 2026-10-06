@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Chip, Spinner, Table } from '@heroui/react';
+import { Spinner, Table } from '@heroui/react';
 import { ArrowDownLeft, ArrowUpRight, Info } from 'lucide-react';
 
+import { StatusChip } from '../components/flota/StatusChip';
 import { useItems, useMovements } from '../hooks/useInventory';
 import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery';
 import { MovementKindChip, NUMBER, movementKind } from '../components/inventario/shared';
@@ -62,9 +63,9 @@ function ItemStockCard({ item }: { item: InventoryItem }) {
     <div className="flex flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
-        <Chip color={status.color} size="sm" variant="soft">
+        <StatusChip tone={status.color}>
           {status.label}
-        </Chip>
+        </StatusChip>
       </div>
       <span className="text-sm font-semibold">{item.name}</span>
       <div className="mt-1 font-display text-[26px] font-semibold tracking-[-0.02em]">

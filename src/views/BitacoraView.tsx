@@ -4,7 +4,6 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Button,
   Card,
-  Chip,
   FieldError,
   Input,
   Label,
@@ -15,6 +14,7 @@ import {
 } from '@heroui/react';
 import { ArrowRight, Clock, Info, Truck, TriangleAlert, Wrench } from 'lucide-react';
 
+import { StatusChip } from '../components/flota/StatusChip';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePermissions } from '../hooks/usePermissions';
 import { useLogOperation, useOrdenes } from '../hooks/useOrdenes';
@@ -65,12 +65,12 @@ function OperationTimelineItem({ orden }: { orden: OrdenTrabajo }) {
   return (
     <div className="flex flex-col gap-1.5 border-t border-border py-3.5 first:border-t-0 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">
-        <Chip size="sm" variant="secondary">
+        <StatusChip tone="secondary">
           {TIPO_OT_LABELS[orden.tipo]}
-        </Chip>
-        <Chip color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+        </StatusChip>
+        <StatusChip tone={estadoOTChipColor(orden.estado)}>
           {ESTADO_OT_LABELS[orden.estado]}
-        </Chip>
+        </StatusChip>
         <span className="ms-auto font-mono text-xs text-muted-foreground">
           {formatDate(orden.updatedAt)}
         </span>

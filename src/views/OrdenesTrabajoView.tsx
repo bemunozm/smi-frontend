@@ -4,7 +4,6 @@ import { Controller, useForm } from 'react-hook-form';
 import {
   Button,
   Card,
-  Chip,
   FieldError,
   Input,
   Label,
@@ -16,6 +15,9 @@ import {
 } from '@heroui/react';
 import { Clock, TriangleAlert } from 'lucide-react';
 
+// StatusChip y no <Chip> de HeroUI: su slot API comparte estado entre
+// instancias (bug documentado en StatusChip.tsx) y los colores se pisan.
+import { StatusChip } from '../components/flota/StatusChip';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePendingWrites } from '../hooks/usePendingWrites';
@@ -353,9 +355,7 @@ function BoardColumn({
   return (
     <section aria-label={title} className="flex min-w-0 flex-col">
       <div className="mb-3 flex items-center gap-2">
-        <Chip color={color} size="sm" variant="soft">
-          {title}
-        </Chip>
+        <StatusChip tone={color}>{title}</StatusChip>
         <span className="ms-auto text-xs font-semibold text-muted-foreground">{count}</span>
       </div>
       <div className="flex flex-col gap-3.5">{children}</div>
@@ -401,19 +401,19 @@ function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boo
  * del supervisor (rojo) vs mantención preventiva del administrador (azul). */
 function FindingChip() {
   return (
-    <Chip color="danger" size="sm" variant="soft">
+    <StatusChip className="gap-1" tone="danger">
       <TriangleAlert className="size-3" />
       Hallazgo
-    </Chip>
+    </StatusChip>
   );
 }
 
 function PreventiveChip() {
   return (
-    <Chip color="accent" size="sm" variant="soft">
+    <StatusChip className="gap-1" tone="accent">
       <Clock className="size-3" />
       Preventiva
-    </Chip>
+    </StatusChip>
   );
 }
 
@@ -438,9 +438,9 @@ function FindingCard({
         <span className="font-mono text-xs text-muted-foreground">{equipo}</span>
         <div className="flex gap-1.5">
           <FindingChip />
-          <Chip color={prioridadOTChipColor(prioridad)} size="sm" variant="soft">
+          <StatusChip tone={prioridadOTChipColor(prioridad)}>
             {PRIORIDAD_OT_LABELS[prioridad]}
-          </Chip>
+          </StatusChip>
         </div>
       </div>
       <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
@@ -575,9 +575,9 @@ export function OrdenesTrabajoView() {
                     ) : orden.origen === 'HALLAZGO' ? (
                       <FindingChip />
                     ) : null}
-                    <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
+                    <StatusChip tone={prioridadOTChipColor(orden.prioridad)}>
                       {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                    </Chip>
+                    </StatusChip>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -602,9 +602,7 @@ export function OrdenesTrabajoView() {
                   <span className="font-mono text-xs text-muted-foreground">
                     {equipmentLabel(orden.equipoId, fleet)}
                   </span>
-                  <Chip size="sm" variant="secondary">
-                    {TIPO_OT_LABELS[orden.tipo]}
-                  </Chip>
+                  <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
@@ -639,13 +637,9 @@ export function OrdenesTrabajoView() {
                   </span>
                   <div className="flex gap-1.5">
                     {orden.estado === 'CANCELADA' ? (
-                      <Chip color="danger" size="sm" variant="soft">
-                        Cancelada
-                      </Chip>
+                      <StatusChip tone="danger">Cancelada</StatusChip>
                     ) : null}
-                    <Chip size="sm" variant="secondary">
-                      {TIPO_OT_LABELS[orden.tipo]}
-                    </Chip>
+                    <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

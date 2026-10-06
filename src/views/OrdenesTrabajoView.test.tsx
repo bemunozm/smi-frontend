@@ -232,6 +232,26 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(within(backlog).getByText('Preventiva')).toBeTruthy();
   });
 
+  it('cada chip lleva SU color real como clase (mitigación del bug de Chip de HeroUI v3.2.3)', () => {
+    // El Chip de HeroUI comparte estado entre instancias (ver StatusChip.tsx):
+    // todos pueden terminar del color del último calculado. Acá se fija que
+    // cada chip del tablero lleve su token directo, inmune a ese bug.
+    renderView();
+
+    expect(screen.getAllByText('Hallazgo')[0].closest('span')?.className).toContain(
+      'bg-danger-soft',
+    );
+    expect(screen.getByText('Crítica').closest('span')?.className).toContain('bg-danger-soft');
+    expect(screen.getByText('Alta').closest('span')?.className).toContain('bg-warning-soft');
+    expect(screen.getByText('Media').closest('span')?.className).toContain('bg-accent-soft');
+    // 'Preventiva' también existe como chip de TIPO en otras columnas — acá
+    // se verifica el de la bandeja.
+    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    expect(within(backlog).getByText('Preventiva').closest('span')?.className).toContain(
+      'bg-accent-soft',
+    );
+  });
+
   it('resuelve el nombre del equipo desde Flota', () => {
     renderView();
     expect(screen.getAllByText('EX-014 · CAT 320').length).toBeGreaterThan(0);

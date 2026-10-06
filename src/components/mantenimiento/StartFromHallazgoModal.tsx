@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Button, Chip, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+import { Button, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+
+import { StatusChip } from '../flota/StatusChip';
 import { ArrowRight, Info, TriangleAlert } from 'lucide-react';
 
 import { useLogOperation } from '../../hooks/useOrdenes';
@@ -47,13 +49,13 @@ export function StartFromHallazgoModal({
                 <Modal.Body className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-muted px-3.5 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Chip color="danger" size="sm" variant="soft">
+                      <StatusChip className="gap-1" tone="danger">
                         <TriangleAlert className="size-3" />
                         Hallazgo
-                      </Chip>
-                      <Chip color={prioridadOTChipColor(prioridad)} size="sm" variant="soft">
+                      </StatusChip>
+                      <StatusChip tone={prioridadOTChipColor(prioridad)}>
                         {PRIORIDAD_OT_LABELS[prioridad]}
-                      </Chip>
+                      </StatusChip>
                       <span className="ms-auto font-mono text-xs text-muted-foreground">
                         {hallazgo.equipo?.internalCode ?? equipmentLabel(hallazgo.equipoId, equipment)}
                       </span>

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Button, Chip, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+import { Button, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+
+import { StatusChip } from '../flota/StatusChip';
 import { ArrowRight, Info } from 'lucide-react';
 
 import { useActualizarOrden } from '../../hooks/useOrdenes';
@@ -49,16 +51,16 @@ export function StartOperationModal({
                 </Modal.Header>
                 <Modal.Body className="flex flex-col gap-4">
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-3">
-                    <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
+                    <StatusChip tone={prioridadOTChipColor(orden.prioridad)}>
                       {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                    </Chip>
+                    </StatusChip>
                     <span className="font-mono text-xs text-muted-foreground">
                       {equipmentLabel(orden.equipoId, equipment)}
                     </span>
                     <strong className="text-sm">{orden.titulo}</strong>
-                    <Chip className="ms-auto" size="sm" variant="secondary">
+                    <StatusChip className="ms-auto" tone="secondary">
                       {TIPO_OT_LABELS[orden.tipo]}
-                    </Chip>
+                    </StatusChip>
                   </div>
 
                   <TextField

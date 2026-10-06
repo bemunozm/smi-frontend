@@ -2,7 +2,7 @@ import type { FlotaChipColor } from '../../config/flota-colors';
 
 /**
  * Reemplazo de `<Chip variant="soft"|"secondary" color={...}>` de
- * `@heroui/react` — SOLO para los usos de Flota listados abajo.
+ * `@heroui/react` — lo usan Flota y el Taller (Mantenimiento).
  *
  * Bug confirmado en HeroUI v3.2.3 (`@heroui/react` + `tailwind-variants`
  * 3.3.1): `ChipRoot` memoiza `chipVariants({color,size,variant})` vía
@@ -24,12 +24,16 @@ import type { FlotaChipColor } from '../../config/flota-colors';
  * HeroUI (`bg-success-soft`, etc. — mismos tokens que ya usa el bloque de
  * error de `EquiposView`), sin pasar por el slot API de `tv()`.
  */
-const TONE_CLASSES: Record<FlotaChipColor, string> = {
+/** `secondary` = el chip oscuro (tipo de operación del taller). */
+export type StatusChipTone = FlotaChipColor | 'secondary';
+
+const TONE_CLASSES: Record<StatusChipTone, string> = {
   accent: 'bg-accent-soft text-accent-soft-foreground',
   success: 'bg-success-soft text-success-soft-foreground',
   warning: 'bg-warning-soft text-warning-soft-foreground',
   danger: 'bg-danger-soft text-danger-soft-foreground',
   default: 'bg-default text-default-foreground',
+  secondary: 'bg-secondary text-secondary-foreground',
 };
 
 const SIZE_CLASSES: Record<'sm' | 'md', string> = {
@@ -38,7 +42,7 @@ const SIZE_CLASSES: Record<'sm' | 'md', string> = {
 };
 
 interface StatusChipProps {
-  tone: FlotaChipColor;
+  tone: StatusChipTone;
   size?: 'sm' | 'md';
   className?: string;
   children: React.ReactNode;
