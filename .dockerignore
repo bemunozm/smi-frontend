@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+.git
+.codegraph
+scratchpad
+.playwright-cli
+.env*
+!.env.example
+coverage
+*.log
