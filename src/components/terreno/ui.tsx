@@ -4,9 +4,11 @@ import { avisoDeAgrupacion } from '../../lib/decimal';
 import type { ReactElement, ReactNode } from 'react';
 import {
   Button as AriaButton,
+  ComboBox as AriaComboBox,
   Dialog,
   Header,
   Heading,
+  Input as AriaInput,
   ListBox,
   ListBoxItem,
   ListBoxSection,
@@ -526,6 +528,124 @@ export function Selector({
         </ListBox>
       </Popover>
     </AriaSelect>
+  );
+}
+
+/**
+ * `Selector` con búsqueda escrita: el mismo marco, popover y opciones (grupos,
+ * `motivo` que apaga, `aviso` que informa), pero el campo es un input que
+ * filtra por lo tecleado — título y detalle. Para catálogos largos (insumos de
+ * bodega) donde recorrer la lista con el dedo no escala.
+ *
+ * El markup de la opción y de los grupos es ESPEJO del de `Selector` de
+ * arriba a propósito (react-aria exige `ListBoxItem` directos en la
+ * colección, sin wrappers): si cambias uno, cambia el otro.
+ */
+export function SelectorBuscable({
+  id,
+  valor,
+  onChange,
+  opciones,
+  etiqueta,
+  placeholder = 'Buscá…',
+  tituloTabular,
+  'aria-describedby': describedBy,
+}: {
+  id?: string;
+  valor: string;
+  onChange: (valor: string) => void;
+  opciones: OpcionSelector[];
+  etiqueta: string;
+  placeholder?: string;
+  tituloTabular?: boolean;
+  'aria-describedby'?: string;
+}) {
+  const tab = tituloTabular ? 'tabular' : '';
+
+  const item = (o: OpcionSelector) => (
+    <ListBoxItem
+      key={o.valor}
+      id={o.valor}
+      textValue={o.detalle ? `${o.titulo} · ${o.detalle}` : o.titulo}
+      className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[focused]:bg-[#f1f3f5] data-[selected]:bg-[var(--accent-soft)] data-[selected]:text-[var(--accent-soft-foreground)]"
+    >
+      {({ isSelected }) => (
+        <>
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className={`text-[15.5px] font-semibold ${tab}`}>{o.titulo}</span>
+            {o.detalle && (
+              <span className={`text-[14.5px] ${isSelected ? '' : 'text-muted-foreground'}`}>
+                {' '}
+                · {o.detalle}
+              </span>
+            )}
+            {(o.motivo ?? o.aviso) && (
+              <span className="mt-0.5 block text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
+                {o.motivo ?? o.aviso}
+              </span>
+            )}
+          </span>
+          {isSelected && <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={2.6} aria-hidden />}
+        </>
+      )}
+    </ListBoxItem>
+  );
+
+  const grupos = [...new Set(opciones.map((o) => o.grupo ?? ''))];
+  const agrupada = grupos.some((g) => g !== '');
+
+  return (
+    <AriaComboBox
+      id={id}
+      aria-label={etiqueta}
+      aria-describedby={describedBy}
+      menuTrigger="focus"
+      selectedKey={valor === '' ? null : valor}
+      onSelectionChange={(clave) => clave != null && onChange(String(clave))}
+      disabledKeys={opciones.filter((o) => o.motivo).map((o) => o.valor)}
+      className="group min-w-0"
+    >
+      <div
+        className={`${INPUT} flex items-center gap-2 pr-1.5 focus-within:border-[var(--accent)] focus-within:outline-3 focus-within:outline-[rgba(29,78,216,.18)] group-data-[open]:border-[var(--accent)]`}
+      >
+        <AriaInput
+          placeholder={placeholder}
+          className={`h-full min-w-0 flex-1 bg-transparent font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground ${tab}`}
+        />
+        <AriaButton
+          aria-label={`Abrir ${etiqueta}`}
+          className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-foreground"
+        >
+          <ChevronDown
+            className="h-5 w-5 transition-transform group-data-[open]:rotate-180"
+            strokeWidth={2.2}
+            aria-hidden
+          />
+        </AriaButton>
+      </div>
+      <Popover
+        offset={6}
+        className="w-[var(--trigger-width)] min-w-[220px] overflow-y-auto rounded-2xl border border-border bg-card p-1.5 shadow-[0_18px_44px_rgba(20,23,28,.18)] outline-none"
+        style={{ maxHeight: 'min(360px, var(--popover-max-height, 360px))' }}
+      >
+        <ListBox className="flex flex-col gap-0.5 outline-none">
+          {agrupada
+            ? grupos.map((g) => (
+                <ListBoxSection
+                  key={g}
+                  id={g}
+                  className="flex flex-col gap-0.5 not-first:mt-1.5 not-first:border-t not-first:border-border not-first:pt-1.5"
+                >
+                  <Header className="px-3 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+                    {g}
+                  </Header>
+                  {opciones.filter((o) => (o.grupo ?? '') === g).map(item)}
+                </ListBoxSection>
+              ))
+            : opciones.map(item)}
+        </ListBox>
+      </Popover>
+    </AriaComboBox>
   );
 }
 
