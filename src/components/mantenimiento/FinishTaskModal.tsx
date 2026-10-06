@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import {
@@ -13,7 +13,7 @@ import {
   TextArea,
   TextField,
 } from '@heroui/react';
-import { Check, CircleCheck, Plus, Trash2 } from 'lucide-react';
+import { Check, CircleCheck, Plus, Trash2, Warehouse } from 'lucide-react';
 
 import { PhotoCaptureField } from '../flota/PhotoCaptureField';
 import { StatusChip } from '../flota/StatusChip';
@@ -32,7 +32,7 @@ import {
   totalQuantity,
   type InventoryItem,
 } from '../../types/inventory';
-import { equipmentLabel, findEquipment, type EquipmentRef } from './workshop';
+import { equipmentLabel, type EquipmentRef } from './workshop';
 
 /**
  * Stock ACTUAL del insumo en la bodega elegida (de ahí sale el descuento al
@@ -101,17 +101,19 @@ export function FinishTaskModal({
   const insumosValues = useWatch({ control, name: 'insumos' });
   const branchId = useWatch({ control, name: 'branchId' });
 
-  // Default de bodega: la base del equipo de la OT SOLO si está entre las
-  // activas (una base inactiva/borrada dejaría un branchId fantasma que el
-  // Select no puede mostrar); si no, la primera activa. Editable abajo.
-  const home = findEquipment(orden.equipoId, equipment)?.homeBranchId;
-  const defaultBranchId =
-    home && branches?.some((branch) => branch.id === home) ? home : branches?.[0]?.id;
+  // Regla del taller: los insumos salen SIEMPRE de la bodega de FAENA — no
+  // hay opción de descontar desde Casa Matriz. Se resuelve por nombre entre
+  // las bodegas activas y queda fija en el formulario.
+  const faenaBranch = useMemo(
+    () => branches?.find((branch) => /faena/i.test(branch.name)),
+    [branches],
+  );
   useEffect(() => {
-    if (defaultBranchId && !getValues('branchId')) {
-      setValue('branchId', defaultBranchId);
+    const target = faenaBranch?.id;
+    if (target && getValues('branchId') !== target) {
+      setValue('branchId', target);
     }
-  }, [defaultBranchId, getValues, setValue]);
+  }, [faenaBranch, getValues, setValue]);
 
   return (
     <Modal>
@@ -215,41 +217,28 @@ export function FinishTaskModal({
                           </p>
                         ) : (
                           <div className="flex flex-col gap-3">
-                            <Controller
-                              control={control}
-                              name="branchId"
-                              render={({ field }) => (
-                                <Select
-                                  className="sm:max-w-60"
-                                  isInvalid={!!errors.branchId}
-                                  name={field.name}
-                                  placeholder="Elige la bodega"
-                                  value={field.value}
-                                  onChange={(value) => {
-                                    if (typeof value === 'string') field.onChange(value);
-                                  }}
-                                >
-                                  <Label>Bodega</Label>
-                                  <Select.Trigger>
-                                    <Select.Value />
-                                    <Select.Indicator />
-                                  </Select.Trigger>
-                                  <Select.Popover>
-                                    <ListBox>
-                                      {(branches ?? []).map((branch) => (
-                                        <ListBox.Item key={branch.id} id={branch.id} textValue={branch.name}>
-                                          {branch.name}
-                                          <ListBox.ItemIndicator />
-                                        </ListBox.Item>
-                                      ))}
-                                    </ListBox>
-                                  </Select.Popover>
-                                  {errors.branchId ? (
-                                    <FieldError>{errors.branchId.message}</FieldError>
-                                  ) : null}
-                                </Select>
-                              )}
-                            />
+                            {/* Bodega FIJA: regla del taller — el descuento
+                                sale SIEMPRE de la faena, sin opción de cambiarla. */}
+                            {faenaBranch ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                                  Bodega
+                                </span>
+                                <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium">
+                                  <Warehouse className="size-4 text-muted-foreground" />
+                                  {faenaBranch.name}
+                                </span>
+                              </div>
+                            ) : (
+                              <div
+                                className="rounded-lg bg-danger-soft px-3.5 py-3 text-sm text-danger-soft-foreground"
+                                role="alert"
+                              >
+                                No hay una bodega de faena activa en Inventario — no se puede
+                                descontar stock. Crea o reactiva la bodega "Faena" antes de
+                                cerrar con insumos.
+                              </div>
+                            )}
                             {fields.map((row, index) => {
                               const selectedItem = items?.find(
                                 (item) => item.id === insumosValues?.[index]?.insumoId,

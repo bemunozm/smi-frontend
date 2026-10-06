@@ -11,14 +11,15 @@ vi.mock('../../hooks/useIntervenciones', () => ({
   useCrearIntervencion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+// Casa Matriz va PRIMERO a propósito: prueba que la regla elige la FAENA por
+// nombre, no "la primera de la lista".
+let branchesData = [
+  { id: 'br-1', name: 'Casa Matriz', address: null, isActive: true },
+  { id: 'br-2', name: 'Faena', address: null, isActive: true },
+];
+
 vi.mock('../../hooks/useBranches', () => ({
-  useBranches: () => ({
-    data: [
-      { id: 'br-1', name: 'Casa Matriz', address: null, isActive: true },
-      { id: 'br-2', name: 'Faena Patillo', address: null, isActive: true },
-    ],
-    isPending: false,
-  }),
+  useBranches: () => ({ data: branchesData, isPending: false }),
 }));
 
 vi.mock('../../hooks/useInventory', () => ({
@@ -67,6 +68,10 @@ const ORDEN: OrdenTrabajo = {
 afterEach(() => {
   cleanup();
   mutateMock.mockReset();
+  branchesData = [
+    { id: 'br-1', name: 'Casa Matriz', address: null, isActive: true },
+    { id: 'br-2', name: 'Faena', address: null, isActive: true },
+  ];
 });
 
 // El equipo de la OT apunta a una bodega FANTASMA (inactiva o borrada): el
@@ -119,13 +124,38 @@ describe('FinishTaskModal', () => {
     await waitFor(() => expect(screen.getByText('Bodega')).toBeTruthy());
   });
 
-  it('la bodega base fantasma del equipo NO queda como default: cae a la primera activa', async () => {
+  it('la bodega queda FIJA en la faena: se muestra, pero no hay opción de cambiarla', async () => {
     openModal();
     fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
     await waitFor(() => expect(screen.getByText('Bodega')).toBeTruthy());
-    // Con un default real elegido, el trigger no puede estar mostrando el
-    // placeholder (eso delataría un branchId que el Select no conoce).
+    // La faena visible como dato fijo…
+    expect(screen.getByText('Faena')).toBeTruthy();
+    // …y Casa Matriz ni siquiera existe como opción en el DOM (sin selector).
+    expect(screen.queryByText('Casa Matriz')).toBeNull();
     expect(screen.queryByText('Elige la bodega')).toBeNull();
+  });
+
+  it('el payload del cierre lleva la bodega de faena aunque no sea la primera de la lista', async () => {
+    openModal();
+    fillDetalle();
+    submitForm();
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    const { intervencion } = mutateMock.mock.calls[0][0] as {
+      intervencion: { branchId?: string };
+    };
+    expect(intervencion.branchId).toBe('br-2');
+  });
+
+  it('sin una bodega de faena activa, agrega insumo muestra el aviso y no se puede descontar', async () => {
+    branchesData = [{ id: 'br-1', name: 'Casa Matriz', address: null, isActive: true }];
+    openModal();
+    fillDetalle();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+
+    await waitFor(() => expect(screen.getByText(/No hay una bodega de faena/)).toBeTruthy());
+    submitForm();
+    expect(mutateMock).not.toHaveBeenCalled();
   });
 
   it('ofrece adjuntar la foto de lo realizado', () => {
