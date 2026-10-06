@@ -188,7 +188,7 @@ export const IntervencionListResponseSchema = z.object({
 /**
  * `POST /api/mantenimiento/ordenes/:id/intervenciones` body (MANTENEDOR).
  * `insumoId` es texto libre — Inventario no expone todavía un selector de
- * insumos consumible acá (ver TODO en `BitacoraView`).
+ * insumos consumible acá (el cierre real usa el selector de `FinishTaskModal`).
  */
 export const CreateIntervencionInsumoSchema = z.object({
   insumoId: z.string().min(1, 'El insumo es obligatorio'),

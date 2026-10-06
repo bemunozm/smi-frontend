@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Tabs } from '@heroui/react';
 import type { Key } from '@heroui/react';
-import { ClipboardList, Gauge, ListChecks, NotebookPen, Package } from 'lucide-react';
+import { ClipboardList, Gauge, ListChecks, Package } from 'lucide-react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { ROLES } from '../types/roles';
 import { ActividadesView } from './ActividadesView';
-import { BitacoraView } from './BitacoraView';
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 import { PreventivoView } from './PreventivoView';
 import { WorkshopStockView } from './WorkshopStockView';
@@ -14,13 +13,12 @@ import { WorkshopStockView } from './WorkshopStockView';
 /**
  * Secciones del dominio. Única fuente para el control superior (desktop) y
  * la barra inferior (móvil), así label/orden no se desincronizan.
- * Las tres primeras son el taller del diseño "Mantenedor Taller"
- * (Órdenes · Bitácora · Stock); Preventivo y Tareas son gestión que el
- * diseño no cubre y quedan solo para ADMIN.
+ * Órdenes y Stock son el taller del diseño "Mantenedor Taller" (la creación
+ * tipo Bitácora vive dentro de "Crear orden" en el tablero); Preventivo y
+ * Tareas son gestión que el diseño no cubre y quedan solo para ADMIN.
  */
 const SECTIONS = [
   { id: 'ordenes', label: 'Órdenes', icon: ClipboardList, adminOnly: false },
-  { id: 'bitacora', label: 'Bitácora', icon: NotebookPen, adminOnly: false },
   { id: 'stock', label: 'Stock', icon: Package, adminOnly: false },
   { id: 'preventivo', label: 'Preventivo', icon: Gauge, adminOnly: true },
   { id: 'tareas', label: 'Tareas', icon: ListChecks, adminOnly: true },
@@ -28,7 +26,6 @@ const SECTIONS = [
 
 const PANELS: Record<(typeof SECTIONS)[number]['id'], () => React.ReactNode> = {
   ordenes: () => <OrdenesTrabajoView />,
-  bitacora: () => <BitacoraView />,
   stock: () => <WorkshopStockView />,
   preventivo: () => <PreventivoView />,
   tareas: () => <ActividadesView />,

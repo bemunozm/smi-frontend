@@ -1,18 +1,5 @@
 import { useMemo } from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
-import {
-  Button,
-  Card,
-  FieldError,
-  Input,
-  Label,
-  ListBox,
-  Modal,
-  Select,
-  Spinner,
-  TextField,
-} from '@heroui/react';
+import { Card, Spinner } from '@heroui/react';
 import { Clock, TriangleAlert } from 'lucide-react';
 
 // StatusChip y no <Chip> de HeroUI: su slot API comparte estado entre
@@ -22,27 +9,17 @@ import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePendingWrites } from '../hooks/usePendingWrites';
 import { usePermissions } from '../hooks/usePermissions';
-import { useCrearOrden, useOrdenes } from '../hooks/useOrdenes';
+import { useOrdenes } from '../hooks/useOrdenes';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHallazgosList } from '../hooks/useHallazgos';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ORIGEN_OT_LABELS,
-  ORIGEN_OT_OPTIONS,
   PRIORIDAD_OT_LABELS,
-  PRIORIDAD_OT_OPTIONS,
   TIPO_OT_LABELS,
-  TIPO_OT_OPTIONS,
   prioridadOTChipColor,
 } from '../config/mantenimiento-colors';
-import {
-  CreateOrdenSchema,
-  ORIGEN_OT,
-  PRIORIDAD_OT,
-  TIPO_OT,
-  type CreateOrdenInput,
-  type OrdenTrabajo,
-} from '../types/mantenimiento';
+import type { OrdenTrabajo } from '../types/mantenimiento';
 import type { Hallazgo } from '../types/hallazgos';
 import {
   buildWorkshopStats,
@@ -52,271 +29,11 @@ import {
   toPrioridadOT,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
+import { CreateOperationModal } from '../components/mantenimiento/CreateOperationModal';
 import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
 import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
 import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
-
-/**
- * Modal de creación — mismo patrón que `CreateUserModal` (`views/UsersView.tsx`):
- * RHF + `zodResolver` + `useCrearOrden`, toast/invalidate viven en el hook.
- * `equipoId`/`asignadoAId` son texto libre a propósito (ver TODOs inline):
- * Flota (equipos) e Inventario/Usuarios (asignado) no exponen todavía un
- * selector real consumible desde acá.
- */
-function CreateOrdenModal() {
-  const crearOrden = useCrearOrden();
-  const {
-    control,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CreateOrdenInput>({
-    resolver: zodResolver(CreateOrdenSchema),
-    defaultValues: {
-      equipoId: '',
-      titulo: '',
-      prioridad: PRIORIDAD_OT.MEDIA,
-      tipo: TIPO_OT.CORRECTIVA,
-      origen: ORIGEN_OT.MANUAL,
-      origenDetalle: '',
-      asignadoAId: '',
-    },
-  });
-
-  return (
-    <Modal>
-      <Button variant="secondary">Crear orden</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: CreateOrdenInput): void => {
-                const payload: CreateOrdenInput = {
-                  ...values,
-                  origenDetalle: values.origenDetalle?.trim() ? values.origenDetalle.trim() : undefined,
-                  asignadoAId: values.asignadoAId?.trim() ? values.asignadoAId.trim() : undefined,
-                };
-                crearOrden.mutate(payload, {
-                  onSuccess: () => {
-                    reset();
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Nueva orden de trabajo
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="create-orden-form"
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <Controller
-                        control={control}
-                        name="equipoId"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.equipoId}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Equipo</Label>
-                            {/* TODO(flota): reemplazar por selector real de equipos cuando Flota exponga el endpoint */}
-                            <Input autoFocus placeholder="Código del equipo (ej. EX-001)" />
-                            {errors.equipoId ? <FieldError>{errors.equipoId.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="titulo"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.titulo}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Título</Label>
-                            <Input placeholder="Describe el trabajo a realizar" />
-                            {errors.titulo ? <FieldError>{errors.titulo.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Controller
-                          control={control}
-                          name="prioridad"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.prioridad}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Prioridad</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {PRIORIDAD_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="tipo"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.tipo}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Tipo</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {TIPO_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="origen"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.origen}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Origen</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {ORIGEN_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-                      </div>
-
-                      <Controller
-                        control={control}
-                        name="origenDetalle"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.origenDetalle}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Detalle del origen (opcional)</Label>
-                            <Input placeholder="Ej. nombre de quien reportó el hallazgo" />
-                            {errors.origenDetalle ? (
-                              <FieldError>{errors.origenDetalle.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="asignadoAId"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.asignadoAId}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Asignado a (opcional)</Label>
-                            {/* TODO: reemplazar por selector real de usuarios (rol MANTENEDOR) — no hay
-                                endpoint público de usuarios para roles no-admin todavía */}
-                            <Input placeholder="ID del usuario mantenedor" />
-                            {errors.asignadoAId ? <FieldError>{errors.asignadoAId.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button form="create-orden-form" isPending={crearOrden.isPending} type="submit">
-                      {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Crear orden')}
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
-  );
-}
 
 /** KPI card — mismo patrón que `Contador`/`KpiCard` (Dashboard, Flota). */
 function StatCard({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' }) {
@@ -504,7 +221,7 @@ export function OrdenesTrabajoView() {
             a "en proceso".
           </p>
         </div>
-        {canCreate ? <CreateOrdenModal /> : null}
+        {canCreate ? <CreateOperationModal /> : null}
       </div>
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
