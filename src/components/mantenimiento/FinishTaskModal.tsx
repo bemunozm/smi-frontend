@@ -192,7 +192,7 @@ export function FinishTaskModal({
                       <PhotoCaptureField
                         file={foto}
                         subtitle="Respalda el trabajo o los insumos ocupados."
-                        title="Foto de lo realizado (opcional)"
+                        title="Foto de lo realizado"
                         onClear={() => setFoto(null)}
                         onSelect={setFoto}
                       />
@@ -247,14 +247,14 @@ export function FinishTaskModal({
                               return (
                                 <div
                                   key={row.id}
-                                  className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted p-3"
+                                  className="flex flex-col gap-3 rounded-lg border border-border bg-muted p-3"
                                 >
                                   <Controller
                                     control={control}
                                     name={`insumos.${index}.insumoId`}
                                     render={({ field }) => (
                                       <ComboBox
-                                        className="min-w-44 flex-1"
+                                        fullWidth
                                         isInvalid={!!errors.insumos?.[index]?.insumoId}
                                         selectedKey={field.value || null}
                                         onSelectionChange={(key) =>
@@ -294,6 +294,9 @@ export function FinishTaskModal({
                                       </ComboBox>
                                     )}
                                   />
+                                  {/* Debajo del buscador: cantidad, stock y
+                                      quitar en una sola línea alineada. */}
+                                  <div className="flex items-end gap-4">
                                   <Controller
                                     control={control}
                                     name={`insumos.${index}.cantidad`}
@@ -323,12 +326,14 @@ export function FinishTaskModal({
                                   <Button
                                     isIconOnly
                                     aria-label="Quitar insumo"
+                                    className="ms-auto"
                                     size="sm"
                                     variant="tertiary"
                                     onPress={() => remove(index)}
                                   >
                                     <Trash2 className="size-4" />
                                   </Button>
+                                  </div>
                                 </div>
                               );
                             })}
