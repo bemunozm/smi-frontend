@@ -267,9 +267,24 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     );
   });
 
-  it('resuelve el nombre del equipo desde Flota', () => {
+  it('el equipo es el TITULAR de la tarjeta: código en negrita + nombre de Flota', () => {
     renderView();
-    expect(screen.getAllByText('EX-014 · CAT 320').length).toBeGreaterThan(0);
+    // Código tabular en negrita (que se note), con el nombre al lado en gris.
+    const codigo = screen.getAllByText('EX-014')[0];
+    expect(codigo.className).toContain('font-bold');
+    expect(codigo.parentElement?.textContent).toContain('CAT 320');
+  });
+
+  it('las tarjetas siguen el orden del boceto: equipo → operación → hallazgo → etiquetas → origen → botón', () => {
+    renderView();
+    const card = screen
+      .getByText('Ruido anormal en la transmisión')
+      .closest('article') as HTMLElement;
+    // El titular es SOLO el equipo — las etiquetas ya no viven arriba.
+    expect(card.firstElementChild?.textContent).toContain('CM-007');
+    expect(card.firstElementChild?.textContent).not.toContain('Hallazgo');
+    // Y el botón cierra la tarjeta.
+    expect(card.lastElementChild?.textContent).toContain('Iniciar operación');
   });
 
   it('como MANTENEDOR: puede iniciar (hallazgos y órdenes) y finalizar', () => {

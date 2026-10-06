@@ -23,8 +23,8 @@ import type { OrdenTrabajo } from '../types/mantenimiento';
 import type { Hallazgo } from '../types/hallazgos';
 import {
   buildWorkshopStats,
-  equipmentLabel,
   formatDate,
+  findEquipment,
   groupWorkshopBoard,
   toPrioridadOT,
   type EquipmentRef,
@@ -78,14 +78,30 @@ function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
   return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
 }
 
-/** Fila superior compacta del artboard tablet: código truncado + chips fijos. */
-function CardTopRow({ code, children }: { code: string; children: React.ReactNode }) {
+/** Titular de la tarjeta (boceto del taller): el EQUIPO primero y notorio —
+ * código tabular en negrita + nombre de Flota en gris, como el Selector de
+ * Terreno. */
+function EquipoHead({
+  equipoId,
+  fleet,
+}: {
+  equipoId: string;
+  fleet: readonly EquipmentRef[] | undefined;
+}) {
+  const eq = findEquipment(equipoId, fleet);
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{code}</span>
-      <div className="flex shrink-0 gap-1.5">{children}</div>
-    </div>
+    <span className="min-w-0 truncate leading-tight">
+      <span className="tabular text-[15.5px] font-bold">{eq?.internalCode ?? equipoId}</span>
+      {eq ? (
+        <span className="text-[14.5px] text-muted-foreground"> · {eq.brand} {eq.model}</span>
+      ) : null}
+    </span>
   );
+}
+
+/** Fila de etiquetas, después del hallazgo y antes del origen (boceto). */
+function ChipsRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap gap-1.5">{children}</div>;
 }
 
 /** Meta de UNA línea, como las tarjetas del artboard tablet del Mantenedor. */
@@ -124,19 +140,17 @@ function FindingCard({
   canStart: boolean;
 }) {
   const prioridad = toPrioridadOT(hallazgo.prioridad);
-  const resolved = equipmentLabel(hallazgo.equipoId, fleet);
-  const equipo =
-    resolved === hallazgo.equipoId ? (hallazgo.equipo?.internalCode ?? resolved) : resolved;
 
   return (
     <BoardCard>
-      <CardTopRow code={equipo}>
+      <EquipoHead equipoId={hallazgo.equipoId} fleet={fleet} />
+      <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
+      <ChipsRow>
         <FindingChip />
         <Chip tono={chipColorToTono(prioridadOTChipColor(prioridad))}>
           {PRIORIDAD_OT_LABELS[prioridad]}
         </Chip>
-      </CardTopRow>
-      <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
+      </ChipsRow>
       <CardMeta>Terreno · Supervisor — {formatDate(hallazgo.fecha)}</CardMeta>
       {canStart ? <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} /> : null}
     </BoardCard>
@@ -259,7 +273,12 @@ export function OrdenesTrabajoView() {
             ))}
             {board.backlog.map((orden) => (
               <BoardCard key={orden.id}>
-                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
+                  <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
+                </div>
+                <ChipsRow>
                   {orden.tipo === 'PREVENTIVA' ? (
                     <PreventiveChip />
                   ) : orden.origen === 'HALLAZGO' ? (
@@ -268,11 +287,7 @@ export function OrdenesTrabajoView() {
                   <Chip tono={chipColorToTono(prioridadOTChipColor(orden.prioridad))}>
                     {PRIORIDAD_OT_LABELS[orden.prioridad]}
                   </Chip>
-                </CardTopRow>
-                <div className="flex items-center gap-2">
-                  <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
-                  <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
-                </div>
+                </ChipsRow>
                 <CardMeta>
                   {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} —{' '}
                   {formatDate(orden.createdAt)}
@@ -285,14 +300,15 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="warning" count={board.inProgress.length} title="Operaciones en proceso">
             {board.inProgress.map((orden) => (
               <BoardCard key={orden.id}>
-                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
-                  <TipoChip tipo={orden.tipo} />
-                </CardTopRow>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
                   <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                 </div>
                 <HallazgoAssoc orden={orden} />
+                <ChipsRow>
+                  <TipoChip tipo={orden.tipo} />
+                </ChipsRow>
                 <CardMeta>
                   Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
                 </CardMeta>
@@ -314,17 +330,16 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="success" count={board.finished.length} title="Finalizadas">
             {board.finished.map((orden) => (
               <BoardCard key={orden.id} muted>
-                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
-                  {orden.estado === 'CANCELADA' ? (
-                    <Chip tono="danger">Cancelada</Chip>
-                  ) : null}
-                  <TipoChip tipo={orden.tipo} />
-                </CardTopRow>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
                   <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                 </div>
                 <HallazgoAssoc orden={orden} />
+                <ChipsRow>
+                  {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
+                  <TipoChip tipo={orden.tipo} />
+                </ChipsRow>
                 <CardMeta>
                   {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}{' '}
                   {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
