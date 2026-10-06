@@ -14,7 +14,7 @@ import {
   Spinner,
   TextField,
 } from '@heroui/react';
-import { TriangleAlert } from 'lucide-react';
+import { Clock, TriangleAlert } from 'lucide-react';
 
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
@@ -22,6 +22,7 @@ import { usePendingWrites } from '../hooks/usePendingWrites';
 import { usePermissions } from '../hooks/usePermissions';
 import { useCrearOrden, useOrdenes } from '../hooks/useOrdenes';
 import { useEquipment } from '../hooks/useEquipment';
+import { useHallazgosList } from '../hooks/useHallazgos';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ORIGEN_OT_LABELS,
@@ -40,13 +41,16 @@ import {
   type CreateOrdenInput,
   type OrdenTrabajo,
 } from '../types/mantenimiento';
+import type { Hallazgo } from '../types/hallazgos';
 import {
   buildWorkshopStats,
   equipmentLabel,
   formatDate,
   groupWorkshopBoard,
+  toPrioridadOT,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
+import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
 import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
 import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
@@ -393,6 +397,62 @@ function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boo
   );
 }
 
+/** Chip que diferencia el ORIGEN de lo que espera en la bandeja: hallazgo
+ * del supervisor (rojo) vs mantención preventiva del administrador (azul). */
+function FindingChip() {
+  return (
+    <Chip color="danger" size="sm" variant="soft">
+      <TriangleAlert className="size-3" />
+      Hallazgo
+    </Chip>
+  );
+}
+
+function PreventiveChip() {
+  return (
+    <Chip color="accent" size="sm" variant="soft">
+      <Clock className="size-3" />
+      Preventiva
+    </Chip>
+  );
+}
+
+/** Tarjeta de un hallazgo REAL de Terreno esperando que el taller lo tome. */
+function FindingCard({
+  hallazgo,
+  fleet,
+  canStart,
+}: {
+  hallazgo: Hallazgo;
+  fleet: readonly EquipmentRef[] | undefined;
+  canStart: boolean;
+}) {
+  const prioridad = toPrioridadOT(hallazgo.prioridad);
+  const resolved = equipmentLabel(hallazgo.equipoId, fleet);
+  const equipo =
+    resolved === hallazgo.equipoId ? (hallazgo.equipo?.internalCode ?? resolved) : resolved;
+
+  return (
+    <BoardCard>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs text-muted-foreground">{equipo}</span>
+        <div className="flex gap-1.5">
+          <FindingChip />
+          <Chip color={prioridadOTChipColor(prioridad)} size="sm" variant="soft">
+            {PRIORIDAD_OT_LABELS[prioridad]}
+          </Chip>
+        </div>
+      </div>
+      <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <MetaItem label="Reportado">{formatDate(hallazgo.fecha)}</MetaItem>
+        <MetaItem label="Origen">Terreno · Supervisor</MetaItem>
+      </div>
+      {canStart ? <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} /> : null}
+    </BoardCard>
+  );
+}
+
 /**
  * Sub-vista "Órdenes" del taller (diseño Mantenedor Taller): los hallazgos
  * reportados llegan como OT PENDIENTE/ASIGNADA a la bandeja, "Iniciar
@@ -402,11 +462,19 @@ function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boo
 export function OrdenesTrabajoView() {
   const { can } = usePermissions();
   const { data: ordenes, isPending, isError, error } = useOrdenes();
+  const { data: hallazgos } = useHallazgosList();
   const { data: equipment } = useEquipment();
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const board = useMemo(() => groupWorkshopBoard(ordenes ?? []), [ordenes]);
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
+  // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
+  // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
+  // en el tablero lo toma la OT ligada.
+  const openFindings = useMemo(
+    () => (hallazgos ?? []).filter((hallazgo) => hallazgo.estado === 'ABIERTO'),
+    [hallazgos],
+  );
 
   // Espejo de los `@Roles` del backend vía `lib/permissions`: el cierre de la
   // tarea (POST de intervención) es exclusivo del MANTENEDOR.
@@ -433,7 +501,7 @@ export function OrdenesTrabajoView() {
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Hallazgos pendientes" value={stats.backlog} />
+        <StatCard label="Hallazgos pendientes" value={openFindings.length} />
         <StatCard label="En proceso" tone="warning" value={stats.inProgress} />
         <StatCard label="Finalizadas hoy" tone="success" value={stats.finishedToday} />
         <StatCard label="Total asignadas" value={stats.total} />
@@ -451,27 +519,46 @@ export function OrdenesTrabajoView() {
         </div>
       ) : null}
 
-      {!isPending && !isError && ordenes && ordenes.length === 0 ? (
+      {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">No hay órdenes de trabajo</p>
+          <p className="text-sm font-medium text-foreground">No hay nada en el tablero</p>
           <p className="text-sm text-muted-foreground">
-            Los hallazgos reportados y las órdenes creadas aparecen acá.
+            Los hallazgos reportados y las mantenciones preventivas asignadas aparecen acá.
           </p>
         </div>
       ) : null}
 
-      {!isPending && !isError && ordenes && ordenes.length > 0 ? (
+      {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length > 0 ? (
         <div className="grid items-start gap-4 lg:grid-cols-3">
-          <BoardColumn color="default" count={board.backlog.length} title="Hallazgos">
+          <BoardColumn
+            color="default"
+            count={openFindings.length + board.backlog.length}
+            title="Órdenes"
+          >
+            {openFindings.map((hallazgo) => (
+              <FindingCard
+                key={hallazgo.id}
+                canStart={can('orden.create')}
+                fleet={fleet}
+                hallazgo={hallazgo}
+              />
+            ))}
             {board.backlog.map((orden) => (
               <BoardCard key={orden.id}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {equipmentLabel(orden.equipoId, fleet)}
                   </span>
-                  <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
-                    {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                  </Chip>
+                  <div className="flex gap-1.5">
+                    {orden.tipo === 'PREVENTIVA' ? (
+                      <PreventiveChip />
+                    ) : orden.origen === 'HALLAZGO' ? (
+                      <FindingChip />
+                    ) : null}
+                    <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
+                      {PRIORIDAD_OT_LABELS[orden.prioridad]}
+                    </Chip>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
@@ -488,7 +575,7 @@ export function OrdenesTrabajoView() {
             ))}
           </BoardColumn>
 
-          <BoardColumn color="warning" count={board.inProgress.length} title="Operación en proceso">
+          <BoardColumn color="warning" count={board.inProgress.length} title="Operaciones en proceso">
             {board.inProgress.map((orden) => (
               <BoardCard key={orden.id}>
                 <div className="flex items-center justify-between gap-2">
@@ -513,7 +600,7 @@ export function OrdenesTrabajoView() {
             ))}
           </BoardColumn>
 
-          <BoardColumn color="success" count={board.finished.length} title="Finalizado">
+          <BoardColumn color="success" count={board.finished.length} title="Finalizadas">
             {board.finished.map((orden) => (
               <BoardCard key={orden.id} muted>
                 <div className="flex items-center justify-between gap-2">

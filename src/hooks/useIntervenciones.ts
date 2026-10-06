@@ -52,13 +52,18 @@ export function useFinishTask() {
     mutationFn: async ({
       orden,
       intervencion,
+      foto,
     }: {
       orden: OrdenTrabajo;
       intervencion: CreateIntervencionInput;
+      /** Foto de lo realizado/ocupado: viaja como archivo del write y el
+       * replay la sube e inyecta su `fotoKey` (patrón combustible). */
+      foto?: File | null;
     }) => {
       const registered = await writeQueued('intervencion.create', {
         params: { ordenId: orden.id },
         body: { ...intervencion, id: generateUuid() },
+        ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
       });
       const completed = await writeQueued('orden.update', {
         params: { id: orden.id },

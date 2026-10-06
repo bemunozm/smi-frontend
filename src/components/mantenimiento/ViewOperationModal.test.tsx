@@ -25,6 +25,7 @@ import { ViewOperationModal } from './ViewOperationModal';
 const ORDEN: OrdenTrabajo = {
   id: 'ot-3',
   equipoId: 'RE-003',
+  hallazgoId: null,
   titulo: 'Engrase general y cambio de pernos',
   estado: 'COMPLETADA',
   prioridad: 'MEDIA',
@@ -62,6 +63,7 @@ describe('ViewOperationModal', () => {
           detalle: 'Engrase de bujes y cambio de 6 pernos.',
           horasHombre: 3,
           horometro: 3220,
+          fotoUrl: 'https://signed.example/cierre.jpg',
           soloLectura: true,
           insumos: [],
           fecha: '2026-10-05T11:05:00.000Z',
@@ -73,6 +75,10 @@ describe('ViewOperationModal', () => {
     openModal();
     expect(screen.getByText('Engrase de bujes y cambio de 6 pernos.')).toBeTruthy();
     expect(screen.getByText('3220 h')).toBeTruthy();
+    // La foto del cierre, servida con URL firmada.
+    expect(screen.getByAltText('Foto del cierre').getAttribute('src')).toBe(
+      'https://signed.example/cierre.jpg',
+    );
   });
 
   it('sin intervenciones muestra el vacío amable', () => {

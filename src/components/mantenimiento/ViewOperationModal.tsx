@@ -79,6 +79,18 @@ function OperationDetail({
             <p className="m-0 text-sm text-foreground">{cierre.detalle}</p>
           </ReadOnlyBlock>
 
+          {cierre.fotoUrl ? (
+            <ReadOnlyBlock label="Foto del cierre">
+              <a href={cierre.fotoUrl} rel="noreferrer" target="_blank">
+                <img
+                  alt="Foto del cierre"
+                  className="max-h-48 w-fit rounded-lg border border-border object-cover"
+                  src={cierre.fotoUrl}
+                />
+              </a>
+            </ReadOnlyBlock>
+          ) : null}
+
           {cierre.insumos.length > 0 ? (
             <ReadOnlyBlock label="¿Qué se utilizó?">
               <div className="flex flex-col gap-2">
@@ -130,8 +142,8 @@ function OperationDetail({
       <div className="flex items-start gap-2.5 rounded-lg bg-muted px-3.5 py-3 text-[13px] leading-5 text-muted-foreground">
         <Package className="mt-0.5 size-4 shrink-0" />
         <span>
-          Los insumos quedan registrados en la bitácora de la OT — los movimientos de stock se
-          consultan en Inventario.
+          Stock descontado al finalizar — cada insumo quedó como salida trazable ligada a esta OT
+          en Inventario.
         </span>
       </div>
     </div>

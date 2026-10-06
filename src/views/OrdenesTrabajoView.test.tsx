@@ -8,6 +8,7 @@ function orden(overrides: Partial<OrdenTrabajo>): OrdenTrabajo {
   return {
     id: 'ot-x',
     equipoId: 'EX-014',
+    hallazgoId: null,
     titulo: 'Sin título',
     estado: 'PENDIENTE',
     prioridad: 'MEDIA',
@@ -33,6 +34,7 @@ const ORDENES: OrdenTrabajo[] = [
   orden({
     id: 'ot-2',
     equipoId: 'CM-007',
+    hallazgoId: null,
     titulo: 'Cambio de aceite motor y filtro',
     estado: 'EN_PROCESO',
     tipo: 'PREVENTIVA',
@@ -41,10 +43,20 @@ const ORDENES: OrdenTrabajo[] = [
   orden({
     id: 'ot-3',
     equipoId: 'RE-003',
+    hallazgoId: null,
     titulo: 'Engrase general y cambio de pernos',
     estado: 'COMPLETADA',
     tipo: 'PREVENTIVA',
     origen: 'PREVENTIVO',
+  }),
+  // Preventiva asignada por el administrador, esperando en la bandeja.
+  orden({
+    id: 'ot-4',
+    titulo: 'Mantención 500 h — filtros y aceite',
+    estado: 'PENDIENTE',
+    tipo: 'PREVENTIVA',
+    origen: 'PREVENTIVO',
+    origenDetalle: null,
   }),
 ];
 
@@ -54,10 +66,40 @@ const EQUIPMENT = [
   { id: 'eq-3', internalCode: 'RE-003', brand: 'CAT', model: '416' },
 ];
 
+// Hallazgo REAL de Terreno (del supervisor), todavía sin operación.
+const HALLAZGOS = [
+  {
+    id: 'h-1',
+    equipoId: 'eq-2',
+    descripcion: 'Ruido anormal en la transmisión',
+    prioridad: 'ALTA',
+    estado: 'ABIERTO',
+    fotoUrl: null,
+    fecha: '2026-10-06T07:50:00.000Z',
+    equipo: { internalCode: 'CM-007' },
+  },
+  // CERRADO: no debe aparecer en la bandeja.
+  {
+    id: 'h-2',
+    equipoId: 'eq-1',
+    descripcion: 'Vidrio trizado',
+    prioridad: 'BAJA',
+    estado: 'CERRADO',
+    fotoUrl: null,
+    fecha: '2026-10-01T07:50:00.000Z',
+    equipo: { internalCode: 'EX-014' },
+  },
+];
+
 // Permisos como los resuelve `lib/permissions` para cada rol (espejo del
-// backend): MANTENEDOR inicia/finaliza pero no crea; ADMIN crea pero el POST
-// de intervenciones no es suyo.
-const CAN_MANTENEDOR = new Set(['orden.update', 'orden.toggleTarea', 'intervencion.create']);
+// backend): el MANTENEDOR también crea órdenes (inicia operaciones desde los
+// hallazgos de su bandeja); el POST de intervenciones sigue siendo solo suyo.
+const CAN_MANTENEDOR = new Set([
+  'orden.create',
+  'orden.update',
+  'orden.toggleTarea',
+  'intervencion.create',
+]);
 const CAN_ADMIN = new Set(['orden.create', 'orden.update', 'orden.toggleTarea']);
 let allowed: ReadonlySet<string> = CAN_MANTENEDOR;
 
@@ -91,6 +133,14 @@ vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({ data: EQUIPMENT, isPending: false }),
 }));
 
+vi.mock('../hooks/useHallazgos', () => ({
+  useHallazgosList: () => ({ data: HALLAZGOS, isPending: false, isError: false }),
+}));
+
+vi.mock('../hooks/useBranches', () => ({
+  useBranches: () => ({ data: [{ id: 'br-1', name: 'Casa Matriz' }], isPending: false }),
+}));
+
 vi.mock('../hooks/useInventory', () => ({
   useItems: () => ({ data: [], isPending: false }),
 }));
@@ -120,27 +170,44 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
   it('reparte las órdenes en las tres columnas del tablero', () => {
     renderView();
 
-    const backlog = screen.getByRole('region', { name: 'Hallazgos' });
-    const inProgress = screen.getByRole('region', { name: 'Operación en proceso' });
-    const finished = screen.getByRole('region', { name: 'Finalizado' });
+    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    const inProgress = screen.getByRole('region', { name: 'Operaciones en proceso' });
+    const finished = screen.getByRole('region', { name: 'Finalizadas' });
 
     expect(within(backlog).getByText('Fuga de aceite hidráulico en pluma')).toBeTruthy();
     expect(within(inProgress).getByText('Cambio de aceite motor y filtro')).toBeTruthy();
     expect(within(finished).getByText('Engrase general y cambio de pernos')).toBeTruthy();
   });
 
-  it('resuelve el nombre del equipo desde Flota', () => {
+  it('los hallazgos REALES abiertos llegan a la bandeja, diferenciados; los cerrados no', () => {
     renderView();
-    expect(screen.getByText('EX-014 · CAT 320')).toBeTruthy();
+
+    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    // El hallazgo real del supervisor, con su chip diferenciador.
+    expect(within(backlog).getByText('Ruido anormal en la transmisión')).toBeTruthy();
+    expect(within(backlog).getAllByText('Hallazgo').length).toBeGreaterThan(0);
+    // El cerrado no vuelve a la bandeja.
+    expect(screen.queryByText('Vidrio trizado')).toBeNull();
   });
 
-  it('como MANTENEDOR: puede iniciar y finalizar, pero no crear órdenes', () => {
+  it('una preventiva pendiente se distingue con su propio chip', () => {
+    renderView();
+    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    expect(within(backlog).getByText('Preventiva')).toBeTruthy();
+  });
+
+  it('resuelve el nombre del equipo desde Flota', () => {
+    renderView();
+    expect(screen.getAllByText('EX-014 · CAT 320').length).toBeGreaterThan(0);
+  });
+
+  it('como MANTENEDOR: puede iniciar (hallazgos y órdenes) y finalizar', () => {
     renderView();
 
-    expect(screen.getByRole('button', { name: /Iniciar operación/ })).toBeTruthy();
+    // Un "Iniciar operación" por cada hallazgo abierto y por cada OT pendiente.
+    expect(screen.getAllByRole('button', { name: /Iniciar operación/ }).length).toBeGreaterThanOrEqual(3);
     expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Ver operación/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Crear orden/ })).toBeNull();
   });
 
   it('como ADMIN: puede crear órdenes pero no finalizar (el POST de bitácora es del mantenedor)', () => {

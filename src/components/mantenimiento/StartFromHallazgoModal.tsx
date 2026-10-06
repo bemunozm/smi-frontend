@@ -1,31 +1,28 @@
 import { useState } from 'react';
 import { Button, Chip, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
-import { ArrowRight, Info } from 'lucide-react';
+import { ArrowRight, Info, TriangleAlert } from 'lucide-react';
 
-import { useActualizarOrden } from '../../hooks/useOrdenes';
-import {
-  PRIORIDAD_OT_LABELS,
-  TIPO_OT_LABELS,
-  prioridadOTChipColor,
-} from '../../config/mantenimiento-colors';
-import type { OrdenTrabajo } from '../../types/mantenimiento';
-import { equipmentLabel, type EquipmentRef } from './workshop';
+import { useLogOperation } from '../../hooks/useOrdenes';
+import { PRIORIDAD_OT_LABELS, prioridadOTChipColor } from '../../config/mantenimiento-colors';
+import type { Hallazgo } from '../../types/hallazgos';
+import { equipmentLabel, toPrioridadOT, type EquipmentRef } from './workshop';
 
 /**
- * Pop-up "Iniciar operación" (diseño Mantenedor Taller): toma un hallazgo de
- * la bandeja, deja nombrar la operación y pasa la OT a EN_PROCESO. El
- * horómetro y los insumos NO se piden acá a propósito — se registran al
- * finalizar la tarea (campo de la intervención), igual que dice el banner.
+ * Pop-up "Iniciar operación" desde un hallazgo REAL de Terreno: crea la OT
+ * ligada (`hallazgoId`) y la deja EN_PROCESO (`useLogOperation` encola ambas
+ * escrituras). El backend pasa el hallazgo a EN_PROCESO en la misma
+ * transacción del create — por eso desaparece de la bandeja.
  */
-export function StartOperationModal({
-  orden,
+export function StartFromHallazgoModal({
+  hallazgo,
   equipment,
 }: {
-  orden: OrdenTrabajo;
+  hallazgo: Hallazgo;
   equipment: readonly EquipmentRef[] | undefined;
 }) {
-  const actualizarOrden = useActualizarOrden();
-  const [titulo, setTitulo] = useState(orden.titulo);
+  const logOperation = useLogOperation();
+  const [titulo, setTitulo] = useState(`Reparación: ${hallazgo.descripcion}`);
+  const prioridad = toPrioridadOT(hallazgo.prioridad);
 
   return (
     <Modal>
@@ -48,17 +45,27 @@ export function StartOperationModal({
                   </p>
                 </Modal.Header>
                 <Modal.Body className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-3">
-                    <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
-                      {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                    </Chip>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {equipmentLabel(orden.equipoId, equipment)}
-                    </span>
-                    <strong className="text-sm">{orden.titulo}</strong>
-                    <Chip className="ms-auto" size="sm" variant="secondary">
-                      {TIPO_OT_LABELS[orden.tipo]}
-                    </Chip>
+                  <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-muted px-3.5 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Chip color="danger" size="sm" variant="soft">
+                        <TriangleAlert className="size-3" />
+                        Hallazgo
+                      </Chip>
+                      <Chip color={prioridadOTChipColor(prioridad)} size="sm" variant="soft">
+                        {PRIORIDAD_OT_LABELS[prioridad]}
+                      </Chip>
+                      <span className="ms-auto font-mono text-xs text-muted-foreground">
+                        {hallazgo.equipo?.internalCode ?? equipmentLabel(hallazgo.equipoId, equipment)}
+                      </span>
+                    </div>
+                    <strong className="text-sm">{hallazgo.descripcion}</strong>
+                    {hallazgo.fotoUrl ? (
+                      <img
+                        alt="Foto del hallazgo"
+                        className="h-24 w-fit rounded-md border border-border object-cover"
+                        src={hallazgo.fotoUrl}
+                      />
+                    ) : null}
                   </div>
 
                   <TextField
@@ -86,10 +93,18 @@ export function StartOperationModal({
                   </Button>
                   <Button
                     isDisabled={!titulo.trim()}
-                    isPending={actualizarOrden.isPending}
+                    isPending={logOperation.isPending}
                     onPress={() => {
-                      actualizarOrden.mutate(
-                        { orden, input: { estado: 'EN_PROCESO', titulo: titulo.trim() } },
+                      logOperation.mutate(
+                        {
+                          equipoId: hallazgo.equipoId,
+                          hallazgoId: hallazgo.id,
+                          titulo: titulo.trim(),
+                          prioridad,
+                          tipo: 'CORRECTIVA',
+                          origen: 'HALLAZGO',
+                          origenDetalle: hallazgo.descripcion,
+                        },
                         { onSuccess: close },
                       );
                     }}

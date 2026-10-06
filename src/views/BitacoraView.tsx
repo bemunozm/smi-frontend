@@ -164,8 +164,7 @@ export function BitacoraView() {
           <Card.Content className="flex flex-col gap-4">
             {!canCreate ? (
               <div className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
-                Por ahora las órdenes las crea un Administrador o Supervisor. Puedes iniciar una
-                operación desde un hallazgo de tu bandeja en la pestaña Órdenes.
+                Tu rol no puede registrar operaciones — puedes consultar el historial del equipo.
               </div>
             ) : null}
 
@@ -298,8 +297,8 @@ export function BitacoraView() {
               <div className="flex items-start gap-2.5 rounded-lg bg-accent px-3.5 py-3 text-[13px] leading-5 text-accent-foreground">
                 <Info className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  Lo que hiciste y los insumos utilizados se registran al{' '}
-                  <strong>finalizar la tarea</strong>.
+                  Lo que hiciste, la foto y los insumos utilizados se registran al{' '}
+                  <strong>finalizar la tarea</strong>. Ahí se descuenta el stock.
                 </span>
               </div>
 

@@ -11,6 +11,16 @@ vi.mock('../../hooks/useIntervenciones', () => ({
   useCrearIntervencion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock('../../hooks/useBranches', () => ({
+  useBranches: () => ({
+    data: [
+      { id: 'br-1', name: 'Casa Matriz', address: null, isActive: true },
+      { id: 'br-2', name: 'Faena Patillo', address: null, isActive: true },
+    ],
+    isPending: false,
+  }),
+}));
+
 vi.mock('../../hooks/useInventory', () => ({
   useItems: () => ({
     data: [
@@ -41,6 +51,7 @@ import { FinishTaskModal } from './FinishTaskModal';
 const ORDEN: OrdenTrabajo = {
   id: 'ot-1',
   equipoId: 'CM-007',
+  hallazgoId: null,
   titulo: 'Cambio de aceite motor y filtro',
   estado: 'EN_PROCESO',
   prioridad: 'MEDIA',
@@ -86,6 +97,18 @@ describe('FinishTaskModal', () => {
       intervencion: { horometro?: number };
     };
     expect(intervencion.horometro).toBeUndefined();
+  });
+
+  it('al agregar un insumo aparece la Bodega — el descuento sale de una bodega concreta', async () => {
+    openModal();
+    expect(screen.queryByText('Bodega')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+    await waitFor(() => expect(screen.getByText('Bodega')).toBeTruthy());
+  });
+
+  it('ofrece adjuntar la foto de lo realizado', () => {
+    openModal();
+    expect(screen.getByText(/Foto de lo realizado/)).toBeTruthy();
   });
 
   it('un insumo sin seleccionar bloquea el guardado CON mensaje visible (no en silencio)', async () => {

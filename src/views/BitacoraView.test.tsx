@@ -49,18 +49,19 @@ function renderView() {
 }
 
 describe('BitacoraView', () => {
-  it('el banner NO promete un descuento de stock que el backend no hace', () => {
-    // Constraint de honestidad del plan: el backend no descuenta stock al
-    // registrar la intervención; prometerlo desvía el inventario real.
+  it('el banner promete el descuento de stock — y desde este backend ES verdad', () => {
+    // La constraint de honestidad se mantiene, pero invertida: ahora el
+    // backend SÍ descuenta stock al registrar la intervención de cierre
+    // (StockService.issue en la misma transacción), así que el banner lo dice.
     const { container } = renderView();
-    expect(container.textContent).not.toMatch(/se descuenta el stock/i);
+    expect(container.textContent).toMatch(/se descuenta el stock/i);
     expect(container.textContent).toMatch(/finalizar la tarea/i);
   });
 
-  it('como MANTENEDOR el formulario queda deshabilitado con aviso (espejo del backend)', () => {
+  it('un rol sin orden.create ve el formulario deshabilitado con aviso (espejo del backend)', () => {
     canCreateOrden = false;
     renderView();
-    expect(screen.getByText(/las órdenes las crea un Administrador o Supervisor/)).toBeTruthy();
+    expect(screen.getByText(/Tu rol no puede registrar operaciones/)).toBeTruthy();
     const submit = screen.getByRole('button', { name: /Iniciar operación/ });
     expect(submit.hasAttribute('disabled')).toBe(true);
   });

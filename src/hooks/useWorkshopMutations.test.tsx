@@ -36,6 +36,7 @@ const UUID = /^[0-9a-f-]{36}$/;
 const ORDEN: OrdenTrabajo = {
   id: 'ot-1',
   equipoId: 'CM-007',
+  hallazgoId: null,
   titulo: 'Cambio de aceite motor y filtro',
   estado: 'EN_PROCESO',
   prioridad: 'MEDIA',
@@ -80,6 +81,33 @@ describe('useFinishTask', () => {
     expect(toast.success).toHaveBeenCalledWith('Operación finalizada', {
       description: ORDEN.titulo,
     });
+  });
+
+  it('la foto del cierre viaja como archivo del write de la intervención (el replay inyecta fotoKey)', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }));
+    const foto = new File(['x'], 'cierre.jpg', { type: 'image/jpeg' });
+
+    const { result } = renderHook(() => useFinishTask(), { wrapper });
+    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, foto });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [first, second] = submitWriteMock.mock.calls;
+    expect((first[1] as { files?: unknown }).files).toEqual([{ field: 'fotoKey', file: foto }]);
+    // El PATCH de estado no lleva archivos.
+    expect((second[1] as { files?: unknown }).files).toBeUndefined();
+  });
+
+  it('sin foto, el write de la intervención no lleva archivos', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }));
+
+    const { result } = renderHook(() => useFinishTask(), { wrapper });
+    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, foto: null });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [first] = submitWriteMock.mock.calls;
+    expect((first[1] as { files?: unknown }).files).toBeUndefined();
   });
 
   it('si la intervención falla, NO toca el estado de la orden', async () => {

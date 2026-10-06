@@ -1,4 +1,4 @@
-import type { OrdenTrabajo, PrioridadOT } from '../../types/mantenimiento';
+import { PRIORIDAD_OT, type OrdenTrabajo, type PrioridadOT } from '../../types/mantenimiento';
 
 /**
  * Helpers puros del tablero del taller (diseño "Mantenedor Taller").
@@ -82,6 +82,16 @@ export interface EquipmentRef {
   internalCode: string;
   brand: string;
   model: string;
+  /** Bodega base de la unidad — el default de la bodega al descontar insumos. */
+  homeBranchId?: string | null;
+}
+
+/** La unidad de Flota detrás del `equipoId` libre de una OT, si se resuelve. */
+export function findEquipment(
+  equipoId: string,
+  equipment: readonly EquipmentRef[] | undefined,
+): EquipmentRef | undefined {
+  return equipment?.find((eq) => eq.internalCode === equipoId || eq.id === equipoId);
 }
 
 /**
@@ -96,6 +106,16 @@ export function equipmentLabel(
     (eq) => eq.internalCode === equipoId || eq.id === equipoId,
   );
   return match ? `${match.internalCode} · ${match.brand} ${match.model}` : equipoId;
+}
+
+/**
+ * La prioridad de un hallazgo de Terreno viaja como string libre; para los
+ * chips del taller se proyecta al set de OT, con MEDIA como caída segura.
+ */
+export function toPrioridadOT(prioridad: string): PrioridadOT {
+  return (Object.values(PRIORIDAD_OT) as string[]).includes(prioridad)
+    ? (prioridad as PrioridadOT)
+    : PRIORIDAD_OT.MEDIA;
 }
 
 /** Mismo formato corto que el resto del dominio (es-CL, dd-mm hh:mm). */

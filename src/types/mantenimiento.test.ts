@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { toCreateOrdenInput } from './mantenimiento';
+import { CreateIntervencionSchema, toCreateOrdenInput } from './mantenimiento';
+
+describe('CreateIntervencionSchema (cierre de tarea)', () => {
+  const BASE = { tipo: 'PREVENTIVA' as const, detalle: 'Cambio de filtro', horasHombre: 1 };
+
+  it('con insumos exige la bodega (el descuento sale de UNA bodega)', () => {
+    const sinBodega = CreateIntervencionSchema.safeParse({
+      ...BASE,
+      insumos: [{ insumoId: 'item-1', cantidad: 1 }],
+    });
+    expect(sinBodega.success).toBe(false);
+    if (!sinBodega.success) {
+      expect(sinBodega.error.issues.some((issue) => issue.path.includes('branchId'))).toBe(true);
+    }
+
+    const conBodega = CreateIntervencionSchema.safeParse({
+      ...BASE,
+      branchId: 'branch-1',
+      insumos: [{ insumoId: 'item-1', cantidad: 1 }],
+    });
+    expect(conBodega.success).toBe(true);
+  });
+
+  it('sin insumos no exige bodega', () => {
+    expect(CreateIntervencionSchema.safeParse(BASE).success).toBe(true);
+  });
+});
 
 describe('toCreateOrdenInput (form "Nueva operación" de la Bitácora)', () => {
   it('correctiva con hallazgo → origen HALLAZGO con el detalle', () => {

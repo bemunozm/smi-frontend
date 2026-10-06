@@ -163,7 +163,7 @@ export function WorkshopStockView() {
           Descuento de stock
         </h2>
         <p className="text-sm text-muted-foreground">
-          Cada insumo o repuesto usado en una operación debe quedar como movimiento trazable en
+          Cada insumo o repuesto usado en una operación queda como movimiento trazable en
           Inventario.
         </p>
       </div>
@@ -171,12 +171,12 @@ export function WorkshopStockView() {
       <div className="flex items-start gap-2.5 rounded-lg bg-accent px-3.5 py-3 text-[13px] leading-5 text-accent-foreground">
         <Info className="mt-0.5 size-4 shrink-0" />
         <span>
-          El descuento automático al finalizar una tarea está pendiente de la integración
-          Mantenimiento ↔ Inventario; por ahora los consumos se asientan como salidas en{' '}
+          Cada insumo usado al <strong>finalizar una tarea</strong> se descuenta automáticamente de
+          la bodega elegida y queda como salida trazable en{' '}
           <Link className="font-semibold underline" to="/inventario/movimientos">
             Inventario
           </Link>
-          .
+          , ligada a su OT.
         </span>
       </div>
 
