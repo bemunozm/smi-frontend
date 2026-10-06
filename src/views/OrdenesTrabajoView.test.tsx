@@ -205,9 +205,10 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     renderView();
     const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;
     expect(board?.className).toContain('md:grid-cols-3');
-    // Y los KPI pasan a fila de 4 desde tablet, como el artboard.
-    const kpis = screen.getByText('Hallazgos pendientes').closest('.grid');
-    expect(kpis?.className).toContain('md:grid-cols-4');
+    // Y los KPI son el bloque `Cifras` del kit de Terreno: 4 celdas comparables.
+    const kpis = screen.getByText('Hallazgos pendientes').closest('dl');
+    expect(kpis).toBeTruthy();
+    expect(kpis?.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
   });
 
   it('reparte las órdenes en las tres columnas del tablero', () => {
@@ -241,23 +242,28 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(within(backlog).getByText('Preventiva')).toBeTruthy();
   });
 
-  it('cada chip lleva SU color real como clase (mitigación del bug de Chip de HeroUI v3.2.3)', () => {
-    // El Chip de HeroUI comparte estado entre instancias (ver StatusChip.tsx):
-    // todos pueden terminar del color del último calculado. Acá se fija que
-    // cada chip del tablero lleve su token directo, inmune a ese bug.
+  it('cada chip es el Chip del kit de Terreno con su tono real (y sin el bug de HeroUI)', () => {
+    // Chips del kit (`components/terreno/ui.tsx`): clases de token directas,
+    // un tono por nivel, inmunes al bug de slots compartidos de HeroUI.
     renderView();
 
     expect(screen.getAllByText('Hallazgo')[0].closest('span')?.className).toContain(
-      'bg-danger-soft',
+      'bg-[var(--danger-soft)]',
     );
-    expect(screen.getByText('Crítica').closest('span')?.className).toContain('bg-danger-soft');
-    expect(screen.getByText('Alta').closest('span')?.className).toContain('bg-warning-soft');
-    expect(screen.getByText('Media').closest('span')?.className).toContain('bg-accent-soft');
+    expect(screen.getByText('Crítica').closest('span')?.className).toContain(
+      'bg-[var(--danger-soft)]',
+    );
+    expect(screen.getByText('Alta').closest('span')?.className).toContain(
+      'bg-[var(--warning-soft)]',
+    );
+    expect(screen.getByText('Media').closest('span')?.className).toContain(
+      'bg-[var(--accent-soft)]',
+    );
     // 'Preventiva' también existe como chip de TIPO en otras columnas — acá
     // se verifica el de la bandeja.
     const backlog = screen.getByRole('region', { name: 'Órdenes' });
     expect(within(backlog).getByText('Preventiva').closest('span')?.className).toContain(
-      'bg-accent-soft',
+      'bg-[var(--accent-soft)]',
     );
   });
 

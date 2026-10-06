@@ -13,8 +13,18 @@ import {
   type TipoOT,
 } from '../types/mantenimiento';
 
+import type { Tono } from '../components/terreno/ui';
+
 /** Mismo set de colores semánticos que acepta `Chip`/`Avatar` de HeroUI. */
 export type StatusChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
+
+/**
+ * Traducción al `Tono` del kit de Terreno (el taller se dibuja con ese kit):
+ * mismo semáforo, con `accent→info` y `default→neutral`.
+ */
+export function chipColorToTono(color: StatusChipColor): Tono {
+  return color === 'accent' ? 'info' : color === 'default' ? 'neutral' : color;
+}
 
 const ESTADO_OT_COLOR: Record<EstadoOT, StatusChipColor> = {
   [ESTADO_OT.PENDIENTE]: 'default',

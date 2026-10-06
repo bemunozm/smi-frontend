@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { Card, Spinner } from '@heroui/react';
+import { Spinner } from '@heroui/react';
 import { Clock, TriangleAlert } from 'lucide-react';
 
-// StatusChip y no <Chip> de HeroUI: su slot API comparte estado entre
-// instancias (bug documentado en StatusChip.tsx) y los colores se pisan.
-import { StatusChip } from '../components/flota/StatusChip';
+// El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
+// táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
+import { Chip, Cifras, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePendingWrites } from '../hooks/usePendingWrites';
@@ -16,7 +16,7 @@ import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ORIGEN_OT_LABELS,
   PRIORIDAD_OT_LABELS,
-  TIPO_OT_LABELS,
+  chipColorToTono,
   prioridadOTChipColor,
 } from '../config/mantenimiento-colors';
 import type { OrdenTrabajo } from '../types/mantenimiento';
@@ -35,28 +35,6 @@ import { StartOperationModal } from '../components/mantenimiento/StartOperationM
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
 import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
 
-/** KPI card — mismo patrón que `Contador`/`KpiCard` (Dashboard, Flota). */
-function StatCard({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' }) {
-  const toneClass =
-    tone === 'success'
-      ? 'text-success-soft-foreground'
-      : tone === 'warning'
-        ? 'text-warning-soft-foreground'
-        : 'text-foreground';
-  return (
-    <Card>
-      <Card.Header>
-        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-          {label}
-        </Card.Description>
-        <Card.Title className={`font-display text-[26px] font-semibold tracking-[-0.02em] ${toneClass}`}>
-          {value}
-        </Card.Title>
-      </Card.Header>
-    </Card>
-  );
-}
-
 /** Columna del tablero: chip de cabecera + conteo + tarjetas. */
 function BoardColumn({
   title,
@@ -65,14 +43,14 @@ function BoardColumn({
   children,
 }: {
   title: string;
-  color: 'default' | 'warning' | 'success';
+  color: 'neutral' | 'warning' | 'success';
   count: number;
   children: React.ReactNode;
 }) {
   return (
     <section aria-label={title} className="flex min-w-0 flex-col">
       <div className="mb-3 flex items-center gap-2">
-        <StatusChip tone={color}>{title}</StatusChip>
+        <Chip tono={color}>{title}</Chip>
         <span className="ms-auto text-xs font-semibold text-muted-foreground">{count}</span>
       </div>
       <div className="flex flex-col gap-3.5">{children}</div>
@@ -92,15 +70,12 @@ function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
 }
 
 function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
-  return (
-    <article
-      className={`flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-3.5 shadow-sm ${
-        muted ? 'opacity-90' : ''
-      }`}
-    >
-      {children}
-    </article>
-  );
+  return <Tarjeta className={`min-w-0 gap-2.5 ${muted ? 'opacity-90' : ''}`}>{children}</Tarjeta>;
+}
+
+/** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
+function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
+  return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
 }
 
 /** Fila superior compacta del artboard tablet: código truncado + chips fijos. */
@@ -122,19 +97,19 @@ function CardMeta({ children }: { children: React.ReactNode }) {
  * del supervisor (rojo) vs mantención preventiva del administrador (azul). */
 function FindingChip() {
   return (
-    <StatusChip className="gap-1" tone="danger">
+    <Chip tono="danger">
       <TriangleAlert className="size-3" />
       Hallazgo
-    </StatusChip>
+    </Chip>
   );
 }
 
 function PreventiveChip() {
   return (
-    <StatusChip className="gap-1" tone="accent">
+    <Chip tono="info">
       <Clock className="size-3" />
       Preventiva
-    </StatusChip>
+    </Chip>
   );
 }
 
@@ -157,9 +132,9 @@ function FindingCard({
     <BoardCard>
       <CardTopRow code={equipo}>
         <FindingChip />
-        <StatusChip tone={prioridadOTChipColor(prioridad)}>
+        <Chip tono={chipColorToTono(prioridadOTChipColor(prioridad))}>
           {PRIORIDAD_OT_LABELS[prioridad]}
-        </StatusChip>
+        </Chip>
       </CardTopRow>
       <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
       <CardMeta>Terreno · Supervisor — {formatDate(hallazgo.fecha)}</CardMeta>
@@ -224,12 +199,14 @@ export function OrdenesTrabajoView() {
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-        <StatCard label="Hallazgos pendientes" value={openFindings.length} />
-        <StatCard label="En proceso" tone="warning" value={stats.inProgress} />
-        <StatCard label="Finalizadas hoy" tone="success" value={stats.finishedToday} />
-        <StatCard label="Total asignadas" value={stats.total} />
-      </div>
+      <Cifras
+        items={[
+          { label: 'Hallazgos pendientes', valor: openFindings.length },
+          { label: 'En proceso', valor: stats.inProgress },
+          { label: 'Finalizadas hoy', valor: stats.finishedToday, destacado: true },
+          { label: 'Total asignadas', valor: stats.total },
+        ]}
+      />
 
       {isPending || (findingsPending && !findingsError) ? (
         <div className="flex justify-center py-16">
@@ -268,7 +245,7 @@ export function OrdenesTrabajoView() {
         // quedan en pantalla desde md (834px de una tablet vertical incluida).
         <div className="grid items-start gap-3 md:grid-cols-3 lg:gap-4">
           <BoardColumn
-            color="default"
+            color="neutral"
             count={openFindings.length + board.backlog.length}
             title="Órdenes"
           >
@@ -288,9 +265,9 @@ export function OrdenesTrabajoView() {
                   ) : orden.origen === 'HALLAZGO' ? (
                     <FindingChip />
                   ) : null}
-                  <StatusChip tone={prioridadOTChipColor(orden.prioridad)}>
+                  <Chip tono={chipColorToTono(prioridadOTChipColor(orden.prioridad))}>
                     {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                  </StatusChip>
+                  </Chip>
                 </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
@@ -309,7 +286,7 @@ export function OrdenesTrabajoView() {
             {board.inProgress.map((orden) => (
               <BoardCard key={orden.id}>
                 <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
-                  <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
+                  <TipoChip tipo={orden.tipo} />
                 </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
@@ -339,9 +316,9 @@ export function OrdenesTrabajoView() {
               <BoardCard key={orden.id} muted>
                 <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
                   {orden.estado === 'CANCELADA' ? (
-                    <StatusChip tone="danger">Cancelada</StatusChip>
+                    <Chip tono="danger">Cancelada</Chip>
                   ) : null}
-                  <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
+                  <TipoChip tipo={orden.tipo} />
                 </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
