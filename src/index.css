@@ -192,12 +192,12 @@
     min-height: 48px;
   }
 
-  /* Grupos de input (ComboBox buscable, search): HeroUI los trae a 38px y
-     quedaban más BAJOS que los campos sueltos y los steppers de al lado —
-     misma altura (48px) para mantener el ritmo uniforme de controles. */
-  .input-group {
+  /* Steppers (NumberField): HeroUI trae el grupo a 36px (h-9) y quedaba a
+     otra altura que los campos de al lado — mismo 48px que el resto del
+     ritmo de controles. El ComboBox no necesita regla: su caja visible es el
+     .input interno, que ya toma los 48px de arriba. */
+  .number-field__group {
     height: 48px;
-    min-height: 48px;
   }
 
   /* Botones: refs no usan el pill (rounded-3xl) por defecto de HeroUI —
