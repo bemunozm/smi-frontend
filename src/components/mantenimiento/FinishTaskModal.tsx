@@ -51,7 +51,9 @@ function CurrentStock({
       <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
         {branchId ? 'Stock en bodega' : 'Stock total'}
       </span>
-      <span className="font-mono text-sm text-foreground">
+      {/* Misma altura que los campos del lado (48px): el valor queda a la
+          altura de los inputs de la fila, no colgando del label. */}
+      <span className="flex h-12 items-center font-mono text-sm text-foreground">
         {item
           ? `${branchId ? quantityAt(item, branchId) : totalQuantity(item)} ${UNIT_SYMBOLS[item.unit]}`
           : '—'}
@@ -247,7 +249,7 @@ export function FinishTaskModal({
                               return (
                                 <div
                                   key={row.id}
-                                  className="flex flex-col gap-3 rounded-lg border border-border bg-muted p-3"
+                                  className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end gap-3 rounded-lg border border-border bg-muted p-3"
                                 >
                                   <Controller
                                     control={control}
@@ -294,15 +296,12 @@ export function FinishTaskModal({
                                       </ComboBox>
                                     )}
                                   />
-                                  {/* Debajo del buscador: cantidad, stock y
-                                      quitar en una sola línea alineada. */}
-                                  <div className="flex items-end gap-4">
                                   <Controller
                                     control={control}
                                     name={`insumos.${index}.cantidad`}
                                     render={({ field }) => (
                                       <NumberField
-                                        className="w-32"
+                                        className="w-28"
                                         isInvalid={!!errors.insumos?.[index]?.cantidad}
                                         minValue={0.01}
                                         value={field.value}
@@ -326,14 +325,11 @@ export function FinishTaskModal({
                                   <Button
                                     isIconOnly
                                     aria-label="Quitar insumo"
-                                    className="ms-auto"
-                                    size="sm"
                                     variant="tertiary"
                                     onPress={() => remove(index)}
                                   >
                                     <Trash2 className="size-4" />
                                   </Button>
-                                  </div>
                                 </div>
                               );
                             })}
