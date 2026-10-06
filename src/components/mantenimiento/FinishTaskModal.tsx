@@ -101,10 +101,12 @@ export function FinishTaskModal({
   const insumosValues = useWatch({ control, name: 'insumos' });
   const branchId = useWatch({ control, name: 'branchId' });
 
-  // Default de bodega: la base del equipo de la OT si existe, si no la
-  // primera activa — editable en el Select de abajo.
+  // Default de bodega: la base del equipo de la OT SOLO si está entre las
+  // activas (una base inactiva/borrada dejaría un branchId fantasma que el
+  // Select no puede mostrar); si no, la primera activa. Editable abajo.
+  const home = findEquipment(orden.equipoId, equipment)?.homeBranchId;
   const defaultBranchId =
-    findEquipment(orden.equipoId, equipment)?.homeBranchId ?? branches?.[0]?.id;
+    home && branches?.some((branch) => branch.id === home) ? home : branches?.[0]?.id;
   useEffect(() => {
     if (defaultBranchId && !getValues('branchId')) {
       setValue('branchId', defaultBranchId);

@@ -462,7 +462,11 @@ function FindingCard({
 export function OrdenesTrabajoView() {
   const { can } = usePermissions();
   const { data: ordenes, isPending, isError, error } = useOrdenes();
-  const { data: hallazgos } = useHallazgosList();
+  const {
+    data: hallazgos,
+    isPending: findingsPending,
+    isError: findingsError,
+  } = useHallazgosList();
   const { data: equipment } = useEquipment();
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
@@ -507,7 +511,7 @@ export function OrdenesTrabajoView() {
         <StatCard label="Total asignadas" value={stats.total} />
       </div>
 
-      {isPending ? (
+      {isPending || (findingsPending && !findingsError) ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
         </div>
@@ -519,7 +523,16 @@ export function OrdenesTrabajoView() {
         </div>
       ) : null}
 
-      {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length === 0 ? (
+      {/* La bandeja sin sus hallazgos NO puede hacerse pasar por vacía: si la
+          carga falla, se dice — las órdenes siguen abajo. */}
+      {findingsError ? (
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+          No se pudieron cargar los hallazgos de Terreno — la bandeja puede estar incompleta.
+        </div>
+      ) : null}
+
+      {!isPending && !findingsPending && !isError && !findingsError &&
+      (ordenes?.length ?? 0) + openFindings.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">No hay nada en el tablero</p>
           <p className="text-sm text-muted-foreground">
@@ -529,6 +542,8 @@ export function OrdenesTrabajoView() {
       ) : null}
 
       {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length > 0 ? (
+        // El tablero se dibuja aunque los hallazgos hayan fallado: esa mitad
+        // ya avisó arriba y las órdenes no tienen por qué esconderse.
         <div className="grid items-start gap-4 lg:grid-cols-3">
           <BoardColumn
             color="default"
@@ -595,7 +610,17 @@ export function OrdenesTrabajoView() {
                   <MetaItem label="Iniciada">{formatDate(orden.updatedAt)}</MetaItem>
                   <MetaItem label="Asignado">{orden.asignadoA?.nombre ?? '—'}</MetaItem>
                 </div>
-                {canFinish ? <FinishTaskModal equipment={fleet} orden={orden} /> : null}
+                {/* Con una escritura de esta OT aún sin sincronizar, el botón
+                    se retira: un segundo "Guardar y finalizar" generaría OTRA
+                    intervención con OTRO id — y ahora eso descuenta stock real
+                    dos veces. */}
+                {pendientes.marcaDe('orden', orden.id) ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Sincronizando cambios de esta operación…
+                  </span>
+                ) : canFinish ? (
+                  <FinishTaskModal equipment={fleet} orden={orden} />
+                ) : null}
               </BoardCard>
             ))}
           </BoardColumn>

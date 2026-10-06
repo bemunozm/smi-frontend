@@ -62,9 +62,9 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('useFinishTask', () => {
-  it('encola la intervención de cierre y recién después el paso a COMPLETADA', async () => {
-    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }));
-    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }));
+  it('encola la intervención de cierre y recién después el paso a COMPLETADA, DEPENDIENTE de ella', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }, 'op-intervencion'));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
 
     const { result } = renderHook(() => useFinishTask(), { wrapper });
     result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT });
@@ -77,7 +77,14 @@ describe('useFinishTask', () => {
       body: { ...INTERVENCION_INPUT, id: expect.stringMatching(UUID) },
     });
     expect(second[0]).toBe('orden.update');
-    expect(second[1]).toEqual({ params: { id: 'ot-1' }, body: { estado: 'COMPLETADA' } });
+    // `dependsOn`: si la intervención queda rechazada (p. ej. 409 de stock) en
+    // la hoja de sync, el PATCH a COMPLETADA queda retenido — nunca una orden
+    // completada sin su cierre.
+    expect(second[1]).toEqual({
+      params: { id: 'ot-1' },
+      body: { estado: 'COMPLETADA' },
+      dependsOn: ['op-intervencion'],
+    });
     expect(toast.success).toHaveBeenCalledWith('Operación finalizada', {
       description: ORDEN.titulo,
     });

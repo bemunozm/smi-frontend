@@ -69,8 +69,21 @@ afterEach(() => {
   mutateMock.mockReset();
 });
 
+// El equipo de la OT apunta a una bodega FANTASMA (inactiva o borrada): el
+// default debe caer a la primera bodega activa, nunca quedar en un id que el
+// Select no puede mostrar.
+const EQUIPMENT = [
+  {
+    id: 'eq-9',
+    internalCode: 'CM-007',
+    brand: 'Volvo',
+    model: 'FMX',
+    homeBranchId: 'br-fantasma',
+  },
+];
+
 function openModal() {
-  render(<FinishTaskModal equipment={undefined} orden={ORDEN} />);
+  render(<FinishTaskModal equipment={EQUIPMENT} orden={ORDEN} />);
   fireEvent.click(screen.getByRole('button', { name: /Finalizar tarea/ }));
 }
 
@@ -104,6 +117,15 @@ describe('FinishTaskModal', () => {
     expect(screen.queryByText('Bodega')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
     await waitFor(() => expect(screen.getByText('Bodega')).toBeTruthy());
+  });
+
+  it('la bodega base fantasma del equipo NO queda como default: cae a la primera activa', async () => {
+    openModal();
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+    await waitFor(() => expect(screen.getByText('Bodega')).toBeTruthy());
+    // Con un default real elegido, el trigger no puede estar mostrando el
+    // placeholder (eso delataría un branchId que el Select no conoce).
+    expect(screen.queryByText('Elige la bodega')).toBeNull();
   });
 
   it('ofrece adjuntar la foto de lo realizado', () => {

@@ -68,6 +68,10 @@ export function useFinishTask() {
       const completed = await writeQueued('orden.update', {
         params: { id: orden.id },
         body: { estado: 'COMPLETADA' },
+        // Si la intervención queda rechazada en la hoja de sync (p. ej. 409
+        // por stock insuficiente), el PATCH queda retenido detrás de ella y
+        // un descarte lo arrastra — nunca una orden COMPLETADA sin su cierre.
+        dependsOn: [registered.opId],
       });
       return { registered, completed };
     },

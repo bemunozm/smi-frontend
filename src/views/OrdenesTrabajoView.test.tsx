@@ -112,8 +112,15 @@ vi.mock('../hooks/usePermissions', () => ({
   }),
 }));
 
+let marcaDeMock: (entity: string, id: string) => 'pendiente' | 'atencion' | null = () => null;
+
 vi.mock('../hooks/usePendingWrites', () => ({
-  usePendingWrites: () => ({ ops: [], pendientes: 0, atencion: 0, marcaDe: () => null }),
+  usePendingWrites: () => ({
+    ops: [],
+    pendientes: 0,
+    atencion: 0,
+    marcaDe: (entity: string, id: string) => marcaDeMock(entity, id),
+  }),
 }));
 
 vi.mock('../components/sync/PendientesStrip', () => ({
@@ -133,8 +140,14 @@ vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({ data: EQUIPMENT, isPending: false }),
 }));
 
+let hallazgosResult: { data: typeof HALLAZGOS | undefined; isPending: boolean; isError: boolean } = {
+  data: HALLAZGOS,
+  isPending: false,
+  isError: false,
+};
+
 vi.mock('../hooks/useHallazgos', () => ({
-  useHallazgosList: () => ({ data: HALLAZGOS, isPending: false, isError: false }),
+  useHallazgosList: () => hallazgosResult,
 }));
 
 vi.mock('../hooks/useBranches', () => ({
@@ -156,6 +169,8 @@ import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 afterEach(() => {
   cleanup();
   allowed = CAN_MANTENEDOR;
+  marcaDeMock = () => null;
+  hallazgosResult = { data: HALLAZGOS, isPending: false, isError: false };
 });
 
 function renderView() {
@@ -208,6 +223,23 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.getAllByRole('button', { name: /Iniciar operación/ }).length).toBeGreaterThanOrEqual(3);
     expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Ver operación/ })).toBeTruthy();
+  });
+
+  it('con una escritura pendiente sobre la OT, "Finalizar tarea" se retira — un doble cierre ahora duplica stock', () => {
+    marcaDeMock = (_entity, id) => (id === 'ot-2' ? 'pendiente' : null);
+    renderView();
+
+    expect(screen.queryByRole('button', { name: /Finalizar tarea/ })).toBeNull();
+    expect(screen.getByText(/Sincronizando cambios/)).toBeTruthy();
+  });
+
+  it('si los hallazgos fallan al cargar, la bandeja LO DICE en vez de mostrarse vacía', () => {
+    hallazgosResult = { data: undefined, isPending: false, isError: true };
+    renderView();
+
+    expect(screen.getByText(/No se pudieron cargar los hallazgos/)).toBeTruthy();
+    // Las órdenes siguen visibles: solo falta la mitad de la bandeja.
+    expect(screen.getByText('Fuga de aceite hidráulico en pluma')).toBeTruthy();
   });
 
   it('como ADMIN: puede crear órdenes pero no finalizar (el POST de bitácora es del mantenedor)', () => {
