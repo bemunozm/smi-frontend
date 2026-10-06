@@ -264,7 +264,9 @@ export function FinishTaskModal({
                                         }
                                       >
                                         <Label>Insumo</Label>
-                                        <ComboBox.InputGroup>
+                                        {/* h-12: a la altura exacta del stepper
+                                            de al lado (el grupo trae min-h-9). */}
+                                        <ComboBox.InputGroup className="h-12">
                                           <Input placeholder="Busca por código o nombre…" />
                                           <ComboBox.Trigger />
                                         </ComboBox.InputGroup>
