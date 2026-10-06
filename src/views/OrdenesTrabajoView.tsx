@@ -80,17 +80,6 @@ function BoardColumn({
   );
 }
 
-function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5 text-sm text-foreground">
-      <span className="text-[10px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
 /** Línea "Hallazgo: …" de una OT originada en un hallazgo. */
 function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
   if (orden.origen !== 'HALLAZGO' || !orden.origenDetalle) return null;
@@ -105,13 +94,28 @@ function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
 function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
     <article
-      className={`flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm ${
+      className={`flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-3.5 shadow-sm ${
         muted ? 'opacity-90' : ''
       }`}
     >
       {children}
     </article>
   );
+}
+
+/** Fila superior compacta del artboard tablet: código truncado + chips fijos. */
+function CardTopRow({ code, children }: { code: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{code}</span>
+      <div className="flex shrink-0 gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+/** Meta de UNA línea, como las tarjetas del artboard tablet del Mantenedor. */
+function CardMeta({ children }: { children: React.ReactNode }) {
+  return <span className="text-xs leading-5 text-muted-foreground">{children}</span>;
 }
 
 /** Chip que diferencia el ORIGEN de lo que espera en la bandeja: hallazgo
@@ -151,20 +155,14 @@ function FindingCard({
 
   return (
     <BoardCard>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-muted-foreground">{equipo}</span>
-        <div className="flex gap-1.5">
-          <FindingChip />
-          <StatusChip tone={prioridadOTChipColor(prioridad)}>
-            {PRIORIDAD_OT_LABELS[prioridad]}
-          </StatusChip>
-        </div>
-      </div>
+      <CardTopRow code={equipo}>
+        <FindingChip />
+        <StatusChip tone={prioridadOTChipColor(prioridad)}>
+          {PRIORIDAD_OT_LABELS[prioridad]}
+        </StatusChip>
+      </CardTopRow>
       <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <MetaItem label="Reportado">{formatDate(hallazgo.fecha)}</MetaItem>
-        <MetaItem label="Origen">Terreno · Supervisor</MetaItem>
-      </div>
+      <CardMeta>Terreno · Supervisor — {formatDate(hallazgo.fecha)}</CardMeta>
       {canStart ? <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} /> : null}
     </BoardCard>
   );
@@ -284,31 +282,24 @@ export function OrdenesTrabajoView() {
             ))}
             {board.backlog.map((orden) => (
               <BoardCard key={orden.id}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {equipmentLabel(orden.equipoId, fleet)}
-                  </span>
-                  <div className="flex gap-1.5">
-                    {orden.tipo === 'PREVENTIVA' ? (
-                      <PreventiveChip />
-                    ) : orden.origen === 'HALLAZGO' ? (
-                      <FindingChip />
-                    ) : null}
-                    <StatusChip tone={prioridadOTChipColor(orden.prioridad)}>
-                      {PRIORIDAD_OT_LABELS[orden.prioridad]}
-                    </StatusChip>
-                  </div>
-                </div>
+                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
+                  {orden.tipo === 'PREVENTIVA' ? (
+                    <PreventiveChip />
+                  ) : orden.origen === 'HALLAZGO' ? (
+                    <FindingChip />
+                  ) : null}
+                  <StatusChip tone={prioridadOTChipColor(orden.prioridad)}>
+                    {PRIORIDAD_OT_LABELS[orden.prioridad]}
+                  </StatusChip>
+                </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
                   <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                  <MetaItem label="Reportado por">
-                    {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]}
-                  </MetaItem>
-                  <MetaItem label="Fecha">{formatDate(orden.createdAt)}</MetaItem>
-                </div>
+                <CardMeta>
+                  {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} —{' '}
+                  {formatDate(orden.createdAt)}
+                </CardMeta>
                 {canStart ? <StartOperationModal equipment={fleet} orden={orden} /> : null}
               </BoardCard>
             ))}
@@ -317,21 +308,17 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="warning" count={board.inProgress.length} title="Operaciones en proceso">
             {board.inProgress.map((orden) => (
               <BoardCard key={orden.id}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {equipmentLabel(orden.equipoId, fleet)}
-                  </span>
+                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
                   <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
-                </div>
+                </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
                   <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                 </div>
                 <HallazgoAssoc orden={orden} />
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                  <MetaItem label="Iniciada">{formatDate(orden.updatedAt)}</MetaItem>
-                  <MetaItem label="Asignado">{orden.asignadoA?.nombre ?? '—'}</MetaItem>
-                </div>
+                <CardMeta>
+                  Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
+                </CardMeta>
                 {/* Con una escritura de esta OT aún sin sincronizar, el botón
                     se retira: un segundo "Guardar y finalizar" generaría OTRA
                     intervención con OTRO id — y ahora eso descuenta stock real
@@ -350,28 +337,21 @@ export function OrdenesTrabajoView() {
           <BoardColumn color="success" count={board.finished.length} title="Finalizadas">
             {board.finished.map((orden) => (
               <BoardCard key={orden.id} muted>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {equipmentLabel(orden.equipoId, fleet)}
-                  </span>
-                  <div className="flex gap-1.5">
-                    {orden.estado === 'CANCELADA' ? (
-                      <StatusChip tone="danger">Cancelada</StatusChip>
-                    ) : null}
-                    <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
-                  </div>
-                </div>
+                <CardTopRow code={equipmentLabel(orden.equipoId, fleet)}>
+                  {orden.estado === 'CANCELADA' ? (
+                    <StatusChip tone="danger">Cancelada</StatusChip>
+                  ) : null}
+                  <StatusChip tone="secondary">{TIPO_OT_LABELS[orden.tipo]}</StatusChip>
+                </CardTopRow>
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
                   <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                 </div>
                 <HallazgoAssoc orden={orden} />
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                  <MetaItem label={orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}>
-                    {formatDate(orden.updatedAt)}
-                  </MetaItem>
-                  <MetaItem label="Asignado">{orden.asignadoA?.nombre ?? '—'}</MetaItem>
-                </div>
+                <CardMeta>
+                  {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}{' '}
+                  {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
+                </CardMeta>
                 <ViewOperationModal equipment={fleet} orden={orden} />
               </BoardCard>
             ))}
