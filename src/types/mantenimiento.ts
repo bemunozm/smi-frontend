@@ -200,7 +200,8 @@ export const CreateIntervencionSchema = z
   .object({
     tipo: z.enum(TIPO_OT),
     detalle: z.string().min(1, 'El detalle es obligatorio'),
-    horasHombre: z.number().min(0, 'Debe ser 0 o mayor'),
+    /** Opcional: el cierre del taller ya no lo pide (el backend lo deja en 0). */
+    horasHombre: z.number().min(0, 'Debe ser 0 o mayor').optional(),
     horometro: z.number().min(0, 'Debe ser 0 o mayor').optional(),
     /** Bodega de la que salen los insumos — el backend descuenta stock REAL
      * de ella (`StockService.issue`), por eso es obligatoria si hay insumos. */

@@ -93,7 +93,6 @@ export function FinishTaskModal({
     defaultValues: {
       tipo: orden.tipo,
       detalle: '',
-      horasHombre: 0,
       // Sin default: un horómetro no tocado NO se envía — mandar 0 inventaría
       // una lectura del medidor que nadie tomó.
       horometro: undefined,
@@ -387,29 +386,6 @@ export function FinishTaskModal({
                       </div>
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Controller
-                          control={control}
-                          name="horasHombre"
-                          render={({ field }) => (
-                            <NumberField
-                              fullWidth
-                              isInvalid={!!errors.horasHombre}
-                              minValue={0}
-                              value={field.value}
-                              onChange={field.onChange}
-                            >
-                              <Label>Horas hombre</Label>
-                              <NumberField.Group>
-                                <NumberField.DecrementButton />
-                                <NumberField.Input onBlur={field.onBlur} />
-                                <NumberField.IncrementButton />
-                              </NumberField.Group>
-                              {errors.horasHombre ? (
-                                <FieldError>{errors.horasHombre.message}</FieldError>
-                              ) : null}
-                            </NumberField>
-                          )}
-                        />
                         <Controller
                           control={control}
                           name="horometro"

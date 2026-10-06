@@ -187,6 +187,11 @@ describe('FinishTaskModal', () => {
     expect(screen.getByText(/Foto de lo realizado/)).toBeTruthy();
   });
 
+  it('no pide horas hombre — el cierre es qué se hizo, foto e insumos', () => {
+    openModal();
+    expect(screen.queryByText(/Horas hombre/i)).toBeNull();
+  });
+
   it('el insumo se busca ESCRIBIENDO: filtra por código/nombre y al elegir viaja su id', async () => {
     openModal();
     fillDetalle();
