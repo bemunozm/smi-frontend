@@ -32,8 +32,9 @@ const PANELS: Record<SectionId, () => React.ReactNode> = {
 
 /**
  * Contenedor del dominio Mantenimiento. La navegación entre secciones es la
- * barra inferior fija del kit de Terreno —el taller se usa en tablet, con
- * guantes— en TODOS los anchos: mismo lenguaje que `TerrenoLayout`.
+ * barra inferior del kit de Terreno —el taller se usa en tablet, con
+ * guantes— en TODOS los anchos: mismo lenguaje y misma mecánica sticky que
+ * `TerrenoLayout`, así convive con el `BottomNav` global sin taparlo.
  */
 export function MantenimientoView() {
   const { role } = useCurrentUser();
@@ -42,8 +43,9 @@ export function MantenimientoView() {
   const sections = SECTIONS.filter((s) => !s.adminOnly || role === ROLES.ADMIN);
 
   return (
-    // pb deja aire para que el contenido no quede bajo la barra fija.
-    <div className="flex flex-col gap-4 pb-24">
+    // min-h-full + flex-col: la barra inferior queda al fondo del área de
+    // contenido aunque la sección sea corta — misma mecánica que TerrenoLayout.
+    <div className="flex min-h-full flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
           SMI · Mantenimiento
@@ -58,12 +60,15 @@ export function MantenimientoView() {
         </p>
       </div>
 
-      <div>{PANELS[selected]()}</div>
+      <div className="flex-1">{PANELS[selected]()}</div>
 
-      {/* Barra inferior del kit de Terreno — misma receta que TerrenoLayout. */}
+      {/* Barra inferior del kit de Terreno — misma lógica que TerrenoLayout:
+          sticky DENTRO del scroll del contenido, así se apila ENCIMA de la
+          barra global del administrador en vez de taparla. Los márgenes
+          negativos la llevan borde a borde del main (que trae p-4/sm:p-6). */}
       <nav
         aria-label="Secciones de Mantenimiento"
-        className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/[.97] pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        className="sticky bottom-0 z-20 -mx-4 -mb-4 border-t bg-white/[.97] backdrop-blur sm:-mx-6 sm:-mb-6"
         style={{ borderColor: 'var(--border)' }}
       >
         <div
