@@ -43,7 +43,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'orden.create': [ADMIN, SUPERVISOR, MANTENEDOR],
   'orden.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'orden.toggleTarea': [ADMIN, SUPERVISOR, MANTENEDOR],
-  'intervencion.create': [MANTENEDOR],
+  // ADMIN incluido: puede cerrar una tarea del taller (registrar el cierre
+  // con insumos/foto), además del MANTENEDOR que la trabaja.
+  'intervencion.create': [ADMIN, MANTENEDOR],
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],

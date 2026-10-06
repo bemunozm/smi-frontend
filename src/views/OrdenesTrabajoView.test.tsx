@@ -100,7 +100,15 @@ const CAN_MANTENEDOR = new Set([
   'orden.toggleTarea',
   'intervencion.create',
 ]);
-const CAN_ADMIN = new Set(['orden.create', 'orden.update', 'orden.toggleTarea']);
+const CAN_ADMIN = new Set([
+  'orden.create',
+  'orden.update',
+  'orden.toggleTarea',
+  'intervencion.create',
+]);
+// Un rol hipotético sin el POST de intervenciones (hoy ninguno con acceso a la
+// ruta, pero el gating debe seguir espejando `WRITE_ROLES`).
+const CAN_SOLO_LECTOR = new Set(['orden.update']);
 let allowed: ReadonlySet<string> = CAN_MANTENEDOR;
 
 vi.mock('../hooks/usePermissions', () => ({
@@ -242,11 +250,18 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.getByText('Fuga de aceite hidráulico en pluma')).toBeTruthy();
   });
 
-  it('como ADMIN: puede crear órdenes pero no finalizar (el POST de bitácora es del mantenedor)', () => {
+  it('como ADMIN: puede crear órdenes Y finalizar tareas (espejo del backend ampliado)', () => {
     allowed = CAN_ADMIN;
     renderView();
 
     expect(screen.getByRole('button', { name: /Crear orden/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
+  });
+
+  it('un rol sin intervencion.create no ve "Finalizar tarea"', () => {
+    allowed = CAN_SOLO_LECTOR;
+    renderView();
+
     expect(screen.queryByRole('button', { name: /Finalizar tarea/ })).toBeNull();
   });
 });
