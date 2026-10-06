@@ -249,7 +249,7 @@ export function FinishTaskModal({
                               return (
                                 <div
                                   key={row.id}
-                                  className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end gap-3 rounded-lg border border-border bg-muted p-3"
+                                  className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-start gap-3 rounded-lg border border-border bg-muted p-3"
                                 >
                                   <Controller
                                     control={control}
@@ -301,7 +301,7 @@ export function FinishTaskModal({
                                     name={`insumos.${index}.cantidad`}
                                     render={({ field }) => (
                                       <NumberField
-                                        className="w-28"
+                                        className="w-36"
                                         isInvalid={!!errors.insumos?.[index]?.cantidad}
                                         minValue={0.01}
                                         value={field.value}
@@ -325,6 +325,7 @@ export function FinishTaskModal({
                                   <Button
                                     isIconOnly
                                     aria-label="Quitar insumo"
+                                    className="self-end"
                                     variant="tertiary"
                                     onPress={() => remove(index)}
                                   >
