@@ -16,6 +16,11 @@ import {
   type Umbral,
   type UpdateActividadInput,
 } from '../../types/mantenimiento';
+import {
+  MaintenancePlanViewSchema,
+  type MaintenancePlanView,
+  type SaveMaintenancePlanInput,
+} from '../../types/maintenance-plan';
 import { cachedName } from '../cache-upserts';
 import {
   actividadEntity,
@@ -54,6 +59,12 @@ export interface MantenimientoEndpointMap {
   'actividad.create': { params: NoParams; body: WithId<CreateActividadInput>; result: Actividad };
   'actividad.update': { params: { id: string }; body: Partial<UpdateActividadInput>; result: Actividad };
   'umbral.create': { params: NoParams; body: WithId<CreateUmbralInput>; result: Umbral };
+  /** Pauta de mantención de un equipo: se guarda entera (`PUT`, last-write-wins). */
+  'maintenancePlan.save': {
+    params: { equipmentId: string };
+    body: SaveMaintenancePlanInput;
+    result: MaintenancePlanView;
+  };
 }
 
 export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
@@ -149,5 +160,16 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     carriesFiles: false,
     creates: true,
     entity: (_params, body) => entityOf(umbralEntity, bodyText(body, 'id')),
+  },
+  'maintenancePlan.save': {
+    method: 'PUT',
+    path: (params) => `/api/maintenance-plans/${param(params, 'equipmentId')}`,
+    failMessage: 'No se pudo guardar la pauta de mantención.',
+    parse: parseWith(MaintenancePlanViewSchema),
+    invalidate: ['maintenancePlans'],
+    label: (params) => etiqueta('Pauta de mantención', cachedName('equipment', params.equipmentId)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(equipmentEntity, params.equipmentId),
   },
 });

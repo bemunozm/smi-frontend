@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import {
   Button,
   Card,
@@ -19,6 +19,7 @@ import {
 } from '@heroui/react';
 
 import { ActionTile } from '../components/ActionTile';
+import { PautaMantencionModal } from '../components/mantenimiento/PautaMantencionModal';
 import {
   CamposEquipo,
   DeleteEquipoAlertDialog,
@@ -34,6 +35,10 @@ import { StatusChip } from '../components/flota/StatusChip';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePermissions } from '../hooks/usePermissions';
+import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
+import { fmtContador } from '../lib/maintenance-plan';
+import type { MaintenanceStatusRow } from '../types/maintenance-plan';
+import { ROLES } from '../types/roles';
 import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
 import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
@@ -343,8 +348,10 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
   const { can } = usePermissions();
   const puedeCambiarEstado = can('equipment.status');
   const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
+  const { puedeVerPauta, puedeEditarPauta } = usePermisosPauta();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isPautaOpen, setIsPautaOpen] = useState(false);
   const updateStatus = useUpdateEquipmentStatus();
 
   const otrosEstados = puedeCambiarEstado
@@ -364,6 +371,7 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
               const clave = String(key);
               if (clave === 'edit') return setIsEditOpen(true);
               if (clave === 'delete') return setIsDeleteOpen(true);
+              if (clave === 'pauta') return setIsPautaOpen(true);
               if (clave.startsWith('status:')) {
                 updateStatus.mutate({
                   equipo,
@@ -381,6 +389,11 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
                 <Label>Marcar como {equipmentStatusLabel(status)}</Label>
               </Dropdown.Item>
             ))}
+            {puedeVerPauta ? (
+              <Dropdown.Item id="pauta" textValue="Asignar mantenciones">
+                <Label>Asignar mantenciones</Label>
+              </Dropdown.Item>
+            ) : null}
             <Dropdown.Item id="edit" textValue="Editar ficha">
               <Label>Editar ficha</Label>
             </Dropdown.Item>
@@ -393,7 +406,56 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
 
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
+      {puedeVerPauta ? (
+        <PautaMantencionModal
+          equipo={equipo}
+          isOpen={isPautaOpen}
+          onOpenChange={setIsPautaOpen}
+          soloLectura={!puedeEditarPauta}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * Quién ve y quién arma la pauta de mantención de un equipo: la ven
+ * administrador, mantenedor y supervisor (los `@Roles` de lectura de
+ * `maintenance-plans` en el backend); la guardan administrador y mantenedor.
+ */
+function usePermisosPauta() {
+  const { role, can } = usePermissions();
+  return {
+    puedeVerPauta: role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR,
+    puedeEditarPauta: can('maintenancePlan.save'),
+  };
+}
+
+/**
+ * Cuánto antes avisar que se acerca una mantención. Provisorio: lo razonable
+ * para pautas cada 250 h; cuando el mantenedor tenga sus tareas preventivas
+ * (Alexander) este margen debería salir de ahí.
+ */
+const AVISO_PROXIMA: Record<'h' | 'km', number> = { h: 25, km: 500 };
+
+/**
+ * «Próx. mant. 250 h · faltan 150 h» bajo el contador del equipo. Se pone en
+ * advertencia cuando falta poco y en peligro cuando ya toca.
+ */
+function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined }) {
+  const next = fila?.status.next;
+  if (!fila || !next) return null;
+  const tono =
+    next.remaining === 0
+      ? 'text-danger'
+      : next.remaining <= AVISO_PROXIMA[fila.unit]
+        ? 'text-warning'
+        : 'text-muted-foreground';
+  return (
+    <span className={`block text-xs tabular-nums ${tono}`}>
+      Próx. mant. {fmtContador(next.milestone, fila.unit)} ·{' '}
+      {next.remaining === 0 ? 'toca ahora' : `faltan ${fmtContador(next.remaining, fila.unit)}`}
+    </span>
   );
 }
 
@@ -432,9 +494,12 @@ function EquipoCardMobile({
   equipo,
   sucursalPorId,
   marca,
+  proxima,
 }: {
   equipo: Equipment;
   marca: Marca | null;
+  /** Próxima mantención según la pauta del equipo, si tiene. */
+  proxima: MaintenanceStatusRow | undefined;
   sucursalPorId: Map<string, string>;
 }) {
   const navigate = useNavigate();
@@ -452,6 +517,8 @@ function EquipoCardMobile({
   // según `equipo.openShift`, así que acá solo se controla si está abierto.
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isCargaOpen, setIsCargaOpen] = useState(false);
+  const [isPautaOpen, setIsPautaOpen] = useState(false);
+  const { puedeVerPauta, puedeEditarPauta } = usePermisosPauta();
   // R3 (vista diferenciada por clase): patente destacada en pesados, o
   // integrada en `marcaModelo` en livianos — fuente única, ver `flota-colors.ts`.
   const identidad = equipoIdentidad(equipo);
@@ -502,6 +569,7 @@ function EquipoCardMobile({
                 <span className="font-mono text-base font-semibold text-foreground">
                   {formatearUso(equipo)}
                 </span>
+                <ProximaMantencion fila={proxima} />
               </div>
               <div className="flex flex-1 flex-col gap-0.5">
                 <span className="text-[11px] font-bold tracking-wide text-(--muted) uppercase">
@@ -618,6 +686,16 @@ function EquipoCardMobile({
                     }}
                   />
                 ) : null}
+                {puedeVerPauta ? (
+                  <ActionTile
+                    icon={Wrench}
+                    label="Asignar mantenciones"
+                    onPress={() => {
+                      setIsSheetOpen(false);
+                      setIsPautaOpen(true);
+                    }}
+                  />
+                ) : null}
                 {puedeEditarFicha ? (
                   <ActionTile
                     icon={Pencil}
@@ -648,6 +726,14 @@ function EquipoCardMobile({
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
       <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
+      {puedeVerPauta ? (
+        <PautaMantencionModal
+          equipo={equipo}
+          isOpen={isPautaOpen}
+          onOpenChange={setIsPautaOpen}
+          soloLectura={!puedeEditarPauta}
+        />
+      ) : null}
       <RegistrarCargaCombustibleModal
         equipoId={equipo.id}
         equipoLabel={equipo.internalCode}
@@ -662,6 +748,10 @@ const TODOS = '__todos__';
 
 export function EquiposView() {
   const { can } = usePermissions();
+  // La próxima mantención de todos los equipos con pauta, en una sola llamada;
+  // solo para los roles que pueden leer pautas (al resto el servidor le da 403).
+  const { puedeVerPauta } = usePermisosPauta();
+  const { data: proximaPorEquipo } = useMaintenanceStatusByEquipment(puedeVerPauta);
   const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
   const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
   const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
@@ -902,6 +992,7 @@ export function EquiposView() {
                             <span className="mt-0.5 block text-xs text-(--muted)">
                               {USO_UNIDAD_LABEL[equipo.controlUnit]}
                             </span>
+                            <ProximaMantencion fila={proximaPorEquipo?.get(equipo.id)} />
                           </Table.Cell>
                           <Table.Cell>
                             <FuelGauge pct={equipo.currentFuelLevel} />
@@ -944,6 +1035,7 @@ export function EquiposView() {
                 equipo={equipo}
                 key={equipo.id}
                 marca={pendientes.marcaDe('equipment', equipo.id)}
+                proxima={proximaPorEquipo?.get(equipo.id)}
                 sucursalPorId={sucursalPorId}
               />
             ))}

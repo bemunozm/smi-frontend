@@ -23,6 +23,7 @@ const API_PATH_BY_QUERY_KEY: Readonly<Record<QueryKeyName, string>> = {
   intervenciones: '/api/mantenimiento',
   actividades: '/api/mantenimiento',
   umbrales: '/api/mantenimiento',
+  maintenancePlans: '/api/maintenance-plans',
 };
 
 function estaBajo(pathname: string, raiz: string): boolean {

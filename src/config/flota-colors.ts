@@ -196,6 +196,7 @@ const EQUIPMENT_DOCUMENT_TYPE_LABEL: Record<EquipmentDocumentType, string> = {
   INSURANCE: 'Seguro',
   CIRCULATION_PERMIT: 'Permiso de circulación',
   CERTIFICATION: 'Certificación',
+  MAINTENANCE_MANUAL: 'Pauta de mantención',
   OTHER: 'Otro',
 };
 
