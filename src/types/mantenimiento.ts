@@ -87,6 +87,8 @@ export type Tarea = z.infer<typeof TareaSchema>;
 export const OrdenTrabajoSchema = z.object({
   id: z.string(),
   equipoId: z.string(),
+  /** Hallazgo de Terreno que originó la operación, si aplica. */
+  hallazgoId: z.string().nullable(),
   titulo: z.string(),
   estado: z.enum(ESTADO_OT),
   prioridad: z.enum(PRIORIDAD_OT),
@@ -119,6 +121,9 @@ export const OrdenTrabajoResponseSchema = z.object({
  */
 export const CreateOrdenSchema = z.object({
   equipoId: z.string().min(1, 'El equipo es obligatorio'),
+  /** Al crear desde un hallazgo real: la OT nace ligada y el backend pasa el
+   * hallazgo a EN_PROCESO en la misma transacción. */
+  hallazgoId: z.string().optional(),
   titulo: z.string().min(1, 'El título es obligatorio'),
   prioridad: z.enum(PRIORIDAD_OT),
   tipo: z.enum(TIPO_OT),
@@ -167,6 +172,8 @@ export const IntervencionSchema = z.object({
   detalle: z.string(),
   horasHombre: z.number(),
   horometro: z.number().nullable(),
+  /** URL firmada de la foto del cierre (el backend nunca expone la key). */
+  fotoUrl: z.string().nullable(),
   soloLectura: z.boolean(),
   insumos: z.array(InsumoUsadoSchema),
   fecha: z.string(),
@@ -181,7 +188,7 @@ export const IntervencionListResponseSchema = z.object({
 /**
  * `POST /api/mantenimiento/ordenes/:id/intervenciones` body (MANTENEDOR).
  * `insumoId` es texto libre — Inventario no expone todavía un selector de
- * insumos consumible acá (ver TODO en `BitacoraView`).
+ * insumos consumible acá (el cierre real usa el selector de `FinishTaskModal`).
  */
 export const CreateIntervencionInsumoSchema = z.object({
   insumoId: z.string().min(1, 'El insumo es obligatorio'),
@@ -189,14 +196,68 @@ export const CreateIntervencionInsumoSchema = z.object({
   cantidad: z.number().int('La cantidad debe ser un número entero').min(1, 'La cantidad debe ser mayor a 0'),
 });
 
-export const CreateIntervencionSchema = z.object({
-  tipo: z.enum(TIPO_OT),
-  detalle: z.string().min(1, 'El detalle es obligatorio'),
-  horasHombre: z.number().min(0, 'Debe ser 0 o mayor'),
-  horometro: z.number().min(0, 'Debe ser 0 o mayor').optional(),
-  insumos: z.array(CreateIntervencionInsumoSchema).optional(),
-});
+export const CreateIntervencionSchema = z
+  .object({
+    tipo: z.enum(TIPO_OT),
+    detalle: z.string().min(1, 'El detalle es obligatorio'),
+    /** Opcional: el cierre del taller ya no lo pide (el backend lo deja en 0). */
+    horasHombre: z.number().min(0, 'Debe ser 0 o mayor').optional(),
+    horometro: z.number().min(0, 'Debe ser 0 o mayor').optional(),
+    /** Bodega de la que salen los insumos — el backend descuenta stock REAL
+     * de ella (`StockService.issue`), por eso es obligatoria si hay insumos. */
+    branchId: z.string().optional(),
+    insumos: z.array(CreateIntervencionInsumoSchema).optional(),
+  })
+  .superRefine((values, ctx) => {
+    if ((values.insumos?.length ?? 0) > 0 && !values.branchId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['branchId'],
+        message: 'Elige la bodega de la que salen los insumos',
+      });
+    }
+  });
 export type CreateIntervencionInput = z.infer<typeof CreateIntervencionSchema>;
+
+// ---------------------------------------------------------------------------
+// Bitácora del taller — form "Nueva operación" (diseño Mantenedor Taller)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que pide el formulario de la Bitácora: equipo + tipo + nombre, y el
+ * hallazgo asociado solo cuando es correctiva. La prioridad no se pide (el
+ * diseño no la muestra); `toCreateOrdenInput` fija MEDIA.
+ */
+export const LogOperationFormSchema = z.object({
+  equipoId: z.string().min(1, 'El equipo es obligatorio'),
+  tipo: z.enum(TIPO_OT),
+  hallazgo: z.string().optional(),
+  titulo: z.string().min(1, 'El nombre es obligatorio'),
+});
+export type LogOperationFormValues = z.infer<typeof LogOperationFormSchema>;
+
+/**
+ * Traduce el form al body real de `POST /ordenes`: correctiva con hallazgo →
+ * origen HALLAZGO (con el texto como `origenDetalle`); correctiva sin
+ * hallazgo → MANUAL; preventiva → PREVENTIVO (el hallazgo no aplica y se
+ * descarta). `origenDetalle` se omite en vez de mandarse vacío — el backend
+ * corre con `forbidNonWhitelisted`.
+ */
+export function toCreateOrdenInput(values: LogOperationFormValues): CreateOrdenInput {
+  const hallazgo = values.hallazgo?.trim();
+  const base = {
+    equipoId: values.equipoId,
+    titulo: values.titulo.trim(),
+    prioridad: PRIORIDAD_OT.MEDIA,
+    tipo: values.tipo,
+  };
+  if (values.tipo === TIPO_OT.PREVENTIVA) {
+    return { ...base, origen: ORIGEN_OT.PREVENTIVO };
+  }
+  return hallazgo
+    ? { ...base, origen: ORIGEN_OT.HALLAZGO, origenDetalle: hallazgo }
+    : { ...base, origen: ORIGEN_OT.MANUAL };
+}
 
 // ---------------------------------------------------------------------------
 // Umbral preventivo

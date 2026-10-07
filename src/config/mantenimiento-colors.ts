@@ -13,8 +13,18 @@ import {
   type TipoOT,
 } from '../types/mantenimiento';
 
+import type { Tono } from '../components/terreno/ui';
+
 /** Mismo set de colores semánticos que acepta `Chip`/`Avatar` de HeroUI. */
 export type StatusChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
+
+/**
+ * Traducción al `Tono` del kit de Terreno (el taller se dibuja con ese kit):
+ * mismo semáforo, con `accent→info` y `default→neutral`.
+ */
+export function chipColorToTono(color: StatusChipColor): Tono {
+  return color === 'accent' ? 'info' : color === 'default' ? 'neutral' : color;
+}
 
 const ESTADO_OT_COLOR: Record<EstadoOT, StatusChipColor> = {
   [ESTADO_OT.PENDIENTE]: 'default',
@@ -40,8 +50,12 @@ export const ESTADO_OT_OPTIONS: ReadonlyArray<{ value: EstadoOT; label: string }
   Object.values(ESTADO_OT) as EstadoOT[]
 ).map((estado) => ({ value: estado, label: ESTADO_OT_LABELS[estado] }));
 
+/**
+ * Escala semáforo: un color PROPIO por nivel, sin compartir el gris `default`
+ * (que usan muchos otros chips) — la prioridad se distingue de un vistazo.
+ */
 const PRIORIDAD_OT_COLOR: Record<PrioridadOT, StatusChipColor> = {
-  [PRIORIDAD_OT.BAJA]: 'default',
+  [PRIORIDAD_OT.BAJA]: 'success',
   [PRIORIDAD_OT.MEDIA]: 'accent',
   [PRIORIDAD_OT.ALTA]: 'warning',
   [PRIORIDAD_OT.CRITICA]: 'danger',

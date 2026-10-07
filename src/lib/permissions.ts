@@ -38,10 +38,14 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'category.update': [ADMIN],
   'category.delete': [ADMIN],
   // Mantenimiento
-  'orden.create': [ADMIN, SUPERVISOR],
+  // MANTENEDOR incluido: el taller inicia operaciones desde los hallazgos de
+  // su bandeja (la OT nace ligada y el hallazgo pasa a EN_PROCESO).
+  'orden.create': [ADMIN, SUPERVISOR, MANTENEDOR],
   'orden.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'orden.toggleTarea': [ADMIN, SUPERVISOR, MANTENEDOR],
-  'intervencion.create': [MANTENEDOR],
+  // ADMIN incluido: puede cerrar una tarea del taller (registrar el cierre
+  // con insumos/foto), además del MANTENEDOR que la trabaja.
+  'intervencion.create': [ADMIN, MANTENEDOR],
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],

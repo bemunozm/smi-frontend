@@ -1,536 +1,228 @@
-import { useMemo, useState } from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
-import {
-  Button,
-  Card,
-  Checkbox,
-  Chip,
-  FieldError,
-  Input,
-  Label,
-  ListBox,
-  Modal,
-  Select,
-  Spinner,
-  TextField,
-} from '@heroui/react';
+import { useMemo } from 'react';
+import { Spinner } from '@heroui/react';
+import { Clock, TriangleAlert } from 'lucide-react';
 
+// El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
+// táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
+import { Chip, Cifras, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
-import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { usePendingWrites } from '../hooks/usePendingWrites';
 import { usePermissions } from '../hooks/usePermissions';
-import { useActualizarOrden, useCrearOrden, useOrdenes, useToggleTarea } from '../hooks/useOrdenes';
+import { useOrdenes } from '../hooks/useOrdenes';
+import { useEquipment } from '../hooks/useEquipment';
+import { useHallazgosList } from '../hooks/useHallazgos';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
-  ESTADO_OT_LABELS,
-  ESTADO_OT_OPTIONS,
   ORIGEN_OT_LABELS,
-  ORIGEN_OT_OPTIONS,
   PRIORIDAD_OT_LABELS,
-  PRIORIDAD_OT_OPTIONS,
-  TIPO_OT_LABELS,
-  TIPO_OT_OPTIONS,
-  estadoOTChipColor,
+  chipColorToTono,
   prioridadOTChipColor,
 } from '../config/mantenimiento-colors';
+import type { OrdenTrabajo } from '../types/mantenimiento';
+import type { Hallazgo } from '../types/hallazgos';
 import {
-  CreateOrdenSchema,
-  ORIGEN_OT,
-  PRIORIDAD_OT,
-  TIPO_OT,
-  type CreateOrdenInput,
-  type EstadoOT,
-  type OrdenTrabajo,
-} from '../types/mantenimiento';
+  buildWorkshopStats,
+  formatDate,
+  findEquipment,
+  groupWorkshopBoard,
+  toPrioridadOT,
+  type EquipmentRef,
+} from '../components/mantenimiento/workshop';
+import { CreateOperationModal } from '../components/mantenimiento/CreateOperationModal';
+import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
+import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
+import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
+import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
 
-type FiltroEstado = 'TODAS' | EstadoOT;
-
-function formatFecha(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleString('es-CL', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-}
-
-/**
- * Modal de creación — mismo patrón que `CreateUserModal` (`views/UsersView.tsx`):
- * RHF + `zodResolver` + `useCrearOrden`, toast/invalidate viven en el hook.
- * `equipoId`/`asignadoAId` son texto libre a propósito (ver TODOs inline):
- * Flota (equipos) e Inventario/Usuarios (asignado) no exponen todavía un
- * selector real consumible desde acá.
- */
-function CreateOrdenModal() {
-  const crearOrden = useCrearOrden();
-  const {
-    control,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CreateOrdenInput>({
-    resolver: zodResolver(CreateOrdenSchema),
-    defaultValues: {
-      equipoId: '',
-      titulo: '',
-      prioridad: PRIORIDAD_OT.MEDIA,
-      tipo: TIPO_OT.CORRECTIVA,
-      origen: ORIGEN_OT.MANUAL,
-      origenDetalle: '',
-      asignadoAId: '',
-    },
-  });
-
+/** Columna del tablero: chip de cabecera + conteo + tarjetas. */
+function BoardColumn({
+  title,
+  color,
+  count,
+  children,
+}: {
+  title: string;
+  color: 'neutral' | 'warning' | 'success';
+  count: number;
+  children: React.ReactNode;
+}) {
   return (
-    <Modal>
-      <Button>Crear orden</Button>
-      <Modal.Backdrop>
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-lg">
-            {({ close }) => {
-              const onSubmit = (values: CreateOrdenInput): void => {
-                const payload: CreateOrdenInput = {
-                  ...values,
-                  origenDetalle: values.origenDetalle?.trim() ? values.origenDetalle.trim() : undefined,
-                  asignadoAId: values.asignadoAId?.trim() ? values.asignadoAId.trim() : undefined,
-                };
-                crearOrden.mutate(payload, {
-                  onSuccess: () => {
-                    reset();
-                    close();
-                  },
-                });
-              };
-
-              return (
-                <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                      Nueva orden de trabajo
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form
-                      className="flex flex-col gap-4"
-                      id="create-orden-form"
-                      noValidate
-                      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-                    >
-                      <Controller
-                        control={control}
-                        name="equipoId"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.equipoId}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Equipo</Label>
-                            {/* TODO(flota): reemplazar por selector real de equipos cuando Flota exponga el endpoint */}
-                            <Input autoFocus placeholder="Código del equipo (ej. EX-001)" />
-                            {errors.equipoId ? <FieldError>{errors.equipoId.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="titulo"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.titulo}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Título</Label>
-                            <Input placeholder="Describe el trabajo a realizar" />
-                            {errors.titulo ? <FieldError>{errors.titulo.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Controller
-                          control={control}
-                          name="prioridad"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.prioridad}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Prioridad</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {PRIORIDAD_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="tipo"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.tipo}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Tipo</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {TIPO_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-
-                        <Controller
-                          control={control}
-                          name="origen"
-                          render={({ field }) => (
-                            <Select
-                              fullWidth
-                              isInvalid={!!errors.origen}
-                              name={field.name}
-                              value={field.value}
-                              onChange={(value) => {
-                                if (value) field.onChange(value);
-                              }}
-                            >
-                              <Label>Origen</Label>
-                              <Select.Trigger>
-                                <Select.Value />
-                                <Select.Indicator />
-                              </Select.Trigger>
-                              <Select.Popover>
-                                <ListBox>
-                                  {ORIGEN_OT_OPTIONS.map((option) => (
-                                    <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                                      {option.label}
-                                      <ListBox.ItemIndicator />
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Select.Popover>
-                            </Select>
-                          )}
-                        />
-                      </div>
-
-                      <Controller
-                        control={control}
-                        name="origenDetalle"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.origenDetalle}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Detalle del origen (opcional)</Label>
-                            <Input placeholder="Ej. nombre de quien reportó el hallazgo" />
-                            {errors.origenDetalle ? (
-                              <FieldError>{errors.origenDetalle.message}</FieldError>
-                            ) : null}
-                          </TextField>
-                        )}
-                      />
-
-                      <Controller
-                        control={control}
-                        name="asignadoAId"
-                        render={({ field }) => (
-                          <TextField
-                            fullWidth
-                            isInvalid={!!errors.asignadoAId}
-                            name={field.name}
-                            onBlur={field.onBlur}
-                            onChange={field.onChange}
-                            value={field.value}
-                          >
-                            <Label>Asignado a (opcional)</Label>
-                            {/* TODO: reemplazar por selector real de usuarios (rol MANTENEDOR) — no hay
-                                endpoint público de usuarios para roles no-admin todavía */}
-                            <Input placeholder="ID del usuario mantenedor" />
-                            {errors.asignadoAId ? <FieldError>{errors.asignadoAId.message}</FieldError> : null}
-                          </TextField>
-                        )}
-                      />
-                    </form>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="secondary" onPress={close}>
-                      Cancelar
-                    </Button>
-                    <Button form="create-orden-form" isPending={crearOrden.isPending} type="submit">
-                      {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Crear orden')}
-                    </Button>
-                  </Modal.Footer>
-                </>
-              );
-            }}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <section aria-label={title} className="flex min-w-0 flex-col">
+      <div className="mb-3 flex items-center gap-2">
+        <Chip tono={color}>{title}</Chip>
+        <span className="ms-auto text-xs font-semibold text-muted-foreground">{count}</span>
+      </div>
+      <div className="flex flex-col gap-3.5">{children}</div>
+    </section>
   );
 }
 
-/** KPI card — mismo patrón que `Contador`/`KpiCard` (Dashboard, Flota). */
-function StatCard({ label, value }: { label: string; value: number }) {
+/** Línea "Hallazgo: …" de una OT originada en un hallazgo. */
+function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
+  if (orden.origen !== 'HALLAZGO' || !orden.origenDetalle) return null;
   return (
-    <Card>
-      <Card.Header>
-        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-          {label}
-        </Card.Description>
-        <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
-          {value}
-        </Card.Title>
-      </Card.Header>
-    </Card>
+    <div className="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+      <TriangleAlert className="size-3.5 shrink-0" />
+      Hallazgo: {orden.origenDetalle}
+    </div>
+  );
+}
+
+function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+  return <Tarjeta className={`min-w-0 gap-2.5 ${muted ? 'opacity-90' : ''}`}>{children}</Tarjeta>;
+}
+
+/** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
+function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
+  return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
+}
+
+/** Titular de la tarjeta (boceto del taller): el EQUIPO primero y notorio —
+ * código tabular en negrita + nombre de Flota en gris, como el Selector de
+ * Terreno. */
+function EquipoHead({
+  equipoId,
+  fleet,
+}: {
+  equipoId: string;
+  fleet: readonly EquipmentRef[] | undefined;
+}) {
+  const eq = findEquipment(equipoId, fleet);
+  return (
+    <span className="min-w-0 truncate leading-tight">
+      <span className="tabular text-[15.5px] font-bold">{eq?.internalCode ?? equipoId}</span>
+      {eq ? (
+        <span className="text-[14.5px] text-muted-foreground"> · {eq.brand} {eq.model}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Fila de etiquetas, después del hallazgo y antes del origen (boceto). */
+function ChipsRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap gap-1.5">{children}</div>;
+}
+
+/** Meta de UNA línea, como las tarjetas del artboard tablet del Mantenedor. */
+function CardMeta({ children }: { children: React.ReactNode }) {
+  return <span className="text-xs leading-5 text-muted-foreground">{children}</span>;
+}
+
+/** Chip que diferencia el ORIGEN de lo que espera en la bandeja: hallazgo
+ * del supervisor (rojo) vs mantención preventiva del administrador (azul). */
+function FindingChip() {
+  return (
+    <Chip tono="danger">
+      <TriangleAlert className="size-3" />
+      Hallazgo
+    </Chip>
+  );
+}
+
+function PreventiveChip() {
+  return (
+    <Chip tono="info">
+      <Clock className="size-3" />
+      Preventiva
+    </Chip>
+  );
+}
+
+/** Tarjeta de un hallazgo REAL de Terreno esperando que el taller lo tome. */
+function FindingCard({
+  hallazgo,
+  fleet,
+  canStart,
+}: {
+  hallazgo: Hallazgo;
+  fleet: readonly EquipmentRef[] | undefined;
+  canStart: boolean;
+}) {
+  const prioridad = toPrioridadOT(hallazgo.prioridad);
+
+  return (
+    <BoardCard>
+      <EquipoHead equipoId={hallazgo.equipoId} fleet={fleet} />
+      <span className="text-[15px] font-semibold tracking-[-0.01em]">{hallazgo.descripcion}</span>
+      <ChipsRow>
+        <FindingChip />
+        <Chip tono={chipColorToTono(prioridadOTChipColor(prioridad))}>
+          {PRIORIDAD_OT_LABELS[prioridad]}
+        </Chip>
+      </ChipsRow>
+      <CardMeta>Terreno · Supervisor — {formatDate(hallazgo.fecha)}</CardMeta>
+      {canStart ? <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} /> : null}
+    </BoardCard>
   );
 }
 
 /**
- * Tarjeta de una OT dentro de la grilla web: chips de prioridad/estado,
- * metadata compacta en 2 columnas, cambio de estado y checklist de tareas.
- */
-function OrdenCard({ orden, marca }: { orden: OrdenTrabajo; marca: Marca | null }) {
-  const actualizarOrden = useActualizarOrden();
-  const toggleTarea = useToggleTarea();
-  const tareasHechas = orden.tareas.filter((tarea) => tarea.hecha).length;
-  const tareasOrdenadas = [...orden.tareas].sort((a, b) => a.posicion - b.posicion);
-
-  return (
-    <Card>
-      <Card.Header>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-col gap-1">
-            <Card.Description className="font-mono text-xs text-muted-foreground">{orden.equipoId}</Card.Description>
-            <Card.Title className="font-display text-base font-semibold text-foreground">
-              {orden.titulo}
-            </Card.Title>
-            <MarcaPendiente marca={marca} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Chip color={prioridadOTChipColor(orden.prioridad)} size="sm" variant="soft">
-              {PRIORIDAD_OT_LABELS[orden.prioridad]}
-            </Chip>
-            <Chip color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
-              {ESTADO_OT_LABELS[orden.estado]}
-            </Chip>
-          </div>
-        </div>
-      </Card.Header>
-      <Card.Content className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-foreground">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Tipo
-            </span>
-            {TIPO_OT_LABELS[orden.tipo]}
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Origen
-            </span>
-            {ORIGEN_OT_LABELS[orden.origen]}
-            {orden.origenDetalle ? ` · ${orden.origenDetalle}` : ''}
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Asignado a
-            </span>
-            {orden.asignadoA?.nombre ?? 'Sin asignar'}
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Actualizada
-            </span>
-            {formatFecha(orden.updatedAt)}
-          </div>
-        </div>
-
-        <Select
-          fullWidth
-          isDisabled={actualizarOrden.isPending}
-          value={orden.estado}
-          onChange={(value) => {
-            if (value && value !== orden.estado) {
-              actualizarOrden.mutate({ orden, input: { estado: value as EstadoOT } });
-            }
-          }}
-        >
-          <Label>Cambiar estado</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {ESTADO_OT_OPTIONS.map((option) => (
-                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                  {option.label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-
-        {tareasOrdenadas.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-              Tareas ({tareasHechas}/{tareasOrdenadas.length})
-            </span>
-            <div className="flex flex-col gap-1.5">
-              {tareasOrdenadas.map((tarea) => (
-                <Checkbox
-                  key={tarea.id}
-                  isSelected={tarea.hecha}
-                  onChange={(hecha) => {
-                    toggleTarea.mutate({ ordenId: orden.id, tareaId: tarea.id, hecha });
-                  }}
-                >
-                  <Checkbox.Content>
-                    <Checkbox.Control>
-                      <Checkbox.Indicator />
-                    </Checkbox.Control>
-                    <span className={tarea.hecha ? 'text-sm text-muted-foreground line-through' : 'text-sm text-foreground'}>
-                      {tarea.texto}
-                    </span>
-                  </Checkbox.Content>
-                </Checkbox>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </Card.Content>
-    </Card>
-  );
-}
-
-/**
- * Sub-vista "Órdenes" del dominio Mantenimiento: bandeja de OT con stat
- * chips, filtro por estado y checklist de tareas. Consume `useOrdenes` +
- * `useActualizarOrden`/`useToggleTarea` — sin try/catch ni toasts acá (viven
- * en los hooks).
+ * Sub-vista "Órdenes" del taller (diseño Mantenedor Taller): los hallazgos
+ * reportados llegan como OT PENDIENTE/ASIGNADA a la bandeja, "Iniciar
+ * operación" las pasa a EN_PROCESO y "Finalizar tarea" registra la bitácora
+ * de cierre y las completa. Sin try/catch ni toasts acá — viven en los hooks.
  */
 export function OrdenesTrabajoView() {
   const { can } = usePermissions();
-  const [filtro, setFiltro] = useState<FiltroEstado>('TODAS');
-  const { data: ordenes, isPending, isError, error } = useOrdenes(filtro === 'TODAS' ? undefined : filtro);
+  const { data: ordenes, isPending, isError, error } = useOrdenes();
+  const {
+    data: hallazgos,
+    isPending: findingsPending,
+    isError: findingsError,
+  } = useHallazgosList();
+  const { data: equipment } = useEquipment();
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
-  const stats = useMemo(() => {
-    const lista = ordenes ?? [];
-    return {
-      abiertas: lista.filter((orden) => orden.estado === 'PENDIENTE' || orden.estado === 'ASIGNADA').length,
-      enProceso: lista.filter((orden) => orden.estado === 'EN_PROCESO').length,
-      cerradas: lista.filter((orden) => orden.estado === 'COMPLETADA' || orden.estado === 'CANCELADA').length,
-      total: lista.length,
-    };
-  }, [ordenes]);
+  const board = useMemo(() => groupWorkshopBoard(ordenes ?? []), [ordenes]);
+  const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
+  // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
+  // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
+  // en el tablero lo toma la OT ligada. Regla del taller: al mantenedor SOLO
+  // le llegan hallazgos con un equipo asociado — una operación sin unidad no
+  // tiene sobre qué trabajarse ni a qué imputar el consumo.
+  const openFindings = useMemo(
+    () =>
+      (hallazgos ?? []).filter(
+        (hallazgo) => hallazgo.estado === 'ABIERTO' && hallazgo.equipoId.trim() !== '',
+      ),
+    [hallazgos],
+  );
 
-  const puedeCrear = can('orden.create');
+  // Espejo de los `@Roles` del backend vía `lib/permissions`: el cierre de la
+  // tarea (POST de intervención) es exclusivo del MANTENEDOR.
+  const canCreate = can('orden.create');
+  const canStart = can('orden.update');
+  const canFinish = can('intervencion.create');
+  const fleet: readonly EquipmentRef[] | undefined = equipment;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
-            Órdenes de trabajo
+            Taller — Hallazgos y operaciones
           </h2>
-          <p className="text-sm text-muted-foreground">Bandeja de OT correctivas y preventivas.</p>
+          <p className="text-sm text-muted-foreground">
+            Los hallazgos reportados llegan a tu bandeja. Al iniciar una operación el hallazgo pasa
+            a "en proceso".
+          </p>
         </div>
-        {puedeCrear ? <CreateOrdenModal /> : null}
+        {canCreate ? <CreateOperationModal /> : null}
       </div>
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Abiertas" value={stats.abiertas} />
-        <StatCard label="En proceso" value={stats.enProceso} />
-        <StatCard label="Cerradas" value={stats.cerradas} />
-        <StatCard label="Total" value={stats.total} />
-      </div>
+      <Cifras
+        items={[
+          { label: 'Hallazgos pendientes', valor: openFindings.length },
+          { label: 'En proceso', valor: stats.inProgress },
+          { label: 'Finalizadas hoy', valor: stats.finishedToday, destacado: true },
+          { label: 'Total asignadas', valor: stats.total },
+        ]}
+      />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <Select
-          className="w-full sm:w-56"
-          aria-label="Filtrar por estado"
-          value={filtro}
-          onChange={(value) => {
-            if (value) setFiltro(value as FiltroEstado);
-          }}
-        >
-          <Label>Estado</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id="TODAS" textValue="Todas">
-                Todas
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {ESTADO_OT_OPTIONS.map((option) => (
-                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
-                  {option.label}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-      </div>
-
-      {isPending ? (
+      {isPending || (findingsPending && !findingsError) ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
         </div>
@@ -542,18 +234,120 @@ export function OrdenesTrabajoView() {
         </div>
       ) : null}
 
-      {!isPending && !isError && ordenes && ordenes.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">No hay órdenes de trabajo para este filtro</p>
-          <p className="text-sm text-muted-foreground">Crea una nueva con el botón "Crear orden".</p>
+      {/* La bandeja sin sus hallazgos NO puede hacerse pasar por vacía: si la
+          carga falla, se dice — las órdenes siguen abajo. */}
+      {findingsError ? (
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+          No se pudieron cargar los hallazgos de Terreno — la bandeja puede estar incompleta.
         </div>
       ) : null}
 
-      {!isPending && !isError && ordenes && ordenes.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {ordenes.map((orden) => (
-            <OrdenCard key={orden.id} marca={pendientes.marcaDe('orden', orden.id)} orden={orden} />
-          ))}
+      {!isPending && !findingsPending && !isError && !findingsError &&
+      (ordenes?.length ?? 0) + openFindings.length === 0 ? (
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+          <p className="text-sm font-medium text-foreground">No hay nada en el tablero</p>
+          <p className="text-sm text-muted-foreground">
+            Los hallazgos reportados y las mantenciones preventivas asignadas aparecen acá.
+          </p>
+        </div>
+      ) : null}
+
+      {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length > 0 ? (
+        // El tablero se dibuja aunque los hallazgos hayan fallado: esa mitad
+        // ya avisó arriba y las órdenes no tienen por qué esconderse.
+        // Tablet es el dispositivo principal del taller: las TRES columnas se
+        // quedan en pantalla desde md (834px de una tablet vertical incluida).
+        <div className="grid items-start gap-3 md:grid-cols-3 lg:gap-4">
+          <BoardColumn
+            color="neutral"
+            count={openFindings.length + board.backlog.length}
+            title="Órdenes"
+          >
+            {openFindings.map((hallazgo) => (
+              <FindingCard
+                key={hallazgo.id}
+                canStart={can('orden.create')}
+                fleet={fleet}
+                hallazgo={hallazgo}
+              />
+            ))}
+            {board.backlog.map((orden) => (
+              <BoardCard key={orden.id}>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
+                  <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
+                </div>
+                <ChipsRow>
+                  {orden.tipo === 'PREVENTIVA' ? (
+                    <PreventiveChip />
+                  ) : orden.origen === 'HALLAZGO' ? (
+                    <FindingChip />
+                  ) : null}
+                  <Chip tono={chipColorToTono(prioridadOTChipColor(orden.prioridad))}>
+                    {PRIORIDAD_OT_LABELS[orden.prioridad]}
+                  </Chip>
+                </ChipsRow>
+                <CardMeta>
+                  {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} —{' '}
+                  {formatDate(orden.createdAt)}
+                </CardMeta>
+                {canStart ? <StartOperationModal equipment={fleet} orden={orden} /> : null}
+              </BoardCard>
+            ))}
+          </BoardColumn>
+
+          <BoardColumn color="warning" count={board.inProgress.length} title="Operaciones en proceso">
+            {board.inProgress.map((orden) => (
+              <BoardCard key={orden.id}>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
+                  <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
+                </div>
+                <HallazgoAssoc orden={orden} />
+                <ChipsRow>
+                  <TipoChip tipo={orden.tipo} />
+                </ChipsRow>
+                <CardMeta>
+                  Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
+                </CardMeta>
+                {/* Con una escritura de esta OT aún sin sincronizar, el botón
+                    se retira: un segundo "Guardar y finalizar" generaría OTRA
+                    intervención con OTRO id — y ahora eso descuenta stock real
+                    dos veces. */}
+                {pendientes.marcaDe('orden', orden.id) ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Sincronizando cambios de esta operación…
+                  </span>
+                ) : canFinish ? (
+                  <FinishTaskModal equipment={fleet} orden={orden} />
+                ) : null}
+              </BoardCard>
+            ))}
+          </BoardColumn>
+
+          <BoardColumn color="success" count={board.finished.length} title="Finalizadas">
+            {board.finished.map((orden) => (
+              <BoardCard key={orden.id} muted>
+                <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold tracking-[-0.01em]">{orden.titulo}</span>
+                  <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
+                </div>
+                <HallazgoAssoc orden={orden} />
+                <ChipsRow>
+                  {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
+                  <TipoChip tipo={orden.tipo} />
+                </ChipsRow>
+                <CardMeta>
+                  {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}{' '}
+                  {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
+                </CardMeta>
+                <ViewOperationModal equipment={fleet} orden={orden} />
+              </BoardCard>
+            ))}
+          </BoardColumn>
         </div>
       ) : null}
     </div>

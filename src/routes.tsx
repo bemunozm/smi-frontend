@@ -15,7 +15,11 @@ import { FichaItemView } from './views/FichaItemView';
 import { InventarioView } from './views/InventarioView';
 import { MovimientosView } from './views/MovimientosView';
 import { LoginView } from './views/LoginView';
-import { MantenimientoView } from './views/MantenimientoView';
+import { ActividadesView } from './views/ActividadesView';
+import { MantenimientoLayout } from './layout/MantenimientoLayout';
+import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
+import { PreventivoView } from './views/PreventivoView';
+import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
 import { PlaceholderView } from './views/PlaceholderView';
@@ -103,9 +107,30 @@ export const router = createBrowserRouter([
                   { path: '/usuarios', element: <UsersView /> },
                 ],
               },
+            ],
+          },
+          // Mantención (el taller) — shell propio igual que Terreno: al entrar
+          // desaparece el chrome del administrador y manda la navegación del
+          // módulo (ver `layout/MantenimientoLayout.tsx`). Preventivo y Tareas
+          // son gestión ADMIN-only; el filtro de pestañas del layout y este
+          // `ProtectedRoute` anidado cuentan la misma historia.
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
+            children: [
               {
-                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
-                children: [{ path: '/mantenimiento', element: <MantenimientoView /> }],
+                element: <MantenimientoLayout />,
+                children: [
+                  { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
+                  { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
+                  { path: '/mantenimiento/stock', element: <WorkshopStockView /> },
+                  {
+                    element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                    children: [
+                      { path: '/mantenimiento/preventivo', element: <PreventivoView /> },
+                      { path: '/mantenimiento/tareas', element: <ActividadesView /> },
+                    ],
+                  },
+                ],
               },
             ],
           },
