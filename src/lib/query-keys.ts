@@ -54,6 +54,9 @@ export const ORDENES_KEY = ['ordenes'] as const;
 export const INTERVENCIONES_KEY = ['intervenciones'] as const;
 export const ACTIVIDADES_KEY = ['actividades'] as const;
 export const UMBRALES_KEY = ['umbrales'] as const;
+/** Pautas de mantención: `[...MAINTENANCE_PLANS_KEY, equipmentId]` para una,
+ * `[...MAINTENANCE_PLANS_KEY, 'status']` para la próxima de todos los equipos. */
+export const MAINTENANCE_PLANS_KEY = ['maintenance-plans'] as const;
 /** Bandeja de notificaciones y su contador de no leídas: las usa
  * `hooks/useNotificaciones.ts` y la precarga de `hooks/usePrepareOffline.ts`. */
 export const NOTIFICACIONES_KEY = ['notificaciones'] as const;
@@ -81,6 +84,7 @@ export const QUERY_KEYS = {
   intervenciones: INTERVENCIONES_KEY,
   actividades: ACTIVIDADES_KEY,
   umbrales: UMBRALES_KEY,
+  maintenancePlans: MAINTENANCE_PLANS_KEY,
 } as const;
 
 export type QueryKeyName = keyof typeof QUERY_KEYS;

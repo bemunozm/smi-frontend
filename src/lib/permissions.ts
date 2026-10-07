@@ -45,6 +45,7 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
+  'maintenancePlan.save': [ADMIN, MANTENEDOR],
   // Catálogos
   'branch.create': [ADMIN, SUPERVISOR],
   'branch.update': [ADMIN, SUPERVISOR],

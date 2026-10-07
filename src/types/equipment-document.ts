@@ -18,6 +18,9 @@ export const EQUIPMENT_DOCUMENT_TYPES = [
   'INSURANCE',
   'CIRCULATION_PERMIT',
   'CERTIFICATION',
+  // Pauta o manual de mantención del fabricante: se adjunta desde «Asignar
+  // mantenciones» (`PautaMantencionModal`).
+  'MAINTENANCE_MANUAL',
   'OTHER',
 ] as const;
 export type EquipmentDocumentType = (typeof EQUIPMENT_DOCUMENT_TYPES)[number];
