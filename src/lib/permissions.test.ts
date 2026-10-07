@@ -23,7 +23,7 @@ describe('WRITE_ROLES', () => {
     ['combustible.create', [ADMIN, SUPERVISOR]],
     ['equipment.create', [ADMIN]],
     ['equipment.status', [ADMIN, SUPERVISOR]],
-    ['intervencion.create', [MANTENEDOR]],
+    ['intervencion.create', [ADMIN, MANTENEDOR]],
     ['umbral.create', [ADMIN]],
     ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR]],
   ])('%s la hacen %j', (accion, roles) => {

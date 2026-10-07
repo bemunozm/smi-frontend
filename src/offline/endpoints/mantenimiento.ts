@@ -73,7 +73,8 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     path: () => '/api/mantenimiento/ordenes',
     failMessage: 'No se pudo crear la orden de trabajo.',
     parse: parseWith(OrdenTrabajoSchema),
-    invalidate: ['ordenes'],
+    // 'hallazgos': crear desde un hallazgo lo pasa a EN_PROCESO (sale de la bandeja).
+    invalidate: ['ordenes', 'hallazgos'],
     label: (_params, body) => etiqueta('Nueva orden de trabajo', bodyText(body, 'titulo')),
     notFoundIsDone: false,
     carriesFiles: false,
@@ -86,7 +87,8 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     path: (params) => `/api/mantenimiento/ordenes/${param(params, 'id')}`,
     failMessage: 'No se pudo actualizar la orden de trabajo.',
     parse: parseWith(OrdenTrabajoSchema),
-    invalidate: ['ordenes'],
+    // 'hallazgos': completar cierra el hallazgo ligado; cancelar lo reabre.
+    invalidate: ['ordenes', 'hallazgos'],
     label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
@@ -109,10 +111,12 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     path: (params) => `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/intervenciones`,
     failMessage: 'No se pudo registrar la intervención.',
     parse: parseWith(IntervencionSchema),
-    invalidate: ['intervenciones', 'ordenes'],
+    // 'inventory': el cierre descuenta stock real (salidas INTERVENTION).
+    invalidate: ['intervenciones', 'ordenes', 'inventory'],
     label: (params) => etiqueta('Intervención', cachedName('orden', params.ordenId)),
     notFoundIsDone: false,
-    carriesFiles: false,
+    // La foto del cierre viaja como archivo y el replay inyecta `fotoKey`.
+    carriesFiles: true,
     creates: true,
     entity: (_params, body) => entityOf(intervencionEntity, bodyText(body, 'id')),
     parents: (params) => referencias(entityOf(ordenEntity, params.ordenId)),

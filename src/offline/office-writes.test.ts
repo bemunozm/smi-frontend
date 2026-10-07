@@ -113,7 +113,15 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
   it('solo llevan archivos los endpoints cuyo formulario sube uno', () => {
     const conArchivos = (Object.keys(ENDPOINTS) as EndpointKey[]).filter((key) => ENDPOINTS[key].carriesFiles);
     expect(conArchivos.sort()).toEqual(
-      ['combustible.create', 'equipment.create', 'equipment.update', 'equipmentDocument.create', 'equipmentDocument.update'].sort(),
+      [
+        'combustible.create',
+        'equipment.create',
+        'equipment.update',
+        'equipmentDocument.create',
+        'equipmentDocument.update',
+        // La foto del cierre de una intervención del taller.
+        'intervencion.create',
+      ].sort(),
     );
   });
 
