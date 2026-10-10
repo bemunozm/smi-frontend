@@ -123,6 +123,18 @@ export const router = createBrowserRouter([
                   { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
                   { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
                   { path: '/mantenimiento/stock', element: <WorkshopStockView /> },
+                  // Historial y ficha SIN salir del taller: las mismas
+                  // pantallas de Inventario, montadas acá para que la barra
+                  // del módulo no cambie (la pestaña Stock sigue activa).
+                  // "movimientos" antes que `:id`, igual que en Inventario.
+                  {
+                    path: '/mantenimiento/stock/movimientos',
+                    element: <MovimientosView contexto="taller" />,
+                  },
+                  {
+                    path: '/mantenimiento/stock/:id',
+                    element: <FichaItemView contexto="taller" />,
+                  },
                   {
                     element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                     children: [
