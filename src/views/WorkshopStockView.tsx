@@ -5,8 +5,6 @@ import { History, Info } from 'lucide-react';
 
 import { ItemCard } from '../components/inventario/ItemCard';
 import {
-  ALL_BRANCHES,
-  BranchBreakdown,
   CriticalBadge,
   NUMBER,
   Segmented,
@@ -17,12 +15,10 @@ import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
 import { useItems } from '../hooks/useInventory';
 import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import type { Branch } from '../types/branch';
 import {
   UNIT_SYMBOLS,
   quantityAt,
   stockAt,
-  totalQuantity,
   type InventoryItem,
   type ItemType,
 } from '../types/inventory';
@@ -30,20 +26,15 @@ import {
 /** Centinela del filtro de categoría: "todas" no es un id. */
 const ALL_CATEGORIES = '__all__';
 
-/** Mismo umbral que `InventarioView`: hasta cuántas sucursales caben segmentadas. */
-const MAX_SEGMENTED_BRANCHES = 3;
-
-type StockFilter = 'todos' | 'atencion';
-
 const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
 
 // --- Fila de escritorio ----------------------------------------------------
 
-/** La fila de `InventarioView` sin su columna de acciones: acá no hay menú. */
+/** La fila de `InventarioView` sin acciones ni desglose por sucursal: acá la
+ * bodega es una sola (Faena), así que la columna "Sucursal" no dice nada. */
 function ItemRow({ item, branchId }: { item: InventoryItem; branchId: string }) {
-  const isAll = branchId === ALL_BRANCHES;
-  const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
-  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
+  const quantity = quantityAt(item, branchId);
+  const minimum = stockAt(item, branchId)?.minimumQuantity ?? 0;
   const status = stockStatus(item, branchId);
 
   return (
@@ -77,14 +68,9 @@ function ItemRow({ item, branchId }: { item: InventoryItem; branchId: string }) 
       >
         {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
       </Table.Cell>
-      <Table.Cell>
-        <BranchBreakdown highlightBranchId={isAll ? undefined : branchId} item={item} />
+      <Table.Cell className="font-mono text-sm text-muted-foreground">
+        {minimum > 0 ? NUMBER.format(minimum) : '—'}
       </Table.Cell>
-      {isAll ? null : (
-        <Table.Cell className="font-mono text-sm text-muted-foreground">
-          {minimum > 0 ? NUMBER.format(minimum) : '—'}
-        </Table.Cell>
-      )}
       <Table.Cell>
         <StatusChip label={status.label} tone={status.tone} />
       </Table.Cell>
@@ -106,7 +92,6 @@ function EmptyState() {
 function ItemsList({ items, branchId }: { items: InventoryItem[]; branchId: string }) {
   const isDesktop = useMediaQuery(TABLE_LAYOUT_QUERY);
   const navigate = useNavigate();
-  const isAll = branchId === ALL_BRANCHES;
 
   if (items.length === 0) return <EmptyState />;
 
@@ -132,18 +117,15 @@ function ItemsList({ items, branchId }: { items: InventoryItem[]; branchId: stri
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Stock del taller" className="min-w-200">
+        <Table.Content aria-label="Stock del taller" className="min-w-160">
           <Table.Header>
             <Table.Column className={COLUMN_CLASS} isRowHeader>
               SKU
             </Table.Column>
             <Table.Column className={COLUMN_CLASS}>Nombre</Table.Column>
             <Table.Column className={COLUMN_CLASS}>Categoría</Table.Column>
-            <Table.Column className={COLUMN_CLASS}>
-              {isAll ? 'Existencia · total' : 'Existencia acá'}
-            </Table.Column>
-            <Table.Column className={COLUMN_CLASS}>Sucursal</Table.Column>
-            {isAll ? null : <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>}
+            <Table.Column className={COLUMN_CLASS}>Existencia en Faena</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>
             <Table.Column className={COLUMN_CLASS}>Estado</Table.Column>
           </Table.Header>
           <Table.Body>
@@ -161,24 +143,26 @@ function ItemsList({ items, branchId }: { items: InventoryItem[]; branchId: stri
 
 /**
  * Sub-vista "Stock" del taller: el inventario del administrador
- * (`InventarioView`) en **solo lectura** — mismas pestañas, filtros, semáforo
- * de mínimos y desglose por sucursal, pero sin crear, editar, eliminar ni
- * registrar movimientos. El taller no mueve stock a mano: cada salida nace de
- * finalizar una operación, y acá solo se consulta cuánto queda y dónde.
- *
- * La sucursal elegida es estado local (no `useUiStore`): lo que el mantenedor
- * filtra acá no tiene por qué mover el filtro del Inventario del admin.
+ * (`InventarioView`) en **solo lectura y solo Faena** — mismas pestañas,
+ * búsqueda y categorías, pero sin crear, editar, eliminar ni registrar
+ * movimientos, sin filtro de sucursal (la bodega del taller es SIEMPRE la de
+ * faena, la misma regla de `FinishTaskModal`) y sin filtro de estado. El
+ * taller no mueve stock a mano: cada salida nace de finalizar una operación.
  */
 export function WorkshopStockView() {
   const [tab, setTab] = useState<ItemType>('SUPPLY');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
-  const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
-  const [branchId, setBranchId] = useState<string>(ALL_BRANCHES);
 
   const { data: branches } = useBranches({ isActive: true });
   // Las categorías siguen a la pestaña, igual que en Inventario.
   const { data: categories } = useCategories({ type: tab });
+
+  // Regla del taller: la bodega es SIEMPRE la de FAENA (ver `FinishTaskModal`).
+  const faenaBranch = useMemo(
+    () => branches?.find((branch) => /faena/i.test(branch.name)),
+    [branches],
+  );
 
   const { data, isPending, isError, error } = useItems({
     type: tab,
@@ -187,27 +171,18 @@ export function WorkshopStockView() {
     ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
   });
 
-  const all = useMemo(() => data ?? [], [data]);
-
-  const alertCount = useMemo(
-    () => all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
-    [all, branchId],
-  );
-
-  const items = useMemo(
-    () =>
-      stockFilter === 'atencion'
-        ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
-        : all,
-    [all, stockFilter, branchId],
-  );
-
-  const branchOptions = [
-    { id: ALL_BRANCHES, label: 'Todas' },
-    ...(branches ?? []).map((branch: Branch) => ({ id: branch.id, label: branch.name })),
-  ];
-  const useSegmentedBranches = branchOptions.length <= MAX_SEGMENTED_BRANCHES + 1;
-  const branchLabel = branchOptions.find((option) => option.id === branchId)?.label ?? '';
+  /**
+   * Solo la existencia de Faena: se recortan los stocks de las demás bodegas
+   * ANTES de pintar, así ninguna pieza (tarjeta, desglose, estado) puede
+   * mostrar cifras de Casa Matriz por accidente.
+   */
+  const items = useMemo(() => {
+    if (!faenaBranch) return [];
+    return (data ?? []).map((item) => ({
+      ...item,
+      stocks: item.stocks.filter((stock) => stock.branchId === faenaBranch.id),
+    }));
+  }, [data, faenaBranch]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -218,7 +193,7 @@ export function WorkshopStockView() {
         <p className="text-sm text-muted-foreground">
           Existencias de suministros y repuestos{' '}
           <strong className="font-semibold text-foreground">
-            {branchId === ALL_BRANCHES ? 'en todas las sucursales' : `en ${branchLabel}`}
+            en {faenaBranch?.name ?? 'Faena'}
           </strong>
           , en solo lectura.
         </p>
@@ -257,46 +232,11 @@ export function WorkshopStockView() {
         value={tab}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-(--label-color)">Sucursal</span>
-          {useSegmentedBranches ? (
-            <Segmented
-              label="Filtro de sucursal"
-              onChange={setBranchId}
-              options={branchOptions}
-              value={branchId}
-            />
-          ) : (
-            <Select
-              aria-label="Sucursal"
-              onChange={(value) => {
-                if (value) setBranchId(String(value));
-              }}
-              value={branchId}
-            >
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {branchOptions.map((option) => (
-                    <ListBox.Item id={option.id} key={option.id} textValue={option.label}>
-                      {option.label}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          )}
-        </div>
 
         <Select
           onChange={(value) => {
@@ -324,19 +264,6 @@ export function WorkshopStockView() {
             </ListBox>
           </Select.Popover>
         </Select>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-(--label-color)">Estado</span>
-          <Segmented
-            label="Filtro de estado"
-            onChange={setStockFilter}
-            options={[
-              { id: 'todos', label: `Todos · ${all.length}` },
-              { id: 'atencion', label: `Requieren atención · ${alertCount}` },
-            ]}
-            value={stockFilter}
-          />
-        </div>
       </div>
 
       {isError ? (
@@ -348,13 +275,21 @@ export function WorkshopStockView() {
         </div>
       ) : null}
 
-      {isPending ? (
+      {!isPending && branches && !faenaBranch ? (
+        <div
+          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
+          role="alert"
+        >
+          No hay una bodega de faena activa en Inventario — el stock del taller vive ahí. Crea o
+          reactiva la bodega "Faena" para ver existencias.
+        </div>
+      ) : isPending ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
         </div>
-      ) : (
-        <ItemsList branchId={branchId} items={items} />
-      )}
+      ) : faenaBranch ? (
+        <ItemsList branchId={faenaBranch.id} items={items} />
+      ) : null}
     </div>
   );
 }
