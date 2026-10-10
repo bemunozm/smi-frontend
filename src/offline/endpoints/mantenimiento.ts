@@ -48,10 +48,12 @@ import {
 export interface MantenimientoEndpointMap {
   'orden.create': { params: NoParams; body: WithId<CreateOrdenInput>; result: OrdenTrabajo };
   'orden.update': { params: { id: string }; body: Partial<OrdenFields>; result: OrdenTrabajo };
-  /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición). */
+  /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición).
+   * El checklist preventivo agrega notas y foto (la cola la sube y la inyecta
+   * como `fotoKey`). */
   'orden.toggleTarea': {
     params: { ordenId: string; tareaId: string };
-    body: { hecha: boolean };
+    body: { hecha: boolean; notas?: string; fotoKey?: string };
     result: Tarea;
   };
   'intervencion.create': {
@@ -109,10 +111,12 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
       `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
     failMessage: 'No se pudo actualizar la tarea.',
     parse: parseWith(TareaSchema),
-    invalidate: ['ordenes'],
+    // `maintenancePlans`: completar una tarea preventiva escribe el registro
+    // del ciclo en el backend — la grilla de la ficha debe refrescarse.
+    invalidate: ['ordenes', 'maintenancePlans'],
     label: (params) => etiqueta('Tarea de orden de trabajo', cachedName('orden', params.ordenId)),
     notFoundIsDone: false,
-    carriesFiles: false,
+    carriesFiles: true,
     entity: (params) => entityOf(ordenEntity, params.ordenId),
   },
   'intervencion.create': {

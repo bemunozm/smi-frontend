@@ -118,3 +118,27 @@ export function useToggleTarea() {
     errorFallback: 'No se pudo actualizar la tarea.',
   });
 }
+
+/**
+ * Completar una tarea del checklist preventivo: marca + qué se hizo + foto de
+ * respaldo (la cola la sube y la inyecta como `fotoKey`). El backend escribe
+ * el registro del ciclo y mueve la orden solo (primera tarea → EN_PROCESO,
+ * todas → COMPLETADA) — acá no se toca el estado.
+ */
+export function useCompletarTarea() {
+  return useQueuedMutation<
+    'orden.toggleTarea',
+    { ordenId: string; tareaId: string; notas: string; foto: File | null }
+  >({
+    endpoint: 'orden.toggleTarea',
+    build: ({ ordenId, tareaId, notas, foto }) => ({
+      params: { ordenId, tareaId },
+      body: { hecha: true, notas },
+      ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
+    }),
+    onSent: () => {
+      toast.success('Tarea de mantención registrada');
+    },
+    errorFallback: 'No se pudo registrar la tarea de mantención.',
+  });
+}

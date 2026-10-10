@@ -14,6 +14,8 @@ function orden(overrides: Partial<OrdenTrabajo> = {}): OrdenTrabajo {
     id: 'ot-1',
     equipoId: 'EX-014',
     hallazgoId: null,
+    pautaMilestone: null,
+    pautaCycle: null,
     titulo: 'Fuga de aceite hidráulico en pluma',
     estado: 'PENDIENTE',
     prioridad: 'MEDIA',

@@ -9,6 +9,8 @@ function orden(overrides: Partial<OrdenTrabajo>): OrdenTrabajo {
     id: 'ot-x',
     equipoId: 'EX-014',
     hallazgoId: null,
+    pautaMilestone: null,
+    pautaCycle: null,
     titulo: 'Sin título',
     estado: 'PENDIENTE',
     prioridad: 'MEDIA',
@@ -31,10 +33,28 @@ const ORDENES: OrdenTrabajo[] = [
     prioridad: 'CRITICA',
     origenDetalle: 'J. Soto · Operador',
   }),
+  // La tarjeta-checklist: preventiva nacida de la pauta por horómetro.
+  orden({
+    id: 'ot-pauta',
+    equipoId: 'EX-014',
+    titulo: 'Mantención preventiva 250 h · EX-014',
+    estado: 'PENDIENTE',
+    tipo: 'PREVENTIVA',
+    origen: 'PREVENTIVO',
+    origenDetalle: 'Pauta: 250 h · ciclo 1',
+    pautaMilestone: 250,
+    pautaCycle: 1,
+    tareas: [
+      { id: 'ta-1', texto: 'Cambio de aceite', hecha: false, posicion: 0, notas: null, fotoUrl: null },
+      { id: 'ta-2', texto: 'Cambio de filtro', hecha: false, posicion: 1, notas: null, fotoUrl: null },
+    ],
+  }),
   orden({
     id: 'ot-2',
     equipoId: 'CM-007',
     hallazgoId: null,
+    pautaMilestone: null,
+    pautaCycle: null,
     titulo: 'Cambio de aceite motor y filtro',
     estado: 'EN_PROCESO',
     tipo: 'PREVENTIVA',
@@ -44,6 +64,8 @@ const ORDENES: OrdenTrabajo[] = [
     id: 'ot-3',
     equipoId: 'RE-003',
     hallazgoId: null,
+    pautaMilestone: null,
+    pautaCycle: null,
     titulo: 'Engrase general y cambio de pernos',
     estado: 'COMPLETADA',
     tipo: 'PREVENTIVA',
@@ -152,6 +174,7 @@ vi.mock('../hooks/useOrdenes', () => ({
   useActualizarOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useLogOperation: () => ({ mutate: vi.fn(), isPending: false }),
   useToggleTarea: () => ({ mutate: vi.fn(), isPending: false }),
+  useCompletarTarea: () => ({ mutate: vi.fn(), isPending: false }),
   useOrden: () => ({ data: undefined }),
 }));
 
@@ -236,10 +259,31 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.queryByText('Observación general sin equipo')).toBeNull();
   });
 
+  it('la preventiva de la pauta es una tarjeta-CHECKLIST: avance de tareas y su propio botón', () => {
+    renderView();
+
+    // Avance del checklist en la tarjeta, no el flujo iniciar → finalizar.
+    expect(screen.getByText('0 de 2 tareas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Registrar mantención/ })).toBeTruthy();
+    // El botón de las correctivas sigue existiendo para las demás tarjetas,
+    // pero la de la pauta NO lo ofrece: tiene una sola por tablero en este
+    // fixture, así que el conteo lo delata.
+    const iniciar = screen.getAllByRole('button', { name: /Iniciar operación/ });
+    expect(iniciar.length).toBeGreaterThan(0);
+  });
+
+  it('sin permiso de tareas, la tarjeta-checklist no ofrece registrar', () => {
+    allowed = CAN_SOLO_LECTOR;
+    renderView();
+
+    expect(screen.queryByRole('button', { name: /Registrar mantención/ })).toBeNull();
+  });
+
   it('una preventiva pendiente se distingue con su propio chip', () => {
     renderView();
     const backlog = screen.getByRole('region', { name: 'Órdenes' });
-    expect(within(backlog).getByText('Preventiva')).toBeTruthy();
+    // Dos preventivas en la bandeja: la manual y la tarjeta-checklist de la pauta.
+    expect(within(backlog).getAllByText('Preventiva').length).toBeGreaterThan(0);
   });
 
   it('cada chip es el Chip del kit de Terreno con su tono real (y sin el bug de HeroUI)', () => {
@@ -256,15 +300,15 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.getByText('Alta').closest('span')?.className).toContain(
       'bg-[var(--warning-soft)]',
     );
-    expect(screen.getByText('Media').closest('span')?.className).toContain(
+    expect(screen.getAllByText('Media')[0]!.closest('span')?.className).toContain(
       'bg-[var(--accent-soft)]',
     );
     // 'Preventiva' también existe como chip de TIPO en otras columnas — acá
-    // se verifica el de la bandeja.
+    // se verifica el de la bandeja (puede haber más de una preventiva ahí).
     const backlog = screen.getByRole('region', { name: 'Órdenes' });
-    expect(within(backlog).getByText('Preventiva').closest('span')?.className).toContain(
-      'bg-[var(--accent-soft)]',
-    );
+    expect(
+      within(backlog).getAllByText('Preventiva')[0]!.closest('span')?.className,
+    ).toContain('bg-[var(--accent-soft)]');
   });
 
   it('el equipo es el TITULAR de la tarjeta: código en negrita + nombre de Flota', () => {

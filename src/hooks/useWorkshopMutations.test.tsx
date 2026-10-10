@@ -37,6 +37,8 @@ const ORDEN: OrdenTrabajo = {
   id: 'ot-1',
   equipoId: 'CM-007',
   hallazgoId: null,
+  pautaMilestone: null,
+  pautaCycle: null,
   titulo: 'Cambio de aceite motor y filtro',
   estado: 'EN_PROCESO',
   prioridad: 'MEDIA',

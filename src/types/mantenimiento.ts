@@ -81,6 +81,10 @@ export const TareaSchema = z.object({
   texto: z.string(),
   hecha: z.boolean(),
   posicion: z.number(),
+  /** Qué se hizo (checklist del taller); null mientras no se complete. */
+  notas: z.string().nullable(),
+  /** URL firmada de la foto de respaldo — el backend nunca expone la key. */
+  fotoUrl: z.string().nullable(),
 });
 export type Tarea = z.infer<typeof TareaSchema>;
 
@@ -95,6 +99,10 @@ export const OrdenTrabajoSchema = z.object({
   tipo: z.enum(TIPO_OT),
   origen: z.enum(ORIGEN_OT),
   origenDetalle: z.string().nullable(),
+  /** Hito y vuelta de la pauta que originó la orden (solo las PREVENTIVAS que
+   * crea el aviso del backend) — la tarjeta-checklist del tablero los usa. */
+  pautaMilestone: z.number().nullable(),
+  pautaCycle: z.number().nullable(),
   asignadoA: AsignadoSchema.nullable(),
   tareas: z.array(TareaSchema),
   createdAt: z.string(),
@@ -144,9 +152,12 @@ export const UpdateOrdenSchema = z.object({
 });
 export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 
-/** `PATCH /api/mantenimiento/ordenes/:ordenId/tareas/:tareaId` body. */
+/** `PATCH /api/mantenimiento/ordenes/:ordenId/tareas/:tareaId` body. `notas`
+ * y la foto (que la cola inyecta como `fotoKey`) son del checklist del
+ * taller: al completar una tarea de una orden preventiva de la pauta. */
 export const ToggleTareaSchema = z.object({
   hecha: z.boolean(),
+  notas: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
