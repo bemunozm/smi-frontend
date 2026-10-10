@@ -17,6 +17,7 @@ import {
 const base = (): PautaBorrador => ({
   milestones: [250, 500, 2000],
   initialMilestone: '',
+  alertBefore: '',
   items: [{ ...filaVacia(), key: 'a', kind: 'ACEITE', description: 'Aceite motor', quantity: '24', unit: 'LT', milestones: [250, 2000] }],
 });
 
@@ -55,6 +56,11 @@ describe('borrador de la pauta', () => {
 });
 
 describe('problemaDe', () => {
+  it('el aviso al mantenedor tiene que ser un entero positivo', () => {
+    expect(problemaDe({ ...base(), alertBefore: '50' })).toBeNull();
+    expect(problemaDe({ ...base(), alertBefore: '-5' })).toMatch(/aviso al mantenedor/);
+  });
+
   it('una pauta completa se puede guardar', () => {
     expect(problemaDe(base())).toBeNull();
   });
@@ -74,6 +80,19 @@ describe('problemaDe', () => {
   });
 });
 
+describe('aEntrada · filas guardadas', () => {
+  /** El id ata lo registrado en el ciclo a la operación: no se puede perder al guardar. */
+  it('manda el id de las filas que vinieron del servidor y no el de las nuevas', () => {
+    const b = base();
+    b.items[0] = { ...b.items[0], key: 'cmuk123' };
+    b.items.push({ ...filaVacia(), description: 'Nueva', milestones: [250] });
+
+    const items = aEntrada(b).items;
+    expect(items[0].id).toBe('cmuk123');
+    expect(items[1].id).toBeUndefined();
+  });
+});
+
 describe('aEntrada', () => {
   it('convierte el borrador a la forma del servidor y omite las filas vacías', () => {
     const b = base();
@@ -82,7 +101,8 @@ describe('aEntrada', () => {
     expect(aEntrada(b)).toEqual({
       milestones: [250, 500, 2000],
       initialMilestone: null,
-      items: [{ kind: 'ACEITE', description: 'Aceite motor', quantity: 24, unit: 'LT', milestones: [250, 2000] }],
+      alertBefore: null,
+      items: [{ id: 'a', kind: 'ACEITE', description: 'Aceite motor', quantity: 24, unit: 'LT', milestones: [250, 2000] }],
     });
   });
 });

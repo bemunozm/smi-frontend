@@ -167,7 +167,22 @@ export function PautaMantencionModal({
                           <Button variant="secondary" isDisabled={!hitoValido} onPress={sumarHito}>
                             <Plus className="size-4" /> Agregar hito
                           </Button>
+                          {/* El aviso es lo que dispara la tarjeta del mantenedor: al
+                              entrar en este margen se le crea una orden preventiva
+                              con las operaciones del hito que viene. */}
                           <div className="ml-auto flex w-56 flex-col gap-1">
+                            <Label htmlFor="aviso-mantenedor">
+                              Avisar al mantenedor ({vista?.equipment.unit ?? 'h'} antes, opcional)
+                            </Label>
+                            <Input
+                              id="aviso-mantenedor"
+                              inputMode="numeric"
+                              placeholder="Ej. 50"
+                              value={borrador.alertBefore}
+                              onChange={(e) => setBorrador((b) => ({ ...b, alertBefore: e.target.value }))}
+                            />
+                          </div>
+                          <div className="flex w-56 flex-col gap-1">
                             <Label htmlFor="hito-inicial">Servicio inicial, solo una vez (opcional)</Label>
                             <Input
                               id="hito-inicial"

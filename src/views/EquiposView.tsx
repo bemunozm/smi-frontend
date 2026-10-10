@@ -432,9 +432,9 @@ function usePermisosPauta() {
 }
 
 /**
- * Cuánto antes avisar que se acerca una mantención. Provisorio: lo razonable
- * para pautas cada 250 h; cuando el mantenedor tenga sus tareas preventivas
- * (Alexander) este margen debería salir de ahí.
+ * Cuánto antes pintar en advertencia una mantención que se acerca, cuando la
+ * pauta del equipo no tiene «Avisar al mantenedor». Si lo tiene, se usa ese
+ * margen: el mismo que crea la orden preventiva en el tablero del taller.
  */
 const AVISO_PROXIMA: Record<'h' | 'km', number> = { h: 25, km: 500 };
 
@@ -448,7 +448,7 @@ function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined })
   const tono =
     next.remaining === 0
       ? 'text-danger'
-      : next.remaining <= AVISO_PROXIMA[fila.unit]
+      : next.remaining <= (fila.alertBefore ?? AVISO_PROXIMA[fila.unit])
         ? 'text-warning'
         : 'text-muted-foreground';
   return (
