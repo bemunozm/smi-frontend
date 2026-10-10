@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { MaintenancePlanAPI } from '../api/MaintenancePlanAPI';
 import { MAINTENANCE_PLANS_KEY } from '../lib/query-keys';
-import type { SaveMaintenancePlanInput } from '../types/maintenance-plan';
+import type { SaveMaintenancePlanInput, SetMaintenanceRecordInput } from '../types/maintenance-plan';
 import { useQueuedMutation } from './useQueuedMutation';
 
 /** La pauta de un equipo. Solo se pide con la ventana abierta (`enabled`). */
@@ -47,5 +47,30 @@ export function useSaveMaintenancePlan() {
       toast.success('Pauta guardada', { description: internalCode });
     },
     errorFallback: 'No se pudo guardar la pauta de mantención.',
+  });
+}
+
+/** Una vuelta del ciclo de mantenciones del equipo; sin `cycle`, la que corre. */
+export function useMaintenanceCycle(equipmentId: string, cycle: number | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [...MAINTENANCE_PLANS_KEY, equipmentId, 'cycle', cycle ?? 'actual'],
+    queryFn: () => MaintenancePlanAPI.cycle(equipmentId, cycle),
+    enabled,
+  });
+}
+
+export interface SetMaintenanceRecordVars extends SetMaintenanceRecordInput {
+  equipmentId: string;
+}
+
+/**
+ * Marca o desmarca una operación como hecha en el ciclo. Va por la cola de
+ * escrituras: sin señal queda pendiente y se envía al volver.
+ */
+export function useSetMaintenanceRecord() {
+  return useQueuedMutation<'maintenanceRecord.set', SetMaintenanceRecordVars>({
+    endpoint: 'maintenanceRecord.set',
+    build: ({ equipmentId, ...body }) => ({ params: { equipmentId }, body }),
+    errorFallback: 'No se pudo registrar la mantención.',
   });
 }

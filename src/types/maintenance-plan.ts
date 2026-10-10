@@ -58,6 +58,8 @@ export const MaintenancePlanViewSchema = z.object({
     .object({
       milestones: z.array(z.number()),
       initialMilestone: z.number().nullable(),
+      /** Cuánto antes de la próxima mantención se avisa al mantenedor. */
+      alertBefore: z.number().nullable(),
       items: z.array(PlanItemSchema),
       updatedAt: z.string(),
     })
@@ -74,6 +76,7 @@ export const MaintenancePlanViewResponseSchema = z.object({
 export const MaintenanceStatusRowSchema = z.object({
   equipmentId: z.string(),
   unit: z.enum(['h', 'km']),
+  alertBefore: z.number().nullable(),
   status: MaintenanceStatusSchema,
 });
 export type MaintenanceStatusRow = z.infer<typeof MaintenanceStatusRowSchema>;
@@ -83,8 +86,10 @@ export const MaintenanceStatusListResponseSchema = z.object({
   message: z.string(),
 });
 
-/** Una fila de la pauta tal como se guarda. */
+/** Una fila de la pauta tal como se guarda. `id` = fila que ya existe (se actualiza
+ * en su lugar y conserva lo registrado en el ciclo); sin `id`, es nueva. */
 export type SavePlanItemInput = {
+  id?: string;
   kind: PlanItemKind;
   description: string;
   quantity?: number;
@@ -98,5 +103,76 @@ export type SavePlanItemInput = {
 export type SaveMaintenancePlanInput = {
   milestones: number[];
   initialMilestone?: number | null;
+  /** Cuánto antes de la próxima mantención se crea la orden preventiva; null = sin aviso. */
+  alertBefore?: number | null;
   items: SavePlanItemInput[];
 }
+
+// --- Ciclo de mantenciones (registro de lo hecho) ---------------------------
+
+export const CycleColumnSchema = z.object({
+  milestone: z.number(),
+  /** Servicio inicial: solo en el ciclo 1. */
+  firstTimeOnly: z.boolean(),
+  /** Contador absoluto en que toca (2.250 para el hito 250 del ciclo 2). */
+  dueAt: z.number(),
+  /** El equipo ya llegó a ese contador. */
+  reached: z.boolean(),
+  total: z.number(),
+  done: z.number(),
+  /** Todas sus operaciones están hechas: la columna va en verde. */
+  complete: z.boolean(),
+  /** Vencía antes de que el equipo entrara al sistema: se da por hecha. */
+  preSystem: z.boolean(),
+  /** Se puede marcar: los hitos anteriores de la vuelta están completos. */
+  unlocked: z.boolean(),
+  /** Se puede desmarcar: ningún hito posterior tiene registros. */
+  canUndo: z.boolean(),
+});
+export type CycleColumn = z.infer<typeof CycleColumnSchema>;
+
+export const MaintenanceRecordSchema = z.object({
+  id: z.string(),
+  planItemId: z.string().nullable(),
+  milestone: z.number(),
+  description: z.string(),
+  kind: z.string(),
+  counterAt: z.number().nullable(),
+  doneByName: z.string(),
+  doneAt: z.string(),
+});
+export type MaintenanceRecord = z.infer<typeof MaintenanceRecordSchema>;
+
+export const MaintenanceCycleViewSchema = z.object({
+  equipment: z.object({
+    id: z.string(),
+    internalCode: z.string(),
+    unit: z.enum(['h', 'km']),
+    counter: z.number().nullable(),
+  }),
+  hasPlan: z.boolean(),
+  currentCycle: z.number(),
+  cycle: z.number(),
+  cycleLength: z.number().nullable(),
+  cycleStart: z.number().nullable(),
+  cycleEnd: z.number().nullable(),
+  /** Contador con que el equipo entró al sistema: lo anterior se da por hecho. */
+  baselineCounter: z.number().nullable(),
+  items: z.array(PlanItemSchema),
+  columns: z.array(CycleColumnSchema),
+  records: z.array(MaintenanceRecordSchema),
+});
+export type MaintenanceCycleView = z.infer<typeof MaintenanceCycleViewSchema>;
+
+export const MaintenanceCycleViewResponseSchema = z.object({
+  data: MaintenanceCycleViewSchema,
+  message: z.string(),
+});
+
+/** `PUT /api/maintenance-plans/:equipmentId/records`. */
+export type SetMaintenanceRecordInput = {
+  planItemId: string;
+  cycle: number;
+  milestone: number;
+  done: boolean;
+};

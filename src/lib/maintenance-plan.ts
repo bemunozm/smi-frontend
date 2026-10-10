@@ -26,11 +26,16 @@ export interface PautaBorrador {
   milestones: number[];
   /** Servicio inicial único («1ras 50H»); vacío si no hay. */
   initialMilestone: string;
+  /** Avisar al mantenedor N horas (o km) antes; vacío = sin aviso. */
+  alertBefore: string;
   items: FilaBorrador[];
 }
 
 let contador = 0;
-const nuevaKey = () => `fila-${Date.now()}-${contador++}`;
+const PREFIJO_NUEVA = 'fila-';
+const nuevaKey = () => `${PREFIJO_NUEVA}${Date.now()}-${contador++}`;
+/** Las filas nuevas llevan una key local; las guardadas, el id del servidor. */
+const esFilaGuardada = (key: string) => !key.startsWith(PREFIJO_NUEVA);
 
 export function filaVacia(): FilaBorrador {
   return { key: nuevaKey(), kind: 'OPERACION', description: '', quantity: '', unit: '', partNumber: '', milestones: [] };
@@ -55,10 +60,11 @@ const esKind = (k: string): k is PlanItemKind => (PLAN_ITEM_KINDS as readonly st
 
 export function borradorDesde(vista: MaintenancePlanView | undefined): PautaBorrador {
   const plan = vista?.plan;
-  if (!plan) return { milestones: [...HITOS_SUGERIDOS], initialMilestone: '', items: [filaVacia()] };
+  if (!plan) return { milestones: [...HITOS_SUGERIDOS], initialMilestone: '', alertBefore: '', items: [filaVacia()] };
   return {
     milestones: [...plan.milestones],
     initialMilestone: plan.initialMilestone != null ? String(plan.initialMilestone) : '',
+    alertBefore: plan.alertBefore != null ? String(plan.alertBefore) : '',
     items: plan.items.map((i) => ({
       key: i.id,
       kind: esKind(i.kind) ? i.kind : 'OPERACION',
@@ -124,6 +130,12 @@ export function problemaDe(b: PautaBorrador): string | null {
     }
     if (inicial >= b.milestones[0]) return 'El servicio inicial tiene que ir antes del primer hito.';
   }
+  if (b.alertBefore.trim() !== '') {
+    const aviso = leerNumero(b.alertBefore);
+    if (aviso == null || !Number.isInteger(aviso) || aviso < 1) {
+      return 'El aviso al mantenedor tiene que ser un número entero de horas o km.';
+    }
+  }
   const conTexto = b.items.filter((i) => i.description.trim() !== '' || i.milestones.length > 0);
   if (conTexto.some((i) => i.description.trim() === '')) return 'Cada operación necesita una descripción.';
   if (conTexto.some((i) => i.quantity.trim() !== '' && (leerNumero(i.quantity) ?? -1) < 0)) {
@@ -138,11 +150,15 @@ export function aEntrada(b: PautaBorrador): SaveMaintenancePlanInput {
   return {
     milestones: b.milestones,
     initialMilestone: inicial,
+    alertBefore: leerNumero(b.alertBefore),
     items: b.items
       .filter((i) => i.description.trim() !== '' || i.milestones.length > 0)
       .map((i) => {
         const quantity = leerNumero(i.quantity);
         return {
+          // Una fila que vino del servidor viaja con su id: así se actualiza
+          // en su lugar y no pierde lo ya registrado en el ciclo.
+          ...(esFilaGuardada(i.key) ? { id: i.key } : {}),
           kind: i.kind,
           description: i.description.trim(),
           ...(quantity != null ? { quantity } : {}),
