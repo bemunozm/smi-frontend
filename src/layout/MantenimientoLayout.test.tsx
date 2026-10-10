@@ -69,14 +69,14 @@ describe('MantenimientoLayout', () => {
     expect(screen.queryByRole('navigation', { name: 'Navegación principal' })).toBeNull();
   });
 
-  it('MANTENEDOR ve solo Órdenes y Stock en la barra inferior', () => {
+  it('MANTENEDOR ve Órdenes, Stock y Equipos en la barra inferior', () => {
     renderLayout('phone', ROLES.MANTENEDOR);
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(labels).toEqual(['Órdenes', 'Stock']);
+    expect(labels).toEqual(['Órdenes', 'Stock', 'Equipos']);
   });
 
   it('ADMIN ve también Preventivo y Tareas', () => {
@@ -86,7 +86,7 @@ describe('MantenimientoLayout', () => {
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(labels).toEqual(['Órdenes', 'Stock', 'Preventivo', 'Tareas']);
+    expect(labels).toEqual(['Órdenes', 'Stock', 'Equipos', 'Preventivo', 'Tareas']);
   });
 
   it('el drawer del MANTENEDOR no ofrece «Ir al panel»: el taller ES su panel', () => {

@@ -135,6 +135,18 @@ export const router = createBrowserRouter([
                     path: '/mantenimiento/stock/:id',
                     element: <FichaItemView contexto="taller" />,
                   },
+                  // Equipos de consulta para el taller: lista, detalle y
+                  // bitácora consolidada en SOLO LECTURA (el contexto apaga
+                  // todas las escrituras, sin mirar el rol), dentro del shell.
+                  { path: '/mantenimiento/equipos', element: <EquiposView contexto="taller" /> },
+                  {
+                    path: '/mantenimiento/equipos/:id',
+                    element: <EquipoDetalleView contexto="taller" />,
+                  },
+                  {
+                    path: '/mantenimiento/equipos/:id/ficha',
+                    element: <FichaEquipoView contexto="taller" />,
+                  },
                   {
                     element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                     children: [

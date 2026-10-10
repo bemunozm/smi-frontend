@@ -1,4 +1,4 @@
-import { ClipboardList, Gauge, ListChecks, Package } from 'lucide-react';
+import { ClipboardList, Gauge, ListChecks, Package, Truck } from 'lucide-react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { ROLES } from '../types/roles';
@@ -14,6 +14,9 @@ import { TerrenoShell, type ShellTab } from './TerrenoShell';
 const TABS: (ShellTab & { adminOnly: boolean })[] = [
   { to: '/mantenimiento/ordenes', label: 'Órdenes de trabajo', corto: 'Órdenes', icon: ClipboardList, adminOnly: false },
   { to: '/mantenimiento/stock', label: 'Stock del taller', corto: 'Stock', icon: Package, adminOnly: false },
+  // Consulta de la flota en solo lectura (mismo ícono que usa el BottomNav
+  // del escritorio para Equipos) — ver las rutas `/mantenimiento/equipos/*`.
+  { to: '/mantenimiento/equipos', label: 'Equipos', corto: 'Equipos', icon: Truck, adminOnly: false },
   { to: '/mantenimiento/preventivo', label: 'Plan preventivo', corto: 'Preventivo', icon: Gauge, adminOnly: true },
   { to: '/mantenimiento/tareas', label: 'Tareas', corto: 'Tareas', icon: ListChecks, adminOnly: true },
 ];

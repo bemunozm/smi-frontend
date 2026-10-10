@@ -267,6 +267,46 @@ function renderFicha(
 }
 
 describe('EquipoDetalleView', () => {
+  it('montada en el taller es solo lectura incluso para ADMIN y no sale de su shell', async () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+
+    const qc = crearQueryClient();
+    qc.setQueryData(['equipment', 'eq_1'], EQUIPO_DETALLE);
+    qc.setQueryData(['horometro'], HOROMETROS);
+    qc.setQueryData(['combustible'], COMBUSTIBLES);
+    qc.setQueryData(['ficha', 'eq_1'], FICHA);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/mantenimiento/equipos/eq_1']}>
+          <Routes>
+            <Route
+              element={<EquipoDetalleView contexto="taller" />}
+              path="/mantenimiento/equipos/:id"
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // La regla es del módulo, no del rol: ninguna escritura a la vista.
+    expect(screen.queryByText('Editar equipo')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Eliminar equipo' })).toBeNull();
+    expect(screen.queryByText('Cambiar estado')).toBeNull();
+    expect(screen.queryByText(/Registrar/)).toBeNull();
+
+    // Y los enlaces se quedan dentro del shell del taller.
+    const volver = screen.getByRole('link', { name: '← Volver a Equipos' });
+    expect(volver.getAttribute('href')).toBe('/mantenimiento/equipos');
+    const bitacora = await screen.findByRole('link', { name: 'Ver bitácora completa →' });
+    expect(bitacora.getAttribute('href')).toBe('/mantenimiento/equipos/eq_1/ficha');
+  });
+
   it('muestra la cabecera, los KPIs, los datos de la unidad y los consumos', () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
