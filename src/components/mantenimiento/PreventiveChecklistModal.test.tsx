@@ -9,6 +9,31 @@ vi.mock('../../hooks/useOrdenes', () => ({
   useCompletarTarea: () => ({ mutate: mutateMock, isPending: false }),
 }));
 
+// Insumos de Faena (`useInsumosFaena`): se mockean las lecturas de abajo,
+// igual que en `FinishTaskModal.test.tsx`.
+vi.mock('../../hooks/useBranches', () => ({
+  useBranches: () => ({
+    data: [
+      { id: 'br-1', name: 'Casa Matriz' },
+      { id: 'br-2', name: 'Faena' },
+    ],
+  }),
+}));
+vi.mock('../../hooks/useInventory', () => ({
+  useItems: () => ({
+    data: [
+      {
+        id: 'item-aceite',
+        sku: 'ACE-002',
+        name: 'Aceite hidráulico ISO 68',
+        type: 'SUPPLY',
+        unit: 'LITER',
+        stocks: [{ branchId: 'br-2', quantity: 27, minimumQuantity: 5, branch: { id: 'br-2', name: 'Faena' } }],
+      },
+    ],
+  }),
+}));
+
 // La captura real lee EXIF del archivo; acá se controla qué foto "hay".
 let mockFile: File | null = null;
 vi.mock('../../lib/usePhotoCaptureFlow', () => ({
@@ -28,7 +53,15 @@ afterEach(() => {
 });
 
 function tarea(over: Partial<Tarea> & Pick<Tarea, 'id' | 'texto'>): Tarea {
-  return { hecha: false, posicion: 0, notas: null, fotoUrl: null, ...over };
+  return {
+    hecha: false,
+    posicion: 0,
+    notas: null,
+    fotoUrl: null,
+    hechaPorNombre: null,
+    hechaAt: null,
+    ...over,
+  };
 }
 
 const ORDEN: OrdenTrabajo = {
@@ -49,8 +82,10 @@ const ORDEN: OrdenTrabajo = {
       id: 'ta-1',
       texto: 'Cambio de aceite',
       hecha: true,
-      notas: 'Aceite 15W-40 nuevo',
+      notas: 'se cambio el aceite',
       fotoUrl: 'https://signed/aceite.jpg',
+      hechaPorNombre: 'Mantenedor SMI',
+      hechaAt: '2026-10-10T15:30:00.000Z',
     }),
     tarea({ id: 'ta-2', texto: 'Cambio de filtro', posicion: 1 }),
   ],
@@ -76,17 +111,18 @@ describe('tareasHechas', () => {
 });
 
 describe('PreventiveChecklistModal', () => {
-  it('muestra el hito, el avance y cada tarea con su evidencia', () => {
+  it('la tarea hecha pliega su evidencia detrás de «Ver detalle»: fecha, quién, qué y la foto', () => {
     abrir();
 
-    expect(screen.getByText('Mantención de 250')).toBeTruthy();
-    expect(screen.getByText('1 de 2 tareas')).toBeTruthy();
-    // La hecha es de solo lectura, con sus notas y su foto.
-    expect(screen.getByText('Aceite 15W-40 nuevo')).toBeTruthy();
-    const foto = screen.getByRole('link', { name: 'Ver foto de respaldo' });
-    expect(foto.getAttribute('href')).toBe('https://signed/aceite.jpg');
-    // La pendiente ofrece completarla.
-    expect(screen.getByRole('button', { name: 'Completar' })).toBeTruthy();
+    // Plegada: ni las notas ni la foto a la vista.
+    expect(screen.queryByText('se cambio el aceite')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalle' }));
+
+    expect(screen.getByText(/Realizada:/)).toBeTruthy();
+    expect(screen.getByText('Mantenedor SMI')).toBeTruthy();
+    expect(screen.getByText('se cambio el aceite')).toBeTruthy();
+    const foto = screen.getByRole('img', { name: 'Foto de respaldo de Cambio de aceite' });
+    expect(foto.getAttribute('src')).toBe('https://signed/aceite.jpg');
   });
 
   it('exige descripción Y foto antes de poder guardar la tarea', () => {
@@ -103,7 +139,7 @@ describe('PreventiveChecklistModal', () => {
     expect(guardar.hasAttribute('disabled')).toBe(true);
   });
 
-  it('con descripción y foto guarda la tarea por separado', () => {
+  it('con descripción y foto guarda la tarea por separado (sin insumos, sin bodega)', () => {
     mockFile = new File(['x'], 'filtro.jpg', { type: 'image/jpeg' });
     abrir();
     fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
@@ -120,6 +156,27 @@ describe('PreventiveChecklistModal', () => {
       notas: 'Filtro nuevo instalado',
       foto: mockFile,
     });
+  });
+
+  it('los insumos usados van con la bodega de Faena FIJA y avisan del descuento de stock', () => {
+    mockFile = new File(['x'], 'filtro.jpg', { type: 'image/jpeg' });
+    abrir();
+    fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
+    fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
+
+    // Bodega fija del taller — sin opción de cambiarla.
+    expect(screen.getByText('Faena')).toBeTruthy();
+    expect(screen.getByText('Fija del taller')).toBeTruthy();
+    expect(screen.queryByText('Casa Matriz')).toBeNull();
+    expect(screen.getByText(/descuentan automáticamente/)).toBeTruthy();
+
+    // Con la fila incompleta (sin insumo elegido) no se puede guardar.
+    fireEvent.change(screen.getByPlaceholderText(/Se cambió el aceite/), {
+      target: { value: 'Filtro nuevo instalado' },
+    });
+    expect(screen.getByRole('button', { name: /Guardar tarea/ }).hasAttribute('disabled')).toBe(
+      true,
+    );
   });
 
   it('en solo lectura no se puede completar nada', () => {

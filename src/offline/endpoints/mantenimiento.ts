@@ -53,7 +53,14 @@ export interface MantenimientoEndpointMap {
    * como `fotoKey`). */
   'orden.toggleTarea': {
     params: { ordenId: string; tareaId: string };
-    body: { hecha: boolean; notas?: string; fotoKey?: string };
+    body: {
+      hecha: boolean;
+      notas?: string;
+      fotoKey?: string;
+      /** Insumos usados en ESTA tarea — el backend los descuenta del stock. */
+      insumos?: { insumoId: string; cantidad: number }[];
+      branchId?: string;
+    };
     result: Tarea;
   };
   'intervencion.create': {

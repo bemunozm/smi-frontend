@@ -52,7 +52,7 @@ import {
   useToggleOperatorActive,
   useUpdateOperator,
 } from './useOperators';
-import { useActualizarOrden, useCrearOrden, useToggleTarea } from './useOrdenes';
+import { useActualizarOrden, useCompletarTarea, useCrearOrden, useToggleTarea } from './useOrdenes';
 import { useCrearUmbral } from './useUmbrales';
 
 const UUID = expect.stringMatching(/^[0-9a-f-]{36}$/);
@@ -675,6 +675,33 @@ describe('Mantenimiento', () => {
     expect(endpoint).toBe('orden.toggleTarea');
     expect(input).toMatchObject({ params: { ordenId: 'ot_1', tareaId: 'ta_1' }, body: { hecha: true } });
     expect(input.expected).toBeUndefined();
+  });
+
+  it('completar una tarea del checklist lleva notas, foto e insumos con su bodega', async () => {
+    submitWriteMock.mockResolvedValueOnce(encolado());
+    const foto = new File(['x'], 'tarea.jpg', { type: 'image/jpeg' });
+
+    await correr(useCompletarTarea, {
+      ordenId: 'ot_1',
+      tareaId: 'ta_1',
+      notas: 'Se cambió el filtro',
+      foto,
+      insumos: [{ insumoId: 'item_1', cantidad: 2 }],
+      branchId: 'br_faena',
+    });
+
+    const { endpoint, input } = ultimaEscritura();
+    expect(endpoint).toBe('orden.toggleTarea');
+    expect(input).toMatchObject({
+      params: { ordenId: 'ot_1', tareaId: 'ta_1' },
+      body: {
+        hecha: true,
+        notas: 'Se cambió el filtro',
+        insumos: [{ insumoId: 'item_1', cantidad: 2 }],
+        branchId: 'br_faena',
+      },
+      files: [{ field: 'fotoKey', file: foto }],
+    });
   });
 
   it('una intervención va a la orden y lleva el id del cliente', async () => {

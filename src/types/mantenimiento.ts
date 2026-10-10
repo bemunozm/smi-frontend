@@ -85,6 +85,9 @@ export const TareaSchema = z.object({
   notas: z.string().nullable(),
   /** URL firmada de la foto de respaldo — el backend nunca expone la key. */
   fotoUrl: z.string().nullable(),
+  /** Quién y cuándo la completó — el "ver detalle" de la tarjeta. */
+  hechaPorNombre: z.string().nullable(),
+  hechaAt: z.string().nullable(),
 });
 export type Tarea = z.infer<typeof TareaSchema>;
 

@@ -128,12 +128,24 @@ export function useToggleTarea() {
 export function useCompletarTarea() {
   return useQueuedMutation<
     'orden.toggleTarea',
-    { ordenId: string; tareaId: string; notas: string; foto: File | null }
+    {
+      ordenId: string;
+      tareaId: string;
+      notas: string;
+      foto: File | null;
+      /** Insumos usados en la tarea — salen SIEMPRE de la bodega de faena. */
+      insumos?: { insumoId: string; cantidad: number }[];
+      branchId?: string;
+    }
   >({
     endpoint: 'orden.toggleTarea',
-    build: ({ ordenId, tareaId, notas, foto }) => ({
+    build: ({ ordenId, tareaId, notas, foto, insumos, branchId }) => ({
       params: { ordenId, tareaId },
-      body: { hecha: true, notas },
+      body: {
+        hecha: true,
+        notas,
+        ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}),
+      },
       ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
     }),
     onSent: () => {

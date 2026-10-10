@@ -45,8 +45,8 @@ const ORDENES: OrdenTrabajo[] = [
     pautaMilestone: 250,
     pautaCycle: 1,
     tareas: [
-      { id: 'ta-1', texto: 'Cambio de aceite', hecha: false, posicion: 0, notas: null, fotoUrl: null },
-      { id: 'ta-2', texto: 'Cambio de filtro', hecha: false, posicion: 1, notas: null, fotoUrl: null },
+      { id: 'ta-1', texto: 'Cambio de aceite', hecha: false, posicion: 0, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
+      { id: 'ta-2', texto: 'Cambio de filtro', hecha: false, posicion: 1, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
     ],
   }),
   // Pauta ya iniciada: el checklist se registra en la columna del medio.
@@ -61,8 +61,8 @@ const ORDENES: OrdenTrabajo[] = [
     pautaMilestone: 500,
     pautaCycle: 1,
     tareas: [
-      { id: 'tb-1', texto: 'Engrase general', hecha: true, posicion: 0, notas: 'Hecho', fotoUrl: null },
-      { id: 'tb-2', texto: 'Revisión de correas', hecha: false, posicion: 1, notas: null, fotoUrl: null },
+      { id: 'tb-1', texto: 'Engrase general', hecha: true, posicion: 0, notas: 'Hecho', fotoUrl: null, hechaPorNombre: null, hechaAt: null },
+      { id: 'tb-2', texto: 'Revisión de correas', hecha: false, posicion: 1, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
     ],
   }),
   orden({
