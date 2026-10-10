@@ -17,9 +17,12 @@ import {
   type UpdateActividadInput,
 } from '../../types/mantenimiento';
 import {
+  MaintenanceCycleViewSchema,
   MaintenancePlanViewSchema,
+  type MaintenanceCycleView,
   type MaintenancePlanView,
   type SaveMaintenancePlanInput,
+  type SetMaintenanceRecordInput,
 } from '../../types/maintenance-plan';
 import { cachedName } from '../cache-upserts';
 import {
@@ -64,6 +67,12 @@ export interface MantenimientoEndpointMap {
     params: { equipmentId: string };
     body: SaveMaintenancePlanInput;
     result: MaintenancePlanView;
+  };
+  /** Marcar o desmarcar una operación hecha en el ciclo (`PUT`, idempotente). */
+  'maintenanceRecord.set': {
+    params: { equipmentId: string };
+    body: SetMaintenanceRecordInput;
+    result: MaintenanceCycleView;
   };
 }
 
@@ -168,6 +177,21 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     parse: parseWith(MaintenancePlanViewSchema),
     invalidate: ['maintenancePlans'],
     label: (params) => etiqueta('Pauta de mantención', cachedName('equipment', params.equipmentId)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(equipmentEntity, params.equipmentId),
+  },
+  'maintenanceRecord.set': {
+    method: 'PUT',
+    path: (params) => `/api/maintenance-plans/${param(params, 'equipmentId')}/records`,
+    failMessage: 'No se pudo registrar la mantención.',
+    parse: parseWith(MaintenanceCycleViewSchema),
+    invalidate: ['maintenancePlans'],
+    label: (params, body) =>
+      etiqueta(
+        body.done ? 'Mantención registrada' : 'Registro de mantención quitado',
+        cachedName('equipment', params.equipmentId),
+      ),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(equipmentEntity, params.equipmentId),
