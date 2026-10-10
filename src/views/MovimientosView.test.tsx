@@ -75,6 +75,7 @@ const TRASPASO_SALIDA = movement({
 function renderView(
   movements: StockMovement[],
   size: 'phone' | 'desktop' = 'desktop',
+  contexto?: 'inventario' | 'taller',
 ) {
   setViewport(size);
 
@@ -85,7 +86,7 @@ function renderView(
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <MovimientosView />
+        <MovimientosView contexto={contexto} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -100,6 +101,18 @@ describe('MovimientosView', () => {
     expect(tabla.getByText('Compra / reposición')).toBeTruthy();
     expect(tabla.getByText('Casa Matriz')).toBeTruthy();
     expect(tabla.getByText('GD-4471')).toBeTruthy();
+  });
+
+  it('montada en el taller vuelve al stock del taller y sus fichas se abren SIN salir del shell', () => {
+    renderView([COMPRA], 'desktop', 'taller');
+
+    const volver = screen.getByRole('link', { name: '← Volver al stock del taller' });
+    expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
+    expect(screen.queryByText('Volver al inventario')).toBeNull();
+    expect(screen.queryByText('SMI · Inventario')).toBeNull();
+    // Los datos son los mismos, y la ficha del ítem también vive en el taller.
+    const sku = screen.getByRole('link', { name: 'FIL-001' });
+    expect(sku.getAttribute('href')).toBe('/mantenimiento/stock/i1');
   });
 
   it('escribe el recorrido del traspaso, origen → destino', () => {

@@ -33,11 +33,15 @@ export function ItemCard({
   marca,
   branchId,
   onOpen,
+  ariaLabel,
 }: {
   item: InventoryItem;
   marca: Marca | null;
   branchId: string;
   onOpen: () => void;
+  /** Qué anuncia la tarjeta. Default: abrir las acciones del ítem (Inventario);
+   * el stock del taller —solo lectura— pasa el suyo porque ahí abre la ficha. */
+  ariaLabel?: string;
 }) {
   const isAll = branchId === ALL_BRANCHES;
   const symbol = UNIT_SYMBOLS[item.unit];
@@ -50,7 +54,7 @@ export function ItemCard({
       // Sin etiqueta propia, el nombre accesible de la tarjeta es la ristra de
       // todo lo que lleva dentro ("FIL-001 OK Filtro de aceite…"). Lo que hace
       // el botón es abrir las acciones del ítem, y eso es lo que debe anunciar.
-      aria-label={`Acciones de ${item.sku}`}
+      aria-label={ariaLabel ?? `Acciones de ${item.sku}`}
       className="w-full cursor-pointer rounded-xl border border-border bg-card p-3.5 text-left shadow-sm transition-colors hover:bg-[var(--surface-secondary)]"
       onClick={onOpen}
       type="button"

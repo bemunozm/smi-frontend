@@ -92,7 +92,11 @@ const MOVEMENTS: StockMovement[] = [
 ];
 
 function renderFicha(
-  { movements = MOVEMENTS, size = 'desktop' as 'phone' | 'desktop' } = {},
+  {
+    movements = MOVEMENTS,
+    size = 'desktop' as 'phone' | 'desktop',
+    contexto = 'inventario' as 'inventario' | 'taller',
+  } = {},
 ) {
   setViewport(size);
 
@@ -103,11 +107,15 @@ function renderFicha(
     movements,
   });
 
+  // El mismo anidamiento que `routes.tsx`: la ficha vive en Inventario y
+  // también dentro del taller (`/mantenimiento/stock/:id`).
+  const base = contexto === 'taller' ? '/mantenimiento/stock' : '/inventario';
+
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/inventario/i1']}>
+      <MemoryRouter initialEntries={[`${base}/i1`]}>
         <Routes>
-          <Route element={<FichaItemView />} path="/inventario/:id" />
+          <Route element={<FichaItemView contexto={contexto} />} path={`${base}/:id`} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -115,6 +123,27 @@ function renderFicha(
 }
 
 describe('FichaItemView', () => {
+  it('montada en el taller es solo lectura incluso para ADMIN, y vuelve al stock del taller', () => {
+    renderFicha({ contexto: 'taller' });
+
+    // La regla es del módulo, no del rol: el stock del taller solo se mueve
+    // al finalizar operaciones.
+    expect(screen.queryByText('Registrar movimiento')).toBeNull();
+    expect(screen.queryByText('Editar ítem')).toBeNull();
+
+    const volver = screen.getByRole('link', { name: '← Volver al stock del taller' });
+    expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
+    expect(screen.queryByText('← Volver a Inventario')).toBeNull();
+  });
+
+  it('montada en Inventario conserva sus acciones (rol mediante)', () => {
+    renderFicha();
+
+    expect(screen.getByText('Registrar movimiento')).toBeTruthy();
+    expect(screen.getByText('Editar ítem')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Volver a Inventario' })).toBeTruthy();
+  });
+
   it('encabeza con qué es el ítem, no solo con su código', () => {
     renderFicha();
 

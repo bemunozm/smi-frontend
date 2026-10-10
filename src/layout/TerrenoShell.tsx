@@ -8,6 +8,7 @@ import { SyncStatus } from '../components/terreno/SyncStatus';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { ROLES } from '../types/roles';
 import { CONTAINER } from './terreno-container';
 
 /**
@@ -76,6 +77,14 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
    * demás de esta pantalla es estilo y va con clases `sm:`/`lg:`.
    */
   const navEnHeader = useMediaQuery(DESKTOP_QUERY);
+
+  /**
+   * "Ir al panel" lleva al escritorio del administrador. Para el MANTENEDOR
+   * el panel no es parte de su trabajo —su módulo ES el taller, como Terreno
+   * para el supervisor—, así que el atajo no se ofrece; ADMIN y SUPERVISOR
+   * lo conservan.
+   */
+  const ofreceIrAlPanel = role !== ROLES.MANTENEDOR;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--terreno-warm)' }}>
@@ -236,14 +245,16 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
               )}
 
               <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
-                <NavLink
-                  to="/"
-                  onClick={() => setMenu(false)}
-                  className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium hover:bg-muted"
-                >
-                  <LayoutDashboard className="h-[19px] w-[19px]" />
-                  Ir al panel
-                </NavLink>
+                {ofreceIrAlPanel && (
+                  <NavLink
+                    to="/"
+                    onClick={() => setMenu(false)}
+                    className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium hover:bg-muted"
+                  >
+                    <LayoutDashboard className="h-[19px] w-[19px]" />
+                    Ir al panel
+                  </NavLink>
+                )}
                 <button
                   type="button"
                   onClick={requestLogout}
