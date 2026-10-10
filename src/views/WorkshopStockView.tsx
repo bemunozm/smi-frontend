@@ -209,9 +209,10 @@ export function WorkshopStockView() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {/* Dentro del shell del taller: la barra del módulo no cambia. */}
         <Link
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
-          to="/inventario/movimientos"
+          to="/mantenimiento/stock/movimientos"
         >
           <History size={16} />
           Historial de movimientos

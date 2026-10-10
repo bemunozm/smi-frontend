@@ -75,6 +75,7 @@ const TRASPASO_SALIDA = movement({
 function renderView(
   movements: StockMovement[],
   size: 'phone' | 'desktop' = 'desktop',
+  contexto?: 'inventario' | 'taller',
 ) {
   setViewport(size);
 
@@ -85,7 +86,7 @@ function renderView(
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <MovimientosView />
+        <MovimientosView contexto={contexto} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -100,6 +101,17 @@ describe('MovimientosView', () => {
     expect(tabla.getByText('Compra / reposición')).toBeTruthy();
     expect(tabla.getByText('Casa Matriz')).toBeTruthy();
     expect(tabla.getByText('GD-4471')).toBeTruthy();
+  });
+
+  it('montada en el taller vuelve al stock del taller, no al inventario del admin', () => {
+    renderView([COMPRA], 'desktop', 'taller');
+
+    const volver = screen.getByRole('link', { name: 'Volver al stock del taller' });
+    expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
+    expect(screen.queryByText('Volver al inventario')).toBeNull();
+    expect(screen.queryByText('SMI · Inventario')).toBeNull();
+    // Los datos son los mismos: solo cambian la cabecera y el "volver".
+    expect(screen.getByText('FIL-001')).toBeTruthy();
   });
 
   it('escribe el recorrido del traspaso, origen → destino', () => {

@@ -134,7 +134,18 @@ function MovementCard({ movement }: { movement: StockMovement }) {
   );
 }
 
-export function MovimientosView() {
+/**
+ * El historial se monta en DOS lugares: en Inventario (`/inventario/
+ * movimientos`, chrome de escritorio) y dentro del taller (`/mantenimiento/
+ * stock/movimientos`, shell de Mantención) — misma pantalla, para que el
+ * mantenedor no salga de su barra al revisarlo. `contexto` solo cambia la
+ * cabecera y el "volver"; los datos y filtros son idénticos.
+ */
+export function MovimientosView({
+  contexto = 'inventario',
+}: {
+  contexto?: 'inventario' | 'taller';
+}) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const { data: branches } = useBranches({ isActive: true });
 
@@ -168,21 +179,38 @@ export function MovimientosView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-          SMI · Inventario
-        </span>
-        <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-          Historial de inventario
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
-          renglón deja el stock que quedó en esa bodega.{' '}
-          <Link className="text-(--accent) hover:underline" to="/inventario">
-            Volver al inventario
-          </Link>
-        </p>
-      </div>
+      {contexto === 'inventario' ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+            SMI · Inventario
+          </span>
+          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+            Historial de inventario
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
+            renglón deja el stock que quedó en esa bodega.{' '}
+            <Link className="text-(--accent) hover:underline" to="/inventario">
+              Volver al inventario
+            </Link>
+          </p>
+        </div>
+      ) : (
+        // Dentro del taller la marca ya la pone el header del shell: acá basta
+        // el título al tamaño de las demás sub-vistas y el volver a Stock.
+        <div className="flex flex-col gap-1">
+          <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
+            Historial de inventario
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
+            renglón deja el stock que quedó en esa bodega.{' '}
+            <Link className="text-(--accent) hover:underline" to="/mantenimiento/stock">
+              Volver al stock del taller
+            </Link>
+          </p>
+        </div>
+      )}
 
       <PendientesStrip recursos={RECURSOS_DE_MOVIMIENTOS} />
 

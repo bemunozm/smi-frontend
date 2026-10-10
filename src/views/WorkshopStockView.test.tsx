@@ -144,12 +144,13 @@ describe('WorkshopStockView', () => {
     expect(screen.queryByText('FIL-001')).toBeNull();
   });
 
-  it('explica que los movimientos nacen de las operaciones y enlaza el historial', () => {
+  it('explica que los movimientos nacen de las operaciones y enlaza el historial SIN salir del taller', () => {
     renderView([EN_AMBAS]);
 
     expect(screen.getByText(/se descuenta automáticamente/)).toBeTruthy();
+    // La ruta vive dentro del shell de Mantención: la barra del módulo no cambia.
     const historial = screen.getByRole('link', { name: /Historial de movimientos/ });
-    expect(historial.getAttribute('href')).toBe('/inventario/movimientos');
+    expect(historial.getAttribute('href')).toBe('/mantenimiento/stock/movimientos');
   });
 
   it('en escritorio el SKU lleva a la ficha; en teléfono la tarjeta anuncia la ficha', () => {

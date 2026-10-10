@@ -123,6 +123,13 @@ export const router = createBrowserRouter([
                   { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
                   { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
                   { path: '/mantenimiento/stock', element: <WorkshopStockView /> },
+                  // El historial SIN salir del taller: misma pantalla que
+                  // `/inventario/movimientos`, montada acá para que la barra
+                  // del módulo no cambie (la pestaña Stock sigue activa).
+                  {
+                    path: '/mantenimiento/stock/movimientos',
+                    element: <MovimientosView contexto="taller" />,
+                  },
                   {
                     element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                     children: [
