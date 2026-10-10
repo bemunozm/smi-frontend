@@ -103,15 +103,16 @@ describe('MovimientosView', () => {
     expect(tabla.getByText('GD-4471')).toBeTruthy();
   });
 
-  it('montada en el taller vuelve al stock del taller, no al inventario del admin', () => {
+  it('montada en el taller vuelve al stock del taller y sus fichas se abren SIN salir del shell', () => {
     renderView([COMPRA], 'desktop', 'taller');
 
-    const volver = screen.getByRole('link', { name: 'Volver al stock del taller' });
+    const volver = screen.getByRole('link', { name: '← Volver al stock del taller' });
     expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
     expect(screen.queryByText('Volver al inventario')).toBeNull();
     expect(screen.queryByText('SMI · Inventario')).toBeNull();
-    // Los datos son los mismos: solo cambian la cabecera y el "volver".
-    expect(screen.getByText('FIL-001')).toBeTruthy();
+    // Los datos son los mismos, y la ficha del ítem también vive en el taller.
+    const sku = screen.getByRole('link', { name: 'FIL-001' });
+    expect(sku.getAttribute('href')).toBe('/mantenimiento/stock/i1');
   });
 
   it('escribe el recorrido del traspaso, origen → destino', () => {

@@ -347,10 +347,25 @@ function MovementHistory({
  * nada sin la existencia al lado — "salieron 5" se entiende distinto si quedan
  * 40 o si quedan 2 — y quien abre el historial de un ítem viene, casi siempre,
  * a decidir si repone.
+ *
+ * Se monta en DOS lugares: en Inventario (`/inventario/:id`) y dentro del
+ * taller (`/mantenimiento/stock/:id`), para que el mantenedor no salga de su
+ * barra al abrir un ítem. En el taller es SOLO LECTURA para todos — sin
+ * editar ni registrar movimientos, la regla del módulo — y el volver apunta
+ * al stock del taller.
  */
-export function FichaItemView() {
+export function FichaItemView({
+  contexto = 'inventario',
+}: {
+  contexto?: 'inventario' | 'taller';
+}) {
   const { id = '' } = useParams<{ id: string }>();
   const { can, canAny } = usePermissions();
+
+  const volver =
+    contexto === 'taller'
+      ? { to: '/mantenimiento/stock', label: '← Volver al stock del taller' }
+      : { to: '/inventario', label: '← Volver a Inventario' };
 
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const [branchFilter, setBranchFilter] = useState<string>(TODAS);
@@ -374,8 +389,8 @@ export function FichaItemView() {
   if (isError || !data) {
     return (
       <div className="flex flex-col gap-4">
-        <Link className="text-sm text-(--accent) hover:underline" to="/inventario">
-          ← Volver a Inventario
+        <Link className="text-sm text-(--accent) hover:underline" to={volver.to}>
+          {volver.label}
         </Link>
         <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
           {error instanceof Error
@@ -391,8 +406,8 @@ export function FichaItemView() {
 
   return (
     <div className="flex max-w-280 flex-col gap-5">
-      <Link className="text-sm text-(--accent) hover:underline" to="/inventario">
-        ← Volver a Inventario
+      <Link className="text-sm text-(--accent) hover:underline" to={volver.to}>
+        {volver.label}
       </Link>
 
       <PendientesStrip recursos={RECURSOS_DE_FICHA_ITEM} />
@@ -427,18 +442,22 @@ export function FichaItemView() {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {can('item.update') ? (
-            <Button onPress={() => setIsEditing(true)} variant="secondary">
-              Editar ítem
-            </Button>
-          ) : null}
-          {canAny(MOVEMENT_ACTIONS) ? (
-            <Button onPress={() => setAction('movement')}>
-              Registrar movimiento
-            </Button>
-          ) : null}
-        </div>
+        {/* En el taller la ficha es solo lectura para TODOS los roles: el
+            stock se mueve al finalizar operaciones, nunca a mano desde acá. */}
+        {contexto === 'inventario' ? (
+          <div className="flex flex-wrap gap-2">
+            {can('item.update') ? (
+              <Button onPress={() => setIsEditing(true)} variant="secondary">
+                Editar ítem
+              </Button>
+            ) : null}
+            {canAny(MOVEMENT_ACTIONS) ? (
+              <Button onPress={() => setAction('movement')}>
+                Registrar movimiento
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <Card

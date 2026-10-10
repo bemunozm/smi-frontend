@@ -98,13 +98,19 @@ function DirectionMark({ movement }: { movement: StockMovement }) {
   );
 }
 
-function MovementCard({ movement }: { movement: StockMovement }) {
+function MovementCard({
+  movement,
+  fichaBase,
+}: {
+  movement: StockMovement;
+  fichaBase: string;
+}) {
   return (
     <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3.5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <Link
           className="font-mono text-[15px] font-semibold text-(--accent) hover:underline"
-          to={`/inventario/${movement.itemId}`}
+          to={`${fichaBase}/${movement.itemId}`}
         >
           {movement.item?.sku ?? movement.itemId}
         </Link>
@@ -148,6 +154,10 @@ export function MovimientosView({
 }) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const { data: branches } = useBranches({ isActive: true });
+
+  // Las fichas se abren en el MISMO shell donde está montado el historial:
+  // desde el taller, la barra del módulo no debe cambiar.
+  const fichaBase = contexto === 'taller' ? '/mantenimiento/stock' : '/inventario';
 
   const [branchId, setBranchId] = useState(ALL_BRANCHES);
   const [kind, setKind] = useState<Kind>(ALL_KINDS);
@@ -197,18 +207,21 @@ export function MovimientosView({
         </div>
       ) : (
         // Dentro del taller la marca ya la pone el header del shell: acá basta
-        // el título al tamaño de las demás sub-vistas y el volver a Stock.
-        <div className="flex flex-col gap-1">
-          <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
-            Historial de inventario
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
-            renglón deja el stock que quedó en esa bodega.{' '}
-            <Link className="text-(--accent) hover:underline" to="/mantenimiento/stock">
-              Volver al stock del taller
-            </Link>
-          </p>
+        // el volver arriba —mismo formato que la ficha— y el título al tamaño
+        // de las demás sub-vistas.
+        <div className="flex flex-col gap-3">
+          <Link className="text-sm text-(--accent) hover:underline" to="/mantenimiento/stock">
+            ← Volver al stock del taller
+          </Link>
+          <div className="flex flex-col gap-1">
+            <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
+              Historial de inventario
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
+              renglón deja el stock que quedó en esa bodega.
+            </p>
+          </div>
         </div>
       )}
 
@@ -345,7 +358,7 @@ export function MovimientosView({
       ) : !isDesktop ? (
         <div className="flex flex-col gap-2.5">
           {movements.map((movement) => (
-            <MovementCard key={movement.id} movement={movement} />
+            <MovementCard fichaBase={fichaBase} key={movement.id} movement={movement} />
           ))}
         </div>
       ) : (
@@ -375,7 +388,7 @@ export function MovimientosView({
                       <div className="flex flex-col">
                         <Link
                           className="font-mono text-sm font-medium text-(--accent) hover:underline"
-                          to={`/inventario/${movement.itemId}`}
+                          to={`${fichaBase}/${movement.itemId}`}
                         >
                           {movement.item?.sku ?? movement.itemId}
                         </Link>

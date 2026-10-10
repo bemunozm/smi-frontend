@@ -40,9 +40,10 @@ function ItemRow({ item, branchId }: { item: InventoryItem; branchId: string }) 
   return (
     <Table.Row>
       <Table.Cell>
+        {/* La ficha montada en el shell del taller: la barra no cambia. */}
         <Link
           className="font-mono text-sm font-medium text-(--accent) hover:underline"
-          to={`/inventario/${item.id}`}
+          to={`/mantenimiento/stock/${item.id}`}
         >
           {item.sku}
         </Link>
@@ -107,7 +108,7 @@ function ItemsList({ items, branchId }: { items: InventoryItem[]; branchId: stri
             item={item}
             key={item.id}
             marca={null}
-            onOpen={() => void navigate(`/inventario/${item.id}`)}
+            onOpen={() => void navigate(`/mantenimiento/stock/${item.id}`)}
           />
         ))}
       </div>

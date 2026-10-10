@@ -153,12 +153,12 @@ describe('WorkshopStockView', () => {
     expect(historial.getAttribute('href')).toBe('/mantenimiento/stock/movimientos');
   });
 
-  it('en escritorio el SKU lleva a la ficha; en teléfono la tarjeta anuncia la ficha', () => {
+  it('en escritorio el SKU lleva a la ficha DENTRO del taller; en teléfono la tarjeta anuncia la ficha', () => {
     renderView([BAJO_EN_FAENA], { size: 'desktop' });
     const sku = within(screen.getByLabelText('Stock del taller')).getByRole('link', {
       name: 'COR-001',
     });
-    expect(sku.getAttribute('href')).toBe('/inventario/i3');
+    expect(sku.getAttribute('href')).toBe('/mantenimiento/stock/i3');
     cleanup();
 
     renderView([BAJO_EN_FAENA], { size: 'phone' });
