@@ -9,6 +9,7 @@ import {
   Campo,
   Chip,
   ChipEstado,
+  Filas,
   Input,
   Label,
   ModalTerreno,
@@ -46,59 +47,77 @@ export function tareasHechas(orden: Pick<OrdenTrabajo, 'tareas'>): { hechas: num
 }
 
 /**
- * Una tarea ya completada. Plegada muestra solo qué era; «Ver detalle» abre
- * la evidencia completa: cuándo se hizo, quién, qué se hizo y la foto.
+ * Una tarea ya completada. La fila muestra solo qué era; «Ver detalle» abre
+ * un pop-up con la evidencia completa: cuándo se hizo, quién, qué se hizo y
+ * la foto. `ModalTerreno` es un overlay de react-aria: se apila sin problema
+ * sobre el modal del checklist.
  */
 function TareaHecha({ tarea }: { tarea: Tarea }) {
   const [verDetalle, setVerDetalle] = useState(false);
   return (
-    <div className="flex flex-col gap-1.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success-soft-foreground)]" />
-          <span className="text-sm font-semibold text-[var(--success-soft-foreground)]">
-            {tarea.texto}
-          </span>
-        </div>
-        <button
-          className="shrink-0 cursor-pointer text-[13px] font-semibold underline"
-          type="button"
-          onClick={() => setVerDetalle((v) => !v)}
-        >
-          {verDetalle ? 'Ocultar detalle' : 'Ver detalle'}
-        </button>
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3">
+      <div className="flex min-w-0 items-start gap-2">
+        <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success-soft-foreground)]" />
+        <span className="text-sm font-semibold text-[var(--success-soft-foreground)]">
+          {tarea.texto}
+        </span>
       </div>
-      {verDetalle ? (
-        <div className="flex flex-col gap-2 ps-6 text-[13px] leading-5">
-          <div className="flex flex-col gap-0.5">
-            {tarea.hechaAt ? (
-              <span>
-                <strong className="font-semibold">Realizada:</strong>{' '}
-                <span className="tabular">{formatDate(tarea.hechaAt)}</span>
-              </span>
-            ) : null}
-            {tarea.hechaPorNombre ? (
-              <span>
-                <strong className="font-semibold">Por:</strong> {tarea.hechaPorNombre}
-              </span>
-            ) : null}
-            {tarea.notas ? (
-              <span>
-                <strong className="font-semibold">¿Qué se hizo?</strong> {tarea.notas}
-              </span>
-            ) : null}
+      <Boton
+        className="shrink-0"
+        type="button"
+        variante="contorno"
+        onClick={() => setVerDetalle(true)}
+      >
+        Ver detalle
+      </Boton>
+
+      <ModalTerreno
+        abierto={verDetalle}
+        detalle="La evidencia que quedó registrada al completar esta tarea."
+        titulo={tarea.texto}
+        onAbiertoChange={setVerDetalle}
+      >
+        <div className="flex flex-col gap-4">
+          <Filas
+            filas={[
+              [
+                'Realizada',
+                tarea.hechaAt ? (
+                  <span className="tabular" key="fecha">
+                    {formatDate(tarea.hechaAt)}
+                  </span>
+                ) : (
+                  '—'
+                ),
+              ],
+              ['Por', tarea.hechaPorNombre ?? '—'],
+            ]}
+          />
+          <div className="flex flex-col gap-1">
+            <span className="text-[12.5px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">
+              ¿Qué se hizo?
+            </span>
+            <p className="m-0 text-sm leading-6">{tarea.notas ?? 'Sin descripción.'}</p>
           </div>
           {tarea.fotoUrl ? (
-            <a href={tarea.fotoUrl} rel="noreferrer" target="_blank">
-              <img
-                alt={`Foto de respaldo de ${tarea.texto}`}
-                className="max-h-48 rounded-xl border border-border object-cover"
-                src={tarea.fotoUrl}
-              />
-            </a>
+            <div className="flex flex-col gap-1">
+              <span className="text-[12.5px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">
+                Foto de respaldo
+              </span>
+              <a href={tarea.fotoUrl} rel="noreferrer" target="_blank">
+                <img
+                  alt={`Foto de respaldo de ${tarea.texto}`}
+                  className="max-h-72 w-full rounded-2xl border border-border object-cover"
+                  src={tarea.fotoUrl}
+                />
+              </a>
+            </div>
           ) : null}
+          <Boton type="button" variante="oscuro" onClick={() => setVerDetalle(false)}>
+            Cerrar
+          </Boton>
         </div>
-      ) : null}
+      </ModalTerreno>
     </div>
   );
 }

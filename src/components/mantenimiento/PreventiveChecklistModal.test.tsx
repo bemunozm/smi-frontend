@@ -111,14 +111,15 @@ describe('tareasHechas', () => {
 });
 
 describe('PreventiveChecklistModal', () => {
-  it('la tarea hecha pliega su evidencia detrás de «Ver detalle»: fecha, quién, qué y la foto', () => {
+  it('«Ver detalle» abre un pop-up con fecha, quién, qué se hizo y la foto', () => {
     abrir();
 
-    // Plegada: ni las notas ni la foto a la vista.
+    // En la fila solo queda el nombre de la tarea: la evidencia vive en el pop-up.
     expect(screen.queryByText('se cambio el aceite')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Ver detalle' }));
 
-    expect(screen.getByText(/Realizada:/)).toBeTruthy();
+    // El pop-up (ModalTerreno anidado) con la evidencia completa.
+    expect(screen.getByText('Realizada')).toBeTruthy();
     expect(screen.getByText('Mantenedor SMI')).toBeTruthy();
     expect(screen.getByText('se cambio el aceite')).toBeTruthy();
     const foto = screen.getByRole('img', { name: 'Foto de respaldo de Cambio de aceite' });
