@@ -1,212 +1,350 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { Spinner } from '@heroui/react';
-import { ArrowDownLeft, ArrowUpRight, Info } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Input, Label, ListBox, Select, Spinner, Table, TextField } from '@heroui/react';
+import { History, Info } from 'lucide-react';
 
+import { ItemCard } from '../components/inventario/ItemCard';
 import {
-  Chip,
-  TD,
-  TH,
-  Tabla,
-  Tarjeta,
-  type Tono,
-} from '../components/terreno/ui';
-import { NUMBER, movementKind, type MovementKind } from '../components/inventario/shared';
-import { useItems, useMovements } from '../hooks/useInventory';
-import { useMediaQuery, DESKTOP_QUERY } from '../hooks/useMediaQuery';
+  ALL_BRANCHES,
+  BranchBreakdown,
+  CriticalBadge,
+  NUMBER,
+  Segmented,
+  StatusChip,
+  stockStatus,
+} from '../components/inventario/shared';
+import { useBranches } from '../hooks/useBranches';
+import { useCategories } from '../hooks/useCategories';
+import { useItems } from '../hooks/useInventory';
+import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import type { Branch } from '../types/branch';
 import {
   UNIT_SYMBOLS,
+  quantityAt,
+  stockAt,
   totalQuantity,
   type InventoryItem,
-  type StockMovement,
+  type ItemType,
 } from '../types/inventory';
 
-const DATE = new Intl.DateTimeFormat('es-CL', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
+/** Centinela del filtro de categoría: "todas" no es un id. */
+const ALL_CATEGORIES = '__all__';
 
-/** Motivos de salida que nacen del trabajo del taller. */
-const WORKSHOP_REASONS = new Set(['INTERVENTION', 'ACTIVITY', 'EXTRAORDINARY_WORK']);
+/** Mismo umbral que `InventarioView`: hasta cuántas sucursales caben segmentadas. */
+const MAX_SEGMENTED_BRANCHES = 3;
 
-/** La clase de movimiento, con el chip del kit de Terreno. */
-const KIND_TONO: Record<MovementKind, { label: string; tono: Tono }> = {
-  entrada: { label: 'Entrada', tono: 'success' },
-  salida: { label: 'Salida', tono: 'danger' },
-  traspaso: { label: 'Traspaso', tono: 'info' },
-  ajuste: { label: 'Ajuste', tono: 'neutral' },
-};
+type StockFilter = 'todos' | 'atencion';
 
-function KindChip({ movement }: { movement: StockMovement }) {
-  const { label, tono } = KIND_TONO[movementKind(movement)];
-  return <Chip tono={tono}>{label}</Chip>;
-}
+const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
 
-interface ItemStatus {
-  tono: 'success' | 'warning' | 'danger';
-  label: string;
-}
+// --- Fila de escritorio ----------------------------------------------------
 
-function itemStatus(item: InventoryItem): ItemStatus {
-  const total = totalQuantity(item);
-  if (total <= 0) return { tono: 'danger', label: 'Reponer' };
-  const belowMinimum = item.stocks.some(
-    (stock) => stock.minimumQuantity > 0 && stock.quantity <= stock.minimumQuantity,
-  );
-  return belowMinimum ? { tono: 'warning', label: 'Stock bajo' } : { tono: 'success', label: 'OK' };
-}
-
-const METER_BAR: Record<ItemStatus['tono'], string> = {
-  success: 'bg-[var(--success)]',
-  warning: 'bg-[var(--warning)]',
-  danger: 'bg-[var(--danger)]',
-};
-
-/** Tarjeta de existencia de un insumo afectado por el taller — kit de Terreno. */
-function ItemStockCard({ item }: { item: InventoryItem }) {
-  const status = itemStatus(item);
-  const total = totalQuantity(item);
-  const minimumTotal = item.stocks.reduce((sum, stock) => sum + stock.minimumQuantity, 0);
-  const meterPct =
-    minimumTotal > 0
-      ? Math.min(100, Math.max(4, (total / (minimumTotal * 2.5)) * 100))
-      : total > 0
-        ? 70
-        : 4;
+/** La fila de `InventarioView` sin su columna de acciones: acá no hay menú. */
+function ItemRow({ item, branchId }: { item: InventoryItem; branchId: string }) {
+  const isAll = branchId === ALL_BRANCHES;
+  const quantity = isAll ? totalQuantity(item) : quantityAt(item, branchId);
+  const minimum = isAll ? 0 : (stockAt(item, branchId)?.minimumQuantity ?? 0);
+  const status = stockStatus(item, branchId);
 
   return (
-    <Tarjeta className="gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <span className="tabular text-xs text-muted-foreground">{item.sku}</span>
-        <Chip tono={status.tono}>{status.label}</Chip>
-      </div>
-      <span className="text-sm font-semibold">{item.name}</span>
-      <div className="tabular text-[26px] leading-tight font-bold tracking-[-0.02em]">
-        {NUMBER.format(total)}{' '}
-        <span className="text-sm font-medium text-muted-foreground">{UNIT_SYMBOLS[item.unit]}</span>
-      </div>
-      {minimumTotal > 0 ? (
-        <span className="text-[13px] text-muted-foreground">mín. {NUMBER.format(minimumTotal)}</span>
-      ) : null}
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#eef0f2]">
-        <span
-          className={`block h-full rounded-full ${METER_BAR[status.tono]}`}
-          style={{ width: `${meterPct}%` }}
-        />
-      </div>
-    </Tarjeta>
+    <Table.Row>
+      <Table.Cell>
+        <Link
+          className="font-mono text-sm font-medium text-(--accent) hover:underline"
+          to={`/inventario/${item.id}`}
+        >
+          {item.sku}
+        </Link>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="flex flex-col">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-foreground">{item.name}</span>
+            {item.isCritical ? <CriticalBadge /> : null}
+          </div>
+          {item.partNumber ? (
+            <span className="font-mono text-xs text-muted-foreground">{item.partNumber}</span>
+          ) : null}
+        </div>
+      </Table.Cell>
+      <Table.Cell className="text-sm text-muted-foreground">
+        {item.category?.name ?? 'Sin categoría'}
+      </Table.Cell>
+      <Table.Cell
+        className={`font-mono text-sm ${
+          status.tone === 'peligro' ? 'font-semibold text-danger' : 'text-foreground'
+        }`}
+      >
+        {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
+      </Table.Cell>
+      <Table.Cell>
+        <BranchBreakdown highlightBranchId={isAll ? undefined : branchId} item={item} />
+      </Table.Cell>
+      {isAll ? null : (
+        <Table.Cell className="font-mono text-sm text-muted-foreground">
+          {minimum > 0 ? NUMBER.format(minimum) : '—'}
+        </Table.Cell>
+      )}
+      <Table.Cell>
+        <StatusChip label={status.label} tone={status.tone} />
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
-function QuantityMark({ movement }: { movement: StockMovement }) {
-  const isIn = movement.direction === 'IN';
+// --- Listado ---------------------------------------------------------------
+
+function EmptyState() {
   return (
-    <span
-      className={`tabular inline-flex items-center gap-1 text-sm font-semibold ${
-        isIn ? 'text-[var(--success-soft-foreground)]' : 'text-[var(--danger)]'
-      }`}
-    >
-      {isIn ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
-      {isIn ? '+' : '−'}
-      {NUMBER.format(movement.quantity)} {movement.item ? UNIT_SYMBOLS[movement.item.unit] : ''}
-    </span>
+    <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+      <p className="text-sm font-medium text-foreground">No hay ítems que coincidan</p>
+      <p className="text-sm text-muted-foreground">Ajusta la búsqueda o el filtro.</p>
+    </div>
   );
 }
 
-/** Versión tarjeta de un movimiento — móvil, mismo contenido que la fila. */
-function MovementRowCard({ movement }: { movement: StockMovement }) {
+function ItemsList({ items, branchId }: { items: InventoryItem[]; branchId: string }) {
+  const isDesktop = useMediaQuery(TABLE_LAYOUT_QUERY);
+  const navigate = useNavigate();
+  const isAll = branchId === ALL_BRANCHES;
+
+  if (items.length === 0) return <EmptyState />;
+
+  // Tarjetas en teléfono Y en tablet, igual que Inventario — pero acá la
+  // tarjeta abre la ficha del ítem: no hay hoja de acciones que abrir.
+  if (!isDesktop) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        {items.map((item) => (
+          <ItemCard
+            ariaLabel={`Ver ficha de ${item.sku}`}
+            branchId={branchId}
+            item={item}
+            key={item.id}
+            marca={null}
+            onOpen={() => void navigate(`/inventario/${item.id}`)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <Tarjeta className="gap-1.5">
-      <div className="flex items-start justify-between gap-2">
-        <span className="tabular text-[15px] font-semibold">
-          {movement.item?.sku ?? movement.itemId}
-        </span>
-        <QuantityMark movement={movement} />
-      </div>
-      <span className="text-sm text-muted-foreground">{movement.item?.name}</span>
-      <div className="flex flex-wrap items-center gap-2">
-        <KindChip movement={movement} />
-        {movement.equipment ? (
-          <span className="tabular text-xs text-muted-foreground">
-            {movement.equipment.internalCode}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-        <span>{DATE.format(new Date(movement.occurredAt))}</span>
-        <span>
-          Saldo: <span className="tabular">{NUMBER.format(movement.resultingBalance)}</span>
-        </span>
-      </div>
-    </Tarjeta>
+    <Table variant="secondary">
+      <Table.ScrollContainer>
+        <Table.Content aria-label="Stock del taller" className="min-w-200">
+          <Table.Header>
+            <Table.Column className={COLUMN_CLASS} isRowHeader>
+              SKU
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Nombre</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Categoría</Table.Column>
+            <Table.Column className={COLUMN_CLASS}>
+              {isAll ? 'Existencia · total' : 'Existencia acá'}
+            </Table.Column>
+            <Table.Column className={COLUMN_CLASS}>Sucursal</Table.Column>
+            {isAll ? null : <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>}
+            <Table.Column className={COLUMN_CLASS}>Estado</Table.Column>
+          </Table.Header>
+          <Table.Body>
+            {items.map((item) => (
+              <ItemRow branchId={branchId} item={item} key={item.id} />
+            ))}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
   );
 }
+
+// --- Vista -----------------------------------------------------------------
 
 /**
- * Sub-vista "Stock" del taller — kit de Terreno. Existencias de los insumos
- * que el taller consumió hace poco y el historial reciente de movimientos,
- * con datos 100% reales de `/api/inventory/*`.
+ * Sub-vista "Stock" del taller: el inventario del administrador
+ * (`InventarioView`) en **solo lectura** — mismas pestañas, filtros, semáforo
+ * de mínimos y desglose por sucursal, pero sin crear, editar, eliminar ni
+ * registrar movimientos. El taller no mueve stock a mano: cada salida nace de
+ * finalizar una operación, y acá solo se consulta cuánto queda y dónde.
+ *
+ * La sucursal elegida es estado local (no `useUiStore`): lo que el mantenedor
+ * filtra acá no tiene por qué mover el filtro del Inventario del admin.
  */
 export function WorkshopStockView() {
-  const isDesktop = useMediaQuery(DESKTOP_QUERY);
-  const { data: movements, isPending, isError, error } = useMovements({ limit: 20 });
-  const { data: items } = useItems();
+  const [tab, setTab] = useState<ItemType>('SUPPLY');
+  const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
+  const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
+  const [branchId, setBranchId] = useState<string>(ALL_BRANCHES);
 
-  const highlightedItems = useMemo(() => {
-    const byId = new Map((items ?? []).map((item) => [item.id, item]));
-    const fromWorkshop: InventoryItem[] = [];
-    for (const movement of movements ?? []) {
-      if (movement.direction !== 'OUT' || !WORKSHOP_REASONS.has(movement.reason)) continue;
-      const item = byId.get(movement.itemId);
-      if (item && !fromWorkshop.some((candidate) => candidate.id === item.id)) {
-        fromWorkshop.push(item);
-      }
-      if (fromWorkshop.length === 3) break;
-    }
-    if (fromWorkshop.length > 0) return fromWorkshop;
-    return (items ?? []).filter((item) => itemStatus(item).tono !== 'success').slice(0, 3);
-  }, [items, movements]);
+  const { data: branches } = useBranches({ isActive: true });
+  // Las categorías siguen a la pestaña, igual que en Inventario.
+  const { data: categories } = useCategories({ type: tab });
+
+  const { data, isPending, isError, error } = useItems({
+    type: tab,
+    isActive: true,
+    ...(search.trim() ? { q: search.trim() } : {}),
+    ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
+  });
+
+  const all = useMemo(() => data ?? [], [data]);
+
+  const alertCount = useMemo(
+    () => all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
+    [all, branchId],
+  );
+
+  const items = useMemo(
+    () =>
+      stockFilter === 'atencion'
+        ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
+        : all,
+    [all, stockFilter, branchId],
+  );
+
+  const branchOptions = [
+    { id: ALL_BRANCHES, label: 'Todas' },
+    ...(branches ?? []).map((branch: Branch) => ({ id: branch.id, label: branch.name })),
+  ];
+  const useSegmentedBranches = branchOptions.length <= MAX_SEGMENTED_BRANCHES + 1;
+  const branchLabel = branchOptions.find((option) => option.id === branchId)?.label ?? '';
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
-          Descuento de stock
+          Stock del taller
         </h2>
         <p className="text-sm text-muted-foreground">
-          Cada insumo o repuesto usado en una operación queda como movimiento trazable en
-          Inventario.
+          Existencias de suministros y repuestos{' '}
+          <strong className="font-semibold text-foreground">
+            {branchId === ALL_BRANCHES ? 'en todas las sucursales' : `en ${branchLabel}`}
+          </strong>
+          , en solo lectura.
         </p>
       </div>
 
       <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--accent-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--accent-soft-foreground)]">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Cada insumo usado al <strong>finalizar una tarea</strong> se descuenta automáticamente de
-          la bodega elegida y queda como salida trazable en{' '}
-          <Link className="font-semibold underline" to="/inventario/movimientos">
-            Inventario
-          </Link>
-          , ligada a su OT.
+          Acá no se mueve stock a mano: cada insumo usado al{' '}
+          <strong>finalizar una tarea</strong> se descuenta automáticamente y queda como salida
+          trazable, ligada a su OT.
         </span>
       </div>
 
-      {highlightedItems.length > 0 ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-          {highlightedItems.map((item) => (
-            <ItemStockCard key={item.id} item={item} />
-          ))}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
+          to="/inventario/movimientos"
+        >
+          <History size={16} />
+          Historial de movimientos
+        </Link>
+      </div>
+
+      <Segmented
+        label="Tipo de ítem"
+        onChange={(next) => {
+          setTab(next);
+          // La categoría elegida puede no existir en la otra pestaña.
+          setCategoryId(ALL_CATEGORIES);
+        }}
+        options={[
+          { id: 'SUPPLY', label: 'Suministros' },
+          { id: 'PART', label: 'Repuestos' },
+        ]}
+        value={tab}
+      />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
+          <Label>Buscar</Label>
+          <Input placeholder="SKU, nombre o nº de parte" />
+        </TextField>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">Sucursal</span>
+          {useSegmentedBranches ? (
+            <Segmented
+              label="Filtro de sucursal"
+              onChange={setBranchId}
+              options={branchOptions}
+              value={branchId}
+            />
+          ) : (
+            <Select
+              aria-label="Sucursal"
+              onChange={(value) => {
+                if (value) setBranchId(String(value));
+              }}
+              value={branchId}
+            >
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {branchOptions.map((option) => (
+                    <ListBox.Item id={option.id} key={option.id} textValue={option.label}>
+                      {option.label}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          )}
         </div>
-      ) : null}
+
+        <Select
+          onChange={(value) => {
+            if (value) setCategoryId(String(value));
+          }}
+          value={categoryId}
+        >
+          <Label>Categoría</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
+                Todas
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {(categories ?? []).map((category) => (
+                <ListBox.Item id={category.id} key={category.id} textValue={category.name}>
+                  {category.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-(--label-color)">Estado</span>
+          <Segmented
+            label="Filtro de estado"
+            onChange={setStockFilter}
+            options={[
+              { id: 'todos', label: `Todos · ${all.length}` },
+              { id: 'atencion', label: `Requieren atención · ${alertCount}` },
+            ]}
+            value={stockFilter}
+          />
+        </div>
+      </div>
 
       {isError ? (
         <div
-          className="rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger-soft-foreground)]"
+          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
           role="alert"
         >
-          {error instanceof Error ? error.message : 'No se pudo obtener el historial.'}
+          {error instanceof Error ? error.message : 'No se pudo obtener el inventario.'}
         </div>
       ) : null}
 
@@ -214,74 +352,9 @@ export function WorkshopStockView() {
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
         </div>
-      ) : (movements ?? []).length === 0 ? (
-        !isError ? (
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border py-16 text-center">
-            <p className="text-sm font-semibold">Sin movimientos de inventario</p>
-            <p className="text-sm text-muted-foreground">
-              Cuando el taller consuma insumos, las salidas aparecen acá.
-            </p>
-          </div>
-        ) : null
-      ) : !isDesktop ? (
-        <div className="flex flex-col gap-2.5">
-          {(movements ?? []).map((movement) => (
-            <MovementRowCard key={movement.id} movement={movement} />
-          ))}
-        </div>
       ) : (
-        <Tabla
-          detalle={`Últimos ${(movements ?? []).length} asientos`}
-          titulo="Movimientos de inventario"
-        >
-          <thead>
-            <tr>
-              <th className={TH}>Fecha</th>
-              <th className={TH}>Insumo</th>
-              <th className={TH}>Cantidad</th>
-              <th className={TH}>Equipo</th>
-              <th className={`${TH} text-right`}>Saldo</th>
-              <th className={TH}>Motivo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(movements ?? []).map((movement) => (
-              <tr key={movement.id}>
-                <td className={`${TD} tabular whitespace-nowrap text-muted-foreground`}>
-                  {DATE.format(new Date(movement.occurredAt))}
-                </td>
-                <td className={TD}>
-                  <div className="flex flex-col">
-                    <Link
-                      className="tabular text-sm font-semibold text-[var(--accent)] hover:underline"
-                      to={`/inventario/${movement.itemId}`}
-                    >
-                      {movement.item?.sku ?? movement.itemId}
-                    </Link>
-                    <span className="text-xs text-muted-foreground">{movement.item?.name}</span>
-                  </div>
-                </td>
-                <td className={TD}>
-                  <QuantityMark movement={movement} />
-                </td>
-                <td className={`${TD} tabular text-muted-foreground`}>
-                  {movement.equipment?.internalCode ?? '—'}
-                </td>
-                <td className={`${TD} tabular text-right`}>
-                  {NUMBER.format(movement.resultingBalance)}
-                </td>
-                <td className={TD}>
-                  <KindChip movement={movement} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Tabla>
+        <ItemsList branchId={branchId} items={items} />
       )}
-
-      <p className="text-xs text-muted-foreground">
-        Cada salida queda ligada a su equipo y motivo — trazabilidad entre Taller e Inventario.
-      </p>
     </div>
   );
 }
