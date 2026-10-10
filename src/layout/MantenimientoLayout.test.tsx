@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup, screen, within } from '@testing-library/react';
+import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ROLES, type Role } from '../types/roles';
@@ -87,6 +87,21 @@ describe('MantenimientoLayout', () => {
       .getAllByRole('link')
       .map((link) => link.textContent);
     expect(labels).toEqual(['Órdenes', 'Stock', 'Preventivo', 'Tareas']);
+  });
+
+  it('el drawer del MANTENEDOR no ofrece «Ir al panel»: el taller ES su panel', () => {
+    renderLayout('phone', ROLES.MANTENEDOR);
+    fireEvent.click(screen.getByLabelText('Menú'));
+
+    expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy();
+  });
+
+  it('el drawer del ADMIN sí mantiene «Ir al panel»', () => {
+    renderLayout('phone', ROLES.ADMIN);
+    fireEvent.click(screen.getByLabelText('Menú'));
+
+    expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
   });
 
   it('desde escritorio las secciones suben al header, con sus etiquetas largas', () => {

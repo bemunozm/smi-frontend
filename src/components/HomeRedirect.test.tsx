@@ -27,6 +27,7 @@ function renderHomeRedirect() {
         <Route element={<HomeRedirect />} path="/inicio" />
         <Route element={<div>Dashboard</div>} path="/" />
         <Route element={<div>Registro de equipo</div>} path="/terreno/registro" />
+        <Route element={<div>Órdenes del taller</div>} path="/mantenimiento/ordenes" />
       </Routes>
     </MemoryRouter>,
   );
@@ -45,10 +46,10 @@ describe('HomeRedirect', () => {
     expect(screen.getByText('Dashboard')).toBeTruthy();
   });
 
-  it('MANTENEDOR aterriza en el dashboard', () => {
+  it('MANTENEDOR aterriza en las órdenes del taller, no en el panel de administración', () => {
     mockRole = ROLES.MANTENEDOR;
     renderHomeRedirect();
-    expect(screen.getByText('Dashboard')).toBeTruthy();
+    expect(screen.getByText('Órdenes del taller')).toBeTruthy();
   });
 
   // Integración con `ProtectedRoute` (mismo anidamiento que `routes.tsx`):
