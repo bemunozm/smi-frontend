@@ -279,7 +279,22 @@ describe('EquipoDetalleView', () => {
     qc.setQueryData(['equipment', 'eq_1'], EQUIPO_DETALLE);
     qc.setQueryData(['horometro'], HOROMETROS);
     qc.setQueryData(['combustible'], COMBUSTIBLES);
-    qc.setQueryData(['ficha', 'eq_1'], FICHA);
+    // Ficha con eventos de varios dominios + una intervención: en el taller
+    // la actividad reciente solo debe hablar de intervenciones.
+    qc.setQueryData(['ficha', 'eq_1'], {
+      ...FICHA,
+      timeline: [
+        ...FICHA.timeline,
+        {
+          id: 'ev_3',
+          tipo: 'INTERVENCION',
+          fecha: '2026-08-06T09:00:00.000Z',
+          titulo: 'Cambio de filtro hidráulico',
+          detalle: 'Cierre de la OT-12 con descuento de stock',
+          meta: {},
+        },
+      ],
+    });
 
     render(
       <QueryClientProvider client={qc}>
@@ -305,6 +320,13 @@ describe('EquipoDetalleView', () => {
     expect(volver.getAttribute('href')).toBe('/mantenimiento/equipos');
     const bitacora = await screen.findByRole('link', { name: 'Ver bitácora completa →' });
     expect(bitacora.getAttribute('href')).toBe('/mantenimiento/equipos/eq_1/ficha');
+
+    // La actividad reciente del taller habla SOLO de intervenciones: los
+    // eventos de horómetro y hallazgos de la misma ficha no aparecen.
+    expect(screen.getByText('Intervenciones recientes')).toBeTruthy();
+    expect(screen.getByText('Cambio de filtro hidráulico')).toBeTruthy();
+    expect(screen.queryByText('Lectura de horómetro')).toBeNull();
+    expect(screen.queryByText('Fuga de aceite detectada')).toBeNull();
   });
 
   it('muestra la cabecera, los KPIs, los datos de la unidad y los consumos', () => {

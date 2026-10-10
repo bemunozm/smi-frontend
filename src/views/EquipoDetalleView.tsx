@@ -558,17 +558,33 @@ function RepuestosCompatiblesCard() {
  * bitácora completa. Sección no crítica — si falla, no rompe el resto de
  * la ficha.
  */
-function ActividadReciente({ equipoId, fichaBase }: { equipoId: string; fichaBase: string }) {
+function ActividadReciente({
+  equipoId,
+  fichaBase,
+  soloIntervenciones = false,
+}: {
+  equipoId: string;
+  fichaBase: string;
+  /** Taller: al mantenedor solo le hablan las intervenciones — el resto de la
+   * línea de tiempo (horómetro, combustible, hallazgos…) es ruido acá. */
+  soloIntervenciones?: boolean;
+}) {
   const { data: ficha, isPending, isError } = useFicha(equipoId);
-  const eventos = (ficha?.timeline ?? []).slice(0, 6);
+  const eventos = (ficha?.timeline ?? [])
+    .filter((evento) => !soloIntervenciones || evento.tipo === 'INTERVENCION')
+    .slice(0, 6);
 
   return (
     <Card>
       <Card.Header>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <Card.Title>Actividad reciente</Card.Title>
-            <Card.Description>Últimos eventos registrados para esta unidad.</Card.Description>
+            <Card.Title>{soloIntervenciones ? 'Intervenciones recientes' : 'Actividad reciente'}</Card.Title>
+            <Card.Description>
+              {soloIntervenciones
+                ? 'Últimas intervenciones del taller sobre esta unidad.'
+                : 'Últimos eventos registrados para esta unidad.'}
+            </Card.Description>
           </div>
           <Link className="shrink-0 text-xs font-semibold text-(--accent) hover:underline" to={`${fichaBase}/${equipoId}/ficha`}>
             Ver bitácora completa →
@@ -587,7 +603,11 @@ function ActividadReciente({ equipoId, fichaBase }: { equipoId: string; fichaBas
         ) : null}
 
         {!isPending && !isError && eventos.length === 0 ? (
-          <p className="text-sm text-(--muted)">Esta unidad todavía no tiene actividad registrada.</p>
+          <p className="text-sm text-(--muted)">
+            {soloIntervenciones
+              ? 'Esta unidad todavía no tiene intervenciones registradas.'
+              : 'Esta unidad todavía no tiene actividad registrada.'}
+          </p>
         ) : null}
 
         {!isPending && !isError && eventos.length > 0 ? (
@@ -1131,7 +1151,7 @@ export function EquipoDetalleView({
         </div>
 
         <div className="flex flex-col gap-4">
-          <ActividadReciente equipoId={equipo.id} fichaBase={volverA} />
+          <ActividadReciente equipoId={equipo.id} fichaBase={volverA} soloIntervenciones={enTaller} />
 
           <Card>
             <Card.Header>
