@@ -49,6 +49,22 @@ const ORDENES: OrdenTrabajo[] = [
       { id: 'ta-2', texto: 'Cambio de filtro', hecha: false, posicion: 1, notas: null, fotoUrl: null },
     ],
   }),
+  // Pauta ya iniciada: el checklist se registra en la columna del medio.
+  orden({
+    id: 'ot-pauta-2',
+    equipoId: 'RE-003',
+    titulo: 'Mantención preventiva 500 h · RE-003',
+    estado: 'EN_PROCESO',
+    tipo: 'PREVENTIVA',
+    origen: 'PREVENTIVO',
+    origenDetalle: 'Pauta: 500 h · ciclo 1',
+    pautaMilestone: 500,
+    pautaCycle: 1,
+    tareas: [
+      { id: 'tb-1', texto: 'Engrase general', hecha: true, posicion: 0, notas: 'Hecho', fotoUrl: null },
+      { id: 'tb-2', texto: 'Revisión de correas', hecha: false, posicion: 1, notas: null, fotoUrl: null },
+    ],
+  }),
   orden({
     id: 'ot-2',
     equipoId: 'CM-007',
@@ -259,17 +275,22 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.queryByText('Observación general sin equipo')).toBeNull();
   });
 
-  it('la preventiva de la pauta es una tarjeta-CHECKLIST: avance de tareas y su propio botón', () => {
+  it('la pauta pendiente se INICIA desde la bandeja; el checklist se registra EN PROCESO', () => {
     renderView();
 
-    // Avance del checklist en la tarjeta, no el flujo iniciar → finalizar.
-    expect(screen.getByText('0 de 2 tareas')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Registrar mantención/ })).toBeTruthy();
-    // El botón de las correctivas sigue existiendo para las demás tarjetas,
-    // pero la de la pauta NO lo ofrece: tiene una sola por tablero en este
-    // fixture, así que el conteo lo delata.
-    const iniciar = screen.getAllByRole('button', { name: /Iniciar operación/ });
-    expect(iniciar.length).toBeGreaterThan(0);
+    // En la bandeja: avance del checklist + "Iniciar operación" (pasa a
+    // proceso) — el registro todavía no se ofrece ahí.
+    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    expect(within(backlog).getByText('0 de 2 tareas')).toBeTruthy();
+    expect(within(backlog).queryByRole('button', { name: /Registrar mantención/ })).toBeNull();
+    expect(
+      within(backlog).getAllByRole('button', { name: /Iniciar operación/ }).length,
+    ).toBeGreaterThan(0);
+
+    // En proceso: ahí vive "Registrar mantención", con su avance real.
+    const proceso = screen.getByRole('region', { name: 'Operaciones en proceso' });
+    expect(within(proceso).getByText('1 de 2 tareas')).toBeTruthy();
+    expect(within(proceso).getByRole('button', { name: /Registrar mantención/ })).toBeTruthy();
   });
 
   it('sin permiso de tareas, la tarjeta-checklist no ofrece registrar', () => {

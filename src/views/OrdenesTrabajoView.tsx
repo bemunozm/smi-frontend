@@ -1,15 +1,15 @@
 import { useMemo } from 'react';
 import { Spinner } from '@heroui/react';
-import { Clock, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Clock, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
-import { Chip, Cifras, Tarjeta } from '../components/terreno/ui';
+import { Boton, Chip, Cifras, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePendingWrites } from '../hooks/usePendingWrites';
 import { usePermissions } from '../hooks/usePermissions';
-import { useOrdenes } from '../hooks/useOrdenes';
+import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHallazgosList } from '../hooks/useHallazgos';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
@@ -89,6 +89,27 @@ function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
  */
 function esChecklistPauta(orden: OrdenTrabajo): boolean {
   return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
+}
+
+/**
+ * Iniciar la mantención preventiva: solo pasa la orden a EN_PROCESO — sin
+ * modal, porque el título viene fijo de la pauta y el trabajo real (el
+ * checklist) se registra en la columna "en proceso".
+ */
+function IniciarMantencion({ orden }: { orden: OrdenTrabajo }) {
+  const actualizar = useActualizarOrden();
+  return (
+    <Boton
+      ancho
+      disabled={actualizar.isPending}
+      type="button"
+      variante="acento"
+      onClick={() => actualizar.mutate({ orden, input: { estado: 'EN_PROCESO' } })}
+    >
+      <ArrowRight className="h-5 w-5" />
+      Iniciar operación
+    </Boton>
+  );
 }
 
 /** «1 de 3 tareas» — el avance del checklist en la tarjeta del tablero. */
@@ -318,8 +339,8 @@ export function OrdenesTrabajoView() {
                   {formatDate(orden.createdAt)}
                 </CardMeta>
                 {esChecklistPauta(orden) ? (
-                  canTarea ? (
-                    <PreventiveChecklistModal equipment={fleet} orden={orden} />
+                  canStart ? (
+                    <IniciarMantencion orden={orden} />
                   ) : null
                 ) : canStart ? (
                   <StartOperationModal equipment={fleet} orden={orden} />
@@ -354,11 +375,7 @@ export function OrdenesTrabajoView() {
                   </span>
                 ) : esChecklistPauta(orden) ? (
                   canTarea ? (
-                    <PreventiveChecklistModal
-                      equipment={fleet}
-                      etiqueta="Continuar mantención"
-                      orden={orden}
-                    />
+                    <PreventiveChecklistModal equipment={fleet} orden={orden} />
                   ) : null
                 ) : canFinish ? (
                   <FinishTaskModal equipment={fleet} orden={orden} />
