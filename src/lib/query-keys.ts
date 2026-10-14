@@ -23,6 +23,12 @@ export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
 export const HALLAZGOS_KEY = ['hallazgos'] as const;
 export const TRABAJOS_EXTRA_KEY = ['trabajos-extra'] as const;
 
+/** Reportes diarios del supervisor (Módulo B): lista, detalle e historial de
+ * cambios cuelgan de la raíz; la escribe `offline/replay.ts` al sincronizar. */
+export const REPORTE_DIARIO_KEY = ['reporte-diario'] as const;
+export const PLANTAS_KEY = ['plantas'] as const;
+export const EMPRESAS_EXTERNAS_KEY = ['empresas-externas'] as const;
+
 /** Lecturas de horómetro (`hooks/useHorometro.ts`), que `hooks/usePrepareOffline.ts`
  * precarga para el arranque en frío sin señal. */
 export const HOROMETRO_KEY = ['horometro'] as const;
@@ -73,6 +79,7 @@ export const QUERY_KEYS = {
   shiftCardsMine: SHIFT_CARDS_MINE_KEY,
   hallazgos: HALLAZGOS_KEY,
   trabajosExtra: TRABAJOS_EXTRA_KEY,
+  reporteDiario: REPORTE_DIARIO_KEY,
   horometro: HOROMETRO_KEY,
   equipment: EQUIPMENT_KEY,
   equipmentDocuments: EQUIPMENT_DOCUMENTS_KEY,
