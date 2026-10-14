@@ -5,13 +5,23 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'luc
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useEmpresasExternas, usePlantas } from '../hooks/useReporteDiario';
+import {
+  useCreateReporteDiario,
+  useEmpresasExternas,
+  usePlantas,
+  useReportesDiarios,
+} from '../hooks/useReporteDiario';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
-import { enteroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
-import { diferencias } from '../lib/cambios';
-import type { EntradaCambios } from '../types/cambios';
-import { turnoAnterior, type Turno } from '../lib/turno';
+import {
+  aReporteAnterior,
+  enteroOCero,
+  seccionesDelFormulario,
+  vueltasDeSeccion,
+  type ReporteAnterior,
+} from '../lib/reporte-diario';
+import { toDateOnly } from '../lib/turno';
+import { SECCIONES, type CreateReporteDiarioInput } from '../types/reporte-diario';
 import {
   AvisoEdicion,
   Boton,
@@ -41,16 +51,14 @@ import {
 /**
  * Reporte diario del supervisor (Módulo B de la especificación).
  *
- * ⚠️ MAQUETA. No hay backend: ni endpoints, ni tablas, ni tipos compartidos.
- * La especificación define SIETE entidades nuevas para esta pantalla
- * (`reporte_diario`, `planta`, `reporte_planta`, `reporte_traspaso`,
- * `empresa_externa`, `produccion_turno` y los catálogos), y además dice que el
- * Módulo B es alcance nuevo, fuera de la propuesta que se cotizó.
+ * Conectado al backend: las plantas y empresas salen de los catálogos, el
+ * supervisor es el usuario de la sesión, los operadores salen de las tarjetas
+ * de turno abiertas, y «Enviar» crea el reporte por la cola offline (sin señal
+ * queda guardado en el equipo y se envía solo). El historial lista los reportes
+ * de la última semana que devuelve el servidor.
  *
- * Se maqueta ahora para que el cliente la vea en la prueba en faena, no porque esté lista. Todo lo que hay debajo son constantes de este
- * archivo: nada se guarda y nada se lee del servidor. Cuando exista el
- * backend, lo que se reemplaza es el origen de los datos — el layout y los
- * cálculos de esta pantalla ya quedan resueltos.
+ * Pendiente: la corrección de un reporte ya enviado todavía no está conectada
+ * (su botón queda deshabilitado); la cablea la tarea del PATCH.
  */
 
 // --- Datos de ejemplo. Salen de la especificación, no son inventados. -------
@@ -60,22 +68,6 @@ const TRASPASOS = [
   { clave: 'externos', label: 'Equipos externos', detalle: 'Contratistas que cargan para otras faenas' },
   { clave: 'minaPuerto', label: 'Equipos Mina-Puerto', detalle: 'Bajan material hasta el puerto' },
 ] as const;
-
-/**
- * Lo que el supervisor escribió en un turno ya enviado. Los totales NO se
- * guardan acá: se calculan desde `secciones` con la misma regla que el
- * formulario, para que un dato de ejemplo no pueda contradecir a otro.
- */
-interface ContenidoReporte {
-  personal: [string, string][];
-  secciones: { label: string; camiones: number; vueltas: number }[];
-  tolvas: number[];
-  plantas: [string, string][];
-  traspasos: [string, string][];
-  empresas: string[];
-  /** Quién corrigió qué después de enviarlo, del más reciente al más viejo. */
-  cambios?: EntradaCambios[];
-}
 
 /** Un reporte enviado mientras se corrige: los mismos datos, como texto de formulario. */
 interface BorradorReporte {
@@ -87,153 +79,6 @@ interface BorradorReporte {
   traspasos: string[];
   empresas: string[];
 }
-
-/** Un turno ya enviado: su contenido más a qué turno pertenece y quién firmó. */
-interface ReporteAnterior extends ContenidoReporte {
-  fecha: Date;
-  turno: Turno;
-  supervisor: string;
-}
-
-/** Quién firmó los turnos de ejemplo del historial (Task 11 lo reemplaza por el del reporte). */
-const SUPERVISOR_DE_EJEMPLO: Record<Turno, string> = {
-  DIURNO: 'Limbert Villacorta',
-  NOCTURNO: 'José Pérez',
-};
-
-/**
- * Contenido de los cinco turnos anteriores, del más reciente al más viejo.
- * La fecha y el turno NO están escritos acá: salen del reloj, así el
- * historial siempre muestra los turnos que de verdad precedieron al actual en
- * vez de una semana fija que queda vieja al día siguiente.
- */
-const CONTENIDO_ANTERIORES: ContenidoReporte[] = [
-  {
-    personal: [
-      ['Jefe de turno mina', 'Álvaro Henríquez'],
-      ['Jefe de turno transporte', 'Nelson Cáceres'],
-      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
-      ['Asistente de planta', 'Javiera Morales'],
-    ],
-    secciones: [
-      { label: 'Camiones internos', camiones: 5, vueltas: 4 },
-      { label: 'Camiones Mina Caleta', camiones: 16, vueltas: 3 },
-      { label: 'Camiones mineras', camiones: 34, vueltas: 1 },
-    ],
-    tolvas: [1, 2, 3],
-    plantas: [
-      ['P.P.1', 'Sal gruesa granel'],
-      ['P.R.2', 'Rechazo a acopio'],
-      ['Producto Fino', 'Fino a silo 2'],
-    ],
-    traspasos: [
-      ['Equipos internos', '3'],
-      ['Equipos externos', '1'],
-      ['Equipos Mina-Puerto', '4'],
-    ],
-    empresas: ['Hyd', 'Sijam'],
-  },
-  {
-    personal: [
-      ['Jefe de turno mina', 'Álvaro Henríquez'],
-      ['Jefe de turno transporte', 'Claudio Bravo'],
-      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
-      ['Asistente de planta', 'Javiera Morales'],
-    ],
-    secciones: [
-      { label: 'Camiones internos', camiones: 6, vueltas: 5 },
-      { label: 'Camiones Mina Caleta', camiones: 20, vueltas: 3 },
-      { label: 'Camiones mineras', camiones: 42, vueltas: 1 },
-    ],
-    tolvas: [2, 2, 4],
-    plantas: [
-      ['P.P.1', 'Sal gruesa granel'],
-      ['P.P.2', 'Sal fina'],
-      ['P.P.4', 'Sal gruesa granel'],
-      ['Producto Camino', 'Sal para camino'],
-    ],
-    traspasos: [
-      ['Equipos internos', '4'],
-      ['Equipos externos', '2'],
-      ['Equipos Mina-Puerto', '5'],
-    ],
-    empresas: ['Hyd', 'Casa Blanca', 'Sijam'],
-  },
-  {
-    personal: [
-      ['Jefe de turno mina', 'Mauricio Pinto'],
-      ['Jefe de turno transporte', 'Nelson Cáceres'],
-      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
-      ['Asistente de planta', 'Ignacio Sepúlveda'],
-    ],
-    secciones: [
-      { label: 'Camiones internos', camiones: 5, vueltas: 4 },
-      { label: 'Camiones Mina Caleta', camiones: 14, vueltas: 3 },
-      { label: 'Camiones mineras', camiones: 30, vueltas: 1 },
-    ],
-    tolvas: [1, 1, 3],
-    plantas: [
-      ['P.R.2', 'Rechazo a acopio'],
-      ['Producto Fino', 'Fino a silo 2'],
-    ],
-    traspasos: [
-      ['Equipos internos', '2'],
-      ['Equipos externos', '1'],
-      ['Equipos Mina-Puerto', '3'],
-    ],
-    empresas: ['Coseducam'],
-  },
-  {
-    personal: [
-      ['Jefe de turno mina', 'Álvaro Henríquez'],
-      ['Jefe de turno transporte', 'Claudio Bravo'],
-      ['HSE · prevención de riesgos', 'Paulina Vergara'],
-      ['Asistente de planta', 'Javiera Morales'],
-    ],
-    secciones: [
-      { label: 'Camiones internos', camiones: 8, vueltas: 5 },
-      { label: 'Camiones Mina Caleta', camiones: 18, vueltas: 3 },
-      { label: 'Camiones mineras', camiones: 40, vueltas: 1 },
-    ],
-    tolvas: [2, 2, 4],
-    plantas: [
-      ['P.P.1', 'Sal gruesa granel'],
-      ['P.P.2', 'Sal fina'],
-      ['Apoyo piso externos', 'Carguío a contratistas'],
-    ],
-    traspasos: [
-      ['Equipos internos', '3'],
-      ['Equipos externos', '3'],
-      ['Equipos Mina-Puerto', '4'],
-    ],
-    empresas: ['Hyd', 'Casa Blanca', 'Coseducam', 'Sijam'],
-  },
-  {
-    personal: [
-      ['Jefe de turno mina', 'Mauricio Pinto'],
-      ['Jefe de turno transporte', 'Nelson Cáceres'],
-      ['HSE · prevención de riesgos', 'Daniela Figueroa'],
-      ['Asistente de planta', 'Ignacio Sepúlveda'],
-    ],
-    secciones: [
-      { label: 'Camiones internos', camiones: 5, vueltas: 5 },
-      { label: 'Camiones Mina Caleta', camiones: 15, vueltas: 3 },
-      { label: 'Camiones mineras', camiones: 36, vueltas: 1 },
-    ],
-    tolvas: [1, 2, 3],
-    plantas: [
-      ['P.P.1', 'Sal gruesa granel'],
-      ['P.R.4', 'Rechazo a acopio'],
-      ['Producto Fino', 'Fino a silo 2'],
-    ],
-    traspasos: [
-      ['Equipos internos', '3'],
-      ['Equipos externos', '2'],
-      ['Equipos Mina-Puerto', '4'],
-    ],
-    empresas: ['Hyd', 'Sijam'],
-  },
-];
 
 /**
  * Las tres secciones de camiones. Cada una registra cuántos camiones tiene y
@@ -281,6 +126,17 @@ const TOLVAS = [
   { label: 'Tolva 3', clave: 'tolva3' },
 ] as const;
 
+/** Los cuatro cargos del formulario: clave del estado y rol que viaja al servidor. */
+const PERSONAL = [
+  ['jefeMina', 'Jefe de turno mina'],
+  ['jefeTransporte', 'Jefe de turno transporte'],
+  ['hse', 'HSE · prevención de riesgos'],
+  ['asistentePlanta', 'Asistente de planta'],
+] as const;
+
+/** Tipo de traspaso que espera el servidor para cada fila del formulario. */
+const TRASPASO_TIPO = { internos: 'INTERNOS', externos: 'EXTERNOS', minaPuerto: 'MINA_PUERTO' } as const;
+
 const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
@@ -297,22 +153,6 @@ const dd = (n: number) => String(n).padStart(2, '0');
 const diaMes = (f: Date) => `${dd(f.getDate())}/${dd(f.getMonth() + 1)}`;
 /** `22/09/2026` */
 const fechaCompleta = (f: Date) => `${diaMes(f)}/${f.getFullYear()}`;
-
-/**
- * Los `n` turnos que preceden al turno en curso, del más reciente al más
- * viejo. Se encadena `turnoAnterior` en vez de restar días: al diurno lo
- * precede el nocturno del día ANTERIOR, y al nocturno el diurno del mismo día.
- */
-function turnosPrevios(turno: Turno, fecha: Date, n: number): { turno: Turno; fecha: Date }[] {
-  const previos: { turno: Turno; fecha: Date }[] = [];
-  let actual = { turno, fecha };
-  for (let i = 0; i < n; i++) {
-    actual = turnoAnterior(actual.turno, actual.fecha);
-    previos.push(actual);
-  }
-  return previos;
-}
-
 
 /**
  * Nombre de una sección dentro de una tarjeta.
@@ -395,17 +235,21 @@ export function ReporteDiarioView() {
     [tarjetas],
   );
 
-  /** Lo escrito en los turnos anteriores; es estado porque se puede corregir. */
-  const [contenidos, setContenidos] = useState(CONTENIDO_ANTERIORES);
-
-  const anteriores = useMemo<ReporteAnterior[]>(() => {
-    const previos = turnosPrevios(ctx.turno, ctx.fecha, contenidos.length);
-    return contenidos.map((contenido, i) => ({
-      ...contenido,
-      ...previos[i],
-      supervisor: SUPERVISOR_DE_EJEMPLO[previos[i].turno],
-    }));
-  }, [ctx, contenidos]);
+  /** Reportes de la última semana, del turno más reciente al más viejo. */
+  const desde = toDateOnly(new Date(ctx.fecha.getFullYear(), ctx.fecha.getMonth(), ctx.fecha.getDate() - 7));
+  const hasta = toDateOnly(ctx.fecha);
+  const { data: reportes } = useReportesDiarios({ desde, hasta });
+  const anteriores = useMemo<ReporteAnterior[]>(
+    () =>
+      (reportes ?? [])
+        .map(aReporteAnterior)
+        .sort(
+          (a, b) =>
+            b.fecha.getTime() - a.fecha.getTime() ||
+            Number(b.turno === 'NOCTURNO') - Number(a.turno === 'NOCTURNO'),
+        ),
+    [reportes],
+  );
 
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleIdx, setDetalleIdx] = useState<number | null>(null);
@@ -433,64 +277,6 @@ export function ReporteDiarioView() {
     });
   };
 
-  /**
-   * Guarda la corrección de un reporte ya enviado: sin
-   * autorización, pero con registro de quién cambió qué. Si nada cambió de
-   * verdad no se registra nada. Maqueta: el aviso al administrador lo hará el
-   * servidor cuando exista el backend del reporte.
-   */
-  const guardarEdicion = () => {
-    if (detalleIdx == null || !detalle || !edicion) return;
-    const r = detalle;
-    const nuevo: ContenidoReporte = {
-      personal: r.personal.map(([cargo], i) => [cargo, edicion.personal[i].trim()]),
-      secciones: r.secciones.map((s, i) => ({
-        label: s.label,
-        camiones: enteroOCero(edicion.secciones[i].camiones),
-        vueltas: enteroOCero(edicion.secciones[i].vueltas),
-      })),
-      tolvas: edicion.tolvas.map((tolva) => enteroOCero(tolva)),
-      plantas: plantas.map((x) => x.nombre).filter((p) => edicion.plantas[p]?.trim()).map((p) => [p, edicion.plantas[p].trim()]),
-      traspasos: r.traspasos.map(([label], i) => [label, edicion.traspasos[i].trim()]),
-      empresas: empresasExternas.map((e) => e.nombre).filter((e) => edicion.empresas.includes(e)),
-    };
-    const productoDe = (c: ContenidoReporte, p: string) => c.plantas.find(([n]) => n === p)?.[1] ?? '';
-    const cambios = diferencias([
-      ...r.personal.map(([cargo, nombre], i) => ({
-        field: `personal.${i}`,
-        label: cargo,
-        antes: nombre,
-        despues: nuevo.personal[i][1],
-      })),
-      ...r.secciones.flatMap((s, i) => [
-        { field: `secciones.${i}.camiones`, label: `${s.label} · camiones`, antes: String(s.camiones), despues: String(nuevo.secciones[i].camiones) },
-        { field: `secciones.${i}.vueltas`, label: `${s.label} · vueltas por camión`, antes: String(s.vueltas), despues: String(nuevo.secciones[i].vueltas) },
-      ]),
-      ...r.tolvas.map((v, i) => ({
-        field: `tolvas.${i}`,
-        label: `Alimentación Planta PPE · tolva ${i + 1}`,
-        antes: String(v),
-        despues: String(nuevo.tolvas[i]),
-      })),
-      ...plantas.map(({ nombre: p }) => ({ field: `plantas.${p}`, label: `Planta ${p}`, antes: productoDe(r, p), despues: productoDe(nuevo, p) })),
-      ...r.traspasos.map(([label, v], i) => ({ field: `traspasos.${i}`, label, antes: v, despues: nuevo.traspasos[i][1] })),
-      { field: 'empresas', label: 'Empresas externas', antes: r.empresas.join(', '), despues: nuevo.empresas.join(', ') },
-    ]);
-    if (cambios.length > 0) {
-      const entrada: EntradaCambios = {
-        id: `${detalleIdx}-${Date.now()}`,
-        userName: supervisor,
-        createdAt: new Date().toISOString(),
-        changes: cambios,
-      };
-      setContenidos((cs) =>
-        cs.map((c, i) => (i === detalleIdx ? { ...nuevo, cambios: [entrada, ...(c.cambios ?? [])] } : c)),
-      );
-      setAvisoGuardado(true);
-    }
-    setEdicion(null);
-  };
-
   const [personal, setPersonal] = useState({
     jefeMina: 'Álvaro Henríquez',
     jefeTransporte: 'Claudio Bravo',
@@ -516,6 +302,38 @@ export function ReporteDiarioView() {
 
   const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
+  const crear = useCreateReporteDiario();
+  const hayErrorDeEntero = [
+    ...Object.values(prod),
+    ...Object.values(traspasos),
+  ].some((v) => errorDeEntero(v));
+
+  /**
+   * Arma el reporte desde el formulario y lo manda por la cola. Un 409 (el
+   * turno ya fue reportado) lo muestra el hook como aviso con el mensaje del
+   * backend.
+   */
+  const enviar = () => {
+    const n = (v: string) => enteroOCero(v);
+    const input: CreateReporteDiarioInput = {
+      fecha: toDateOnly(ctx.fecha),
+      turno: ctx.turno,
+      produccion: SECCIONES_CAMIONES.map((s, i) => ({
+        seccion: SECCIONES[i],
+        camiones: n(prod[s.camiones]),
+        vueltasPorCamion: n(prod[s.vueltas]),
+      })),
+      tolvas: TOLVAS.map((t, i) => ({ tolva: i + 1, cargas: n(prod[t.clave]) })),
+      plantas: plantas
+        .map((p) => ({ plantaId: p.id, producto: (productos[p.id] ?? '').trim() }))
+        .filter((p) => p.producto !== ''),
+      traspasos: TRASPASOS.map((t) => ({ tipo: TRASPASO_TIPO[t.clave], cantidad: n(traspasos[t.clave]) })),
+      empresaIds: empresasExternas.filter((e) => empresas[e.id]).map((e) => e.id),
+      personal: PERSONAL.map(([clave, rol]) => ({ rol, nombre: personal[clave].trim() })),
+    };
+    crear.mutate(input);
+  };
+
   const formulario = (
     <>
       {/*
@@ -533,14 +351,7 @@ export function ReporteDiarioView() {
         <CardHead titulo="Personal del turno" bajada="Los cuatro cargos los escribe el supervisor." />
         <Form>
           <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2 lg:flex lg:flex-col">
-            {(
-              [
-                ['jefeMina', 'Jefe de turno mina'],
-                ['jefeTransporte', 'Jefe de turno transporte'],
-                ['hse', 'HSE · prevención de riesgos'],
-                ['asistentePlanta', 'Asistente de planta'],
-              ] as const
-            ).map(([clave, label]) => (
+            {PERSONAL.map(([clave, label]) => (
               <Campo key={clave} label={label}>
                 <Input
                   value={personal[clave]}
@@ -717,12 +528,12 @@ export function ReporteDiarioView() {
         </Form>
       </Card>
 
-      <Boton ancho disabled>
+      <Boton ancho disabled={crear.isPending || hayErrorDeEntero} onClick={enviar}>
         Enviar reporte diario <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       <Hint>
         <span className="block text-center">
-          Maqueta: todavía no hay dónde guardarlo. Llegará al administrador y a Sergio Torres.
+          Llegará al administrador y a Sergio Torres. Sin señal queda guardado en el equipo y se envía solo.
         </span>
       </Hint>
     </>
@@ -921,7 +732,8 @@ export function ReporteDiarioView() {
         </div>
       </div>
 
-      <Boton ancho onClick={guardarEdicion}>
+      {/* Task 12 conecta el guardado al PATCH del reporte. */}
+      <Boton ancho disabled>
         Guardar cambios <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       <Boton variante="contorno" ancho onClick={() => setEdicion(null)}>
@@ -936,7 +748,8 @@ export function ReporteDiarioView() {
         <Boton variante="contorno" onClick={() => abrirDetalle(null)}>
           <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
         </Boton>
-        <Boton variante="contorno" onClick={() => abrirEdicion(detalle)}>
+        {/* Deshabilitado hasta que la corrección se conecte al servidor. */}
+        <Boton variante="contorno" disabled onClick={() => abrirEdicion(detalle)}>
           <Pencil className="h-[17px] w-[17px]" /> Editar
         </Boton>
       </div>
@@ -1002,7 +815,6 @@ export function ReporteDiarioView() {
         titulo="Reporte diario del supervisor"
         /* Faena y turno viven en la cabecera de la ficha: repetirlos acá los
            mostraba dos veces en la misma pantalla. */
-        contexto={<Chip tono="warning">Maqueta</Chip>}
       />
 
       <VistaUnica>

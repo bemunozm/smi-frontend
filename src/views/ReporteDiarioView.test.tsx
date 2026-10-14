@@ -1,7 +1,46 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK } = vi.hoisted(() => ({
+const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE } = vi.hoisted(() => ({
+  MUTATE: vi.fn(),
+  REPORTES_MOCK: [
+    {
+      id: 'r-noche',
+      fecha: '2026-09-22',
+      turno: 'NOCTURNO',
+      supervisorId: 'u2',
+      supervisorNombre: 'José Pérez',
+      observaciones: null,
+      createdAt: '',
+      updatedAt: '',
+      produccion: [
+        { seccion: 'INTERNOS', camiones: 5, vueltasPorCamion: 4 },
+        { seccion: 'MINA_CALETA', camiones: 16, vueltasPorCamion: 3 },
+        { seccion: 'MINERAS', camiones: 34, vueltasPorCamion: 1 },
+      ],
+      tolvas: [{ tolva: 1, cargas: 1 }, { tolva: 2, cargas: 2 }, { tolva: 3, cargas: 3 }],
+      plantas: [{ plantaId: 'pl1', producto: 'Rechazo a acopio', planta: { nombre: 'P.R.2' } }],
+      traspasos: [{ tipo: 'INTERNOS', cantidad: 3 }],
+      empresas: [{ empresaId: 'em1', empresa: { nombre: 'Hyd' } }],
+      personal: [{ rol: 'Jefe de turno transporte', nombre: 'Nelson Cáceres', orden: 0 }],
+    },
+    {
+      id: 'r-dia',
+      fecha: '2026-09-22',
+      turno: 'DIURNO',
+      supervisorId: 'u1',
+      supervisorNombre: 'Limbert Villacorta',
+      observaciones: null,
+      createdAt: '',
+      updatedAt: '',
+      produccion: [{ seccion: 'INTERNOS', camiones: 6, vueltasPorCamion: 5 }],
+      tolvas: [],
+      plantas: [],
+      traspasos: [],
+      empresas: [],
+      personal: [],
+    },
+  ],
   PLANTAS_MOCK: [
     { id: 'pl1', nombre: 'P.P.1', orden: 1, activa: true },
     { id: 'pl2', nombre: 'Planta P.P.E', orden: 2, activa: true },
@@ -18,6 +57,8 @@ const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK } = vi.hoisted(() => ({
 vi.mock('../hooks/useReporteDiario', () => ({
   usePlantas: () => ({ data: PLANTAS_MOCK }),
   useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
+  useReportesDiarios: () => ({ data: REPORTES_MOCK }),
+  useCreateReporteDiario: () => ({ mutate: MUTATE, isPending: false }),
 }));
 vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
@@ -223,9 +264,8 @@ describe('ReporteDiarioView · cabecera de la ficha', () => {
 
 describe('ReporteDiarioView · historial en ventana', () => {
   /**
-   * El historial son los turnos que preceden al actual, calculados desde el
-   * reloj. Con el reloj a media tarde del 23/09 los cinco anteriores son del
-   * 22/09 noche hacia atrás.
+   * El historial son los reportes que devuelve el servidor, del turno más
+   * reciente al más viejo (el nocturno del 22/09 va antes que su diurno).
    */
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -249,6 +289,7 @@ describe('ReporteDiarioView · historial en ventana', () => {
 
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getAllByText('José Pérez').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ver más detalle')).toHaveLength(2);
   });
 
   /**
@@ -288,14 +329,13 @@ describe('ReporteDiarioView · historial en ventana', () => {
     fireEvent.click(screen.getByText('Volver al historial'));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getAllByText('Ver más detalle').length).toBe(5);
+    expect(screen.getAllByText('Ver más detalle').length).toBe(2);
   });
 });
 
 /**
- * Acta N.° 004, R13: un reporte ya enviado se corrige desde el historial,
- * sin autorización pero avisando al administrador, y el detalle guarda quién
- * cambió qué. Guardar sin tocar nada no es un cambio.
+ * La corrección de un reporte enviado la conecta al PATCH la tarea siguiente:
+ * mientras tanto el botón queda deshabilitado, sin romper el detalle real.
  */
 describe('ReporteDiarioView · corregir un reporte enviado', () => {
   beforeEach(() => {
@@ -304,39 +344,44 @@ describe('ReporteDiarioView · corregir un reporte enviado', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const abrirEdicion = () => {
+  it('el detalle de un reporte real se abre y su botón Editar está deshabilitado', () => {
     render(<ReporteDiarioView />);
     fireEvent.click(screen.getByText('Ver historial de reportes'));
     fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Editar/ }));
-    return () => within(screen.getByRole('dialog'));
-  };
 
-  it('abre el reporte prellenado con el aviso al administrador', () => {
-    const ventana = abrirEdicion();
-
-    expect(ventana().getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
-    expect((ventana().getByLabelText('Jefe de turno transporte') as HTMLInputElement).value).toBe('Nelson Cáceres');
+    const ventana = within(screen.getByRole('dialog'));
+    expect((ventana.getByRole('button', { name: /Editar/ }) as HTMLButtonElement).disabled).toBe(true);
   });
+});
 
-  it('guarda la corrección y la deja en el historial de cambios', () => {
-    const ventana = abrirEdicion();
-
-    fireEvent.change(ventana().getByLabelText('Jefe de turno transporte'), { target: { value: 'Claudio Bravo' } });
-    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
-
-    expect(ventana().getByText(/Cambio guardado. Se avisó al administrador./)).toBeTruthy();
-    // El detalle ya muestra el dato nuevo, y el historial el antes y el después.
-    expect(ventana().getAllByText('Claudio Bravo').length).toBeGreaterThan(0);
-    expect(ventana().getByText('Historial de cambios').parentElement?.textContent).toContain('1 cambio');
-    expect(ventana().getByText('Nelson Cáceres')).toBeTruthy();
+describe('ReporteDiarioView · enviar el reporte', () => {
+  beforeEach(() => {
+    MUTATE.mockClear();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
   });
+  afterEach(() => vi.useRealTimers());
 
-  it('guardar sin cambiar nada no agrega un cambio', () => {
-    const ventana = abrirEdicion();
-    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+  it('arma el reporte con las secciones en orden, solo las plantas con producto y las empresas marcadas', () => {
+    render(<ReporteDiarioView />);
+    fireEvent.change(screen.getByLabelText('Producto de P.P.1'), { target: { value: 'Sal fina' } });
+    fireEvent.click(screen.getByText('Sijam'));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
 
-    expect(ventana().queryByText(/Cambio guardado/)).toBeNull();
-    expect(ventana().getByText('Sin cambios desde que se registró.')).toBeTruthy();
+    expect(MUTATE).toHaveBeenCalledTimes(1);
+    const input = MUTATE.mock.calls[0][0];
+    expect(input.fecha).toBe('2026-09-23');
+    expect(input.turno).toBe('DIURNO');
+    expect(input.produccion.map((p: { seccion: string }) => p.seccion)).toEqual(['INTERNOS', 'MINA_CALETA', 'MINERAS']);
+    expect(input.produccion[1]).toEqual({ seccion: 'MINA_CALETA', camiones: 18, vueltasPorCamion: 3 });
+    expect(input.tolvas).toEqual([
+      { tolva: 1, cargas: 2 },
+      { tolva: 2, cargas: 2 },
+      { tolva: 3, cargas: 4 },
+    ]);
+    expect(input.plantas).toEqual([{ plantaId: 'pl1', producto: 'Sal fina' }]);
+    expect(input.empresaIds).toEqual(['em2']);
+    expect(input.traspasos.map((t: { tipo: string }) => t.tipo)).toEqual(['INTERNOS', 'EXTERNOS', 'MINA_PUERTO']);
+    expect(input.personal).toHaveLength(4);
   });
 });

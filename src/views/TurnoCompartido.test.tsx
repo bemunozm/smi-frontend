@@ -24,6 +24,8 @@ const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK } = vi.hoisted(() => ({
 vi.mock('../hooks/useReporteDiario', () => ({
   usePlantas: () => ({ data: PLANTAS_MOCK }),
   useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
+  useReportesDiarios: () => ({ data: [] }),
+  useCreateReporteDiario: () => ({ mutate: () => {}, isPending: false }),
 }));
 vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
