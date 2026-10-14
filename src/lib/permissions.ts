@@ -62,6 +62,8 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'shiftCard.edit': [ADMIN, SUPERVISOR],
   'hallazgo.edit': [ADMIN, SUPERVISOR],
   'trabajoExtra.edit': [ADMIN, SUPERVISOR],
+  'reporteDiario.create': [ADMIN, SUPERVISOR],
+  'reporteDiario.edit': [ADMIN, SUPERVISOR],
 };
 
 /** `true` si `role` puede hacer la escritura `action`. Sin rol (sesión sin
