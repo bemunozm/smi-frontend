@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { Check, CircleCheck, Plus, Trash2 } from 'lucide-react';
@@ -17,20 +17,17 @@ import {
   ModalTerreno,
   SelectorBuscable,
   Textarea,
-  type OpcionSelector,
 } from '../terreno/ui';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
-import { useBranches } from '../../hooks/useBranches';
 import { useFinishTask } from '../../hooks/useIntervenciones';
-import { useItems } from '../../hooks/useInventory';
 import { TIPO_OT_LABELS } from '../../config/mantenimiento-colors';
 import {
   CreateIntervencionSchema,
   type CreateIntervencionInput,
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
-import { UNIT_SYMBOLS, quantityAt, type InventoryItem } from '../../types/inventory';
 import { equipmentLabel, type EquipmentRef } from './workshop';
+import { useInsumosFaena } from './insumos-faena';
 
 /**
  * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
@@ -46,8 +43,7 @@ export function FinishTaskModal({
   equipment: readonly EquipmentRef[] | undefined;
 }) {
   const finishTask = useFinishTask();
-  const { data: items } = useItems({ isActive: true });
-  const { data: branches } = useBranches({ isActive: true });
+  const { faenaBranch, opcionesInsumo } = useInsumosFaena();
   const [abierto, setAbierto] = useState(false);
   // Misma captura de foto que los hallazgos de Terreno (EXIF, sin OCR).
   const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
@@ -74,41 +70,12 @@ export function FinishTaskModal({
   const { fields, append, remove } = useFieldArray({ control, name: 'insumos' });
 
   // Regla del taller: los insumos salen SIEMPRE de la bodega de FAENA.
-  const faenaBranch = useMemo(
-    () => branches?.find((branch) => /faena/i.test(branch.name)),
-    [branches],
-  );
   useEffect(() => {
     const target = faenaBranch?.id;
     if (target && getValues('branchId') !== target) {
       setValue('branchId', target);
     }
   }, [faenaBranch, getValues, setValue]);
-
-  // Opciones del selector: la distinción de Inventario como grupos, y la
-  // existencia en Faena como aviso — sin stock queda apagado con el motivo.
-  const opcionesInsumo: OpcionSelector[] = useMemo(() => {
-    const opcion = (item: InventoryItem, grupo: string): OpcionSelector => {
-      const stock = faenaBranch ? quantityAt(item, faenaBranch.id) : null;
-      const sinStock = stock !== null && stock <= 0;
-      return {
-        valor: item.id,
-        titulo: item.sku,
-        detalle: item.name,
-        grupo,
-        ...(sinStock
-          ? { motivo: 'Sin stock en Faena' }
-          : stock !== null
-            ? { aviso: `${stock} ${UNIT_SYMBOLS[item.unit]} en Faena` }
-            : {}),
-      };
-    };
-    const lista = items ?? [];
-    return [
-      ...lista.filter((item) => item.type === 'SUPPLY').map((item) => opcion(item, 'Suministros')),
-      ...lista.filter((item) => item.type === 'PART').map((item) => opcion(item, 'Repuestos')),
-    ];
-  }, [items, faenaBranch]);
 
   const cerrar = () => setAbierto(false);
 

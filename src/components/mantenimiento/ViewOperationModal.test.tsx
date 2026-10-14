@@ -26,6 +26,8 @@ const ORDEN: OrdenTrabajo = {
   id: 'ot-3',
   equipoId: 'RE-003',
   hallazgoId: null,
+  pautaMilestone: null,
+  pautaCycle: null,
   titulo: 'Engrase general y cambio de pernos',
   estado: 'COMPLETADA',
   prioridad: 'MEDIA',

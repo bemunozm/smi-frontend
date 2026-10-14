@@ -149,12 +149,12 @@ const RESUMEN_VACIO = {
   porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
 };
 
-function renderView() {
+function renderView(contexto?: 'flota' | 'taller') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <EquiposView />
+        <EquiposView contexto={contexto} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -203,6 +203,45 @@ async function abrirPickerOperador(): Promise<void> {
   });
   fireEvent.click(trigger);
 }
+
+describe('EquiposView — contexto taller (solo lectura)', () => {
+  it('oculta toda escritura incluso para ADMIN y enlaza el detalle dentro del shell del taller', async () => {
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    renderView('taller');
+    await screen.findAllByText('EX-001');
+
+    // La regla es del módulo, no del rol: nada de crear, editar ni accionar.
+    expect(screen.queryByText('Nuevo equipo')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Crear equipo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: `Acciones para ${EQUIPO.internalCode}` })).toBeNull();
+    expect(screen.queryByText('Acciones')).toBeNull();
+
+    // El detalle vive en el shell de Mantención — la barra no cambia.
+    const detalle = screen
+      .getAllByRole('link')
+      .find((link) => link.getAttribute('href') === '/mantenimiento/equipos/eq_1');
+    expect(detalle).toBeTruthy();
+    // La tarjeta (tablet/celular) navega directo al detalle: sin hoja de acciones.
+    expect(screen.getByRole('button', { name: 'Ver detalle de EX-001' })).toBeTruthy();
+  });
+
+  it('en Flota el mismo ADMIN conserva sus acciones', async () => {
+    listMock.mockResolvedValue([EQUIPO]);
+    resumenMock.mockResolvedValue(RESUMEN_VACIO);
+    branchListMock.mockResolvedValue([SUCURSAL_ACTIVA]);
+
+    renderView();
+    await screen.findAllByText('EX-001');
+
+    expect(screen.getByText('Nuevo equipo')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: `Acciones para ${EQUIPO.internalCode}` }),
+    ).toBeTruthy();
+  });
+});
 
 describe('EquiposView — menú de acciones', () => {
   it('cambia el estado del equipo al elegir "Marcar como…"', async () => {

@@ -1,15 +1,15 @@
 import { useMemo } from 'react';
 import { Spinner } from '@heroui/react';
-import { Clock, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Clock, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
-import { Chip, Cifras, Tarjeta } from '../components/terreno/ui';
+import { Boton, Chip, Cifras, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePendingWrites } from '../hooks/usePendingWrites';
 import { usePermissions } from '../hooks/usePermissions';
-import { useOrdenes } from '../hooks/useOrdenes';
+import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHallazgosList } from '../hooks/useHallazgos';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
@@ -33,6 +33,10 @@ import { CreateOperationModal } from '../components/mantenimiento/CreateOperatio
 import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
 import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
+import {
+  PreventiveChecklistModal,
+  tareasHechas,
+} from '../components/mantenimiento/PreventiveChecklistModal';
 import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
 
 /** Columna del tablero: chip de cabecera + conteo + tarjetas. */
@@ -76,6 +80,46 @@ function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boo
 /** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
 function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
   return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
+}
+
+/**
+ * Orden preventiva nacida de la pauta por horómetro/km: su tarjeta es un
+ * CHECKLIST (las operaciones del hito como tareas), no el flujo iniciar →
+ * finalizar de las correctivas.
+ */
+function esChecklistPauta(orden: OrdenTrabajo): boolean {
+  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
+}
+
+/**
+ * Iniciar la mantención preventiva: solo pasa la orden a EN_PROCESO — sin
+ * modal, porque el título viene fijo de la pauta y el trabajo real (el
+ * checklist) se registra en la columna "en proceso".
+ */
+function IniciarMantencion({ orden }: { orden: OrdenTrabajo }) {
+  const actualizar = useActualizarOrden();
+  return (
+    <Boton
+      ancho
+      disabled={actualizar.isPending}
+      type="button"
+      variante="acento"
+      onClick={() => actualizar.mutate({ orden, input: { estado: 'EN_PROCESO' } })}
+    >
+      <ArrowRight className="h-5 w-5" />
+      Iniciar operación
+    </Boton>
+  );
+}
+
+/** «1 de 3 tareas» — el avance del checklist en la tarjeta del tablero. */
+function TareasChip({ orden }: { orden: OrdenTrabajo }) {
+  const { hechas, total } = tareasHechas(orden);
+  return (
+    <Chip tono={hechas === total ? 'success' : hechas > 0 ? 'warning' : 'neutral'}>
+      {hechas} de {total} tareas
+    </Chip>
+  );
 }
 
 /** Titular de la tarjeta (boceto del taller): el EQUIPO primero y notorio —
@@ -194,6 +238,7 @@ export function OrdenesTrabajoView() {
   const canCreate = can('orden.create');
   const canStart = can('orden.update');
   const canFinish = can('intervencion.create');
+  const canTarea = can('orden.toggleTarea');
   const fleet: readonly EquipmentRef[] | undefined = equipment;
 
   return (
@@ -287,12 +332,19 @@ export function OrdenesTrabajoView() {
                   <Chip tono={chipColorToTono(prioridadOTChipColor(orden.prioridad))}>
                     {PRIORIDAD_OT_LABELS[orden.prioridad]}
                   </Chip>
+                  {esChecklistPauta(orden) ? <TareasChip orden={orden} /> : null}
                 </ChipsRow>
                 <CardMeta>
                   {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} —{' '}
                   {formatDate(orden.createdAt)}
                 </CardMeta>
-                {canStart ? <StartOperationModal equipment={fleet} orden={orden} /> : null}
+                {esChecklistPauta(orden) ? (
+                  canStart ? (
+                    <IniciarMantencion orden={orden} />
+                  ) : null
+                ) : canStart ? (
+                  <StartOperationModal equipment={fleet} orden={orden} />
+                ) : null}
               </BoardCard>
             ))}
           </BoardColumn>
@@ -308,6 +360,7 @@ export function OrdenesTrabajoView() {
                 <HallazgoAssoc orden={orden} />
                 <ChipsRow>
                   <TipoChip tipo={orden.tipo} />
+                  {esChecklistPauta(orden) ? <TareasChip orden={orden} /> : null}
                 </ChipsRow>
                 <CardMeta>
                   Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
@@ -320,6 +373,10 @@ export function OrdenesTrabajoView() {
                   <span className="text-xs font-medium text-muted-foreground">
                     Sincronizando cambios de esta operación…
                   </span>
+                ) : esChecklistPauta(orden) ? (
+                  canTarea ? (
+                    <PreventiveChecklistModal equipment={fleet} orden={orden} />
+                  ) : null
                 ) : canFinish ? (
                   <FinishTaskModal equipment={fleet} orden={orden} />
                 ) : null}
@@ -344,7 +401,11 @@ export function OrdenesTrabajoView() {
                   {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}{' '}
                   {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
                 </CardMeta>
-                <ViewOperationModal equipment={fleet} orden={orden} />
+                {esChecklistPauta(orden) ? (
+                  <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
+                ) : (
+                  <ViewOperationModal equipment={fleet} orden={orden} />
+                )}
               </BoardCard>
             ))}
           </BoardColumn>

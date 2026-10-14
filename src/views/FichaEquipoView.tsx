@@ -34,9 +34,17 @@ function ResumenTile({ label, value, hint }: { label: string; value: number; hin
  * Mantenimiento (orden de trabajo/intervención) más Actividades. Distinta de
  * `EquipoDetalleView` (ficha técnica de Flota, sin cruzar dominios).
  */
-export function FichaEquipoView() {
+export function FichaEquipoView({
+  contexto = 'flota',
+}: {
+  /** Montada en Flota (`/equipos/:id/ficha`) o dentro del taller
+   * (`/mantenimiento/equipos/:id/ficha`): es solo lectura en ambos; lo único
+   * que cambia es a dónde vuelven sus enlaces. */
+  contexto?: 'flota' | 'taller';
+}) {
   const { id = '' } = useParams<{ id: string }>();
   const { data: ficha, isPending, isError, error } = useFicha(id);
+  const base = contexto === 'taller' ? '/mantenimiento/equipos' : '/equipos';
 
   const [selectedTipos, setSelectedTipos] = useState<Set<EventoFichaTipo>>(() => new Set(EVENTO_TIPOS));
 
@@ -72,7 +80,7 @@ export function FichaEquipoView() {
         >
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha consolidada del equipo.'}
         </div>
-        <Link className="text-sm text-(--accent) hover:underline" to="/equipos">
+        <Link className="text-sm text-(--accent) hover:underline" to={base}>
           ← Volver a equipos
         </Link>
       </div>
@@ -86,7 +94,7 @@ export function FichaEquipoView() {
       <div className="flex flex-col gap-1.5">
         <Link
           className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
-          to={`/equipos/${equipo.id}`}
+          to={`${base}/${equipo.id}`}
         >
           ← SMI · Ficha del equipo
         </Link>

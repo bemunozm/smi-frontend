@@ -121,6 +121,8 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
         'equipmentDocument.update',
         // La foto del cierre de una intervención del taller.
         'intervencion.create',
+        // La foto de respaldo de cada tarea del checklist preventivo.
+        'orden.toggleTarea',
       ].sort(),
     );
   });

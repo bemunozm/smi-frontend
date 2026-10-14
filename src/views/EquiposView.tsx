@@ -495,12 +495,18 @@ function EquipoCardMobile({
   sucursalPorId,
   marca,
   proxima,
+  detalleBase = '/equipos',
+  soloLectura = false,
 }: {
   equipo: Equipment;
   marca: Marca | null;
   /** Próxima mantención según la pauta del equipo, si tiene. */
   proxima: MaintenanceStatusRow | undefined;
   sucursalPorId: Map<string, string>;
+  /** Dónde vive el detalle — en el taller, dentro de su shell. */
+  detalleBase?: string;
+  /** Taller: tocar la tarjeta navega directo al detalle, sin hoja de acciones. */
+  soloLectura?: boolean;
 }) {
   const navigate = useNavigate();
   const { can, canAny } = usePermissions();
@@ -526,8 +532,11 @@ function EquipoCardMobile({
   return (
     <>
       <button
+        aria-label={soloLectura ? `Ver detalle de ${equipo.internalCode}` : undefined}
         className="block w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-        onClick={() => setIsSheetOpen(true)}
+        onClick={() =>
+          soloLectura ? void navigate(`${detalleBase}/${equipo.id}`) : setIsSheetOpen(true)
+        }
         type="button"
       >
         <Card className="transition-colors active:bg-surface-secondary">
@@ -584,6 +593,8 @@ function EquipoCardMobile({
         </Card>
       </button>
 
+      {soloLectura ? null : (
+        <>
       <Drawer.Backdrop isOpen={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <Drawer.Content placement="bottom">
           <Drawer.Dialog className="max-h-[85vh]">
@@ -740,14 +751,26 @@ function EquipoCardMobile({
         isOpen={isCargaOpen}
         onOpenChange={setIsCargaOpen}
       />
+        </>
+      )}
     </>
   );
 }
 
 const TODOS = '__todos__';
 
-export function EquiposView() {
+/**
+ * Listado de la flota. Se monta en DOS lugares: en Flota (`/equipos`, chrome
+ * de escritorio) y dentro del taller (`/mantenimiento/equipos`, shell de
+ * Mantención). En el taller es SOLO LECTURA para todos los roles — sin crear,
+ * editar, eliminar, cambiar estado ni registrar nada: el mantenedor consulta
+ * la unidad y su detalle, y las escrituras de flota viven en Flota.
+ */
+export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'taller' }) {
   const { can } = usePermissions();
+  const enTaller = contexto === 'taller';
+  // Detalle en el MISMO shell: desde el taller la barra del módulo no cambia.
+  const detalleBase = enTaller ? '/mantenimiento/equipos' : '/equipos';
   // La próxima mantención de todos los equipos con pauta, en una sola llamada;
   // solo para los roles que pueden leer pautas (al resto el servidor le da 403).
   const { puedeVerPauta } = usePermisosPauta();
@@ -760,7 +783,7 @@ export function EquiposView() {
   // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const puedeCrear = can('equipment.create');
+  const puedeCrear = !enTaller && can('equipment.create');
 
   const {
     data: equipos,
@@ -790,17 +813,30 @@ export function EquiposView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Flota
-          </span>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Equipos
-          </h1>
-          <p className="text-sm text-(--muted)">
-            Maquinaria y vehículos de la operación: foto, horómetro, combustible, quién lo usa y su estado.
-          </p>
-        </div>
+        {enTaller ? (
+          // Dentro del taller la marca la pone el header del shell: título al
+          // tamaño de las demás sub-vistas, y claro que es de consulta.
+          <div className="flex flex-col gap-1">
+            <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
+              Equipos
+            </h2>
+            <p className="text-sm text-(--muted)">
+              Foto, horómetro, combustible, quién lo usa y su estado — en solo lectura.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+              SMI · Flota
+            </span>
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+              Equipos
+            </h1>
+            <p className="text-sm text-(--muted)">
+              Maquinaria y vehículos de la operación: foto, horómetro, combustible, quién lo usa y su estado.
+            </p>
+          </div>
+        )}
         {/* PC: botón de texto en el header. En tablet/celular la creación es
            por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
            calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}
@@ -932,7 +968,9 @@ export function EquiposView() {
       {!isPending && !isError && equipos.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm font-medium text-foreground">No hay equipos que coincidan</p>
-          <p className="text-sm text-(--muted)">Ajusta los filtros o crea el primero.</p>
+          <p className="text-sm text-(--muted)">
+            {enTaller ? 'Ajusta los filtros.' : 'Ajusta los filtros o crea el primero.'}
+          </p>
         </div>
       ) : null}
 
@@ -953,7 +991,7 @@ export function EquiposView() {
                     <Table.Column>Combustible</Table.Column>
                     <Table.Column>En uso por</Table.Column>
                     <Table.Column>Estado</Table.Column>
-                    <Table.Column>Acciones</Table.Column>
+                    {enTaller ? null : <Table.Column>Acciones</Table.Column>}
                   </Table.Header>
                   <Table.Body>
                     <Table.Collection items={equipos}>
@@ -968,7 +1006,7 @@ export function EquiposView() {
                             <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="sm" />
                           </Table.Cell>
                           <Table.Cell>
-                            <Link className="block" to={`/equipos/${equipo.id}`}>
+                            <Link className="block" to={`${detalleBase}/${equipo.id}`}>
                               <span className="block font-mono text-sm font-semibold text-(--accent) hover:underline">
                                 {equipo.internalCode}
                               </span>
@@ -1008,11 +1046,13 @@ export function EquiposView() {
                               <DocumentAlertBadge equipo={equipo} />
                             </div>
                           </Table.Cell>
-                          <Table.Cell>
-                            <div className="flex justify-end">
-                              <EquipoActionsMenu equipo={equipo} />
-                            </div>
-                          </Table.Cell>
+                          {enTaller ? null : (
+                            <Table.Cell>
+                              <div className="flex justify-end">
+                                <EquipoActionsMenu equipo={equipo} />
+                              </div>
+                            </Table.Cell>
+                          )}
                         </Table.Row>
                         );
                       }}
@@ -1032,10 +1072,12 @@ export function EquiposView() {
           <div className="flex flex-col gap-3 xl:hidden">
             {equipos.map((equipo) => (
               <EquipoCardMobile
+                detalleBase={detalleBase}
                 equipo={equipo}
                 key={equipo.id}
                 marca={pendientes.marcaDe('equipment', equipo.id)}
                 proxima={proximaPorEquipo?.get(equipo.id)}
+                soloLectura={enTaller}
                 sucursalPorId={sucursalPorId}
               />
             ))}
