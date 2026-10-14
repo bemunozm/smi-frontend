@@ -1,6 +1,28 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
+const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK } = vi.hoisted(() => ({
+  PLANTAS_MOCK: [
+    { id: 'pl1', nombre: 'P.P.1', orden: 1, activa: true },
+    { id: 'pl2', nombre: 'Planta P.P.E', orden: 2, activa: true },
+  ],
+  EMPRESAS_MOCK: [
+    { id: 'em1', nombre: 'Hyd', orden: 1, activa: true },
+    { id: 'em2', nombre: 'Sijam', orden: 2, activa: true },
+  ],
+  TARJETAS_MOCK: [
+    { id: 'c1', operatorName: 'Patricio Rojas', equipo: { internalCode: 'CG-002' }, closedAt: null },
+    { id: 'c2', operatorName: 'Marcelo Soto', equipo: { internalCode: 'EX-001' }, closedAt: '2026-09-23T10:00:00Z' },
+  ],
+}));
+vi.mock('../hooks/useReporteDiario', () => ({
+  usePlantas: () => ({ data: PLANTAS_MOCK }),
+  useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
+}));
+vi.mock('../hooks/useShiftCards', () => ({
+  useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
+}));
+
 import { seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { ReporteDiarioView } from './ReporteDiarioView';
 
@@ -56,6 +78,20 @@ describe('seccionesDelFormulario', () => {
   it('un texto que no es un número vale cero', () => {
     const [internos] = seccionesDelFormulario({ ...SECCIONES, camionesInternos: 'abc', vueltasInternos: '4' });
     expect(vueltasDeSeccion(internos)).toBe(0);
+  });
+});
+
+describe('ReporteDiarioView · catálogos y operadores reales', () => {
+  it('lista las plantas y empresas del catálogo y solo los operadores con tarjeta abierta', () => {
+    render(<ReporteDiarioView />);
+
+    expect(screen.getByLabelText('Producto de P.P.1')).toBeTruthy();
+    expect(screen.getByLabelText('Producto de Planta P.P.E')).toBeTruthy();
+    expect(screen.getByText('Hyd')).toBeTruthy();
+    expect(screen.getByText('Sijam')).toBeTruthy();
+    expect(screen.queryByText('Spence')).toBeNull();
+    expect(screen.getByText('Patricio Rojas')).toBeTruthy();
+    expect(screen.queryByText('Marcelo Soto')).toBeNull();
   });
 });
 

@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'luc
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useEmpresasExternas, usePlantas } from '../hooks/useReporteDiario';
+import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
 import { enteroOCero, seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { diferencias } from '../lib/cambios';
@@ -53,42 +55,11 @@ import {
 
 // --- Datos de ejemplo. Salen de la especificación, no son inventados. -------
 
-/** Las diez plantas y apoyos. Catálogo administrable según R7, no constante. */
-const PLANTAS = [
-  'P.P.1',
-  'P.P.2',
-  'P.R.2',
-  'P.P.4',
-  'P.R.4',
-  'Apoyo piso Mina-Puerto',
-  'Apoyo piso externos',
-  'Producto Camino',
-  'Producto Fino',
-  'Planta P.P.E',
-];
-
-/** Las cuatro que nombró el cliente. RT y Spence están en duda (Q8). */
-const EMPRESAS = ['Hyd', 'Casa Blanca', 'Coseducam', 'Sijam'];
-const EMPRESAS_EN_DUDA = ['RT', 'Spence'];
-
 const TRASPASOS = [
   { clave: 'internos', label: 'Equipos internos', detalle: 'Sal y rechazos dentro de faena' },
   { clave: 'externos', label: 'Equipos externos', detalle: 'Contratistas que cargan para otras faenas' },
   { clave: 'minaPuerto', label: 'Equipos Mina-Puerto', detalle: 'Bajan material hasta el puerto' },
 ] as const;
-
-/**
- * Operadores del turno. En el sistema real salen del Registro de equipo; los
- * de ejemplo calcan las tarjetas abiertas de esa pantalla, con códigos de la
- * flota REAL (el seed) — no equipos inventados que el administrador no tiene.
- */
-const OPERADORES_DEL_TURNO = [
-  { nombre: 'Patricio Rojas', equipo: 'CG-002' },
-  { nombre: 'Marcelo Soto', equipo: 'EX-001' },
-  { nombre: 'Cristian Araya', equipo: 'CM-006' },
-  { nombre: 'Héctor Villalobos', equipo: 'CN-007' },
-  { nombre: 'Felipe Gallardo', equipo: 'MB-008' },
-];
 
 /**
  * Lo que el supervisor escribió en un turno ya enviado. Los totales NO se
@@ -124,7 +95,7 @@ interface ReporteAnterior extends ContenidoReporte {
   supervisor: string;
 }
 
-/** Quién firmó los turnos de ejemplo: el supervisor real de cada turno. En el sistema real viene del reporte. */
+/** Quién firmó los turnos de ejemplo del historial (Task 11 lo reemplaza por el del reporte). */
 const SUPERVISOR_DE_EJEMPLO: Record<Turno, string> = {
   DIURNO: 'Limbert Villacorta',
   NOCTURNO: 'José Pérez',
@@ -408,6 +379,22 @@ export function ReporteDiarioView() {
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
+  // Catálogos y operadores reales. Mientras cargan (o si fallan) las listas
+  // quedan vacías y la pantalla sigue renderizando.
+  const { data: plantasCatalogo } = usePlantas();
+  const { data: empresasCatalogo } = useEmpresasExternas();
+  const { data: tarjetas } = useShiftCardsMine();
+  const plantas = useMemo(() => plantasCatalogo ?? [], [plantasCatalogo]);
+  const empresasExternas = useMemo(() => empresasCatalogo ?? [], [empresasCatalogo]);
+  /** Tarjetas abiertas (sin salida registrada): quién opera qué equipo ahora. */
+  const operadoresDelTurno = useMemo(
+    () =>
+      (tarjetas ?? [])
+        .filter((c) => c.closedAt == null)
+        .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode })),
+    [tarjetas],
+  );
+
   /** Lo escrito en los turnos anteriores; es estado porque se puede corregir. */
   const [contenidos, setContenidos] = useState(CONTENIDO_ANTERIORES);
 
@@ -440,7 +427,7 @@ export function ReporteDiarioView() {
       personal: r.personal.map(([, nombre]) => nombre),
       secciones: r.secciones.map((s) => ({ camiones: formatDecimalInput(s.camiones), vueltas: formatDecimalInput(s.vueltas) })),
       tolvas: r.tolvas.map((cargas) => formatDecimalInput(cargas)),
-      plantas: Object.fromEntries(PLANTAS.map((p) => [p, r.plantas.find(([nombre]) => nombre === p)?.[1] ?? ''])),
+      plantas: Object.fromEntries(plantas.map(({ nombre: p }) => [p, r.plantas.find(([nombre]) => nombre === p)?.[1] ?? ''])),
       traspasos: r.traspasos.map(([, v]) => v),
       empresas: r.empresas,
     });
@@ -463,9 +450,9 @@ export function ReporteDiarioView() {
         vueltas: enteroOCero(edicion.secciones[i].vueltas),
       })),
       tolvas: edicion.tolvas.map((tolva) => enteroOCero(tolva)),
-      plantas: PLANTAS.filter((p) => edicion.plantas[p].trim()).map((p) => [p, edicion.plantas[p].trim()]),
+      plantas: plantas.map((x) => x.nombre).filter((p) => edicion.plantas[p]?.trim()).map((p) => [p, edicion.plantas[p].trim()]),
       traspasos: r.traspasos.map(([label], i) => [label, edicion.traspasos[i].trim()]),
-      empresas: [...EMPRESAS, ...EMPRESAS_EN_DUDA].filter((e) => edicion.empresas.includes(e)),
+      empresas: empresasExternas.map((e) => e.nombre).filter((e) => edicion.empresas.includes(e)),
     };
     const productoDe = (c: ContenidoReporte, p: string) => c.plantas.find(([n]) => n === p)?.[1] ?? '';
     const cambios = diferencias([
@@ -485,7 +472,7 @@ export function ReporteDiarioView() {
         antes: String(v),
         despues: String(nuevo.tolvas[i]),
       })),
-      ...PLANTAS.map((p) => ({ field: `plantas.${p}`, label: `Planta ${p}`, antes: productoDe(r, p), despues: productoDe(nuevo, p) })),
+      ...plantas.map(({ nombre: p }) => ({ field: `plantas.${p}`, label: `Planta ${p}`, antes: productoDe(r, p), despues: productoDe(nuevo, p) })),
       ...r.traspasos.map(([label, v], i) => ({ field: `traspasos.${i}`, label, antes: v, despues: nuevo.traspasos[i][1] })),
       { field: 'empresas', label: 'Empresas externas', antes: r.empresas.join(', '), despues: nuevo.empresas.join(', ') },
     ]);
@@ -510,25 +497,11 @@ export function ReporteDiarioView() {
     hse: 'Daniela Figueroa',
     asistentePlanta: 'Javiera Morales',
   });
-  const [productos, setProductos] = useState<string[]>([
-    'Sal gruesa granel',
-    'Sal fina',
-    'Rechazo a acopio',
-    'Sal gruesa granel',
-    '',
-    'Carga directa a camión puerto',
-    'Carguío a contratistas',
-    'Sal para camino',
-    'Fino a silo 2',
-    '',
-  ]);
+  /** plantaId → producto escrito; vacío si no operó en el turno. */
+  const [productos, setProductos] = useState<Record<string, string>>({});
   const [traspasos, setTraspasos] = useState({ internos: '3', externos: '2', minaPuerto: '5' });
-  const [empresas, setEmpresas] = useState<Record<string, boolean>>({
-    Hyd: true,
-    'Casa Blanca': true,
-    Coseducam: false,
-    Sijam: true,
-  });
+  /** empresaId → trabajó en el turno. */
+  const [empresas, setEmpresas] = useState<Record<string, boolean>>({});
   const [prod, setProd] = useState({
     camionesInternos: '5',
     vueltasInternos: '5',
@@ -590,8 +563,8 @@ export function ReporteDiarioView() {
               </em>
             </Label>
             <div className="flex flex-wrap gap-1.5">
-              {OPERADORES_DEL_TURNO.map((o) => (
-                <span key={o.equipo} className="inline-flex items-center gap-2 rounded-xl bg-muted px-2.5 py-1.5 text-sm font-medium">
+              {operadoresDelTurno.map((o) => (
+                <span key={o.id} className="inline-flex items-center gap-2 rounded-xl bg-muted px-2.5 py-1.5 text-sm font-medium">
                   {o.nombre}
                   <b className="tabular text-[12.5px] font-semibold text-muted-foreground">{o.equipo}</b>
                 </span>
@@ -608,16 +581,16 @@ export function ReporteDiarioView() {
           bajada="Una línea por planta. El producto se escribe libre, sin catálogo."
         />
         <div className="flex flex-col gap-2">
-          {PLANTAS.map((planta, i) => (
-            <div key={planta} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
-              <span className="tabular text-sm leading-tight font-semibold">{planta}</span>
+          {plantas.map((planta) => (
+            <div key={planta.id} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
+              <span className="tabular text-sm leading-tight font-semibold">{planta.nombre}</span>
               <Input
-                aria-label={`Producto de ${planta}`}
-                value={productos[i]}
+                aria-label={`Producto de ${planta.nombre}`}
+                value={productos[planta.id] ?? ''}
                 placeholder="Sin operación en el turno"
                 className="!h-12 !text-[15px]"
                 onChange={(e) =>
-                  setProductos((p) => p.map((v, j) => (j === i ? e.target.value : v)))
+                  setProductos((p) => ({ ...p, [planta.id]: e.target.value }))
                 }
               />
             </div>
@@ -653,18 +626,12 @@ export function ReporteDiarioView() {
       <Card>
         <CardHead titulo="Empresas externas del turno" bajada="Marca las contratistas que trabajaron hoy." />
         <div className="flex flex-wrap gap-2">
-          {[...EMPRESAS, ...EMPRESAS_EN_DUDA].map((e) => (
-            <ChipSeleccion key={e} activo={!!empresas[e]} onToggle={() => setEmpresas((v) => ({ ...v, [e]: !v[e] }))}>
-              {e}
+          {empresasExternas.map((e) => (
+            <ChipSeleccion key={e.id} activo={!!empresas[e.id]} onToggle={() => setEmpresas((v) => ({ ...v, [e.id]: !v[e.id] }))}>
+              {e.nombre}
             </ChipSeleccion>
           ))}
         </div>
-        <Hint>
-          <span className="mt-2.5 block">
-            RT y Spence se nombraron cargando en Kainita, pero no están en el listado que dio el
-            cliente. Confirmar si entran acá o son otra categoría.
-          </span>
-        </Hint>
       </Card>
 
       <Card>
@@ -904,14 +871,14 @@ export function ReporteDiarioView() {
 
       <div className="flex flex-col gap-2">
         <GrupoHead titulo="Operaciones en planta" />
-        {PLANTAS.map((p) => (
-          <div key={p} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
+        {plantas.map(({ id, nombre: p }) => (
+          <div key={id} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
             <span className="tabular text-sm leading-tight font-semibold">{p}</span>
             <Input
               aria-label={`Producto de ${p}`}
               className="!h-12 !text-[15px]"
               placeholder="Sin operación en el turno"
-              value={edicion.plantas[p]}
+              value={edicion.plantas[p] ?? ''}
               onChange={(ev) => editar((b) => ({ ...b, plantas: { ...b.plantas, [p]: ev.target.value } }))}
             />
           </div>
@@ -937,9 +904,9 @@ export function ReporteDiarioView() {
       <div className="flex flex-col gap-2">
         <GrupoHead titulo="Empresas externas" />
         <div className="flex flex-wrap gap-2">
-          {[...EMPRESAS, ...EMPRESAS_EN_DUDA].map((e) => (
+          {empresasExternas.map(({ id, nombre: e }) => (
             <ChipSeleccion
-              key={e}
+              key={id}
               activo={edicion.empresas.includes(e)}
               onToggle={() =>
                 editar((b) => ({
