@@ -277,16 +277,19 @@ export function ReporteDiarioView() {
       personal: r.personal.map(([, nombre]) => nombre),
       secciones: r.secciones.map((s) => ({ camiones: formatDecimalInput(s.camiones), vueltas: formatDecimalInput(s.vueltas) })),
       tolvas: r.tolvas.map((cargas) => formatDecimalInput(cargas)),
-      // Por id. Se parte de los productos del reporte (incluye plantas ya
-      // inactivas, que el PATCH reemplaza y no hay que perder) y se completa con el catálogo.
-      plantas: {
-        ...Object.fromEntries(plantas.map((p) => [p.id, ''])),
-        ...r.productosPorPlantaId,
-      },
+      // Por id y solo del catálogo activo: el servidor rechaza con 400 una
+      // planta o empresa inactiva, así que las que ya no lo están se quitan.
+      plantas: Object.fromEntries(plantas.map((p) => [p.id, r.productosPorPlantaId[p.id] ?? ''])),
       traspasos: r.traspasos.map(([, v]) => v),
-      empresas: r.empresaIds,
+      empresas: r.empresaIds.filter((id) => empresasExternas.some((e) => e.id === id)),
     });
   };
+
+  /** Nombres de las plantas y empresas del reporte que ya no están en el catálogo activo. */
+  const inactivasDe = (r: ReporteAnterior): string[] => [
+    ...r.plantaIds.flatMap((id, i) => (plantas.some((p) => p.id === id) ? [] : [r.plantas[i][0]])),
+    ...r.empresaIds.flatMap((id, i) => (empresasExternas.some((e) => e.id === id) ? [] : [r.empresas[i]])),
+  ];
 
   /** Arma el PATCH con los bloques editados y lo manda por la cola. */
   const guardarEdicion = (r: ReporteAnterior, b: BorradorReporte) => {
@@ -668,6 +671,9 @@ export function ReporteDiarioView() {
   const vistaEdicion = detalle && edicion && (
     <div className="flex flex-col gap-4">
       <AvisoEdicion />
+      {inactivasDe(detalle).map((nombre) => (
+        <Hint key={nombre}>{nombre} ya no está activa y se quitará al guardar.</Hint>
+      ))}
 
       <div className="flex flex-col gap-2">
         <GrupoHead titulo="Personal del turno" />

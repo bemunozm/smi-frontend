@@ -91,7 +91,9 @@ export interface ReporteAnterior extends ContenidoReporte {
   id: string;
   /** plantaId → producto, para precargar la corrección por id (nunca por nombre). */
   productosPorPlantaId: Record<string, string>;
-  /** Ids de las empresas externas del turno. */
+  /** Ids de las plantas de `plantas`, en el mismo orden. */
+  plantaIds: string[];
+  /** Ids de las empresas externas del turno, en el orden de `empresas`. */
   empresaIds: string[];
   /** Tipo de cada fila de `traspasos`, en el mismo orden. */
   traspasoTipos: string[];
@@ -110,6 +112,7 @@ export function aReporteAnterior(r: ReporteDiario): ReporteAnterior {
   return {
     id: r.id,
     productosPorPlantaId: Object.fromEntries(r.plantas.map((p) => [p.plantaId, p.producto])),
+    plantaIds: r.plantas.map((p) => p.plantaId),
     empresaIds: r.empresas.map((e) => e.empresaId),
     traspasoTipos: r.traspasos.map((t) => t.tipo),
     // `fecha` puede venir como ISO completo: se toma el día y se arma en local

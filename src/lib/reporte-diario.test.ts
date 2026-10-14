@@ -51,6 +51,7 @@ describe('aReporteAnterior', () => {
   it('conserva los ids de plantas y empresas y el tipo de cada traspaso', () => {
     const r = aReporteAnterior(base);
     expect(r.productosPorPlantaId).toEqual({ p1: 'Sal fina' });
+    expect(r.plantaIds).toEqual(['p1']);
     expect(r.empresaIds).toEqual(['e1']);
     expect(r.traspasoTipos).toEqual(['MINA_PUERTO']);
   });

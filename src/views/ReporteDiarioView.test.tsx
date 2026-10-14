@@ -30,7 +30,10 @@ const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE, EDIT_
         { seccion: 'MINERAS', camiones: 34, vueltasPorCamion: 1 },
       ],
       tolvas: [{ tolva: 1, cargas: 1 }, { tolva: 2, cargas: 2 }, { tolva: 3, cargas: 3 }],
-      plantas: [{ plantaId: 'pl1', producto: 'Rechazo a acopio', planta: { nombre: 'P.R.2' } }],
+      plantas: [
+        { plantaId: 'pl1', producto: 'Rechazo a acopio', planta: { nombre: 'P.R.2' } },
+        { plantaId: 'pl-vieja', producto: 'Sal vieja', planta: { nombre: 'Planta Antigua' } },
+      ],
       traspasos: [{ tipo: 'INTERNOS', cantidad: 3 }],
       empresas: [{ empresaId: 'em1', empresa: { nombre: 'Hyd' } }],
       personal: [{ rol: 'Jefe de turno transporte', nombre: 'Nelson Cáceres', orden: 0 }],
@@ -388,6 +391,7 @@ describe('ReporteDiarioView · corregir un reporte enviado', () => {
     expect(EDIT_MUTATE).toHaveBeenCalledTimes(1);
     const [{ id, body }, opciones] = EDIT_MUTATE.mock.calls[0];
     expect(id).toBe('r-noche');
+    expect(ventana.getByText('Planta Antigua ya no está activa y se quitará al guardar.')).toBeTruthy();
     expect(body.plantas).toEqual([
       { plantaId: 'pl1', producto: 'Sal gruesa' },
       { plantaId: 'pl2', producto: 'Maxisacos' },
