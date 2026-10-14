@@ -47,4 +47,11 @@ describe('aReporteAnterior', () => {
     expect(r.empresas).toEqual(['Hyd']);
     expect(r.personal).toEqual([['HSE', 'Dani']]);
   });
+
+  it('conserva los ids de plantas y empresas y el tipo de cada traspaso', () => {
+    const r = aReporteAnterior(base);
+    expect(r.productosPorPlantaId).toEqual({ p1: 'Sal fina' });
+    expect(r.empresaIds).toEqual(['e1']);
+    expect(r.traspasoTipos).toEqual(['MINA_PUERTO']);
+  });
 });

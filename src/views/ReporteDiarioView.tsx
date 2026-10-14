@@ -7,8 +7,10 @@ import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import {
   useCreateReporteDiario,
+  useEditReporteDiario,
   useEmpresasExternas,
   usePlantas,
+  useReporteCambios,
   useReportesDiarios,
 } from '../hooks/useReporteDiario';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
@@ -21,7 +23,7 @@ import {
   type ReporteAnterior,
 } from '../lib/reporte-diario';
 import { toDateOnly } from '../lib/turno';
-import { SECCIONES, type CreateReporteDiarioInput } from '../types/reporte-diario';
+import { SECCIONES, type CreateReporteDiarioInput, type EditReporteDiarioBody } from '../types/reporte-diario';
 import {
   AvisoEdicion,
   Boton,
@@ -57,8 +59,9 @@ import {
  * queda guardado en el equipo y se envía solo). El historial lista los reportes
  * de la última semana que devuelve el servidor.
  *
- * Pendiente: la corrección de un reporte ya enviado todavía no está conectada
- * (su botón queda deshabilitado); la cablea la tarea del PATCH.
+ * Corregir un reporte enviado manda un PATCH por la cola con los bloques
+ * editados (plantas y empresas por id, nunca por nombre); el historial de
+ * cambios lo registra y lo devuelve el servidor.
  */
 
 // --- Datos de ejemplo. Salen de la especificación, no son inventados. -------
@@ -74,9 +77,10 @@ interface BorradorReporte {
   personal: string[];
   secciones: { camiones: string; vueltas: string }[];
   tolvas: string[];
-  /** Planta → producto; vacío si no operó en el turno. */
+  /** plantaId → producto; vacío si no operó en el turno. */
   plantas: Record<string, string>;
   traspasos: string[];
+  /** Ids de las empresas externas que trabajaron. */
   empresas: string[];
 }
 
@@ -254,6 +258,8 @@ export function ReporteDiarioView() {
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleIdx, setDetalleIdx] = useState<number | null>(null);
   const detalle = detalleIdx == null ? null : (anteriores[detalleIdx] ?? null);
+  const { data: cambios, isLoading: cargandoCambios } = useReporteCambios(detalle?.id ?? null);
+  const editarReporte = useEditReporteDiario();
   /** Borrador de la corrección del reporte abierto; null si no se edita. */
   const [edicion, setEdicion] = useState<BorradorReporte | null>(null);
   const [avisoGuardado, setAvisoGuardado] = useState(false);
@@ -271,10 +277,45 @@ export function ReporteDiarioView() {
       personal: r.personal.map(([, nombre]) => nombre),
       secciones: r.secciones.map((s) => ({ camiones: formatDecimalInput(s.camiones), vueltas: formatDecimalInput(s.vueltas) })),
       tolvas: r.tolvas.map((cargas) => formatDecimalInput(cargas)),
-      plantas: Object.fromEntries(plantas.map(({ nombre: p }) => [p, r.plantas.find(([nombre]) => nombre === p)?.[1] ?? ''])),
+      // Por id. Se parte de los productos del reporte (incluye plantas ya
+      // inactivas, que el PATCH reemplaza y no hay que perder) y se completa con el catálogo.
+      plantas: {
+        ...Object.fromEntries(plantas.map((p) => [p.id, ''])),
+        ...r.productosPorPlantaId,
+      },
       traspasos: r.traspasos.map(([, v]) => v),
-      empresas: r.empresas,
+      empresas: r.empresaIds,
     });
+  };
+
+  /** Arma el PATCH con los bloques editados y lo manda por la cola. */
+  const guardarEdicion = (r: ReporteAnterior, b: BorradorReporte) => {
+    const n = (v: string) => enteroOCero(v);
+    const body: EditReporteDiarioBody = {
+      produccion: SECCIONES.map((seccion, i) => ({
+        seccion,
+        camiones: n(b.secciones[i].camiones),
+        vueltasPorCamion: n(b.secciones[i].vueltas),
+      })),
+      tolvas: b.tolvas.map((v, i) => ({ tolva: i + 1, cargas: n(v) })),
+      plantas: Object.entries(b.plantas)
+        .map(([plantaId, producto]) => ({ plantaId, producto: producto.trim() }))
+        .filter((p) => p.producto !== ''),
+      traspasos: b.traspasos.map((v, i) => ({ tipo: r.traspasoTipos[i], cantidad: n(v) })),
+      empresaIds: b.empresas,
+      personal: r.personal
+        .map(([rol], i) => ({ rol, nombre: b.personal[i].trim() }))
+        .filter((p) => p.nombre !== ''),
+    };
+    editarReporte.mutate(
+      { id: r.id, body },
+      {
+        onSuccess: () => {
+          setEdicion(null);
+          setAvisoGuardado(true);
+        },
+      },
+    );
   };
 
   const [personal, setPersonal] = useState({
@@ -329,7 +370,9 @@ export function ReporteDiarioView() {
         .filter((p) => p.producto !== ''),
       traspasos: TRASPASOS.map((t) => ({ tipo: TRASPASO_TIPO[t.clave], cantidad: n(traspasos[t.clave]) })),
       empresaIds: empresasExternas.filter((e) => empresas[e.id]).map((e) => e.id),
-      personal: PERSONAL.map(([clave, rol]) => ({ rol, nombre: personal[clave].trim() })),
+      personal: PERSONAL.map(([clave, rol]) => ({ rol, nombre: personal[clave].trim() })).filter(
+        (p) => p.nombre !== '',
+      ),
     };
     crear.mutate(input);
   };
@@ -616,6 +659,12 @@ export function ReporteDiarioView() {
    * Corregir un reporte ya enviado: los mismos bloques del formulario
    * del turno, con lo que se envió, y el aviso al administrador arriba.
    */
+  const hayErrorEnEdicion =
+    edicion != null &&
+    [...edicion.secciones.flatMap((s) => [s.camiones, s.vueltas]), ...edicion.tolvas, ...edicion.traspasos].some((v) =>
+      errorDeEntero(v),
+    );
+
   const vistaEdicion = detalle && edicion && (
     <div className="flex flex-col gap-4">
       <AvisoEdicion />
@@ -689,8 +738,8 @@ export function ReporteDiarioView() {
               aria-label={`Producto de ${p}`}
               className="!h-12 !text-[15px]"
               placeholder="Sin operación en el turno"
-              value={edicion.plantas[p] ?? ''}
-              onChange={(ev) => editar((b) => ({ ...b, plantas: { ...b.plantas, [p]: ev.target.value } }))}
+              value={edicion.plantas[id] ?? ''}
+              onChange={(ev) => editar((b) => ({ ...b, plantas: { ...b.plantas, [id]: ev.target.value } }))}
             />
           </div>
         ))}
@@ -718,11 +767,11 @@ export function ReporteDiarioView() {
           {empresasExternas.map(({ id, nombre: e }) => (
             <ChipSeleccion
               key={id}
-              activo={edicion.empresas.includes(e)}
+              activo={edicion.empresas.includes(id)}
               onToggle={() =>
                 editar((b) => ({
                   ...b,
-                  empresas: b.empresas.includes(e) ? b.empresas.filter((x) => x !== e) : [...b.empresas, e],
+                  empresas: b.empresas.includes(id) ? b.empresas.filter((x) => x !== id) : [...b.empresas, id],
                 }))
               }
             >
@@ -732,8 +781,11 @@ export function ReporteDiarioView() {
         </div>
       </div>
 
-      {/* Task 12 conecta el guardado al PATCH del reporte. */}
-      <Boton ancho disabled>
+      <Boton
+        ancho
+        disabled={editarReporte.isPending || hayErrorEnEdicion}
+        onClick={() => guardarEdicion(detalle, edicion)}
+      >
         Guardar cambios <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       <Boton variante="contorno" ancho onClick={() => setEdicion(null)}>
@@ -748,8 +800,7 @@ export function ReporteDiarioView() {
         <Boton variante="contorno" onClick={() => abrirDetalle(null)}>
           <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
         </Boton>
-        {/* Deshabilitado hasta que la corrección se conecte al servidor. */}
-        <Boton variante="contorno" disabled onClick={() => abrirEdicion(detalle)}>
+        <Boton variante="contorno" onClick={() => abrirEdicion(detalle)}>
           <Pencil className="h-[17px] w-[17px]" /> Editar
         </Boton>
       </div>
@@ -805,7 +856,7 @@ export function ReporteDiarioView() {
         </div>
       </div>
 
-      <HistorialCambios entradas={detalle.cambios ?? []} />
+      <HistorialCambios entradas={cambios ?? []} cargando={cargandoCambios} />
     </div>
   );
 

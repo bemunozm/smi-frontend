@@ -26,6 +26,8 @@ vi.mock('../hooks/useReporteDiario', () => ({
   useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
   useReportesDiarios: () => ({ data: [] }),
   useCreateReporteDiario: () => ({ mutate: () => {}, isPending: false }),
+  useEditReporteDiario: () => ({ mutate: () => {}, isPending: false }),
+  useReporteCambios: () => ({ data: undefined, isLoading: false }),
 }));
 vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),

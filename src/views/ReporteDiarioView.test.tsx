@@ -1,8 +1,19 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, within, act } from '@testing-library/react';
 
-const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE } = vi.hoisted(() => ({
+const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE, EDIT_MUTATE, CAMBIOS_MOCK, CAMBIOS_HOOK } =
+  vi.hoisted(() => ({
   MUTATE: vi.fn(),
+  EDIT_MUTATE: vi.fn(),
+  CAMBIOS_MOCK: [
+    {
+      id: 'c1',
+      userName: 'Ana Soto',
+      createdAt: '2026-09-23T15:00:00.000Z',
+      changes: [{ field: 'camiones', label: 'Camiones', before: '5', after: '8' }],
+    },
+  ],
+  CAMBIOS_HOOK: vi.fn(),
   REPORTES_MOCK: [
     {
       id: 'r-noche',
@@ -59,6 +70,11 @@ vi.mock('../hooks/useReporteDiario', () => ({
   useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
   useReportesDiarios: () => ({ data: REPORTES_MOCK }),
   useCreateReporteDiario: () => ({ mutate: MUTATE, isPending: false }),
+  useEditReporteDiario: () => ({ mutate: EDIT_MUTATE, isPending: false }),
+  useReporteCambios: (id: string | null) => {
+    CAMBIOS_HOOK(id);
+    return { data: id ? CAMBIOS_MOCK : undefined, isLoading: false };
+  },
 }));
 vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
@@ -333,24 +349,59 @@ describe('ReporteDiarioView · historial en ventana', () => {
   });
 });
 
-/**
- * La corrección de un reporte enviado la conecta al PATCH la tarea siguiente:
- * mientras tanto el botón queda deshabilitado, sin romper el detalle real.
- */
 describe('ReporteDiarioView · corregir un reporte enviado', () => {
   beforeEach(() => {
+    EDIT_MUTATE.mockClear();
+    CAMBIOS_HOOK.mockClear();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
   });
   afterEach(() => vi.useRealTimers());
 
-  it('el detalle de un reporte real se abre y su botón Editar está deshabilitado', () => {
+  const abrirDetalle = () => {
     render(<ReporteDiarioView />);
     fireEvent.click(screen.getByText('Ver historial de reportes'));
     fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
+    return within(screen.getByRole('dialog'));
+  };
 
-    const ventana = within(screen.getByRole('dialog'));
-    expect((ventana.getByRole('button', { name: /Editar/ }) as HTMLButtonElement).disabled).toBe(true);
+  it('el historial de cambios sale del servidor para el reporte abierto', () => {
+    const ventana = abrirDetalle();
+
+    expect(CAMBIOS_HOOK).toHaveBeenLastCalledWith('r-noche');
+    expect(ventana.getByText('Ana Soto')).toBeTruthy();
+    expect(ventana.getByText('Camiones')).toBeTruthy();
+  });
+
+  it('guarda la corrección por id: plantas y empresas con id, personal sin nombres vacíos', () => {
+    const ventana = abrirDetalle();
+    fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
+
+    const producto = ventana.getByLabelText('Producto de P.P.1') as HTMLInputElement;
+    expect(producto.value).toBe('Rechazo a acopio');
+    fireEvent.change(producto, { target: { value: 'Sal gruesa' } });
+    fireEvent.change(ventana.getByLabelText('Producto de Planta P.P.E'), { target: { value: 'Maxisacos' } });
+    fireEvent.click(ventana.getByText('Sijam'));
+    fireEvent.change(ventana.getByDisplayValue('Nelson Cáceres'), { target: { value: '  ' } });
+    fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
+
+    expect(EDIT_MUTATE).toHaveBeenCalledTimes(1);
+    const [{ id, body }, opciones] = EDIT_MUTATE.mock.calls[0];
+    expect(id).toBe('r-noche');
+    expect(body.plantas).toEqual([
+      { plantaId: 'pl1', producto: 'Sal gruesa' },
+      { plantaId: 'pl2', producto: 'Maxisacos' },
+    ]);
+    expect(body.empresaIds).toEqual(['em1', 'em2']);
+    expect(body.personal).toEqual([]);
+    expect(body.traspasos).toEqual([{ tipo: 'INTERNOS', cantidad: 3 }]);
+    expect(body.produccion[1]).toEqual({ seccion: 'MINA_CALETA', camiones: 16, vueltasPorCamion: 3 });
+    expect(body.fecha).toBeUndefined();
+    expect(body.turno).toBeUndefined();
+
+    // Al confirmarse el guardado vuelve al detalle con el aviso.
+    act(() => opciones.onSuccess());
+    expect(screen.getByText(/Cambio guardado/)).toBeTruthy();
   });
 });
 
@@ -383,5 +434,15 @@ describe('ReporteDiarioView · enviar el reporte', () => {
     expect(input.empresaIds).toEqual(['em2']);
     expect(input.traspasos.map((t: { tipo: string }) => t.tipo)).toEqual(['INTERNOS', 'EXTERNOS', 'MINA_PUERTO']);
     expect(input.personal).toHaveLength(4);
+  });
+
+  it('no manda las filas de personal con el nombre vacío', () => {
+    render(<ReporteDiarioView />);
+    fireEvent.change(screen.getByDisplayValue('Claudio Bravo'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    const { personal } = MUTATE.mock.calls[0][0];
+    expect(personal).toHaveLength(3);
+    expect(personal.map((p: { rol: string }) => p.rol)).not.toContain('Jefe de turno transporte');
   });
 });

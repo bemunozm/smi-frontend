@@ -1,6 +1,5 @@
 import { parseInteger } from './decimal';
 import { fromDateOnly, type Turno } from './turno';
-import type { EntradaCambios } from '../types/cambios';
 import {
   SECCIONES,
   SECCION_LABEL,
@@ -84,14 +83,18 @@ export interface ContenidoReporte {
   plantas: [string, string][];
   traspasos: [string, string][];
   empresas: string[];
-  /** Quién corrigió qué después de enviarlo, del más reciente al más viejo. */
-  cambios?: EntradaCambios[];
 }
 
 /** Un turno ya enviado: su contenido más a qué turno pertenece y quién firmó. */
 export interface ReporteAnterior extends ContenidoReporte {
   /** Id del reporte en el servidor: la corrección lo necesita para el PATCH. */
   id: string;
+  /** plantaId → producto, para precargar la corrección por id (nunca por nombre). */
+  productosPorPlantaId: Record<string, string>;
+  /** Ids de las empresas externas del turno. */
+  empresaIds: string[];
+  /** Tipo de cada fila de `traspasos`, en el mismo orden. */
+  traspasoTipos: string[];
   fecha: Date;
   turno: Turno;
   supervisor: string;
@@ -106,6 +109,9 @@ export function aReporteAnterior(r: ReporteDiario): ReporteAnterior {
   const porSeccion = new Map(r.produccion.map((p) => [p.seccion, p]));
   return {
     id: r.id,
+    productosPorPlantaId: Object.fromEntries(r.plantas.map((p) => [p.plantaId, p.producto])),
+    empresaIds: r.empresas.map((e) => e.empresaId),
+    traspasoTipos: r.traspasos.map((t) => t.tipo),
     // `fecha` puede venir como ISO completo: se toma el día y se arma en local
     // (`new Date('YYYY-MM-DD')` es medianoche UTC y en Chile muestra el día anterior).
     fecha: fromDateOnly(r.fecha.slice(0, 10)),
