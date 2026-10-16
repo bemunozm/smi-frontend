@@ -40,8 +40,8 @@ const BASE = {
     },
   ],
   lecturas: [
-    { internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
-    { internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
+    { id: 'c1', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
+    { id: 'c2', internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
   ],
 };
 
@@ -110,10 +110,26 @@ describe('ResumenDia', () => {
   it('una lectura en curso muestra «en curso» en Final y Avance', () => {
     mock(BASE);
     render(<ResumenDia />);
-    const fila = screen.getByTestId('lectura-CG-002-NOCTURNO');
+    const fila = screen.getByTestId('lectura-c2');
     expect(within(fila).getAllByText('en curso')).toHaveLength(2);
-    const cerrada = screen.getByTestId('lectura-CG-002-DIURNO');
+    const cerrada = screen.getByTestId('lectura-c1');
     expect(within(cerrada).queryByText('en curso')).toBeNull();
+  });
+
+  it('dos tarjetas del mismo equipo y turno renderizan ambas filas sin warning', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mock({
+      ...BASE,
+      lecturas: [
+        { id: 'a', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 102, avance: 2 },
+        { id: 'b', internalCode: 'CG-002', turno: 'DIURNO', inicial: 102, final: null, avance: null },
+      ],
+    });
+    render(<ResumenDia />);
+    expect(screen.getByTestId('lectura-a')).toBeTruthy();
+    expect(screen.getByTestId('lectura-b')).toBeTruthy();
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
   });
 
   it('muestra skeleton al cargar y error con reintento', () => {

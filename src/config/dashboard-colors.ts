@@ -139,10 +139,10 @@ export const ESTADO_HOY_NUMERO_CLASS: Record<EstadoHoy, string> = {
  * Fondos plenos de las 5 tarjetas de la portada («resumen del día»), con texto
  * blanco como la lámina del cliente. Hex literales (mismo precedente que `HEX`
  * arriba): los tokens semánticos no traen ámbar/naranjo/morado. Tonos -700 de
- * Tailwind, todos con contraste >= 4.5:1 contra blanco.
+ * Tailwind (ámbar -800), contraste >= 4.5:1 contra blanco incluso con el texto chico al 95%.
  */
 export const RESUMEN_CARD_BG = {
-  hm: '#b45309',
+  hm: '#92400e',
   diesel: '#15803d',
   reports: '#c2410c',
   produccion: '#1d4ed8',

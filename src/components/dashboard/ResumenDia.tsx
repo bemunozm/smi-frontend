@@ -215,9 +215,8 @@ function TablaLecturas({ data }: { data: ResumenDiaData }) {
                 </Table.Header>
                 <Table.Body>
                   {data.lecturas.map((l) => {
-                    const clave = `${l.internalCode}-${l.turno}`;
                     return (
-                      <Table.Row data-testid={`lectura-${clave}`} id={clave} key={clave}>
+                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id}>
                         <Table.Cell className="font-mono text-sm">{l.internalCode}</Table.Cell>
                         <Table.Cell className="text-sm">{l.turno}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{NUM_CL_1.format(l.inicial)}</Table.Cell>

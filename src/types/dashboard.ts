@@ -172,6 +172,7 @@ export const ResumenDiaSchema = z.object({
   ),
   lecturas: z.array(
     z.object({
+      id: z.string(),
       internalCode: z.string(),
       turno: z.string(),
       inicial: z.number(),
