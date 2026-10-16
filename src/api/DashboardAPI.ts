@@ -4,12 +4,14 @@ import type { ApiResponse } from '../types/api';
 import {
   MantenedoresSchema,
   MetricasEquipoSchema,
+  ResumenDiaSchema,
   ResumenHoySchema,
   SupervisoresSchema,
   VueltasSchema,
   type Mantenedores,
   type MetricasEquipo,
   type RangoDashboard,
+  type ResumenDia,
   type ResumenHoy,
   type Supervisores,
   type Vueltas,
@@ -62,5 +64,14 @@ export async function getDashboardVueltas(rango: RangoDashboard): Promise<Vuelta
     return VueltasSchema.parse(res.data.data);
   } catch (error: unknown) {
     throw toDomainError(error, 'No se pudieron cargar las vueltas.');
+  }
+}
+
+export async function getDashboardResumenDia(): Promise<ResumenDia> {
+  try {
+    const res = await api.get<ApiResponse<ResumenDia>>('/api/dashboard/resumen-dia');
+    return ResumenDiaSchema.parse(res.data.data);
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cargar el resumen del día.');
   }
 }

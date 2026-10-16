@@ -134,3 +134,17 @@ export const ESTADO_HOY_NUMERO_CLASS: Record<EstadoHoy, string> = {
   DISPONIBLE: 'text-foreground',
   INOPERATIVO: 'text-danger',
 };
+
+/**
+ * Fondos plenos de las 5 tarjetas de la portada («resumen del día»), con texto
+ * blanco como la lámina del cliente. Hex literales (mismo precedente que `HEX`
+ * arriba): los tokens semánticos no traen ámbar/naranjo/morado. Tonos -700 de
+ * Tailwind, todos con contraste >= 4.5:1 contra blanco.
+ */
+export const RESUMEN_CARD_BG = {
+  hm: '#b45309',
+  diesel: '#15803d',
+  reports: '#c2410c',
+  produccion: '#1d4ed8',
+  adBlue: '#7e22ce',
+} as const;

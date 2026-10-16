@@ -142,3 +142,42 @@ export interface RangoDashboard {
   desde: string; // YYYY-MM-DD
   hasta: string;
 }
+
+/** ← `GET /api/dashboard/resumen-dia`: portada del admin ("resumen del día"). */
+const HmLitrosSchema = z.object({ hm: z.number(), litros: z.number() });
+export const ResumenDiaSchema = z.object({
+  fecha: z.string(),
+  hm: z.object({ total: z.number(), dia: z.number(), noche: z.number() }),
+  diesel: z.object({
+    total: z.number(),
+    dia: z.number(),
+    noche: z.number(),
+    porHm: z.number().nullable(),
+  }),
+  reports: z.object({
+    totalHoras: z.number(),
+    porEquipo: z.array(z.object({ internalCode: z.string(), horas: z.number() })),
+  }),
+  produccion: z.object({ internos: z.number(), minaCaleta: z.number(), mineras: z.number() }),
+  adBlue: z
+    .object({ itemId: z.string(), nombre: z.string(), stock: z.number(), unidad: z.string() })
+    .nullable(),
+  operacionPorEquipo: z.array(
+    z.object({
+      internalCode: z.string(),
+      dia: HmLitrosSchema,
+      noche: HmLitrosSchema,
+      total: HmLitrosSchema,
+    }),
+  ),
+  lecturas: z.array(
+    z.object({
+      internalCode: z.string(),
+      turno: z.string(),
+      inicial: z.number(),
+      final: z.number().nullable(),
+      avance: z.number().nullable(),
+    }),
+  ),
+});
+export type ResumenDia = z.infer<typeof ResumenDiaSchema>;

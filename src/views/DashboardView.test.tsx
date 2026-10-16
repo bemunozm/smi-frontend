@@ -24,6 +24,7 @@ vi.mock('../hooks/useInventory', () => ({
 }));
 vi.mock('../hooks/useDashboard', () => ({
   useDashboardHoy: () => hoyHook(),
+  useDashboardResumenDia: () => idle,
   useDashboardEquipos: (rango: unknown) => {
     equiposMock(rango);
     return equiposHook();

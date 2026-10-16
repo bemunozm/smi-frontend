@@ -38,6 +38,8 @@ import { SECCION_LABEL } from '../types/reporte-diario';
 import type { MetricasEquipo, RangoDashboard } from '../types/dashboard';
 import { mantencionesProximas } from '../lib/mantenciones-proximas';
 import { FranjaHoy } from '../components/dashboard/FranjaHoy';
+import { ResumenDia } from '../components/dashboard/ResumenDia';
+import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
 import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
 
 /**
@@ -125,9 +127,6 @@ function formatFecha(iso: string): string {
     date,
   );
 }
-
-/** Un decimal máximo, estilo es-CL (miles con punto, decimales con coma). */
-const NUM_CL_1 = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
 
 function formatHoras(horas: number): string {
   return `${NUM_CL_1.format(horas)} h`;
@@ -454,8 +453,6 @@ function HallazgosRecientesSection() {
 // próximos a mantenimiento y tendencia de hallazgos.
 // ---------------------------------------------------------------------------
 
-const NUM_CL = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 });
-
 /** L/h; null (sin horas) o no finito se muestra «—», nunca NaN/Infinity. */
 function formatRendimiento(rendimiento: number | null): string {
   return rendimiento !== null && Number.isFinite(rendimiento) ? `${NUM_CL_1.format(rendimiento)} L/h` : '—';
@@ -463,12 +460,6 @@ function formatRendimiento(rendimiento: number | null): string {
 
 function formatLitros(litros: number): string {
   return `${NUM_CL.format(litros)} L`;
-}
-
-/** `2026-10-02` → `02/10` sin pasar por Date (evita corrimientos de zona horaria). */
-function formatDia(fecha: string): string {
-  const [, mes, dia] = fecha.split('-');
-  return mes && dia ? `${dia}/${mes}` : fecha;
 }
 
 /** KPIs del rango con los mismos criterios del backend: L/h = litros totales / horas totales. */
@@ -1022,6 +1013,8 @@ export function DashboardView() {
           </label>
         </div>
       </div>
+
+      <ResumenDia />
 
       <FranjaHoy />
 

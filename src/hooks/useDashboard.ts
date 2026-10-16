@@ -5,6 +5,7 @@ import {
   getDashboardEquipos,
   getDashboardHoy,
   getDashboardMantenedores,
+  getDashboardResumenDia,
   getDashboardSupervisores,
   getDashboardVueltas,
 } from '../api/DashboardAPI';
@@ -104,5 +105,15 @@ export function useDashboardVueltas(rango: RangoDashboard) {
   return useQuery({
     queryKey: [...DASHBOARD_KEY, 'vueltas', rango],
     queryFn: () => getDashboardVueltas(rango),
+  });
+}
+
+/** Portada viva del admin: resumen del día, refresca solo. */
+export function useDashboardResumenDia() {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'resumen-dia'],
+    queryFn: getDashboardResumenDia,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
