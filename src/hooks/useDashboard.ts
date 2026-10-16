@@ -1,7 +1,16 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { DashboardAPI } from '../api/DashboardAPI';
+import {
+  DashboardAPI,
+  getDashboardEquipos,
+  getDashboardHoy,
+  getDashboardMantenedores,
+  getDashboardSupervisores,
+  getDashboardVueltas,
+} from '../api/DashboardAPI';
+import { DASHBOARD_KEY } from '../lib/query-keys';
+import type { RangoDashboard } from '../types/dashboard';
 import { useHallazgosList } from './useHallazgos';
 import { useTrabajosExtraList } from './useTrabajosExtra';
 import {
@@ -37,6 +46,7 @@ import {
  * agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`, así que no hace
  * falta una capa de agregación en cliente como la de Terreno.
  */
+// TODO(Task 6-8): eliminar — hook del mock de la vista anterior (sigue en uso hasta Tasks 6-8).
 export function useDashboardSummary() {
   return useQuery({
     queryKey: ['dashboard', 'summary'],
@@ -65,6 +75,7 @@ export function useHallazgosRecientes() {
   return { ...query, data };
 }
 
+// TODO(Task 6-8): eliminar — hook del mock de próximas mantenciones (sigue en uso por PreventivoView hasta Tasks 6-8).
 export function useMantencionesProximas() {
   return useQuery({
     queryKey: ['dashboard', 'mantenciones-proximas'],
@@ -97,4 +108,46 @@ export function useHorasFacturables() {
   const query = useTrabajosExtraordinariosMensual();
   const data = useMemo(() => (query.data ? sumHorasExtra(query.data) : undefined), [query.data]);
   return { ...query, data };
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard administrador: queries reales de `/api/dashboard/*` (solo lectura).
+// ---------------------------------------------------------------------------
+
+/** El semáforo de HOY refresca solo: es la franja viva del dashboard. */
+export function useDashboardHoy() {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'hoy'],
+    queryFn: getDashboardHoy,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+}
+
+export function useDashboardEquipos(rango: RangoDashboard) {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'equipos', rango],
+    queryFn: () => getDashboardEquipos(rango),
+  });
+}
+
+export function useDashboardSupervisores(rango: RangoDashboard) {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'supervisores', rango],
+    queryFn: () => getDashboardSupervisores(rango),
+  });
+}
+
+export function useDashboardMantenedores(rango: RangoDashboard) {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'mantenedores', rango],
+    queryFn: () => getDashboardMantenedores(rango),
+  });
+}
+
+export function useDashboardVueltas(rango: RangoDashboard) {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'vueltas', rango],
+    queryFn: () => getDashboardVueltas(rango),
+  });
 }

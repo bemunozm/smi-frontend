@@ -33,6 +33,11 @@ export const EMPRESAS_EXTERNAS_KEY = ['empresas-externas'] as const;
  * precarga para el arranque en frío sin señal. */
 export const HOROMETRO_KEY = ['horometro'] as const;
 
+/** Dashboard administrador (solo lectura, `hooks/useDashboard.ts`): hoy, equipos,
+ * supervisores, mantenedores y vueltas cuelgan de acá. No entra a `QUERY_KEYS`
+ * porque no hay escrituras que el outbox deba invalidar. */
+export const DASHBOARD_KEY = ['dashboard'] as const;
+
 /** Raíz del árbol de equipos; la lista sin filtros (catálogo completo) vive
  * exactamente en esta key. `offline/replay.ts` la lee para completar el
  * código de equipo de un registro sincronizado sin importar `hooks/`. */

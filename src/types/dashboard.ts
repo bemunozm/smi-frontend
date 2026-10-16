@@ -60,6 +60,7 @@ export type HallazgosPorCriticidad = z.infer<typeof HallazgosPorCriticidadSchema
  * el campo `monto` de `TrabajoExtraordinario` no existe en el modelo real,
  * solo `totalHoras`, cubierto por el gráfico de horas extraordinarias).
  */
+// TODO(Task 6-8): eliminar — schema del mock (la vista nueva usa ResumenHoySchema & co.)
 export const DashboardSummarySchema = z.object({
   /** ← Mantenimiento: motor preventivo por umbral de horómetro. */
   proximasMantenciones: z.number().int().nonnegative(),
@@ -86,6 +87,7 @@ export const HallazgoResumenSchema = z.object({
 export type HallazgoResumen = z.infer<typeof HallazgoResumenSchema>;
 
 /** ← Mantenimiento: motor preventivo, próximos equipos a umbral. */
+// TODO(Task 6-8): eliminar — schema del mock de próximas mantenciones
 export const MantencionProximaSchema = z.object({
   id: z.string(),
   equipo: z.string(),
@@ -127,12 +129,97 @@ export type TrabajoExtraordinarioMes = z.infer<typeof TrabajoExtraordinarioMesSc
  * fuera del alcance de Núcleo) y deriva el shape de salida en cliente;
  * Flota/Inventario tampoco tiene envoltura acá — usa directo las respuestas
  * ya validadas por `types/equipo.ts` / `types/inventario.ts`. */
+// TODO(Task 6-8): eliminar — envoltura del mock
 export const DashboardSummaryResponseSchema = z.object({
   data: DashboardSummarySchema,
   message: z.string(),
 });
 
+// TODO(Task 6-8): eliminar — envoltura del mock
 export const MantencionesProximasResponseSchema = z.object({
   data: z.array(MantencionProximaSchema),
   message: z.string(),
 });
+
+// ---------------------------------------------------------------------------
+// Contrato real del dashboard administrador (endpoints de smi-backend).
+// Los campos replican exactamente la respuesta de cada endpoint.
+// ---------------------------------------------------------------------------
+
+export const EstadoEquipoHoySchema = z.object({
+  equipmentId: z.string(),
+  internalCode: z.string(),
+  estado: z.enum(['EN_USO', 'DISPONIBLE', 'INOPERATIVO']),
+  operador: z.string().optional(),
+  turno: z.string().optional(),
+  supervisor: z.string().optional(),
+});
+
+export const ResumenHoySchema = z.object({
+  totales: z.object({
+    enUso: z.number().int(),
+    disponibles: z.number().int(),
+    inoperativos: z.number().int(),
+  }),
+  equipos: z.array(EstadoEquipoHoySchema),
+});
+export type ResumenHoy = z.infer<typeof ResumenHoySchema>;
+
+export const MetricasEquipoSchema = z.object({
+  equipmentId: z.string(),
+  internalCode: z.string(),
+  horas: z.number(),
+  litros: z.number(),
+  rendimiento: z.number().nullable(),
+  serieDiaria: z.array(
+    z.object({ fecha: z.string(), horas: z.number(), opero: z.boolean() }),
+  ),
+});
+export type MetricasEquipo = z.infer<typeof MetricasEquipoSchema>;
+
+export const SupervisoresSchema = z.object({
+  porTurno: z.record(
+    z.enum(['DIURNO', 'NOCTURNO']),
+    z.object({ horas: z.number(), equipos: z.number() }),
+  ),
+  porSupervisor: z.array(
+    z.object({
+      supervisorId: z.string(),
+      nombre: z.string(),
+      horas: z.number(),
+      equipos: z.number(),
+      turnos: z.number(),
+    }),
+  ),
+});
+export type Supervisores = z.infer<typeof SupervisoresSchema>;
+
+export const MantenedoresSchema = z.object({
+  total: z.object({ horas: z.number(), trabajos: z.number() }),
+  porEquipo: z.array(
+    z.object({
+      equipmentId: z.string(),
+      internalCode: z.string(),
+      horas: z.number(),
+      trabajos: z.number(),
+    }),
+  ),
+});
+export type Mantenedores = z.infer<typeof MantenedoresSchema>;
+
+export const VueltasSchema = z.object({
+  porSeccion: z.array(
+    z.object({
+      seccion: z.enum(['INTERNOS', 'MINA_CALETA', 'MINERAS']),
+      camiones: z.number().int(),
+      vueltasTotales: z.number().int(),
+      serieDiaria: z.array(z.object({ fecha: z.string(), vueltas: z.number().int() })),
+    }),
+  ),
+});
+export type Vueltas = z.infer<typeof VueltasSchema>;
+
+export interface RangoDashboard {
+  desde: string; // YYYY-MM-DD
+  hasta: string;
+}
