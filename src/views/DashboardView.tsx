@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 import {
   Area,
@@ -6,9 +6,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,9 +13,9 @@ import {
 } from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useResumenFleet } from '../hooks/useEquipment';
 import { useItems } from '../hooks/useInventory';
 import {
+  useDashboardEquipos,
   useDashboardSummary,
   useHallazgosAbiertosResumen,
   useHallazgosRecientes,
@@ -32,14 +29,13 @@ import {
   HALLAZGOS_TENDENCIA_COLOR,
   TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
-  equipmentStatusChartColor,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
-import { equipmentStatusLabel } from '../config/flota-colors';
 import { UNIT_SYMBOLS } from '../types/inventory';
-import { EQUIPMENT_STATUS } from '../types/equipment';
+import { FranjaHoy } from '../components/dashboard/FranjaHoy';
+import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -232,40 +228,6 @@ function MantencionMockKpiCards() {
   );
 }
 
-/** ← Flota (real): `useResumenFleet()` — el backend ya agrega
- * `disponibles`/`total`, no se cuenta en cliente. Query independiente: si
- * Flota cae, el resto de los KPIs sigue con normalidad. */
-function EquiposDisponiblesKpiCard() {
-  const { data, isPending, isError, error } = useResumenFleet();
-
-  if (isPending) return <KpiCardSkeleton />;
-
-  if (isError) {
-    return (
-      <Card>
-        <Card.Content className="py-6">
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar la flota.'}
-          </p>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  if (!data) return null;
-
-  const disponibilidadPct = data.total > 0 ? Math.round((data.disponibles / data.total) * 100) : 0;
-
-  return (
-    <KpiCard
-      hint={`${disponibilidadPct}% de la flota operativa`}
-      isReal
-      label="Equipos disponibles"
-      value={`${data.disponibles} / ${data.total}`}
-    />
-  );
-}
-
 /**
  * Filas (ítem × bodega) cuya existencia cruzó el mínimo DE ESA BODEGA.
  *
@@ -388,93 +350,11 @@ function HorasFacturablesKpiCard() {
 function SummaryCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <EquiposDisponiblesKpiCard />
       <MantencionMockKpiCards />
       <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />
       <HorasFacturablesKpiCard />
     </div>
-  );
-}
-
-/** Dona — composición de estados de la flota (OPERATIONAL/IN_WORKSHOP/
- * OUT_OF_SERVICE). Aporta la MEZCLA de estados que la card "Equipos
- * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
- * con el resto. Datos ← Flota, REAL: `useResumenFleet().porEstado`
- * ya viene agregado por el backend, solo se remapea a la forma que espera el
- * `Pie` (no se cuenta en cliente). */
-function FlotaComposicionSection() {
-  const { data, isPending, isError, error } = useResumenFleet();
-
-  const chartData = data
-    ? EQUIPMENT_STATUS.map((status) => ({
-        status,
-        cantidad: data.porEstado[status] ?? 0,
-        label: equipmentStatusLabel(status),
-        fill: equipmentStatusChartColor(status),
-      }))
-    : undefined;
-
-  return (
-    <Card>
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Title>Composición de la flota</Card.Title>
-          <RealDataChip />
-        </div>
-        <Card.Description>Distribución de los equipos por estado operativo.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        {isPending ? <ChartSkeleton /> : null}
-
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar la composición de la flota.'}
-          </p>
-        ) : null}
-
-        {!isPending && !isError && chartData ? (
-          <>
-            <div className="h-64 w-full">
-              <ResponsiveContainer height="100%" width="100%">
-                <PieChart>
-                  <Tooltip
-                    contentStyle={TOOLTIP_CONTENT_STYLE}
-                    formatter={(value, name) => [`${value} equipos`, name]}
-                    itemStyle={TOOLTIP_ITEM_STYLE}
-                  />
-                  <Pie
-                    cx="50%"
-                    cy="50%"
-                    data={chartData}
-                    dataKey="cantidad"
-                    innerRadius="58%"
-                    isAnimationActive={false}
-                    nameKey="label"
-                    outerRadius="85%"
-                    paddingAngle={3}
-                    stroke={CHART_NEUTRAL.surface}
-                    strokeWidth={2}
-                  >
-                    {chartData.map((entry) => (
-                      <Cell fill={entry.fill} key={entry.status} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ChartLegendRow
-              items={chartData.map((item) => ({
-                key: item.status,
-                label: item.label,
-                value: String(item.cantidad),
-                color: item.fill,
-              }))}
-            />
-          </>
-        ) : null}
-      </Card.Content>
-    </Card>
   );
 }
 
@@ -810,6 +690,12 @@ function InsumosBajoStockSection() {
 
 export function DashboardView() {
   const { user } = useCurrentUser();
+  const [mes, setMes] = useState(() => mesValue(new Date()));
+  const meses = useMemo(() => opcionesMes(), []);
+  // Rango que consumen las secciones del dashboard (Tasks 7-8).
+  const rango = useMemo(() => rangoDeMes(mes), [mes]);
+  // Precarga la query de equipos del rango para la sección de la Task 7.
+  useDashboardEquipos(rango);
 
   return (
     <div className="flex flex-col gap-6">
@@ -823,15 +709,32 @@ export function DashboardView() {
           </h1>
           <p className="text-sm text-muted-foreground">Resumen general del sistema.</p>
         </div>
-        <Chip color="warning" size="sm" variant="soft">
-          Datos parcialmente de ejemplo
-        </Chip>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Mes
+            <select
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+              onChange={(event) => setMes(event.target.value)}
+              value={mes}
+            >
+              {meses.map((opcion) => (
+                <option key={opcion.value} value={opcion.value}>
+                  {opcion.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Chip color="warning" size="sm" variant="soft">
+            Datos parcialmente de ejemplo
+          </Chip>
+        </div>
       </div>
+
+      <FranjaHoy />
 
       <SummaryCards />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FlotaComposicionSection />
         <HallazgosTendenciaSection />
         <TrabajosExtraordinariosSection />
       </div>

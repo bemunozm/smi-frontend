@@ -117,3 +117,33 @@ export function hallazgosCriticidadHint(breakdown: HallazgosPorCriticidad): stri
   }
   return parts.join(' · ');
 }
+
+/** Estados de la franja HOY: verde en uso, neutro disponible, rojo inoperativo. */
+export type EstadoHoy = 'EN_USO' | 'DISPONIBLE' | 'INOPERATIVO';
+
+const ESTADO_HOY_COLOR: Record<EstadoHoy, DashboardChipColor> = {
+  EN_USO: 'success',
+  DISPONIBLE: 'default',
+  INOPERATIVO: 'danger',
+};
+
+export function estadoHoyChipColor(estado: EstadoHoy): DashboardChipColor {
+  return ESTADO_HOY_COLOR[estado];
+}
+
+const ESTADO_HOY_LABEL: Record<EstadoHoy, string> = {
+  EN_USO: 'En uso',
+  DISPONIBLE: 'Disponible',
+  INOPERATIVO: 'Inoperativo',
+};
+
+export function estadoHoyLabel(estado: EstadoHoy): string {
+  return ESTADO_HOY_LABEL[estado];
+}
+
+/** Clases del número grande de cada contador (tokens de `index.css`). */
+export const ESTADO_HOY_NUMERO_CLASS: Record<EstadoHoy, string> = {
+  EN_USO: 'text-success',
+  DISPONIBLE: 'text-foreground',
+  INOPERATIVO: 'text-danger',
+};
