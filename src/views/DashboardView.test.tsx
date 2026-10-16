@@ -126,7 +126,7 @@ describe('DashboardView', () => {
       render(<DashboardView />);
       expect(screen.getByTestId('kpi-horas').textContent).toContain('20 h');
       expect(screen.getByTestId('kpi-litros').textContent).toContain('160 L');
-      expect(screen.getByTestId('kpi-rendimiento').textContent).toContain('8.0 L/h');
+      expect(screen.getByTestId('kpi-rendimiento').textContent).toContain('8 L/h');
     });
 
     it('muestra — en L/h con 0 horas totales, nunca NaN ni Infinity', () => {
@@ -187,6 +187,16 @@ describe('DashboardView', () => {
       expect(card.textContent).toContain('40 h');
       expect(screen.queryByTestId('mantencion-proxima-e2')).toBeNull();
       expect(screen.queryByTestId('mantencion-proxima-e3')).toBeNull();
+    });
+
+    it('sin código del equipo (fuente pendiente o con error) muestra un placeholder, nunca el UUID', () => {
+      const uuid = '3f2b8c1e-7a44-4d0e-9a51-0c6e2f9b7d10';
+      mockEquipos(undefined);
+      const status = { counter: 100, next: { milestone: 250, remaining: 10, dueAt: 250 } };
+      mockMant([{ equipmentId: uuid, unit: 'h', alertBefore: 50, status }]);
+      render(<DashboardView />);
+      expect(screen.getByTestId(`mantencion-proxima-${uuid}`).textContent).not.toContain(uuid);
+      expect(screen.getByTestId(`mantencion-proxima-${uuid}`).textContent).toContain('…');
     });
   });
 

@@ -184,7 +184,7 @@ function EquiposCercaUmbralSection() {
               className="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0"
             >
               <span className="font-mono text-sm font-semibold text-foreground">
-                {codigos.get(p.equipmentId) ?? p.equipmentId}
+                {codigos.get(p.equipmentId) ?? '…'}
               </span>
               {p.remaining > 0 ? (
                 <span className="font-mono text-sm font-semibold text-foreground">

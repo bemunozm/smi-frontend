@@ -21,7 +21,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Dashboard',
     to: '/',
-    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+    // Solo ADMIN: el dashboard consulta `/api/dashboard/*` (403 para el resto).
+    // SUPERVISOR/MANTENEDOR tienen su propio home (ver `config/home-path.ts`).
+    roles: [ROLES.ADMIN],
   },
   {
     label: 'Equipos',

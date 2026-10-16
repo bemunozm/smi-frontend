@@ -126,8 +126,11 @@ function formatFecha(iso: string): string {
   );
 }
 
+/** Un decimal máximo, estilo es-CL (miles con punto, decimales con coma). */
+const NUM_CL_1 = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
+
 function formatHoras(horas: number): string {
-  return `${Number.isInteger(horas) ? horas : horas.toFixed(1)} h`;
+  return `${NUM_CL_1.format(horas)} h`;
 }
 
 interface KpiCardProps {
@@ -271,7 +274,7 @@ function InsumosBajoMinimoKpiCard() {
 /** ← Terreno (real): `useHallazgosAbiertosResumen()` cuenta sobre
  * `GET /api/hallazgos` y desglosa por `prioridad`. Query independiente de
  * las demás KPI cards — si Terreno cae, el resto sigue mostrando sus datos
- * (reales o mock) con normalidad. */
+ * con normalidad. */
 function HallazgosAbiertosKpiCard() {
   const { data, isPending, isError, error } = useHallazgosAbiertosResumen();
 
@@ -455,7 +458,7 @@ const NUM_CL = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 });
 
 /** L/h; null (sin horas) o no finito se muestra «—», nunca NaN/Infinity. */
 function formatRendimiento(rendimiento: number | null): string {
-  return rendimiento !== null && Number.isFinite(rendimiento) ? `${rendimiento.toFixed(1)} L/h` : '—';
+  return rendimiento !== null && Number.isFinite(rendimiento) ? `${NUM_CL_1.format(rendimiento)} L/h` : '—';
 }
 
 function formatLitros(litros: number): string {
@@ -606,7 +609,7 @@ function MantencionesProximasCard({ codigos }: { codigos: Map<string, string> })
                 data-testid={`mantencion-proxima-${p.equipmentId}`}
                 key={p.equipmentId}
               >
-                <span className="font-mono text-sm text-foreground">{codigos.get(p.equipmentId) ?? p.equipmentId}</span>
+                <span className="font-mono text-sm text-foreground">{codigos.get(p.equipmentId) ?? '…'}</span>
                 <Chip className="ms-auto" color={p.remaining <= 0 ? 'danger' : 'warning'} size="sm" variant="soft">
                   {p.remaining <= 0 ? 'Toca ahora' : `${p.remaining} ${p.unit}`}
                 </Chip>
@@ -699,18 +702,20 @@ function BarrasSimples({
   xKey,
   yKey,
   altura = 'h-64',
+  tickFormatter,
 }: {
   data: object[];
   xKey: string;
   yKey: string;
   altura?: string;
+  tickFormatter?: (value: string) => string;
 }) {
   return (
     <div className={`${altura} w-full`}>
       <ResponsiveContainer height="100%" width="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-          <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickLine={false} />
+          <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
           <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
           <Tooltip
             contentStyle={TOOLTIP_CONTENT_STYLE}
@@ -892,7 +897,7 @@ function SeccionVueltas({ rango }: { rango: RangoDashboard }) {
                     </Card.Description>
                   </Card.Header>
                   <Card.Content>
-                    <BarrasSimples altura="h-32" data={sec.serieDiaria} xKey="fecha" yKey="vueltas" />
+                    <BarrasSimples altura="h-32" data={sec.serieDiaria} tickFormatter={formatDia} xKey="fecha" yKey="vueltas" />
                   </Card.Content>
                 </Card>
               ))}

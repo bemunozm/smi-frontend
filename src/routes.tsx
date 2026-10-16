@@ -63,7 +63,7 @@ export const router = createBrowserRouter([
               // sigue detrás de su propio `allowedRoles`, igual que
               // Equipos/Inventario.
               {
-                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [{ path: '/', element: <DashboardView /> }],
               },
               { path: '/perfil', element: <ProfileView /> },
