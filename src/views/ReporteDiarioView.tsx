@@ -141,6 +141,21 @@ const PERSONAL = [
 /** Tipo de traspaso que espera el servidor para cada fila del formulario. */
 const TRASPASO_TIPO = { internos: 'INTERNOS', externos: 'EXTERNOS', minaPuerto: 'MINA_PUERTO' } as const;
 
+/** El formulario arranca en blanco: ningún dato se inventa por el supervisor. */
+const PERSONAL_VACIO = { jefeMina: '', jefeTransporte: '', hse: '', asistentePlanta: '' };
+const TRASPASOS_VACIO = { internos: '', externos: '', minaPuerto: '' };
+const PROD_VACIO = {
+  camionesInternos: '',
+  vueltasInternos: '',
+  camionesMinaCaleta: '',
+  vueltasMinaCaleta: '',
+  camionesMinera: '',
+  vueltasMinera: '',
+  tolva1: '',
+  tolva2: '',
+  tolva3: '',
+};
+
 const fmt = (n: number, dec = 0) =>
   n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
@@ -225,8 +240,10 @@ export function ReporteDiarioView() {
 
   // Catálogos y operadores reales. Mientras cargan (o si fallan) las listas
   // quedan vacías y la pantalla sigue renderizando.
-  const { data: plantasCatalogo } = usePlantas();
-  const { data: empresasCatalogo } = useEmpresasExternas();
+  const { data: plantasCatalogo, isSuccess: plantasListas } = usePlantas();
+  const { data: empresasCatalogo, isSuccess: empresasListas } = useEmpresasExternas();
+  /** Editar necesita ambos catálogos: con uno vacío el borrador borraría bloques. */
+  const catalogosListos = plantasListas && empresasListas;
   const { data: tarjetas } = useShiftCardsMine();
   const plantas = useMemo(() => plantasCatalogo ?? [], [plantasCatalogo]);
   const empresasExternas = useMemo(() => empresasCatalogo ?? [], [empresasCatalogo]);
@@ -256,23 +273,29 @@ export function ReporteDiarioView() {
   );
 
   const [historialAbierto, setHistorialAbierto] = useState(false);
-  const [detalleIdx, setDetalleIdx] = useState<number | null>(null);
-  const detalle = detalleIdx == null ? null : (anteriores[detalleIdx] ?? null);
+  /** Id del reporte abierto: un índice apuntaría a otro tras un refetch. */
+  const [detalleId, setDetalleId] = useState<string | null>(null);
+  const detalle = detalleId == null ? null : (anteriores.find((r) => r.id === detalleId) ?? null);
   const { data: cambios, isLoading: cargandoCambios } = useReporteCambios(detalle?.id ?? null);
   const editarReporte = useEditReporteDiario();
   /** Borrador de la corrección del reporte abierto; null si no se edita. */
   const [edicion, setEdicion] = useState<BorradorReporte | null>(null);
-  const [avisoGuardado, setAvisoGuardado] = useState(false);
+  /** Cómo quedó la última corrección: enviada ya, o guardada en el equipo. */
+  const [avisoGuardado, setAvisoGuardado] = useState<'sent' | 'queued' | null>(null);
 
   /** Abrir o dejar un reporte siempre sale del modo edición. */
-  const abrirDetalle = (idx: number | null) => {
-    setDetalleIdx(idx);
+  const abrirDetalle = (id: string | null) => {
+    setDetalleId(id);
     setEdicion(null);
-    setAvisoGuardado(false);
+    setAvisoGuardado(null);
   };
 
+  // Si el reporte abierto desaparece tras un refetch, se cierra sin dejar un
+  // borrador colgando (los setState de render sobre el mismo componente son válidos).
+  if (detalleId != null && detalle == null) abrirDetalle(null);
+
   const abrirEdicion = (r: ReporteAnterior) => {
-    setAvisoGuardado(false);
+    setAvisoGuardado(null);
     setEdicion({
       personal: r.personal.map(([, nombre]) => nombre),
       secciones: r.secciones.map((s) => ({ camiones: formatDecimalInput(s.camiones), vueltas: formatDecimalInput(s.vueltas) })),
@@ -313,40 +336,29 @@ export function ReporteDiarioView() {
     editarReporte.mutate(
       { id: r.id, body },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setEdicion(null);
-          setAvisoGuardado(true);
+          setAvisoGuardado(result.status === 'unchanged' ? null : result.status);
         },
       },
     );
   };
 
-  const [personal, setPersonal] = useState({
-    jefeMina: 'Álvaro Henríquez',
-    jefeTransporte: 'Claudio Bravo',
-    hse: 'Daniela Figueroa',
-    asistentePlanta: 'Javiera Morales',
-  });
+  const [personal, setPersonal] = useState(PERSONAL_VACIO);
   /** plantaId → producto escrito; vacío si no operó en el turno. */
   const [productos, setProductos] = useState<Record<string, string>>({});
-  const [traspasos, setTraspasos] = useState({ internos: '3', externos: '2', minaPuerto: '5' });
+  const [traspasos, setTraspasos] = useState(TRASPASOS_VACIO);
   /** empresaId → trabajó en el turno. */
   const [empresas, setEmpresas] = useState<Record<string, boolean>>({});
-  const [prod, setProd] = useState({
-    camionesInternos: '5',
-    vueltasInternos: '5',
-    camionesMinaCaleta: '18',
-    vueltasMinaCaleta: '3',
-    camionesMinera: '38',
-    vueltasMinera: '1',
-    tolva1: '2',
-    tolva2: '2',
-    tolva3: '4',
-  });
+  const [prod, setProd] = useState(PROD_VACIO);
 
   const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
   const crear = useCreateReporteDiario();
+  /** El turno vigente ya tiene reporte en el historial de la semana. */
+  const yaReportado = (reportes ?? []).some(
+    (r) => r.fecha.slice(0, 10) === hasta && r.turno === ctx.turno,
+  );
   const hayErrorDeEntero = [
     ...Object.values(prod),
     ...Object.values(traspasos),
@@ -377,7 +389,18 @@ export function ReporteDiarioView() {
         (p) => p.nombre !== '',
       ),
     };
-    crear.mutate(input);
+    crear.mutate(input, {
+      onSuccess: (result) => {
+        // Enviado o en cola, el formulario vuelve a blanco: el turno ya quedó
+        // registrado (ver `yaReportado`) y no se debe poder reenviar.
+        if (result.status === 'unchanged') return;
+        setPersonal(PERSONAL_VACIO);
+        setProductos({});
+        setTraspasos(TRASPASOS_VACIO);
+        setEmpresas({});
+        setProd(PROD_VACIO);
+      },
+    });
   };
 
   const formulario = (
@@ -574,9 +597,16 @@ export function ReporteDiarioView() {
         </Form>
       </Card>
 
-      <Boton ancho disabled={crear.isPending || hayErrorDeEntero} onClick={enviar}>
+      <Boton ancho disabled={crear.isPending || hayErrorDeEntero || yaReportado} onClick={enviar}>
         Enviar reporte diario <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
+      {yaReportado && (
+        <Hint>
+          <span className="block text-center font-semibold">
+            El turno {ctx.turno} de hoy ya fue reportado
+          </span>
+        </Hint>
+      )}
       <Hint>
         <span className="block text-center">
           Llegará al administrador y a Sergio Torres. Sin señal queda guardado en el equipo y se envía solo.
@@ -605,9 +635,9 @@ export function ReporteDiarioView() {
         </tr>
       </thead>
       <tbody>
-        {anteriores.map((r, i) => {
+        {anteriores.map((r) => {
           return (
-            <tr key={i}>
+            <tr key={r.id}>
               <td className={`${TD} tabular`}>{fechaCompleta(r.fecha)}</td>
               <td className={TD}>{r.turno}</td>
               <td className={TD}>{r.supervisor}</td>
@@ -622,7 +652,7 @@ export function ReporteDiarioView() {
               <td className={`${TD} text-right`}>
                 <button
                   type="button"
-                  onClick={() => abrirDetalle(i)}
+                  onClick={() => abrirDetalle(r.id)}
                   className="inline-flex min-h-[38px] cursor-pointer items-center gap-1 rounded-xl bg-[var(--accent-soft)] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-[var(--accent-soft-foreground)]"
                 >
                   Ver más detalle <ChevronRight className="h-4 w-4" />
@@ -635,9 +665,9 @@ export function ReporteDiarioView() {
     </Tabla>
   ) : (
     <div className="flex flex-col gap-3">
-      {anteriores.map((r, i) => {
+      {anteriores.map((r) => {
         return (
-          <Tarjeta key={i}>
+          <Tarjeta key={r.id}>
             <div className="flex items-center justify-between gap-2">
               <b>
                 {diaMes(r.fecha)} · {r.turno}
@@ -646,7 +676,7 @@ export function ReporteDiarioView() {
             </div>
             <span className="text-[13px] text-muted-foreground">{r.supervisor}</span>
             <Cifras items={cifrasPorTipo(r.secciones)} />
-            <Boton variante="contorno" ancho onClick={() => abrirDetalle(i)}>
+            <Boton variante="contorno" ancho onClick={() => abrirDetalle(r.id)}>
               Ver más detalle <ChevronRight className="h-[18px] w-[18px]" />
             </Boton>
           </Tarjeta>
@@ -806,13 +836,16 @@ export function ReporteDiarioView() {
         <Boton variante="contorno" onClick={() => abrirDetalle(null)}>
           <ArrowLeft className="h-[18px] w-[18px]" /> Volver al historial
         </Boton>
-        <Boton variante="contorno" onClick={() => abrirEdicion(detalle)}>
+        <Boton variante="contorno" disabled={!catalogosListos} onClick={() => abrirEdicion(detalle)}>
           <Pencil className="h-[17px] w-[17px]" /> Editar
         </Boton>
       </div>
       {avisoGuardado && (
         <p className="m-0 flex items-center gap-2 rounded-2xl bg-[var(--success-soft)] px-3 py-2.5 text-[13px] font-semibold text-[var(--success-soft-foreground)]">
-          <Check className="h-4 w-4 shrink-0" /> Cambio guardado. Se avisó al administrador.
+          <Check className="h-4 w-4 shrink-0" />{' '}
+          {avisoGuardado === 'sent'
+            ? 'Cambio guardado. Se avisó al administrador.'
+            : 'Cambio guardado en el equipo; se enviará al recuperar señal.'}
         </p>
       )}
 

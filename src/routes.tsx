@@ -174,8 +174,8 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/terreno', element: <Navigate replace to="/terreno/registro" /> },
                   // Los cuatro destinos del módulo, en el orden de la
-                  // maqueta. `reporte-diario` es el Módulo B: maqueta sin
-                  // backend todavía — ver la cabecera de esa vista.
+                  // maqueta. `reporte-diario` es el Módulo B (reporte del
+                  // supervisor, con backend y cola offline) — ver su vista.
                   { path: '/terreno/registro', element: <RegistroEquipoView /> },
                   { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
                   { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },

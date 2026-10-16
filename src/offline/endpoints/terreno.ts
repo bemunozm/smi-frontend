@@ -69,7 +69,8 @@ export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(trabajoExtraEntity, params.id),
-  },  'reporteDiario.create': {
+  },
+  'reporteDiario.create': {
     method: 'POST',
     path: () => '/api/reporte-diario',
     failMessage: 'No se pudo enviar el reporte diario.',

@@ -69,8 +69,8 @@ const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE, EDIT_
   ],
 }));
 vi.mock('../hooks/useReporteDiario', () => ({
-  usePlantas: () => ({ data: PLANTAS_MOCK }),
-  useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
+  usePlantas: () => ({ data: PLANTAS_MOCK, isSuccess: true }),
+  useEmpresasExternas: () => ({ data: EMPRESAS_MOCK, isSuccess: true }),
   useReportesDiarios: () => ({ data: REPORTES_MOCK }),
   useCreateReporteDiario: () => ({ mutate: MUTATE, isPending: false }),
   useEditReporteDiario: () => ({ mutate: EDIT_MUTATE, isPending: false }),
@@ -87,6 +87,16 @@ import { seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario'
 import { ReporteDiarioView } from './ReporteDiarioView';
 
 afterEach(cleanup);
+
+/** Tipea producción, tolvas y traspasos como lo haría el supervisor. */
+const tipear = (etiqueta: string, valor: string, indice = 0) =>
+  fireEvent.change(screen.getAllByLabelText(etiqueta)[indice], { target: { value: valor } });
+const llenarProduccion = () => {
+  [['5', '5'], ['18', '3'], ['38', '1']].forEach(([camiones, vueltas], i) => {
+    tipear('Cantidad de camiones', camiones, i);
+    tipear('Vueltas por camión', vueltas, i);
+  });
+};
 
 /** Los tres campos de camiones con sus vueltas, como los tiene el formulario. */
 const SECCIONES = {
@@ -177,12 +187,12 @@ describe('ReporteDiarioView · producción del turno', () => {
   });
 
   /**
-   * R9: un contador por tipo de camión y ningún total que los sume. Con los
-   * valores iniciales del formulario: internos 5×5, Mina Caleta 18×3 y
-   * mineras 38×1.
+   * R9: un contador por tipo de camión y ningún total que los sume. Con lo que
+   * se tipea: internos 5×5, Mina Caleta 18×3 y mineras 38×1.
    */
   it('lleva un contador de vueltas independiente por tipo de camión', () => {
     render(<ReporteDiarioView />);
+    llenarProduccion();
 
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('25');
     expect(screen.getByText('Mina Caleta').parentElement?.textContent).toContain('54');
@@ -194,6 +204,7 @@ describe('ReporteDiarioView · producción del turno', () => {
     render(<ReporteDiarioView />);
 
     const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(screen.getAllByLabelText('Vueltas por camión')[0], { target: { value: '5' } });
     fireEvent.change(camionesInternos, { target: { value: '1.200' } });
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('6.000');
     expect(screen.queryByText(/Se guardará/)).toBeNull();
@@ -207,6 +218,7 @@ describe('ReporteDiarioView · producción del turno', () => {
     render(<ReporteDiarioView />);
 
     const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(screen.getAllByLabelText('Vueltas por camión')[0], { target: { value: '5' } });
     fireEvent.change(camionesInternos, { target: { value: '8' } });
 
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('40');
@@ -404,8 +416,18 @@ describe('ReporteDiarioView · corregir un reporte enviado', () => {
     expect(body.turno).toBeUndefined();
 
     // Al confirmarse el guardado vuelve al detalle con el aviso.
-    act(() => opciones.onSuccess());
-    expect(screen.getByText(/Cambio guardado/)).toBeTruthy();
+    act(() => opciones.onSuccess({ status: 'sent', data: {} }));
+    expect(screen.getByText('Cambio guardado. Se avisó al administrador.')).toBeTruthy();
+  });
+
+  it('si la corrección quedó en cola, el aviso no dice que ya se avisó', () => {
+    const ventana = abrirDetalle();
+    fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
+    fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
+
+    act(() => EDIT_MUTATE.mock.calls[0][1].onSuccess({ status: 'queued' }));
+    expect(screen.getByText(/guardado en el equipo; se enviará al recuperar señal/)).toBeTruthy();
+    expect(screen.queryByText(/Se avisó al administrador/)).toBeNull();
   });
 });
 
@@ -419,6 +441,17 @@ describe('ReporteDiarioView · enviar el reporte', () => {
 
   it('arma el reporte con las secciones en orden, solo las plantas con producto y las empresas marcadas', () => {
     render(<ReporteDiarioView />);
+    llenarProduccion();
+    tipear('Tolva 1', '2');
+    tipear('Tolva 2', '2');
+    tipear('Tolva 3', '4');
+    tipear('Equipos internos', '3');
+    tipear('Equipos externos', '2');
+    tipear('Equipos Mina-Puerto', '5');
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Jefe de turno transporte', 'Claudio Bravo');
+    tipear('HSE · prevención de riesgos', 'Daniela Figueroa');
+    tipear('Asistente de planta', 'Javiera Morales');
     fireEvent.change(screen.getByLabelText('Producto de P.P.1'), { target: { value: 'Sal fina' } });
     fireEvent.click(screen.getByText('Sijam'));
     fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
@@ -437,16 +470,64 @@ describe('ReporteDiarioView · enviar el reporte', () => {
     expect(input.plantas).toEqual([{ plantaId: 'pl1', producto: 'Sal fina' }]);
     expect(input.empresaIds).toEqual(['em2']);
     expect(input.traspasos.map((t: { tipo: string }) => t.tipo)).toEqual(['INTERNOS', 'EXTERNOS', 'MINA_PUERTO']);
+    expect(input.traspasos.map((t: { cantidad: number }) => t.cantidad)).toEqual([3, 2, 5]);
     expect(input.personal).toHaveLength(4);
+  });
+
+  it('un formulario sin tipear no inventa datos: producción en cero y sin personal', () => {
+    render(<ReporteDiarioView />);
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    const input = MUTATE.mock.calls[0][0];
+    expect(input.produccion.every((p: { camiones: number; vueltasPorCamion: number }) => p.camiones === 0 && p.vueltasPorCamion === 0)).toBe(true);
+    expect(input.tolvas.map((t: { cargas: number }) => t.cargas)).toEqual([0, 0, 0]);
+    expect(input.traspasos.map((t: { cantidad: number }) => t.cantidad)).toEqual([0, 0, 0]);
+    expect(input.personal).toEqual([]);
+  });
+
+  it('al enviarse con éxito el formulario vuelve a blanco', () => {
+    render(<ReporteDiarioView />);
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Tolva 1', '2');
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    act(() => MUTATE.mock.calls[0][1].onSuccess({ status: 'sent', data: {} }));
+    expect((screen.getByLabelText('Jefe de turno mina') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Tolva 1') as HTMLInputElement).value).toBe('');
   });
 
   it('no manda las filas de personal con el nombre vacío', () => {
     render(<ReporteDiarioView />);
-    fireEvent.change(screen.getByDisplayValue('Claudio Bravo'), { target: { value: '   ' } });
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Jefe de turno transporte', 'Claudio Bravo');
+    tipear('HSE · prevención de riesgos', 'Daniela Figueroa');
+    tipear('Jefe de turno transporte', '   ');
     fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
 
     const { personal } = MUTATE.mock.calls[0][0];
-    expect(personal).toHaveLength(3);
+    expect(personal).toHaveLength(2);
     expect(personal.map((p: { rol: string }) => p.rol)).not.toContain('Jefe de turno transporte');
+  });
+});
+
+describe('ReporteDiarioView · turno ya reportado', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('con el turno vigente ya en el historial, Enviar queda deshabilitado y lo dice', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 22, 14, 0)); // DIURNO del 22/09 = r-dia
+    render(<ReporteDiarioView />);
+
+    expect(screen.getByText('El turno DIURNO de hoy ya fue reportado')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sin reporte del turno vigente, Enviar está habilitado', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
+    render(<ReporteDiarioView />);
+
+    expect(screen.queryByText(/ya fue reportado/)).toBeNull();
+    expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
