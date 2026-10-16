@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import {
-  DashboardAPI,
   getDashboardEquipos,
   getDashboardHoy,
   getDashboardMantenedores,
@@ -12,48 +11,30 @@ import {
 import { DASHBOARD_KEY } from '../lib/query-keys';
 import type { RangoDashboard } from '../types/dashboard';
 import { useHallazgosList } from './useHallazgos';
-import { useTrabajosExtraList } from './useTrabajosExtra';
 import {
   countHallazgosAbiertos,
   hallazgosAbiertosPorPrioridad,
   hallazgosRecientes,
   hallazgosTendenciaSemanal,
-  sumHorasExtra,
-  trabajosExtraPorMes,
 } from '../config/dashboard-aggregations';
 
 /**
  * Solo lectura — el dashboard no tiene mutaciones, así que no hay feedback
  * de toasts que centralizar acá (a diferencia de `hooks/useUsers.ts`).
  *
- * Terreno ya está integrado con datos reales: los
- * hooks de sus 4 piezas (`useHallazgosAbiertosResumen`,
- * `useHallazgosRecientes`, `useHallazgosTendencia`,
- * `useTrabajosExtraordinariosMensual`) NO llaman a `DashboardAPI` — envuelven
- * `useHallazgosList()`/`useTrabajosExtraList()` (las queries reales de la
- * capa de Terreno, ver `hooks/useHallazgos.ts` / `hooks/useTrabajosExtra.ts`)
- * y derivan el shape que consume `DashboardView` con las funciones puras de
- * `config/dashboard-aggregations.ts`. Como comparten `queryKey`
- * (`['hallazgos']` / `['trabajos-extra']`) con TanStack Query, aunque varias
- * piezas del dashboard los usen a la vez solo hay una petición de red por
- * dominio — y si esa petición falla, cada pieza lo refleja en su propio
- * `isError` sin tumbar el resto del dashboard (que sigue en mock).
+ * Dos orígenes de datos, ambos reales:
+ * - Hallazgos (KPI, recientes, tendencia): envuelven `useHallazgosList()`
+ *   (`hooks/useHallazgos.ts`) y derivan el shape de la vista con las funciones
+ *   puras de `config/dashboard-aggregations.ts`. Comparten `queryKey`
+ *   (`['hallazgos']`), así que hay una sola petición y un fallo se refleja en
+ *   el `isError` de cada pieza sin tumbar el resto.
+ * - Métricas del administrador (`useDashboard*` más abajo): consultas a
+ *   `/api/dashboard/*` por rango de fechas.
  *
- * Flota/Inventario también está integrado a `main` con datos reales,
- * pero no tiene hooks propios acá: `DashboardView` consume DIRECTO
- * `useResumenFleet()` (`hooks/useEquipment.ts`) y `useInsumos({ bajoStock: true })`
- * / `useResumenInventario()` (`hooks/useInventario.ts`) — el backend ya
- * agrega `disponibles`/`total`/`porEstado`/`bajoMinimo`, así que no hace
- * falta una capa de agregación en cliente como la de Terreno.
+ * Flota/Inventario/Mantención no tienen hooks acá: `DashboardView` consume
+ * `useItems` (`hooks/useInventory.ts`) y `useMaintenanceStatusByEquipment`
+ * (`hooks/useMaintenancePlans.ts`) directamente.
  */
-// TODO(Task 6-8): eliminar — hook del mock de la vista anterior (sigue en uso hasta Tasks 6-8).
-export function useDashboardSummary() {
-  return useQuery({
-    queryKey: ['dashboard', 'summary'],
-    queryFn: DashboardAPI.getSummary,
-  });
-}
-
 /** ← Terreno (real): cuenta `estado === 'ABIERTO'` sobre `GET /api/hallazgos`
  * y desglosa por `prioridad` para el subtítulo de la card. */
 export function useHallazgosAbiertosResumen() {
@@ -75,38 +56,12 @@ export function useHallazgosRecientes() {
   return { ...query, data };
 }
 
-// TODO(Task 6-8): eliminar — hook del mock de próximas mantenciones (sigue en uso por PreventivoView hasta Tasks 6-8).
-export function useMantencionesProximas() {
-  return useQuery({
-    queryKey: ['dashboard', 'mantenciones-proximas'],
-    queryFn: DashboardAPI.getMantencionesProximas,
-  });
-}
-
 /** ← Terreno (real): agrupa `GET /api/hallazgos` por semana de reporte,
  * abiertos vs cerrados — semántica documentada en
  * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`. */
 export function useHallazgosTendencia() {
   const query = useHallazgosList();
   const data = useMemo(() => (query.data ? hallazgosTendenciaSemanal(query.data) : undefined), [query.data]);
-  return { ...query, data };
-}
-
-/** ← Terreno (real): agrupa `GET /api/trabajos-extra` por mes, sumando `totalHoras`. */
-export function useTrabajosExtraordinariosMensual() {
-  const query = useTrabajosExtraList();
-  const data = useMemo(() => (query.data ? trabajosExtraPorMes(query.data) : undefined), [query.data]);
-  return { ...query, data };
-}
-
-/** ← Terreno (real): KPI "Horas facturables" — total de los mismos 6 meses
- * que ya grafica "Horas extraordinarias por mes". Se apoya en
- * `useTrabajosExtraordinariosMensual()` (no en `useTrabajosExtraList()`
- * directo): reutiliza tanto la query real como los buckets mensuales ya
- * calculados, así la card y el gráfico nunca pueden desincronizarse. */
-export function useHorasFacturables() {
-  const query = useTrabajosExtraordinariosMensual();
-  const data = useMemo(() => (query.data ? sumHorasExtra(query.data) : undefined), [query.data]);
   return { ...query, data };
 }
 

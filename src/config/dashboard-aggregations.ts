@@ -1,19 +1,17 @@
 import type { Hallazgo } from '../types/hallazgos';
-import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 import type {
   Criticidad,
   HallazgoEstado,
   HallazgoResumen,
   HallazgoTendenciaSemana,
   HallazgosPorCriticidad,
-  TrabajoExtraordinarioMes,
 } from '../types/dashboard';
 
 /**
- * Agregaciones en cliente sobre los listados reales de Terreno
- * (`hooks/useHallazgos.ts`, `hooks/useTrabajosExtra.ts`) para alimentar el
+ * Agregaciones en cliente sobre los listado real de hallazgos de Terreno
+ * (`hooks/useHallazgos.ts`) para alimentar el
  * dashboard del bloque Núcleo. Terreno no expone endpoints de
- * agregación/filtro todavía (ver `DASHBOARD-CONTRACTS.md`) — mientras el
+ * agregación/filtro todavía — mientras el
  * volumen sea bajo, se calcula acá en vez de pedirlos.
  *
  * Funciones puras a propósito: no tocan React ni TanStack Query, para que
@@ -118,48 +116,4 @@ export function hallazgosTendenciaSemanal(hallazgos: Hallazgo[], weeks = 8): Hal
       abiertos: bucket.abiertos,
       cerrados: bucket.cerrados,
     }));
-}
-
-const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('es-CL', { month: 'short', timeZone: 'UTC' });
-
-function capitalize(label: string): string {
-  return label.length > 0 ? label.charAt(0).toUpperCase() + label.slice(1) : label;
-}
-
-/** Horas extraordinarias por mes — suma `totalHoras` agrupando por mes de
- * `fecha`. Reemplaza el KPI de ingresos que existía en el mock: el campo
- * `monto` fue eliminado del modelo real de `TrabajoExtraordinario` (solo
- * existe `totalHoras`), así que no hay forma de calcular una cifra en CLP. */
-export function trabajosExtraPorMes(trabajos: TrabajoExtraordinario[], months = 6): TrabajoExtraordinarioMes[] {
-  const buckets = new Map<string, { start: Date; horas: number }>();
-
-  for (const trabajo of trabajos) {
-    const fecha = new Date(trabajo.fecha);
-    if (Number.isNaN(fecha.getTime())) continue;
-
-    const monthStart = new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), 1));
-    const key = monthStart.toISOString();
-    const bucket = buckets.get(key) ?? { start: monthStart, horas: 0 };
-    bucket.horas += trabajo.totalHoras;
-    buckets.set(key, bucket);
-  }
-
-  return Array.from(buckets.values())
-    .sort((a, b) => a.start.getTime() - b.start.getTime())
-    .slice(-months)
-    .map((bucket) => ({
-      mes: capitalize(MONTH_LABEL_FORMATTER.format(bucket.start)),
-      horas: Number(bucket.horas.toFixed(1)),
-    }));
-}
-
-/** KPI "Horas facturables" — total del mismo período que ya grafica
- * "Horas extraordinarias por mes" (últimos 6 meses). A propósito NO
- * recorre `trabajos` de nuevo: suma los buckets mensuales que
- * `trabajosExtraPorMes` ya calculó, para que la card y el gráfico sean
- * exactamente consistentes (mismo dato, mismo período, una sola pasada de
- * agregación) — reemplaza al KPI de ingresos que tenía el mock (el campo
- * `monto` no existe en el modelo real). */
-export function sumHorasExtra(mesesData: TrabajoExtraordinarioMes[]): number {
-  return Number(mesesData.reduce((total, mes) => total + mes.horas, 0).toFixed(1));
 }

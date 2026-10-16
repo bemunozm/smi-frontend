@@ -52,7 +52,7 @@ export function FranjaHoy() {
                   >
                     {data.totales[clave].toLocaleString('es-CL')}
                   </span>
-                  <span className="text-sm font-medium text-muted-foreground">{estadoHoyLabel(estado)}</span>
+                  <span className="text-base font-medium text-muted-foreground">{estadoHoyLabel(estado)}</span>
                 </Card.Content>
               </Card>
             ))}
@@ -75,9 +75,9 @@ export function FranjaHoy() {
                   >
                     <div className="flex min-w-0 flex-col">
                       <span className="font-mono text-sm text-foreground">{equipo.internalCode}</span>
-                      {detalle ? <span className="truncate text-xs text-muted-foreground">{detalle}</span> : null}
+                      {detalle ? <span className="truncate text-sm text-muted-foreground">{detalle}</span> : null}
                       {equipo.estado === 'EN_USO' && equipo.supervisor ? (
-                        <span className="truncate text-xs text-muted-foreground">Sup. {equipo.supervisor}</span>
+                        <span className="truncate text-sm text-muted-foreground">Sup. {equipo.supervisor}</span>
                       ) : null}
                     </div>
                     <Chip color={estadoHoyChipColor(equipo.estado)} size="sm" variant="soft">

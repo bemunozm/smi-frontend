@@ -15,7 +15,9 @@ import {
 
 import { IntegerField } from '../components/IntegerField';
 import { usePermissions } from '../hooks/usePermissions';
-import { useMantencionesProximas } from '../hooks/useDashboard';
+import { useEquipment } from '../hooks/useEquipment';
+import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
+import { mantencionesProximas } from '../lib/mantenciones-proximas';
 import { useCrearUmbral, useUmbrales } from '../hooks/useUmbrales';
 import { RECURSOS_DE_UMBRALES } from '../lib/pending-resources';
 import { CreateUmbralSchema, type CreateUmbralInput } from '../types/mantenimiento';
@@ -139,20 +141,26 @@ function CreateUmbralModal() {
 }
 
 /**
- * Equipos cerca de su umbral de horómetro (horómetro actual vs. umbral). Es un
- * dato del dominio Mantenimiento: se reutiliza `useMantencionesProximas` (mismo
- * hook/tipo/estilo que el Dashboard) — hoy mockeado hasta que Flota
- * exponga el horómetro real. `horometroRestante === 0` ⇒ umbral alcanzado (rojo).
+ * Equipos con la próxima mantención de su pauta dentro de la ventana de aviso
+ * (`remaining <= alertBefore`), con datos reales de `GET /api/maintenance-plans/status`
+ * — la misma regla que la card del dashboard. `remaining <= 0` ⇒ ya toca (rojo).
  */
 function EquiposCercaUmbralSection() {
-  const { data: mantenciones, isPending, isError, error } = useMantencionesProximas();
+  const estado = useMaintenanceStatusByEquipment();
+  const equipos = useEquipment();
+  const isPending = estado.isPending;
+  const isError = estado.isError;
+  const error = estado.error;
+
+  const codigos = new Map((equipos.data ?? []).map((e) => [e.id, e.internalCode]));
+  const proximas = mantencionesProximas(estado.data?.values() ?? []);
 
   return (
     <Card className="flex flex-col gap-3">
       <Card.Header>
         <Card.Title>Equipos cerca de su umbral</Card.Title>
         <Card.Description className="text-muted-foreground">
-          Horómetro restante hasta la próxima mantención. En rojo, los que ya alcanzaron el umbral.
+          Lo que falta hasta la próxima mantención de la pauta. En rojo, los que ya les toca.
         </Card.Description>
       </Card.Header>
 
@@ -168,26 +176,23 @@ function EquiposCercaUmbralSection() {
         </p>
       ) : null}
 
-      {!isPending && !isError && mantenciones.length > 0 ? (
+      {!isPending && !isError && proximas.length > 0 ? (
         <ul className="flex flex-col">
-          {mantenciones.map((mantencion) => (
+          {proximas.map((p) => (
             <li
-              key={mantencion.id}
+              key={p.equipmentId}
               className="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0"
             >
-              <div className="flex min-w-0 flex-col">
-                <span className="font-mono text-sm font-semibold text-foreground">{mantencion.equipo}</span>
-                <span className="text-xs text-muted-foreground">
-                  {mantencion.tipo === 'PREVENTIVA' ? 'Preventiva' : 'Correctiva'}
-                </span>
-              </div>
-              {mantencion.horometroRestante > 0 ? (
+              <span className="font-mono text-sm font-semibold text-foreground">
+                {codigos.get(p.equipmentId) ?? p.equipmentId}
+              </span>
+              {p.remaining > 0 ? (
                 <span className="font-mono text-sm font-semibold text-foreground">
-                  {mantencion.horometroRestante} h
+                  {p.remaining} {p.unit}
                 </span>
               ) : (
                 <Chip color="danger" size="sm" variant="soft">
-                  Umbral alcanzado
+                  Toca ahora
                 </Chip>
               )}
             </li>
@@ -195,7 +200,7 @@ function EquiposCercaUmbralSection() {
         </ul>
       ) : null}
 
-      {!isPending && !isError && mantenciones.length === 0 ? (
+      {!isPending && !isError && proximas.length === 0 ? (
         <p className="px-1 text-sm text-muted-foreground">No hay equipos cerca de su umbral.</p>
       ) : null}
     </Card>

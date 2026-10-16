@@ -1,11 +1,14 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent } from '@testing-library/react';
 
-const { hoyHook, equiposMock, equiposHook, mantHook } = vi.hoisted(() => ({
+const { hoyHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
   hoyHook: vi.fn(),
   equiposMock: vi.fn(),
   equiposHook: vi.fn(),
   mantHook: vi.fn(),
+  supHook: vi.fn(),
+  mantenedoresHook: vi.fn(),
+  vueltasHook: vi.fn(),
 }));
 
 const idle = { data: undefined, isPending: true, isError: false, error: null };
@@ -25,12 +28,12 @@ vi.mock('../hooks/useDashboard', () => ({
     equiposMock(rango);
     return equiposHook();
   },
-  useDashboardSummary: () => idle,
+  useDashboardSupervisores: () => supHook(),
+  useDashboardMantenedores: () => mantenedoresHook(),
+  useDashboardVueltas: () => vueltasHook(),
   useHallazgosAbiertosResumen: () => idle,
   useHallazgosRecientes: () => idle,
   useHallazgosTendencia: () => idle,
-  useHorasFacturables: () => idle,
-  useTrabajosExtraordinariosMensual: () => idle,
 }));
 
 import { DashboardView } from './DashboardView';
@@ -61,6 +64,9 @@ const equipo = (
 beforeEach(() => {
   mockEquipos(undefined);
   mockMant([]);
+  supHook.mockReturnValue(idle);
+  mantenedoresHook.mockReturnValue(idle);
+  vueltasHook.mockReturnValue(idle);
   mockHoy({ data: { totales: { enUso: 0, disponibles: 0, inoperativos: 0 }, equipos: [] } });
 });
 afterEach(() => {
@@ -181,6 +187,79 @@ describe('DashboardView', () => {
       expect(card.textContent).toContain('40 h');
       expect(screen.queryByTestId('mantencion-proxima-e2')).toBeNull();
       expect(screen.queryByTestId('mantencion-proxima-e3')).toBeNull();
+    });
+  });
+
+  describe('sección Supervisores', () => {
+    it('muestra horas DIURNO vs NOCTURNO y la tabla por supervisor, incluido «sin asignar»', () => {
+      supHook.mockReturnValue({
+        data: {
+          porTurno: { DIURNO: { horas: 40, equipos: 3 }, NOCTURNO: { horas: 25, equipos: 2 } },
+          porSupervisor: [
+            { supervisorId: 's1', nombre: 'Limbert', horas: 50, equipos: 3, turnos: 6 },
+            { supervisorId: '', nombre: '(sin asignar)', horas: 15, equipos: 1, turnos: 2 },
+          ],
+        },
+        isPending: false,
+        isError: false,
+        error: null,
+      });
+      render(<DashboardView />);
+      expect(screen.getByTestId('turno-DIURNO').textContent).toContain('40 h');
+      expect(screen.getByTestId('turno-NOCTURNO').textContent).toContain('25 h');
+      const fila = screen.getByTestId('supervisor-s1').textContent ?? '';
+      expect(fila).toContain('Limbert');
+      expect(fila).toContain('50 h');
+      expect(fila).toContain('3');
+      expect(fila).toContain('6');
+      expect(screen.getByTestId('supervisor-sin-asignar').textContent).toContain('(sin asignar)');
+    });
+  });
+
+  describe('sección Mantenedores', () => {
+    it('muestra el total de horas de trabajos extra y una fila por equipo', () => {
+      mantenedoresHook.mockReturnValue({
+        data: {
+          total: { horas: 14, trabajos: 3 },
+          porEquipo: [
+            { equipmentId: 'e1', internalCode: 'EX-001', horas: 9, trabajos: 2 },
+            { equipmentId: 'e2', internalCode: 'CG-002', horas: 5, trabajos: 1 },
+          ],
+        },
+        isPending: false,
+        isError: false,
+        error: null,
+      });
+      render(<DashboardView />);
+      expect(screen.getByTestId('mantenedores-total').textContent).toContain('14 h');
+      expect(screen.getByTestId('mantenedores-total').textContent).toContain('3');
+      expect(screen.getByTestId('mantenedor-e1').textContent).toContain('EX-001');
+      expect(screen.getByTestId('mantenedor-e1').textContent).toContain('9 h');
+    });
+  });
+
+  describe('sección Vueltas', () => {
+    it('una tarjeta por sección con su total, la nota visible y ningún total general', () => {
+      vueltasHook.mockReturnValue({
+        data: {
+          porSeccion: [
+            { seccion: 'INTERNOS', camiones: 2, vueltasTotales: 30, serieDiaria: [{ fecha: '2026-10-01', vueltas: 30 }] },
+            { seccion: 'MINERAS', camiones: 1, vueltasTotales: 12, serieDiaria: [] },
+          ],
+        },
+        isPending: false,
+        isError: false,
+        error: null,
+      });
+      render(<DashboardView />);
+      expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('Camiones internos');
+      expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('30');
+      expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('Camiones mineras');
+      expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('12');
+      expect(screen.getByText('Las secciones no se suman: cada una tiene tarifa distinta.')).toBeTruthy();
+      expect(screen.queryByTestId('vueltas-total')).toBeNull();
+      expect(document.body.textContent).not.toMatch(/total de vueltas|vueltas totales:? ?42/i);
+      expect(document.body.textContent).not.toContain('42');
     });
   });
 });
