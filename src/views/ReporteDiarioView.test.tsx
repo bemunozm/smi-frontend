@@ -1,10 +1,102 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, within, act } from '@testing-library/react';
+
+const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE, EDIT_MUTATE, CAMBIOS_MOCK, CAMBIOS_HOOK } =
+  vi.hoisted(() => ({
+  MUTATE: vi.fn(),
+  EDIT_MUTATE: vi.fn(),
+  CAMBIOS_MOCK: [
+    {
+      id: 'c1',
+      userName: 'Ana Soto',
+      createdAt: '2026-09-23T15:00:00.000Z',
+      changes: [{ field: 'camiones', label: 'Camiones', before: '5', after: '8' }],
+    },
+  ],
+  CAMBIOS_HOOK: vi.fn(),
+  REPORTES_MOCK: [
+    {
+      id: 'r-noche',
+      fecha: '2026-09-22',
+      turno: 'NOCTURNO',
+      supervisorId: 'u2',
+      supervisorNombre: 'José Pérez',
+      observaciones: null,
+      createdAt: '',
+      updatedAt: '',
+      produccion: [
+        { seccion: 'INTERNOS', camiones: 5, vueltasPorCamion: 4 },
+        { seccion: 'MINA_CALETA', camiones: 16, vueltasPorCamion: 3 },
+        { seccion: 'MINERAS', camiones: 34, vueltasPorCamion: 1 },
+      ],
+      tolvas: [{ tolva: 1, cargas: 1 }, { tolva: 2, cargas: 2 }, { tolva: 3, cargas: 3 }],
+      plantas: [
+        { plantaId: 'pl1', producto: 'Rechazo a acopio', planta: { nombre: 'P.R.2' } },
+        { plantaId: 'pl-vieja', producto: 'Sal vieja', planta: { nombre: 'Planta Antigua' } },
+      ],
+      traspasos: [{ tipo: 'INTERNOS', cantidad: 3 }],
+      empresas: [{ empresaId: 'em1', empresa: { nombre: 'Hyd' } }],
+      personal: [{ rol: 'Jefe de turno transporte', nombre: 'Nelson Cáceres', orden: 0 }],
+    },
+    {
+      id: 'r-dia',
+      fecha: '2026-09-22',
+      turno: 'DIURNO',
+      supervisorId: 'u1',
+      supervisorNombre: 'Limbert Villacorta',
+      observaciones: null,
+      createdAt: '',
+      updatedAt: '',
+      produccion: [{ seccion: 'INTERNOS', camiones: 6, vueltasPorCamion: 5 }],
+      tolvas: [],
+      plantas: [],
+      traspasos: [],
+      empresas: [],
+      personal: [],
+    },
+  ],
+  PLANTAS_MOCK: [
+    { id: 'pl1', nombre: 'P.P.1', orden: 1, activa: true },
+    { id: 'pl2', nombre: 'Planta P.P.E', orden: 2, activa: true },
+  ],
+  EMPRESAS_MOCK: [
+    { id: 'em1', nombre: 'Hyd', orden: 1, activa: true },
+    { id: 'em2', nombre: 'Sijam', orden: 2, activa: true },
+  ],
+  TARJETAS_MOCK: [
+    { id: 'c1', operatorName: 'Patricio Rojas', equipo: { internalCode: 'CG-002' }, closedAt: null },
+    { id: 'c2', operatorName: 'Marcelo Soto', equipo: { internalCode: 'EX-001' }, closedAt: '2026-09-23T10:00:00Z' },
+  ],
+}));
+vi.mock('../hooks/useReporteDiario', () => ({
+  usePlantas: () => ({ data: PLANTAS_MOCK, isSuccess: true }),
+  useEmpresasExternas: () => ({ data: EMPRESAS_MOCK, isSuccess: true }),
+  useReportesDiarios: () => ({ data: REPORTES_MOCK }),
+  useCreateReporteDiario: () => ({ mutate: MUTATE, isPending: false }),
+  useEditReporteDiario: () => ({ mutate: EDIT_MUTATE, isPending: false }),
+  useReporteCambios: (id: string | null) => {
+    CAMBIOS_HOOK(id);
+    return { data: id ? CAMBIOS_MOCK : undefined, isLoading: false };
+  },
+}));
+vi.mock('../hooks/useShiftCards', () => ({
+  useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
+}));
 
 import { seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { ReporteDiarioView } from './ReporteDiarioView';
 
 afterEach(cleanup);
+
+/** Tipea producción, tolvas y traspasos como lo haría el supervisor. */
+const tipear = (etiqueta: string, valor: string, indice = 0) =>
+  fireEvent.change(screen.getAllByLabelText(etiqueta)[indice], { target: { value: valor } });
+const llenarProduccion = () => {
+  [['5', '5'], ['18', '3'], ['38', '1']].forEach(([camiones, vueltas], i) => {
+    tipear('Cantidad de camiones', camiones, i);
+    tipear('Vueltas por camión', vueltas, i);
+  });
+};
 
 /** Los tres campos de camiones con sus vueltas, como los tiene el formulario. */
 const SECCIONES = {
@@ -59,6 +151,20 @@ describe('seccionesDelFormulario', () => {
   });
 });
 
+describe('ReporteDiarioView · catálogos y operadores reales', () => {
+  it('lista las plantas y empresas del catálogo y solo los operadores con tarjeta abierta', () => {
+    render(<ReporteDiarioView />);
+
+    expect(screen.getByLabelText('Producto de P.P.1')).toBeTruthy();
+    expect(screen.getByLabelText('Producto de Planta P.P.E')).toBeTruthy();
+    expect(screen.getByText('Hyd')).toBeTruthy();
+    expect(screen.getByText('Sijam')).toBeTruthy();
+    expect(screen.queryByText('Spence')).toBeNull();
+    expect(screen.getByText('Patricio Rojas')).toBeTruthy();
+    expect(screen.queryByText('Marcelo Soto')).toBeNull();
+  });
+});
+
 describe('ReporteDiarioView · producción del turno', () => {
   it('registra camiones y vueltas para cada una de las tres secciones', () => {
     render(<ReporteDiarioView />);
@@ -81,12 +187,12 @@ describe('ReporteDiarioView · producción del turno', () => {
   });
 
   /**
-   * R9: un contador por tipo de camión y ningún total que los sume. Con los
-   * valores iniciales del formulario: internos 5×5, Mina Caleta 18×3 y
-   * mineras 38×1.
+   * R9: un contador por tipo de camión y ningún total que los sume. Con lo que
+   * se tipea: internos 5×5, Mina Caleta 18×3 y mineras 38×1.
    */
   it('lleva un contador de vueltas independiente por tipo de camión', () => {
     render(<ReporteDiarioView />);
+    llenarProduccion();
 
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('25');
     expect(screen.getByText('Mina Caleta').parentElement?.textContent).toContain('54');
@@ -98,6 +204,7 @@ describe('ReporteDiarioView · producción del turno', () => {
     render(<ReporteDiarioView />);
 
     const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(screen.getAllByLabelText('Vueltas por camión')[0], { target: { value: '5' } });
     fireEvent.change(camionesInternos, { target: { value: '1.200' } });
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('6.000');
     expect(screen.queryByText(/Se guardará/)).toBeNull();
@@ -111,6 +218,7 @@ describe('ReporteDiarioView · producción del turno', () => {
     render(<ReporteDiarioView />);
 
     const [camionesInternos] = screen.getAllByLabelText('Cantidad de camiones');
+    fireEvent.change(screen.getAllByLabelText('Vueltas por camión')[0], { target: { value: '5' } });
     fireEvent.change(camionesInternos, { target: { value: '8' } });
 
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('40');
@@ -187,9 +295,8 @@ describe('ReporteDiarioView · cabecera de la ficha', () => {
 
 describe('ReporteDiarioView · historial en ventana', () => {
   /**
-   * El historial son los turnos que preceden al actual, calculados desde el
-   * reloj. Con el reloj a media tarde del 23/09 los cinco anteriores son del
-   * 22/09 noche hacia atrás.
+   * El historial son los reportes que devuelve el servidor, del turno más
+   * reciente al más viejo (el nocturno del 22/09 va antes que su diurno).
    */
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -213,6 +320,7 @@ describe('ReporteDiarioView · historial en ventana', () => {
 
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getAllByText('José Pérez').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ver más detalle')).toHaveLength(2);
   });
 
   /**
@@ -252,55 +360,174 @@ describe('ReporteDiarioView · historial en ventana', () => {
     fireEvent.click(screen.getByText('Volver al historial'));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getAllByText('Ver más detalle').length).toBe(5);
+    expect(screen.getAllByText('Ver más detalle').length).toBe(2);
   });
 });
 
-/**
- * Acta N.° 004, R13: un reporte ya enviado se corrige desde el historial,
- * sin autorización pero avisando al administrador, y el detalle guarda quién
- * cambió qué. Guardar sin tocar nada no es un cambio.
- */
 describe('ReporteDiarioView · corregir un reporte enviado', () => {
   beforeEach(() => {
+    EDIT_MUTATE.mockClear();
+    CAMBIOS_HOOK.mockClear();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
   });
   afterEach(() => vi.useRealTimers());
 
-  const abrirEdicion = () => {
+  const abrirDetalle = () => {
     render(<ReporteDiarioView />);
     fireEvent.click(screen.getByText('Ver historial de reportes'));
     fireEvent.click(screen.getAllByText('Ver más detalle')[0]);
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Editar/ }));
-    return () => within(screen.getByRole('dialog'));
+    return within(screen.getByRole('dialog'));
   };
 
-  it('abre el reporte prellenado con el aviso al administrador', () => {
-    const ventana = abrirEdicion();
+  it('el historial de cambios sale del servidor para el reporte abierto', () => {
+    const ventana = abrirDetalle();
 
-    expect(ventana().getByText(/Al guardar se avisa al administrador/)).toBeTruthy();
-    expect((ventana().getByLabelText('Jefe de turno transporte') as HTMLInputElement).value).toBe('Nelson Cáceres');
+    expect(CAMBIOS_HOOK).toHaveBeenLastCalledWith('r-noche');
+    expect(ventana.getByText('Ana Soto')).toBeTruthy();
+    expect(ventana.getByText('Camiones')).toBeTruthy();
   });
 
-  it('guarda la corrección y la deja en el historial de cambios', () => {
-    const ventana = abrirEdicion();
+  it('guarda la corrección por id: plantas y empresas con id, personal sin nombres vacíos', () => {
+    const ventana = abrirDetalle();
+    fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
 
-    fireEvent.change(ventana().getByLabelText('Jefe de turno transporte'), { target: { value: 'Claudio Bravo' } });
-    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+    const producto = ventana.getByLabelText('Producto de P.P.1') as HTMLInputElement;
+    expect(producto.value).toBe('Rechazo a acopio');
+    fireEvent.change(producto, { target: { value: 'Sal gruesa' } });
+    fireEvent.change(ventana.getByLabelText('Producto de Planta P.P.E'), { target: { value: 'Maxisacos' } });
+    fireEvent.click(ventana.getByText('Sijam'));
+    fireEvent.change(ventana.getByDisplayValue('Nelson Cáceres'), { target: { value: '  ' } });
+    fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
 
-    expect(ventana().getByText(/Cambio guardado. Se avisó al administrador./)).toBeTruthy();
-    // El detalle ya muestra el dato nuevo, y el historial el antes y el después.
-    expect(ventana().getAllByText('Claudio Bravo').length).toBeGreaterThan(0);
-    expect(ventana().getByText('Historial de cambios').parentElement?.textContent).toContain('1 cambio');
-    expect(ventana().getByText('Nelson Cáceres')).toBeTruthy();
+    expect(EDIT_MUTATE).toHaveBeenCalledTimes(1);
+    const [{ id, body }, opciones] = EDIT_MUTATE.mock.calls[0];
+    expect(id).toBe('r-noche');
+    expect(ventana.getByText('Planta Antigua ya no está activa y se quitará al guardar.')).toBeTruthy();
+    expect(body.plantas).toEqual([
+      { plantaId: 'pl1', producto: 'Sal gruesa' },
+      { plantaId: 'pl2', producto: 'Maxisacos' },
+    ]);
+    expect(body.empresaIds).toEqual(['em1', 'em2']);
+    expect(body.personal).toEqual([]);
+    expect(body.traspasos).toEqual([{ tipo: 'INTERNOS', cantidad: 3 }]);
+    expect(body.produccion[1]).toEqual({ seccion: 'MINA_CALETA', camiones: 16, vueltasPorCamion: 3 });
+    expect(body.fecha).toBeUndefined();
+    expect(body.turno).toBeUndefined();
+
+    // Al confirmarse el guardado vuelve al detalle con el aviso.
+    act(() => opciones.onSuccess({ status: 'sent', data: {} }));
+    expect(screen.getByText('Cambio guardado. Se avisó al administrador.')).toBeTruthy();
   });
 
-  it('guardar sin cambiar nada no agrega un cambio', () => {
-    const ventana = abrirEdicion();
-    fireEvent.click(ventana().getByRole('button', { name: /Guardar cambios/ }));
+  it('si la corrección quedó en cola, el aviso no dice que ya se avisó', () => {
+    const ventana = abrirDetalle();
+    fireEvent.click(ventana.getByRole('button', { name: /Editar/ }));
+    fireEvent.click(ventana.getByRole('button', { name: /Guardar cambios/ }));
 
-    expect(ventana().queryByText(/Cambio guardado/)).toBeNull();
-    expect(ventana().getByText('Sin cambios desde que se registró.')).toBeTruthy();
+    act(() => EDIT_MUTATE.mock.calls[0][1].onSuccess({ status: 'queued' }));
+    expect(screen.getByText(/guardado en el equipo; se enviará al recuperar señal/)).toBeTruthy();
+    expect(screen.queryByText(/Se avisó al administrador/)).toBeNull();
+  });
+});
+
+describe('ReporteDiarioView · enviar el reporte', () => {
+  beforeEach(() => {
+    MUTATE.mockClear();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('arma el reporte con las secciones en orden, solo las plantas con producto y las empresas marcadas', () => {
+    render(<ReporteDiarioView />);
+    llenarProduccion();
+    tipear('Tolva 1', '2');
+    tipear('Tolva 2', '2');
+    tipear('Tolva 3', '4');
+    tipear('Equipos internos', '3');
+    tipear('Equipos externos', '2');
+    tipear('Equipos Mina-Puerto', '5');
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Jefe de turno transporte', 'Claudio Bravo');
+    tipear('HSE · prevención de riesgos', 'Daniela Figueroa');
+    tipear('Asistente de planta', 'Javiera Morales');
+    fireEvent.change(screen.getByLabelText('Producto de P.P.1'), { target: { value: 'Sal fina' } });
+    fireEvent.click(screen.getByText('Sijam'));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    expect(MUTATE).toHaveBeenCalledTimes(1);
+    const input = MUTATE.mock.calls[0][0];
+    expect(input.fecha).toBe('2026-09-23');
+    expect(input.turno).toBe('DIURNO');
+    expect(input.produccion.map((p: { seccion: string }) => p.seccion)).toEqual(['INTERNOS', 'MINA_CALETA', 'MINERAS']);
+    expect(input.produccion[1]).toEqual({ seccion: 'MINA_CALETA', camiones: 18, vueltasPorCamion: 3 });
+    expect(input.tolvas).toEqual([
+      { tolva: 1, cargas: 2 },
+      { tolva: 2, cargas: 2 },
+      { tolva: 3, cargas: 4 },
+    ]);
+    expect(input.plantas).toEqual([{ plantaId: 'pl1', producto: 'Sal fina' }]);
+    expect(input.empresaIds).toEqual(['em2']);
+    expect(input.traspasos.map((t: { tipo: string }) => t.tipo)).toEqual(['INTERNOS', 'EXTERNOS', 'MINA_PUERTO']);
+    expect(input.traspasos.map((t: { cantidad: number }) => t.cantidad)).toEqual([3, 2, 5]);
+    expect(input.personal).toHaveLength(4);
+  });
+
+  it('un formulario sin tipear no inventa datos: producción en cero y sin personal', () => {
+    render(<ReporteDiarioView />);
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    const input = MUTATE.mock.calls[0][0];
+    expect(input.produccion.every((p: { camiones: number; vueltasPorCamion: number }) => p.camiones === 0 && p.vueltasPorCamion === 0)).toBe(true);
+    expect(input.tolvas.map((t: { cargas: number }) => t.cargas)).toEqual([0, 0, 0]);
+    expect(input.traspasos.map((t: { cantidad: number }) => t.cantidad)).toEqual([0, 0, 0]);
+    expect(input.personal).toEqual([]);
+  });
+
+  it('al enviarse con éxito el formulario vuelve a blanco', () => {
+    render(<ReporteDiarioView />);
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Tolva 1', '2');
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    act(() => MUTATE.mock.calls[0][1].onSuccess({ status: 'sent', data: {} }));
+    expect((screen.getByLabelText('Jefe de turno mina') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Tolva 1') as HTMLInputElement).value).toBe('');
+  });
+
+  it('no manda las filas de personal con el nombre vacío', () => {
+    render(<ReporteDiarioView />);
+    tipear('Jefe de turno mina', 'Álvaro Henríquez');
+    tipear('Jefe de turno transporte', 'Claudio Bravo');
+    tipear('HSE · prevención de riesgos', 'Daniela Figueroa');
+    tipear('Jefe de turno transporte', '   ');
+    fireEvent.click(screen.getByRole('button', { name: /Enviar reporte diario/ }));
+
+    const { personal } = MUTATE.mock.calls[0][0];
+    expect(personal).toHaveLength(2);
+    expect(personal.map((p: { rol: string }) => p.rol)).not.toContain('Jefe de turno transporte');
+  });
+});
+
+describe('ReporteDiarioView · turno ya reportado', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('con el turno vigente ya en el historial, Enviar queda deshabilitado y lo dice', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 22, 14, 0)); // DIURNO del 22/09 = r-dia
+    render(<ReporteDiarioView />);
+
+    expect(screen.getByText('El turno DIURNO de hoy ya fue reportado')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sin reporte del turno vigente, Enviar está habilitado', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
+    render(<ReporteDiarioView />);
+
+    expect(screen.queryByText(/ya fue reportado/)).toBeNull();
+    expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

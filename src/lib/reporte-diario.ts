@@ -1,4 +1,11 @@
 import { parseInteger } from './decimal';
+import { fromDateOnly, type Turno } from './turno';
+import {
+  SECCIONES,
+  SECCION_LABEL,
+  TRASPASO_LABEL,
+  type ReporteDiario,
+} from '../types/reporte-diario';
 
 /**
  * Cálculos del reporte diario del supervisor.
@@ -62,4 +69,66 @@ export function seccionesDelFormulario(s: SeccionesCamiones): SeccionNumerica[] 
     { camiones: enteroOCero(s.camionesMinaCaleta), vueltas: enteroOCero(s.vueltasMinaCaleta) },
     { camiones: enteroOCero(s.camionesMinera), vueltas: enteroOCero(s.vueltasMinera) },
   ];
+}
+
+/**
+ * Lo que el supervisor escribió en un turno ya enviado. Los totales NO se
+ * guardan acá: se calculan desde `secciones` con la misma regla que el
+ * formulario.
+ */
+export interface ContenidoReporte {
+  personal: [string, string][];
+  secciones: { label: string; camiones: number; vueltas: number }[];
+  tolvas: number[];
+  plantas: [string, string][];
+  traspasos: [string, string][];
+  empresas: string[];
+}
+
+/** Un turno ya enviado: su contenido más a qué turno pertenece y quién firmó. */
+export interface ReporteAnterior extends ContenidoReporte {
+  /** Id del reporte en el servidor: la corrección lo necesita para el PATCH. */
+  id: string;
+  /** plantaId → producto, para precargar la corrección por id (nunca por nombre). */
+  productosPorPlantaId: Record<string, string>;
+  /** Ids de las plantas de `plantas`, en el mismo orden. */
+  plantaIds: string[];
+  /** Ids de las empresas externas del turno, en el orden de `empresas`. */
+  empresaIds: string[];
+  /** Tipo de cada fila de `traspasos`, en el mismo orden. */
+  traspasoTipos: string[];
+  fecha: Date;
+  turno: Turno;
+  supervisor: string;
+}
+
+/**
+ * Reporte del servidor → forma que muestra el historial. Las secciones salen
+ * siempre en el orden canónico de `SECCIONES`, y una sección o tolva que el
+ * servidor no trajo vale 0, para que las columnas del historial no se corran.
+ */
+export function aReporteAnterior(r: ReporteDiario): ReporteAnterior {
+  const porSeccion = new Map(r.produccion.map((p) => [p.seccion, p]));
+  return {
+    id: r.id,
+    productosPorPlantaId: Object.fromEntries(r.plantas.map((p) => [p.plantaId, p.producto])),
+    plantaIds: r.plantas.map((p) => p.plantaId),
+    empresaIds: r.empresas.map((e) => e.empresaId),
+    traspasoTipos: r.traspasos.map((t) => t.tipo),
+    // `fecha` puede venir como ISO completo: se toma el día y se arma en local
+    // (`new Date('YYYY-MM-DD')` es medianoche UTC y en Chile muestra el día anterior).
+    fecha: fromDateOnly(r.fecha.slice(0, 10)),
+    turno: r.turno,
+    supervisor: r.supervisorNombre,
+    personal: r.personal.map((p) => [p.rol, p.nombre] as [string, string]),
+    secciones: SECCIONES.map((s) => ({
+      label: SECCION_LABEL[s],
+      camiones: porSeccion.get(s)?.camiones ?? 0,
+      vueltas: porSeccion.get(s)?.vueltasPorCamion ?? 0,
+    })),
+    tolvas: [1, 2, 3].map((n) => r.tolvas.find((t) => t.tolva === n)?.cargas ?? 0),
+    plantas: r.plantas.map((p) => [p.planta.nombre, p.producto] as [string, string]),
+    traspasos: r.traspasos.map((t) => [TRASPASO_LABEL[t.tipo], String(t.cantidad)] as [string, string]),
+    empresas: r.empresas.map((e) => e.empresa.nombre),
+  };
 }
