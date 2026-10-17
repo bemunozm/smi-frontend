@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   getDashboardEquipos,
@@ -8,16 +8,16 @@ import {
   getDashboardResumenDia,
   getDashboardSupervisores,
   getDashboardVueltas,
-} from '../api/DashboardAPI';
-import { DASHBOARD_KEY } from '../lib/query-keys';
-import type { RangoDashboard } from '../types/dashboard';
-import { useHallazgosList } from './useHallazgos';
+} from "../api/DashboardAPI";
+import { DASHBOARD_KEY } from "../lib/query-keys";
+import type { RangoDashboard } from "../types/dashboard";
+import { useHallazgosList } from "./useHallazgos";
 import {
   countHallazgosAbiertos,
   hallazgosAbiertosPorPrioridad,
   hallazgosRecientes,
   hallazgosTendenciaSemanal,
-} from '../config/dashboard-aggregations';
+} from "../config/dashboard-aggregations";
 
 /**
  * Solo lectura — el dashboard no tiene mutaciones, así que no hay feedback
@@ -53,7 +53,10 @@ export function useHallazgosAbiertosResumen() {
 /** ← Terreno (real): top 5 de `GET /api/hallazgos` (ya viene orden por fecha desc). */
 export function useHallazgosRecientes() {
   const query = useHallazgosList();
-  const data = useMemo(() => (query.data ? hallazgosRecientes(query.data) : undefined), [query.data]);
+  const data = useMemo(
+    () => (query.data ? hallazgosRecientes(query.data) : undefined),
+    [query.data],
+  );
   return { ...query, data };
 }
 
@@ -62,7 +65,10 @@ export function useHallazgosRecientes() {
  * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`. */
 export function useHallazgosTendencia() {
   const query = useHallazgosList();
-  const data = useMemo(() => (query.data ? hallazgosTendenciaSemanal(query.data) : undefined), [query.data]);
+  const data = useMemo(
+    () => (query.data ? hallazgosTendenciaSemanal(query.data) : undefined),
+    [query.data],
+  );
   return { ...query, data };
 }
 
@@ -73,7 +79,7 @@ export function useHallazgosTendencia() {
 /** El semáforo de HOY refresca solo: es la franja viva del dashboard. */
 export function useDashboardHoy() {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'hoy'],
+    queryKey: [...DASHBOARD_KEY, "hoy"],
     queryFn: getDashboardHoy,
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
@@ -82,38 +88,38 @@ export function useDashboardHoy() {
 
 export function useDashboardEquipos(rango: RangoDashboard) {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'equipos', rango],
+    queryKey: [...DASHBOARD_KEY, "equipos", rango],
     queryFn: () => getDashboardEquipos(rango),
   });
 }
 
 export function useDashboardSupervisores(rango: RangoDashboard) {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'supervisores', rango],
+    queryKey: [...DASHBOARD_KEY, "supervisores", rango],
     queryFn: () => getDashboardSupervisores(rango),
   });
 }
 
 export function useDashboardMantenedores(rango: RangoDashboard) {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'mantenedores', rango],
+    queryKey: [...DASHBOARD_KEY, "mantenedores", rango],
     queryFn: () => getDashboardMantenedores(rango),
   });
 }
 
 export function useDashboardVueltas(rango: RangoDashboard) {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'vueltas', rango],
+    queryKey: [...DASHBOARD_KEY, "vueltas", rango],
     queryFn: () => getDashboardVueltas(rango),
   });
 }
 
-/** Portada viva del admin: resumen del día, refresca solo. */
-export function useDashboardResumenDia() {
+/** Portada del admin: resumen del día. Hoy (sin `fecha`) refresca solo; un día pasado es estático. */
+export function useDashboardResumenDia(fecha?: string) {
   return useQuery({
-    queryKey: [...DASHBOARD_KEY, 'resumen-dia'],
-    queryFn: getDashboardResumenDia,
+    queryKey: [...DASHBOARD_KEY, "resumen-dia", fecha ?? "hoy"],
+    queryFn: () => getDashboardResumenDia(fecha),
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: fecha ? false : 5 * 60_000,
   });
 }
