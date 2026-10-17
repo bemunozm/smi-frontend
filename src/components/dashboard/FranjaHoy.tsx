@@ -48,12 +48,15 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
           </Chip>
         </div>
 
-        <div className="min-h-5 text-sm">
-          {equipo.estado === 'INOPERATIVO' ? (
-            <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
-          ) : null}
-          {equipo.estado === 'DISPONIBLE' ? <span className="text-muted-foreground">Sin turno abierto</span> : null}
-        </div>
+        {!enUso ? (
+          <div className="min-h-5 text-sm">
+            {equipo.estado === 'INOPERATIVO' ? (
+              <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
+            ) : (
+              <span className="text-muted-foreground">Sin turno abierto</span>
+            )}
+          </div>
+        ) : null}
 
         <div className="flex flex-col">
           <Fila etiqueta="Operador">
