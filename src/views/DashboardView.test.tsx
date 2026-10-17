@@ -81,15 +81,15 @@ describe('DashboardView', () => {
       data: {
         totales: { enUso: 2, disponibles: 3, inoperativos: 1 },
         equipos: [
-          { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
-          { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE' },
+          { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
+          { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE', status: 'OPERATIONAL' },
         ],
       },
     });
     render(<DashboardView />);
-    expect(await screen.findByText('2')).toBeTruthy();
-    expect(screen.getByText('3')).toBeTruthy();
-    expect(screen.getByText('1')).toBeTruthy();
+    expect((await screen.findByTestId('contador-EN_USO')).textContent).toBe('2 en uso');
+    expect(screen.getByTestId('contador-DISPONIBLE').textContent).toBe('3 disponibles');
+    expect(screen.getByTestId('contador-INOPERATIVO').textContent).toBe('1 inoperativos');
     expect(screen.getByText(/CG-002/)).toBeTruthy();
     expect(screen.getByText(/P\. Rojas · DIURNO/)).toBeTruthy();
     expect(screen.getByText(/EX-001/)).toBeTruthy();

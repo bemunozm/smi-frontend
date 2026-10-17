@@ -1,26 +1,104 @@
+import { useRef } from 'react';
 import { Card, Chip, Spinner } from '@heroui/react';
 
-import {
-  ESTADO_HOY_NUMERO_CLASS,
-  estadoHoyChipColor,
-  estadoHoyLabel,
-  type EstadoHoy,
-} from '../../config/dashboard-colors';
+import { estadoHoyChipColor, estadoHoyLabel, type EstadoHoy } from '../../config/dashboard-colors';
 import { useDashboardHoy } from '../../hooks/useDashboard';
+import { mantencionesProximas, type MantencionProxima } from '../../lib/mantenciones-proximas';
+import type { ResumenHoy } from '../../types/dashboard';
+import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
 
-const CONTADORES: { estado: EstadoHoy; clave: 'enUso' | 'disponibles' | 'inoperativos' }[] = [
-  { estado: 'EN_USO', clave: 'enUso' },
-  { estado: 'DISPONIBLE', clave: 'disponibles' },
-  { estado: 'INOPERATIVO', clave: 'inoperativos' },
+type EquipoHoy = ResumenHoy['equipos'][number];
+
+const CONTADORES: { estado: EstadoHoy; clave: 'enUso' | 'disponibles' | 'inoperativos'; texto: string }[] = [
+  { estado: 'EN_USO', clave: 'enUso', texto: 'en uso' },
+  { estado: 'DISPONIBLE', clave: 'disponibles', texto: 'disponibles' },
+  { estado: 'INOPERATIVO', clave: 'inoperativos', texto: 'inoperativos' },
 ];
 
-/** Franja HOY: semáforo de la flota (contadores grandes + grilla de equipos). */
-export function FranjaHoy() {
+const MOTIVO_INOPERATIVO: Record<EquipoHoy['status'], string> = {
+  OPERATIONAL: 'No operativo',
+  IN_WORKSHOP: 'En taller',
+  OUT_OF_SERVICE: 'Fuera de servicio',
+};
+
+const BOTON_FLECHA =
+  'flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-foreground hover:bg-surface-secondary';
+
+function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: MantencionProxima }) {
+  return (
+    <Card className="h-full" data-testid={`equipo-card-${equipo.equipmentId}`}>
+      <Card.Content className="flex h-full flex-col gap-3 py-4">
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-mono text-2xl font-semibold text-foreground">{equipo.internalCode}</span>
+          <Chip color={estadoHoyChipColor(equipo.estado)} size="sm" variant="soft">
+            {estadoHoyLabel(equipo.estado)}
+          </Chip>
+        </div>
+
+        <div className="flex min-h-10 flex-col gap-0.5 text-sm">
+          {equipo.estado === 'EN_USO' ? (
+            <>
+              <span className="truncate text-foreground">
+                {equipo.operador ?? 'Sin operador'}
+                {equipo.turno ? ` · ${equipo.turno}` : ''}
+              </span>
+              {equipo.supervisor ? <span className="truncate text-muted-foreground">Sup. {equipo.supervisor}</span> : null}
+            </>
+          ) : null}
+          {equipo.estado === 'INOPERATIVO' ? (
+            <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status]}</span>
+          ) : null}
+          {equipo.estado === 'DISPONIBLE' ? <span className="text-muted-foreground">Sin turno abierto</span> : null}
+        </div>
+
+        {mantencion ? (
+          <Chip className="self-start" color="warning" size="sm" variant="soft">
+            {mantencion.remaining <= 0
+              ? 'Mantención: toca ahora'
+              : `Mantención: quedan ${mantencion.remaining.toLocaleString('es-CL')} ${mantencion.unit}`}
+          </Chip>
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+}
+
+/**
+ * Franja HOY: contadores compactos + carrusel de tarjetas por equipo
+ * (CSS scroll-snap, sin dependencias; el swipe táctil es scroll nativo).
+ * `mantenciones` es el estado de mantención que ya cargó el dashboard.
+ */
+export function FranjaHoy({ mantenciones }: { mantenciones?: Map<string, MaintenanceStatusRow> }) {
   const { data, isPending, isError, error, refetch } = useDashboardHoy();
+  const carruselRef = useRef<HTMLUListElement>(null);
+
+  const mover = (sentido: 1 | -1) => {
+    const el = carruselRef.current;
+    if (el) el.scrollBy({ left: sentido * el.clientWidth, behavior: 'smooth' });
+  };
+
+  const proximas = new Map(mantencionesProximas(mantenciones?.values() ?? []).map((m) => [m.equipmentId, m]));
 
   return (
     <section aria-label="Flota hoy" className="flex flex-col gap-3">
-      <h2 className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">Hoy</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">Hoy</h2>
+        {data ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {CONTADORES.map(({ estado, clave, texto }) => (
+              <Chip
+                color={estadoHoyChipColor(estado)}
+                data-testid={`contador-${estado}`}
+                key={estado}
+                size="sm"
+                variant="soft"
+              >
+                {`${data.totales[clave].toLocaleString('es-CL')} ${texto}`}
+              </Chip>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       {isPending ? (
         <div className="flex justify-center py-8">
@@ -40,55 +118,33 @@ export function FranjaHoy() {
         </div>
       ) : null}
 
-      {data ? (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {CONTADORES.map(({ estado, clave }) => (
-              <Card key={estado}>
-                <Card.Content className="flex flex-col gap-1 py-5">
-                  <span
-                    className={`font-display text-6xl font-semibold tracking-[-0.03em] ${ESTADO_HOY_NUMERO_CLASS[estado]}`}
-                    data-testid={`contador-${estado}`}
-                  >
-                    {data.totales[clave].toLocaleString('es-CL')}
-                  </span>
-                  <span className="text-base font-medium text-muted-foreground">{estadoHoyLabel(estado)}</span>
-                </Card.Content>
-              </Card>
-            ))}
-          </div>
+      {data && data.equipos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay equipos registrados.</p>
+      ) : null}
 
-          {data.equipos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay equipos registrados.</p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {data.equipos.map((equipo) => {
-                const detalle =
-                  equipo.estado === 'EN_USO' && equipo.operador
-                    ? `${equipo.operador}${equipo.turno ? ` · ${equipo.turno}` : ''}`
-                    : null;
-                return (
-                  <li
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                    key={equipo.equipmentId}
-                    title={equipo.supervisor ? `Supervisor: ${equipo.supervisor}` : undefined}
-                  >
-                    <div className="flex min-w-0 flex-col">
-                      <span className="font-mono text-sm text-foreground">{equipo.internalCode}</span>
-                      {detalle ? <span className="truncate text-sm text-muted-foreground">{detalle}</span> : null}
-                      {equipo.estado === 'EN_USO' && equipo.supervisor ? (
-                        <span className="truncate text-sm text-muted-foreground">Sup. {equipo.supervisor}</span>
-                      ) : null}
-                    </div>
-                    <Chip color={estadoHoyChipColor(equipo.estado)} size="sm" variant="soft">
-                      {estadoHoyLabel(equipo.estado)}
-                    </Chip>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
+      {data && data.equipos.length > 0 ? (
+        <div className="flex items-center gap-2">
+          <button aria-label="Equipos anteriores" className={BOTON_FLECHA} onClick={() => mover(-1)} type="button">
+            <span aria-hidden="true">◀</span>
+          </button>
+          <ul
+            className="flex min-w-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ref={carruselRef}
+            role="list"
+          >
+            {data.equipos.map((equipo) => (
+              <li
+                className="w-full shrink-0 snap-start md:w-[calc((100%-1rem)/2)] xl:w-[calc((100%-2rem)/3)]"
+                key={equipo.equipmentId}
+              >
+                <EquipoCard equipo={equipo} mantencion={proximas.get(equipo.equipmentId)} />
+              </li>
+            ))}
+          </ul>
+          <button aria-label="Equipos siguientes" className={BOTON_FLECHA} onClick={() => mover(1)} type="button">
+            <span aria-hidden="true">▶</span>
+          </button>
+        </div>
       ) : null}
     </section>
   );

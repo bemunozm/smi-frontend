@@ -983,6 +983,8 @@ export function DashboardView() {
   const meses = useMemo(() => opcionesMes(), []);
   // Rango que consumen las secciones del dashboard.
   const rango = useMemo(() => rangoDeMes(mes), [mes]);
+  // Estado de mantencion (compartido con la franja HOY para el aviso en cada equipo).
+  const { data: mantenciones } = useMaintenanceStatusByEquipment();
 
   return (
     <div className="flex flex-col gap-6">
@@ -1016,7 +1018,7 @@ export function DashboardView() {
 
       <ResumenDia />
 
-      <FranjaHoy />
+      <FranjaHoy mantenciones={mantenciones} />
 
       <SummaryCards />
 

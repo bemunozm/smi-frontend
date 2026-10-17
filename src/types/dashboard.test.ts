@@ -7,8 +7,8 @@ describe('dashboard schemas', () => {
     const res = ResumenHoySchema.parse({
       totales: { enUso: 1, disponibles: 2, inoperativos: 0 },
       equipos: [
-        { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
-        { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE' },
+        { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
+        { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE', status: 'OPERATIONAL' },
       ],
     });
     expect(res.totales.enUso).toBe(1);
