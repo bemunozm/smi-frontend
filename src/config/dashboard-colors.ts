@@ -108,9 +108,11 @@ export function hallazgosCriticidadHint(breakdown: HallazgosPorCriticidad): stri
 /** Estados de la franja HOY: verde en uso, neutro disponible, rojo inoperativo. */
 export type EstadoHoy = 'EN_USO' | 'DISPONIBLE' | 'INOPERATIVO';
 
+/** Pedido del administrador: en uso AMARILLO (operando, atención), disponible
+ * VERDE (listo para asignar), inoperativo/mantención ROJO. */
 const ESTADO_HOY_COLOR: Record<EstadoHoy, DashboardChipColor> = {
-  EN_USO: 'success',
-  DISPONIBLE: 'default',
+  EN_USO: 'warning',
+  DISPONIBLE: 'success',
   INOPERATIVO: 'danger',
 };
 
