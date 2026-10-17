@@ -1,8 +1,10 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Card, Chip, Spinner } from '@heroui/react';
 
 import { estadoHoyChipColor, estadoHoyLabel, type EstadoHoy } from '../../config/dashboard-colors';
+import { FuelGauge } from '../flota/FuelGauge';
 import { useDashboardHoy } from '../../hooks/useDashboard';
+import { NUM_CL_1 } from '../../lib/dashboard-format';
 import { mantencionesProximas, type MantencionProxima } from '../../lib/mantenciones-proximas';
 import type { ResumenHoy } from '../../types/dashboard';
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
@@ -24,31 +26,46 @@ const MOTIVO_INOPERATIVO: Record<NonNullable<EquipoHoy['status']>, string> = {
 const BOTON_FLECHA =
   'flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-foreground hover:bg-surface-secondary';
 
+function Fila({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 last:border-b-0">
+      <span className="shrink-0 text-xs text-muted-foreground">{etiqueta}</span>
+      <div className="min-w-0 truncate text-right text-sm text-foreground">{children}</div>
+    </div>
+  );
+}
+
 function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: MantencionProxima }) {
+  const enUso = equipo.estado === 'EN_USO';
+  const km = equipo.unidadControl === 'KM';
   return (
     <Card className="h-full" data-testid={`equipo-card-${equipo.equipmentId}`}>
-      <Card.Content className="flex h-full flex-col gap-3 py-4">
+      <Card.Content className="flex h-full min-h-72 flex-col gap-3 py-5">
         <div className="flex items-start justify-between gap-2">
-          <span className="font-mono text-2xl font-semibold text-foreground">{equipo.internalCode}</span>
+          <span className="font-mono text-3xl font-semibold text-foreground">{equipo.internalCode}</span>
           <Chip color={estadoHoyChipColor(equipo.estado)} size="sm" variant="soft">
             {estadoHoyLabel(equipo.estado)}
           </Chip>
         </div>
 
-        <div className="flex min-h-10 flex-col gap-0.5 text-sm">
-          {equipo.estado === 'EN_USO' ? (
-            <>
-              <span className="truncate text-foreground">
-                {equipo.operador ?? 'Sin operador'}
-                {equipo.turno ? ` · ${equipo.turno}` : ''}
-              </span>
-              {equipo.supervisor ? <span className="truncate text-muted-foreground">Sup. {equipo.supervisor}</span> : null}
-            </>
-          ) : null}
+        <div className="min-h-5 text-sm">
           {equipo.estado === 'INOPERATIVO' ? (
             <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
           ) : null}
           {equipo.estado === 'DISPONIBLE' ? <span className="text-muted-foreground">Sin turno abierto</span> : null}
+        </div>
+
+        <div className="flex flex-col">
+          <Fila etiqueta="Operador">
+            {enUso ? `${equipo.operador ?? 'Sin operador'}${equipo.turno ? ` · ${equipo.turno}` : ''}` : '—'}
+          </Fila>
+          <Fila etiqueta="Supervisor">{enUso && equipo.supervisor ? equipo.supervisor : '—'}</Fila>
+          <Fila etiqueta="Combustible">
+            <FuelGauge className="justify-end" pct={equipo.nivelCombustible ?? null} />
+          </Fila>
+          <Fila etiqueta={km ? 'Odómetro actual' : 'Horómetro actual'}>
+            {equipo.contadorActual == null ? '—' : `${NUM_CL_1.format(equipo.contadorActual)} ${km ? 'km' : 'h'}`}
+          </Fila>
         </div>
 
         {mantencion ? (

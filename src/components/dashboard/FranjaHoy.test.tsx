@@ -6,14 +6,15 @@ const { hoyHook } = vi.hoisted(() => ({ hoyHook: vi.fn() }));
 vi.mock('../../hooks/useDashboard', () => ({ useDashboardHoy: () => hoyHook() }));
 
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
+import { EstadoEquipoHoySchema } from '../../types/dashboard';
 import { FranjaHoy } from './FranjaHoy';
 
 const DATA = {
   totales: { enUso: 1, disponibles: 1, inoperativos: 2 },
   equipos: [
-    { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
-    { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE', status: 'OPERATIONAL' },
-    { equipmentId: 'e3', internalCode: 'CM-006', estado: 'INOPERATIVO', status: 'IN_WORKSHOP' },
+    { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert', unidadControl: 'HOURS', contadorActual: 1234.5, nivelCombustible: 65 },
+    { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE', status: 'OPERATIONAL', unidadControl: 'KM', contadorActual: 80500, nivelCombustible: 30 },
+    { equipmentId: 'e3', internalCode: 'CM-006', estado: 'INOPERATIVO', status: 'IN_WORKSHOP', unidadControl: 'HOURS', contadorActual: null, nivelCombustible: null },
     { equipmentId: 'e4', internalCode: 'CN-007', estado: 'INOPERATIVO', status: 'OUT_OF_SERVICE' },
   ],
 };
@@ -55,7 +56,54 @@ describe('FranjaHoy', () => {
     render(<FranjaHoy />);
     expect(card('e1').getByText('En uso')).toBeTruthy();
     expect(card('e1').getByText('P. Rojas · DIURNO')).toBeTruthy();
-    expect(card('e1').getByText('Sup. Limbert')).toBeTruthy();
+    expect(card('e1').getByText('Limbert')).toBeTruthy();
+  });
+
+  it('muestra combustible % y contador con unidad (HOURS) o Odómetro (KM)', () => {
+    mockHoy({ data: DATA });
+    render(<FranjaHoy />);
+    expect(card('e1').getByText('Combustible')).toBeTruthy();
+    expect(card('e1').getByText('65%')).toBeTruthy();
+    expect(card('e1').getByText('Horómetro actual')).toBeTruthy();
+    expect(card('e1').getByText('1.234,5 h')).toBeTruthy();
+    expect(card('e2').getByText('Odómetro actual')).toBeTruthy();
+    expect(card('e2').getByText('80.500 km')).toBeTruthy();
+    expect(card('e2').getByText('30%')).toBeTruthy();
+  });
+
+  it('operador y supervisor son filas etiquetadas; sin turno en uso muestran —', () => {
+    mockHoy({ data: DATA });
+    render(<FranjaHoy />);
+    expect(card('e1').getByText('Operador')).toBeTruthy();
+    expect(card('e1').getByText('Supervisor')).toBeTruthy();
+    expect(card('e2').getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('nivel y contador nulos (o ausentes en payload cacheado) muestran —', () => {
+    mockHoy({
+      data: {
+        ...DATA,
+        equipos: [
+          DATA.equipos[2],
+          { equipmentId: 'e8', internalCode: 'XX-008', estado: 'DISPONIBLE' },
+        ],
+      },
+    });
+    render(<FranjaHoy />);
+    for (const id of ['e3', 'e8']) {
+      const fila = (t: string) => card(id).getByText(t).parentElement!;
+      expect(within(fila('Combustible')).getByText('—')).toBeTruthy();
+      expect(within(fila('Horómetro actual')).getByText('—')).toBeTruthy();
+    }
+  });
+
+  it('el schema acepta payloads cacheados sin los campos nuevos', () => {
+    const viejo = { equipmentId: 'e1', internalCode: 'A', estado: 'EN_USO' };
+    expect(EstadoEquipoHoySchema.safeParse(viejo).success).toBe(true);
+    expect(
+      EstadoEquipoHoySchema.safeParse({ ...viejo, unidadControl: 'KM', contadorActual: null, nivelCombustible: null })
+        .success,
+    ).toBe(true);
   });
 
   it('en taller y fuera de servicio se distinguen', () => {

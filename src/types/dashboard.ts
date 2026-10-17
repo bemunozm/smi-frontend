@@ -74,6 +74,10 @@ export const EstadoEquipoHoySchema = z.object({
   operador: z.string().optional(),
   turno: z.string().optional(),
   supervisor: z.string().optional(),
+  /** Opcionales: payloads cacheados (PWA) previos a estos campos deben seguir parseando. */
+  unidadControl: z.enum(['HOURS', 'KM']).optional(),
+  contadorActual: z.number().nullable().optional(),
+  nivelCombustible: z.number().nullable().optional(),
 });
 
 export const ResumenHoySchema = z.object({
