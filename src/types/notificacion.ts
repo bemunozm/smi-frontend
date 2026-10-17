@@ -18,6 +18,12 @@ export const NOTIF_TIPOS = {
   /** Un registro ya enviado fue corregido (solo lo recibe el administrador) —
    * `data: { entity, entityId }`, con `entity` en `RECORD_EDITED_ENTITIES`. */
   RECORD_EDITED: 'record.edited',
+  /** El mantenedor envió el checklist diario de un equipo (al supervisor) —
+   * `data: { checklistId, equipmentId }`. */
+  CHECKLIST_SUBMITTED: 'checklist.submitted',
+  /** El supervisor lo aceptó o rechazó (al mantenedor y al administrador) —
+   * `data: { checklistId, equipmentId, decision }`. */
+  CHECKLIST_REVIEWED: 'checklist.reviewed',
 } as const;
 
 /** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */

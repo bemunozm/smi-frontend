@@ -15,10 +15,9 @@ import { FichaItemView } from './views/FichaItemView';
 import { InventarioView } from './views/InventarioView';
 import { MovimientosView } from './views/MovimientosView';
 import { LoginView } from './views/LoginView';
-import { ActividadesView } from './views/ActividadesView';
+import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
-import { PreventivoView } from './views/PreventivoView';
 import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
@@ -29,6 +28,7 @@ import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
+import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
 import { RegistroEquipoView } from './views/RegistroEquipoView';
 
@@ -111,9 +111,8 @@ export const router = createBrowserRouter([
           },
           // Mantención (el taller) — shell propio igual que Terreno: al entrar
           // desaparece el chrome del administrador y manda la navegación del
-          // módulo (ver `layout/MantenimientoLayout.tsx`). Preventivo y Tareas
-          // son gestión ADMIN-only; el filtro de pestañas del layout y este
-          // `ProtectedRoute` anidado cuentan la misma historia.
+          // módulo (ver `layout/MantenimientoLayout.tsx`): Órdenes, Checklist,
+          // Stock y Equipos.
           {
             element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
             children: [
@@ -122,6 +121,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
                   { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
+                  { path: '/mantenimiento/checklist', element: <ChecklistDiarioView /> },
                   { path: '/mantenimiento/stock', element: <WorkshopStockView /> },
                   // Historial y ficha SIN salir del taller: las mismas
                   // pantallas de Inventario, montadas acá para que la barra
@@ -146,13 +146,6 @@ export const router = createBrowserRouter([
                   {
                     path: '/mantenimiento/equipos/:id/ficha',
                     element: <FichaEquipoView contexto="taller" />,
-                  },
-                  {
-                    element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
-                    children: [
-                      { path: '/mantenimiento/preventivo', element: <PreventivoView /> },
-                      { path: '/mantenimiento/tareas', element: <ActividadesView /> },
-                    ],
                   },
                 ],
               },
@@ -180,6 +173,7 @@ export const router = createBrowserRouter([
                   { path: '/terreno/reporte-diario', element: <ReporteDiarioView /> },
                   { path: '/terreno/trabajos-extra', element: <TrabajosExtraView /> },
                   { path: '/terreno/hallazgos', element: <HallazgosView /> },
+                  { path: '/terreno/checklists', element: <ValidarChecklistsView /> },
                   // Combustible sigue viva sin estar enlazada (la espec la
                   // fusiona en «Registro de equipo»): tiene backend real y de
                   // ahí hay que sacar los endpoints cuando el Módulo A deje

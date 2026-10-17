@@ -19,11 +19,12 @@ import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
+import { useDailyChecklists } from '../hooks/useDailyChecklists';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros, fmtTime, plural } from '../lib/format';
-import { fechaCorta, type Turno } from '../lib/turno';
+import { fechaCorta, toDateOnly, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
   Boton,
@@ -133,6 +134,18 @@ export function RegistroEquipoView() {
     reporteUrl,
   } = useShiftRegister();
 
+  // Módulo 3: con el checklist del día por validar o rechazado, el equipo no
+  // se libera. Se muestra apagado y con el motivo (el backend igual lo frena).
+  const { data: checklistsDelDia } = useDailyChecklists(toDateOnly(ctx.fecha));
+  const checklistSinAceptar = new Map(
+    (checklistsDelDia ?? [])
+      .filter((c) => c.status !== 'ACCEPTED')
+      .map((c) => [
+        c.equipment.id,
+        c.status === 'REJECTED' ? 'Checklist rechazado: falta que lo corrijan' : 'Checklist por validar (Checklists)',
+      ]),
+  );
+
   // --- Apertura -------------------------------------------------------------
 
   const formApertura = (
@@ -155,7 +168,12 @@ export function RegistroEquipoView() {
                   horometro: formatDecimalInput(eq?.currentHourmeter, 1),
                 }));
               }}
-              opciones={disponibles.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+              opciones={disponibles.map((e) => ({
+                valor: e.id,
+                titulo: e.internalCode,
+                detalle: e.type,
+                ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
+              }))}
             />
           </Campo>
 

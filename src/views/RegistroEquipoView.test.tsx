@@ -47,6 +47,10 @@ function lineaEstadoCorreoMock(emailStatus: string): string {
   }
 }
 
+// Checklists del día (Módulo 3): un equipo con el suyo por validar sale apagado.
+let checklistsDelDia: unknown[] = [];
+vi.mock('../hooks/useDailyChecklists', () => ({ useDailyChecklists: () => ({ data: checklistsDelDia }) }));
+
 vi.mock('../hooks/useShiftRegister', () => ({
   useShiftRegister: () => mockResult,
   lineaEstadoCorreo: lineaEstadoCorreoMock,
@@ -211,6 +215,7 @@ function renderView(size: 'phone' | 'desktop' = 'phone', overrides: Partial<UseS
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  checklistsDelDia = [];
 });
 
 describe('RegistroEquipoView', () => {
@@ -222,6 +227,19 @@ describe('RegistroEquipoView', () => {
     const lista = within(screen.getByRole('listbox'));
     expect(lista.getByRole('option', { name: /EX-005/ })).toBeTruthy();
     expect(lista.getByRole('option', { name: /PE-009/ })).toBeTruthy();
+  });
+
+  it('un equipo con el checklist del día por validar sale apagado y dice por qué (Módulo 3)', () => {
+    checklistsDelDia = [{ equipment: { id: 'e1' }, status: 'SUBMITTED' }];
+    renderView();
+
+    fireEvent.click(screen.getByLabelText('Equipo'));
+
+    const lista = within(screen.getByRole('listbox'));
+    const ex = lista.getByRole('option', { name: /EX-005/ });
+    expect(ex.getAttribute('aria-disabled')).toBe('true');
+    expect(ex.textContent).toMatch(/Checklist por validar/);
+    expect(lista.getByRole('option', { name: /PE-009/ }).getAttribute('aria-disabled')).not.toBe('true');
   });
 
   describe('horómetro inicial: avisos y errores', () => {

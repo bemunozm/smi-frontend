@@ -16,6 +16,9 @@ vi.mock('../components/terreno/SyncStatus', () => ({
   SyncStatus: () => <div data-testid="sync-status-stub" />,
 }));
 vi.mock('../lib/logout', () => ({ logout: vi.fn() }));
+// La pestaña Checklist muestra cuántos rechazados hay por corregir.
+let rechazados: unknown[] = [];
+vi.mock('../hooks/useDailyChecklists', () => ({ useChecklistsPorEstado: () => ({ data: rechazados }) }));
 vi.mock('../offline/outbox', () => ({ countPending: vi.fn() }));
 
 let mockRole: Role = ROLES.MANTENEDOR;
@@ -69,24 +72,24 @@ describe('MantenimientoLayout', () => {
     expect(screen.queryByRole('navigation', { name: 'Navegación principal' })).toBeNull();
   });
 
-  it('MANTENEDOR ve Órdenes, Stock y Equipos en la barra inferior', () => {
+  it('MANTENEDOR ve Órdenes, Checklist, Stock y Equipos en la barra inferior', () => {
     renderLayout('phone', ROLES.MANTENEDOR);
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(labels).toEqual(['Órdenes', 'Stock', 'Equipos']);
+    expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos']);
   });
 
-  it('ADMIN ve también Preventivo y Tareas', () => {
+  it('ADMIN ve las mismas cuatro secciones', () => {
     renderLayout('phone', ROLES.ADMIN);
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(labels).toEqual(['Órdenes', 'Stock', 'Equipos', 'Preventivo', 'Tareas']);
+    expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos']);
   });
 
   it('el drawer del MANTENEDOR no ofrece «Ir al panel»: el taller ES su panel', () => {
@@ -109,7 +112,7 @@ describe('MantenimientoLayout', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });
     expect(screen.getByRole('banner').contains(nav)).toBe(true);
-    for (const label of ['Órdenes de trabajo', 'Stock del taller', 'Plan preventivo', 'Tareas']) {
+    for (const label of ['Órdenes de trabajo', 'Checklist diario', 'Stock del taller', 'Equipos']) {
       expect(within(nav).getByRole('link', { name: label })).toBeTruthy();
     }
     // Una sola barra montada — mismo criterio que `TerrenoLayout.test.tsx`.
