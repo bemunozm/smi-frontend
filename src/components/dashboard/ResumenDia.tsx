@@ -14,6 +14,7 @@ function KpiTile({
   bg,
   label,
   fecha,
+  fechaLabel,
   big,
   unit,
   testId,
@@ -22,6 +23,8 @@ function KpiTile({
   bg: string;
   label: string;
   fecha: string;
+  /** Reemplaza la fecha en la cabecera (p. ej. dato que no es del día). */
+  fechaLabel?: string;
   big: string;
   unit?: string;
   testId: string;
@@ -31,7 +34,7 @@ function KpiTile({
     <div className="flex flex-col gap-2 rounded-xl p-4 text-white" data-testid={testId} style={{ backgroundColor: bg }}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-semibold tracking-wider uppercase">{label}</span>
-        <span className="text-xs opacity-90">{formatDia(fecha)}</span>
+        <span className="text-xs opacity-90">{fechaLabel ?? formatDia(fecha)}</span>
       </div>
       <div className="flex items-baseline gap-1.5">
         <span className="font-display text-4xl font-semibold tracking-[-0.03em] xl:text-5xl">{big}</span>
@@ -42,7 +45,7 @@ function KpiTile({
   );
 }
 
-function TarjetasKpi({ data }: { data: ResumenDiaData }) {
+function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }) {
   const { fecha, hm, diesel, reports, produccion, adBlue } = data;
   const vueltasTotal = produccion.internos + produccion.minaCaleta + produccion.mineras;
   const extra = reports.porEquipo.length - MAX_REPORTS_EQUIPOS;
@@ -50,13 +53,7 @@ function TarjetasKpi({ data }: { data: ResumenDiaData }) {
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-      <KpiTile
-        bg={RESUMEN_CARD_BG.hm}
-        big={NUM_CL_1.format(hm.total)}
-        fecha={fecha}
-        label="HM operacionales"
-        testId="kpi-hm"
-      >
+      <KpiTile bg={RESUMEN_CARD_BG.hm} big={NUM_CL_1.format(hm.total)} fecha={fecha} label="HM operacionales" testId="kpi-hm">
         <span>
           {NUM_CL_1.format(hm.dia)} Día + {NUM_CL_1.format(hm.noche)} Noche
         </span>
@@ -110,6 +107,7 @@ function TarjetasKpi({ data }: { data: ResumenDiaData }) {
         bg={RESUMEN_CARD_BG.adBlue}
         big={adBlue ? NUM_CL_1.format(adBlue.stock) : '—'}
         fecha={fecha}
+        fechaLabel={pasado ? 'saldo actual' : undefined}
         label="AdBlue"
         testId="kpi-adblue"
         unit={adBlue ? unidadAdBlue : undefined}
@@ -254,7 +252,8 @@ export function ResumenDia() {
   const hoy = toDateOnly(new Date());
   const actual = fecha ?? hoy;
   const irA = (dia: string) => {
-    if (!dia) return; // input vaciado: conservar el día actual
+    // Vacío o año parcial (Chrome emite 0002-10-10 al tipear): conservar el día actual.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia < '1900-01-01') return;
     setFecha(dia >= hoy ? undefined : dia); // hoy = consulta viva, sin param
   };
   const mover = (delta: number) => {
@@ -318,7 +317,7 @@ export function ResumenDia() {
 
       {data ? (
         <>
-          <TarjetasKpi data={data} />
+          <TarjetasKpi data={data} pasado={fecha !== undefined} />
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <TablaOperacion data={data} />
             <TablaLecturas data={data} />

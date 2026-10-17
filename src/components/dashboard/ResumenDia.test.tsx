@@ -41,33 +41,13 @@ const BASE = {
     },
   ],
   lecturas: [
-    {
-      id: 'c1',
-      internalCode: 'CG-002',
-      turno: 'DIURNO',
-      inicial: 100,
-      final: 106,
-      avance: 6,
-    },
-    {
-      id: 'c2',
-      internalCode: 'CG-002',
-      turno: 'NOCTURNO',
-      inicial: 106,
-      final: null,
-      avance: null,
-    },
+    { id: 'c1', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
+    { id: 'c2', internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
   ],
 };
 
 const mock = (data: object) =>
-  resumenHook.mockReturnValue({
-    data,
-    isPending: false,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
-  });
+  resumenHook.mockReturnValue({ data, isPending: false, isError: false, error: null, refetch: vi.fn() });
 
 afterEach(() => {
   cleanup();
@@ -109,12 +89,7 @@ describe('ResumenDia', () => {
     mock({
       ...BASE,
       diesel: { ...BASE.diesel, porHm: null },
-      adBlue: {
-        itemId: 'i1',
-        nombre: 'AdBlue 20L',
-        stock: 150.5,
-        unidad: 'LITER',
-      },
+      adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' },
     });
     render(<ResumenDia />);
     const ad = within(screen.getByTestId('kpi-adblue'));
@@ -147,22 +122,8 @@ describe('ResumenDia', () => {
     mock({
       ...BASE,
       lecturas: [
-        {
-          id: 'a',
-          internalCode: 'CG-002',
-          turno: 'DIURNO',
-          inicial: 100,
-          final: 102,
-          avance: 2,
-        },
-        {
-          id: 'b',
-          internalCode: 'CG-002',
-          turno: 'DIURNO',
-          inicial: 102,
-          final: null,
-          avance: null,
-        },
+        { id: 'a', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 102, avance: 2 },
+        { id: 'b', internalCode: 'CG-002', turno: 'DIURNO', inicial: 102, final: null, avance: null },
       ],
     });
     render(<ResumenDia />);
@@ -173,12 +134,7 @@ describe('ResumenDia', () => {
   });
 
   it('muestra skeleton al cargar y error con reintento', () => {
-    resumenHook.mockReturnValue({
-      data: undefined,
-      isPending: true,
-      isError: false,
-      error: null,
-    });
+    resumenHook.mockReturnValue({ data: undefined, isPending: true, isError: false, error: null });
     const { unmount } = render(<ResumenDia />);
     expect(screen.getByTestId('resumen-dia-skeleton')).toBeTruthy();
     unmount();
@@ -210,13 +166,7 @@ describe('ResumenDia', () => {
       render(<ResumenDia />);
       expect(resumenHook).toHaveBeenLastCalledWith(undefined);
       expect(screen.queryByRole('button', { name: 'Hoy' })).toBeNull();
-      expect(
-        (
-          screen.getByRole('button', {
-            name: 'Día siguiente',
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(true);
+      expect((screen.getByRole('button', { name: 'Día siguiente' }) as HTMLButtonElement).disabled).toBe(true);
       const input = screen.getByLabelText('Fecha') as HTMLInputElement;
       expect(input.max).toBe(hoyStr);
       expect(input.value).toBe(hoyStr);
@@ -225,9 +175,7 @@ describe('ResumenDia', () => {
     it('cambiar la fecha llama al hook con el param; "Hoy" resetea', () => {
       mock(BASE);
       render(<ResumenDia />);
-      fireEvent.change(screen.getByLabelText('Fecha'), {
-        target: { value: '2026-10-10' },
-      });
+      fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-10' } });
       expect(resumenHook).toHaveBeenLastCalledWith('2026-10-10');
       fireEvent.click(screen.getByRole('button', { name: 'Hoy' }));
       expect(resumenHook).toHaveBeenLastCalledWith(undefined);
@@ -248,13 +196,27 @@ describe('ResumenDia', () => {
       expect(resumenHook).toHaveBeenLastCalledWith(undefined);
     });
 
-    it('ignora una fecha futura o vacía', () => {
+    it('ignora una fecha futura, vacía o con año parcial', () => {
       mock(BASE);
       render(<ResumenDia />);
-      fireEvent.change(screen.getByLabelText('Fecha'), {
-        target: { value: '2999-01-01' },
-      });
+      const input = screen.getByLabelText('Fecha');
+      fireEvent.change(input, { target: { value: '2999-01-01' } });
       expect(resumenHook).toHaveBeenLastCalledWith(undefined);
+      fireEvent.change(input, { target: { value: '2026-10-10' } });
+      expect(resumenHook).toHaveBeenLastCalledWith('2026-10-10');
+      // Vacío o año parcial (Chrome emite 0002-10-10 al tipear): la última consulta no cambia.
+      fireEvent.change(input, { target: { value: '' } });
+      expect(resumenHook).toHaveBeenLastCalledWith('2026-10-10');
+      fireEvent.change(input, { target: { value: '0002-10-10' } });
+      expect(resumenHook).toHaveBeenLastCalledWith('2026-10-10');
+    });
+
+    it('AdBlue en un día pasado rotula "saldo actual" en vez de la fecha', () => {
+      mock({ ...BASE, adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' } });
+      render(<ResumenDia />);
+      fireEvent.click(screen.getByRole('button', { name: 'Día anterior' }));
+      expect(within(screen.getByTestId('kpi-adblue')).getByText('saldo actual')).toBeTruthy();
+      expect(within(screen.getByTestId('kpi-hm')).queryByText('saldo actual')).toBeNull();
     });
   });
 });
