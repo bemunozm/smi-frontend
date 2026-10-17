@@ -52,6 +52,7 @@ export const ordenEntity = (id: string) => `orden:${id}`;
 export const intervencionEntity = (id: string) => `intervencion:${id}`;
 export const actividadEntity = (id: string) => `actividad:${id}`;
 export const umbralEntity = (id: string) => `umbral:${id}`;
+export const dailyChecklistEntity = (id: string) => `daily-checklist:${id}`;
 
 /**
  * `'pending'`/`'pending_upload'`/`'pending_claim'`: esperando su turno en el

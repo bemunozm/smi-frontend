@@ -1,6 +1,9 @@
-import { Briefcase, ClipboardCheck, FileText, TriangleAlert } from 'lucide-react';
+import { Briefcase, ClipboardCheck, FileText, ListChecks, TriangleAlert } from 'lucide-react';
 
+import { useChecklistsPorEstado } from '../hooks/useDailyChecklists';
 import { TerrenoShell, type ShellTab } from './TerrenoShell';
+
+const POR_VALIDAR = ['SUBMITTED'] as const;
 
 /**
  * Los cuatro destinos del módulo, en el orden de la maqueta. La etiqueta larga
@@ -17,6 +20,8 @@ const tabs: ShellTab[] = [
   { to: '/terreno/reporte-diario', label: 'Reporte diario', corto: 'Reporte', icon: FileText },
   { to: '/terreno/trabajos-extra', label: 'Trabajos extra', corto: 'Trabajos', icon: Briefcase },
   { to: '/terreno/hallazgos', label: 'Hallazgos', corto: 'Hallazgos', icon: TriangleAlert },
+  // Módulo 3: el supervisor valida el checklist del mantenedor y libera el equipo.
+  { to: '/terreno/checklists', label: 'Checklists', corto: 'Checklists', icon: ListChecks },
 ];
 
 /**
@@ -25,5 +30,11 @@ const tabs: ShellTab[] = [
  * el shell, compartida con `MantenimientoLayout`.
  */
 export function TerrenoLayout() {
-  return <TerrenoShell etiquetaNav="Secciones de Terreno" subtitulo="Operación en terreno" tabs={tabs} />;
+  // El supervisor no tiene campana en Terreno: la pestaña dice cuántos
+  // checklists esperan su validación.
+  const { data: pendientes } = useChecklistsPorEstado(POR_VALIDAR);
+  const conBadge = tabs.map((t) =>
+    t.to === '/terreno/checklists' ? { ...t, badge: pendientes?.length ?? 0 } : t,
+  );
+  return <TerrenoShell etiquetaNav="Secciones de Terreno" subtitulo="Operación en terreno" tabs={conBadge} />;
 }

@@ -63,6 +63,8 @@ export const UMBRALES_KEY = ['umbrales'] as const;
 /** Pautas de mantención: `[...MAINTENANCE_PLANS_KEY, equipmentId]` para una,
  * `[...MAINTENANCE_PLANS_KEY, 'status']` para la próxima de todos los equipos. */
 export const MAINTENANCE_PLANS_KEY = ['maintenance-plans'] as const;
+/** Checklist diario del mantenedor: catálogo, enviados del día y detalle. */
+export const DAILY_CHECKLISTS_KEY = ['daily-checklists'] as const;
 /** Bandeja de notificaciones y su contador de no leídas: las usa
  * `hooks/useNotificaciones.ts` y la precarga de `hooks/usePrepareOffline.ts`. */
 export const NOTIFICACIONES_KEY = ['notificaciones'] as const;
@@ -92,6 +94,7 @@ export const QUERY_KEYS = {
   actividades: ACTIVIDADES_KEY,
   umbrales: UMBRALES_KEY,
   maintenancePlans: MAINTENANCE_PLANS_KEY,
+  dailyChecklists: DAILY_CHECKLISTS_KEY,
 } as const;
 
 export type QueryKeyName = keyof typeof QUERY_KEYS;
