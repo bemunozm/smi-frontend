@@ -28,9 +28,9 @@ const BOTON_FLECHA =
 
 function Fila({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 last:border-b-0">
-      <span className="shrink-0 text-xs text-muted-foreground">{etiqueta}</span>
-      <div className="min-w-0 truncate text-right text-sm text-foreground">{children}</div>
+    <div className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-b-0">
+      <span className="shrink-0 text-sm text-muted-foreground">{etiqueta}</span>
+      <div className="min-w-0 truncate text-right text-base font-medium text-foreground">{children}</div>
     </div>
   );
 }
@@ -40,16 +40,16 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
   const km = equipo.unidadControl === 'KM';
   return (
     <Card className="h-full" data-testid={`equipo-card-${equipo.equipmentId}`}>
-      <Card.Content className="flex h-full min-h-72 flex-col gap-3 py-5">
+      <Card.Content className="flex h-full min-h-80 flex-col gap-3 py-5">
         <div className="flex items-start justify-between gap-2">
-          <span className="font-mono text-3xl font-semibold text-foreground">{equipo.internalCode}</span>
-          <Chip color={estadoHoyChipColor(equipo.estado)} size="sm" variant="soft">
+          <span className="font-mono text-4xl font-semibold text-foreground">{equipo.internalCode}</span>
+          <Chip color={estadoHoyChipColor(equipo.estado)} size="md" variant="soft">
             {estadoHoyLabel(equipo.estado)}
           </Chip>
         </div>
 
         {!enUso ? (
-          <div className="min-h-5 text-sm">
+          <div className="min-h-5 text-base">
             {equipo.estado === 'INOPERATIVO' ? (
               <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
             ) : (
@@ -72,7 +72,7 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
         </div>
 
         {mantencion ? (
-          <Chip className="self-start" color="warning" size="sm" variant="soft">
+          <Chip className="self-start" color="warning" size="md" variant="soft">
             {mantencion.remaining <= 0
               ? 'Mantención: toca ahora'
               : `Mantención: quedan ${mantencion.remaining.toLocaleString('es-CL')} ${mantencion.unit}`}
@@ -110,7 +110,7 @@ export function FranjaHoy({ mantenciones }: { mantenciones?: Map<string, Mainten
                 color={estadoHoyChipColor(estado)}
                 data-testid={`contador-${estado}`}
                 key={estado}
-                size="sm"
+                size="md"
                 variant="soft"
               >
                 {`${data.totales[clave].toLocaleString('es-CL')} ${texto}`}
