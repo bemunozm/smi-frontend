@@ -1,6 +1,4 @@
-import type { EquipmentStatus } from '../types/equipment';
 import type { Criticidad, HallazgoEstado, HallazgosPorCriticidad } from '../types/dashboard';
-import { equipmentStatusChipColor } from './flota-colors';
 
 /** Colores semánticos de HeroUI (Chip) aceptados por estos mapeos. */
 export type DashboardChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'default';
@@ -44,7 +42,7 @@ export function hallazgoEstadoLabel(estado: HallazgoEstado): string {
  * screenshot full-page (donde `ResponsiveContainer` puede re-medir vía
  * `ResizeObserver` y Recharts re-dispara su animación de entrada), el custom
  * property no llegaba a resolverse a tiempo para el primer paint — los 3
- * gráficos se veían sin marcas (ejes/leyenda sí, dona/líneas/barras no).
+ * gráficos se veían sin marcas (ejes/leyenda sí, líneas/barras no).
  * Copiados 1:1 de los valores reales de `index.css` — si la paleta del tema
  * cambia, actualizar ambos archivos.
  */
@@ -69,8 +67,7 @@ export const CHART_FILL: Record<DashboardChipColor, string> = {
   default: HEX.muted,
 };
 
-/** Elementos neutros de los 3 gráficos (ejes, grid, tooltip, borde de la
- * dona) — mismos hex literales que `CHART_FILL`, por la razón de arriba. */
+/** Elementos neutros de los gráficos (ejes, grid, tooltip) — mismos hex literales que `CHART_FILL`, por la razón de arriba. */
 export const CHART_NEUTRAL = {
   surface: HEX.surface,
   foreground: HEX.foreground,
@@ -80,16 +77,6 @@ export const CHART_NEUTRAL = {
   overlayShadow: HEX.overlayShadow,
 } as const;
 
-/** Color de relleno del gráfico de flota para un estado dado — puente entre
- * el color semántico de Chip que ya define `flota-colors.ts#equipmentStatusChipColor`
- * (fuente única de colores/labels de `EquipmentStatus`, dominio de Benjamín) y
- * los hex literales que necesita Recharts. Ya no duplica el mapeo
- * estado→color: antes vivía acá un mapeo propio, desalineado del que ya usan
- * las vistas de Flota — se eliminó a favor de reusar el de `flota-colors.ts`. */
-export function equipmentStatusChartColor(status: EquipmentStatus): string {
-  return CHART_FILL[equipmentStatusChipColor(status)];
-}
-
 /** Serie "abiertos vs cerrados" del gráfico de tendencia de hallazgos —
  * mismo par que usa `hallazgoEstadoChipColor` para EN_PROCESO/CERRADO, así
  * la lectura del área coincide con los chips de las listas. */
@@ -98,7 +85,7 @@ export const HALLAZGOS_TENDENCIA_COLOR = {
   cerrados: CHART_FILL.success,
 } as const;
 
-/** Serie única del gráfico de horas extraordinarias — un solo hue, sin
+/** Serie única de los gráficos de barras de una sola métrica (horas, vueltas) — un solo hue, sin
  * necesidad de leyenda (el título de la card ya dice qué se mide). */
 export const TRABAJOS_EXTRAORDINARIOS_COLOR = CHART_FILL.accent;
 
@@ -117,3 +104,47 @@ export function hallazgosCriticidadHint(breakdown: HallazgosPorCriticidad): stri
   }
   return parts.join(' · ');
 }
+
+/** Estados de la franja HOY: verde en uso, neutro disponible, rojo inoperativo. */
+export type EstadoHoy = 'EN_USO' | 'DISPONIBLE' | 'INOPERATIVO';
+
+const ESTADO_HOY_COLOR: Record<EstadoHoy, DashboardChipColor> = {
+  EN_USO: 'success',
+  DISPONIBLE: 'default',
+  INOPERATIVO: 'danger',
+};
+
+export function estadoHoyChipColor(estado: EstadoHoy): DashboardChipColor {
+  return ESTADO_HOY_COLOR[estado];
+}
+
+const ESTADO_HOY_LABEL: Record<EstadoHoy, string> = {
+  EN_USO: 'En uso',
+  DISPONIBLE: 'Disponible',
+  INOPERATIVO: 'Inoperativo',
+};
+
+export function estadoHoyLabel(estado: EstadoHoy): string {
+  return ESTADO_HOY_LABEL[estado];
+}
+
+/** Clases del número grande de cada contador (tokens de `index.css`). */
+export const ESTADO_HOY_NUMERO_CLASS: Record<EstadoHoy, string> = {
+  EN_USO: 'text-success',
+  DISPONIBLE: 'text-foreground',
+  INOPERATIVO: 'text-danger',
+};
+
+/**
+ * Fondos plenos de las 5 tarjetas de la portada («resumen del día»), con texto
+ * blanco como la lámina del cliente. Hex literales (mismo precedente que `HEX`
+ * arriba): los tokens semánticos no traen ámbar/naranjo/morado. Tonos -700 de
+ * Tailwind (ámbar -800), contraste >= 4.5:1 contra blanco incluso con el texto chico al 95%.
+ */
+export const RESUMEN_CARD_BG = {
+  hm: '#92400e',
+  diesel: '#15803d',
+  reports: '#c2410c',
+  produccion: '#1d4ed8',
+  adBlue: '#7e22ce',
+} as const;

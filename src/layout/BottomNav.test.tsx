@@ -30,15 +30,19 @@ describe('BottomNav', () => {
     expect(screen.getByText('Más')).toBeTruthy();
   });
 
-  it('MANTENEDOR ve el mismo set que ADMIN', () => {
+  it('MANTENEDOR ve Mantención primero, sin Inicio (el dashboard es solo ADMIN)', () => {
     renderNav(ROLES.MANTENEDOR);
 
-    for (const label of ['Inicio', 'Equipos', 'Inventario', 'Mantención']) {
-      expect(screen.getByText(label)).toBeTruthy();
-    }
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
+    expect(Array.from(nav.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
+      'Mantención',
+      'Equipos',
+      'Inventario',
+    ]);
+    expect(screen.queryByText('Inicio')).toBeNull();
   });
 
-  it('SUPERVISOR ve Terreno primero, después Inicio, Equipos, Inventario — sin Mantención', () => {
+  it('SUPERVISOR ve Terreno primero, después Equipos, Inventario — sin Inicio ni Mantención', () => {
     renderNav(ROLES.SUPERVISOR);
 
     const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
@@ -47,7 +51,6 @@ describe('BottomNav', () => {
     const links = nav.querySelectorAll('a');
     expect(Array.from(links).map((link) => link.textContent)).toEqual([
       'Terreno',
-      'Inicio',
       'Equipos',
       'Inventario',
     ]);

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 import {
   Area,
@@ -6,9 +6,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,30 +13,34 @@ import {
 } from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useResumenFleet } from '../hooks/useEquipment';
 import { useItems } from '../hooks/useInventory';
+import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
 import {
-  useDashboardSummary,
+  useDashboardEquipos,
+  useDashboardMantenedores,
+  useDashboardSupervisores,
+  useDashboardVueltas,
   useHallazgosAbiertosResumen,
   useHallazgosRecientes,
   useHallazgosTendencia,
-  useHorasFacturables,
-  useMantencionesProximas,
-  useTrabajosExtraordinariosMensual,
 } from '../hooks/useDashboard';
 import {
   CHART_NEUTRAL,
   HALLAZGOS_TENDENCIA_COLOR,
   TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
-  equipmentStatusChartColor,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
 } from '../config/dashboard-colors';
-import { equipmentStatusLabel } from '../config/flota-colors';
 import { UNIT_SYMBOLS } from '../types/inventory';
-import { EQUIPMENT_STATUS } from '../types/equipment';
+import { SECCION_LABEL } from '../types/reporte-diario';
+import type { MetricasEquipo, RangoDashboard } from '../types/dashboard';
+import { mantencionesProximas } from '../lib/mantenciones-proximas';
+import { FranjaHoy } from '../components/dashboard/FranjaHoy';
+import { ResumenDia } from '../components/dashboard/ResumenDia';
+import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
+import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -128,7 +129,7 @@ function formatFecha(iso: string): string {
 }
 
 function formatHoras(horas: number): string {
-  return `${Number.isInteger(horas) ? horas : horas.toFixed(1)} h`;
+  return `${NUM_CL_1.format(horas)} h`;
 }
 
 interface KpiCardProps {
@@ -136,14 +137,13 @@ interface KpiCardProps {
   value: string;
   hint: string;
   hintTone?: 'muted' | 'warning';
-  /** Marca discreta de que ESTA card puntual ya consume datos reales
-   * (Terreno), a diferencia del resto del dashboard. Ver `RealDataChip`. */
+  /** Marca discreta de que la card consume datos de otro dominio (Terreno,
+   * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
   isReal?: boolean;
 }
 
-/** Indicador discreto de dato real — reemplaza, a nivel de sección, al
- * chip único "Datos de ejemplo" del header (que dejó de ser cierto para
- * el 100% del dashboard desde que Terreno se integró). */
+/** Indicador discreto de que la card se alimenta del dominio original (Terreno,
+ * Inventario, Mantención) y no del módulo `/api/dashboard/*`. */
 function RealDataChip() {
   return (
     <Chip className="shrink-0" color="success" size="sm" variant="soft">
@@ -185,58 +185,10 @@ function KpiCardSkeleton() {
   );
 }
 
-/**
- * KPIs de Mantenimiento — único dominio que sigue en mock, ver
- * `api/DashboardAPI.ts#getSummary`. Consulta propia (`useDashboardSummary()`):
- * si falla, no afecta a los KPIs reales de al lado (Flota/Inventario,
- * Hallazgos, Horas facturables), que usan sus propias queries.
- */
-function MantencionMockKpiCards() {
-  const { data: summary, isPending, isError, error } = useDashboardSummary();
-
-  if (isPending) {
-    return (
-      <>
-        {Array.from({ length: 2 }, (_, index) => (
-          <KpiCardSkeleton key={index} />
-        ))}
-      </>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div
-        className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground sm:col-span-2 lg:col-span-3"
-        role="alert"
-      >
-        {error instanceof Error ? error.message : 'No se pudo cargar el resumen.'}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <KpiCard
-        hint="Según umbral de horómetro"
-        label="Próximas mantenciones"
-        value={String(summary.proximasMantenciones)}
-      />
-      <KpiCard
-        hint="Mantenciones preventivas ejecutadas a tiempo"
-        hintTone={summary.cumplimientoPreventivoPct < 80 ? 'warning' : 'muted'}
-        label="Cumplimiento preventivo"
-        value={`${Math.round(summary.cumplimientoPreventivoPct)}%`}
-      />
-    </>
-  );
-}
-
-/** ← Flota (real): `useResumenFleet()` — el backend ya agrega
- * `disponibles`/`total`, no se cuenta en cliente. Query independiente: si
- * Flota cae, el resto de los KPIs sigue con normalidad. */
-function EquiposDisponiblesKpiCard() {
-  const { data, isPending, isError, error } = useResumenFleet();
+/** ← Mantenimiento (real): equipos dentro de su ventana de aviso; misma regla
+ * que la card «Próximos a mantenimiento» de la sección Equipos. */
+function ProximasMantencionesKpiCard() {
+  const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -245,23 +197,21 @@ function EquiposDisponiblesKpiCard() {
       <Card>
         <Card.Content className="py-6">
           <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar la flota.'}
+            {error instanceof Error ? error.message : 'No se pudo cargar el estado de mantención.'}
           </p>
         </Card.Content>
       </Card>
     );
   }
 
-  if (!data) return null;
-
-  const disponibilidadPct = data.total > 0 ? Math.round((data.disponibles / data.total) * 100) : 0;
-
+  const cantidad = mantencionesProximas(data?.values() ?? []).length;
   return (
     <KpiCard
-      hint={`${disponibilidadPct}% de la flota operativa`}
+      hint="Dentro de su ventana de aviso"
+      hintTone={cantidad > 0 ? 'warning' : 'muted'}
       isReal
-      label="Equipos disponibles"
-      value={`${data.disponibles} / ${data.total}`}
+      label="Próximas mantenciones"
+      value={String(cantidad)}
     />
   );
 }
@@ -323,7 +273,7 @@ function InsumosBajoMinimoKpiCard() {
 /** ← Terreno (real): `useHallazgosAbiertosResumen()` cuenta sobre
  * `GET /api/hallazgos` y desglosa por `prioridad`. Query independiente de
  * las demás KPI cards — si Terreno cae, el resto sigue mostrando sus datos
- * (reales o mock) con normalidad. */
+ * con normalidad. */
 function HallazgosAbiertosKpiCard() {
   const { data, isPending, isError, error } = useHallazgosAbiertosResumen();
 
@@ -354,127 +304,13 @@ function HallazgosAbiertosKpiCard() {
   );
 }
 
-/** ← Terreno (real): `useHorasFacturables()` reutiliza la MISMA query y los
- * MISMOS buckets mensuales que ya consume el gráfico "Horas extraordinarias
- * por mes" (`useTrabajosExtraordinariosMensual`) — no dispara una query
- * nueva ni recorre `trabajos-extra` de nuevo, solo suma la serie que el
- * gráfico ya calculó. Reemplaza al KPI "Ingresos trabajos extra" del mock
- * original (el campo `monto` no existe en el modelo real de
- * `TrabajoExtraordinario`, solo `totalHoras`). */
-function HorasFacturablesKpiCard() {
-  const { data, isPending, isError, error } = useHorasFacturables();
-
-  if (isPending) return <KpiCardSkeleton />;
-
-  if (isError) {
-    return (
-      <Card>
-        <Card.Content className="py-6">
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar las horas extraordinarias.'}
-          </p>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  if (data === undefined) return null;
-
-  return (
-    <KpiCard hint="Últimos 6 meses" isReal label="Horas facturables" value={formatHoras(data)} />
-  );
-}
-
 function SummaryCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <EquiposDisponiblesKpiCard />
-      <MantencionMockKpiCards />
+      <ProximasMantencionesKpiCard />
       <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />
-      <HorasFacturablesKpiCard />
     </div>
-  );
-}
-
-/** Dona — composición de estados de la flota (OPERATIONAL/IN_WORKSHOP/
- * OUT_OF_SERVICE). Aporta la MEZCLA de estados que la card "Equipos
- * disponibles" no muestra — esa card solo da disponibles/total, no qué pasa
- * con el resto. Datos ← Flota, REAL: `useResumenFleet().porEstado`
- * ya viene agregado por el backend, solo se remapea a la forma que espera el
- * `Pie` (no se cuenta en cliente). */
-function FlotaComposicionSection() {
-  const { data, isPending, isError, error } = useResumenFleet();
-
-  const chartData = data
-    ? EQUIPMENT_STATUS.map((status) => ({
-        status,
-        cantidad: data.porEstado[status] ?? 0,
-        label: equipmentStatusLabel(status),
-        fill: equipmentStatusChartColor(status),
-      }))
-    : undefined;
-
-  return (
-    <Card>
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Title>Composición de la flota</Card.Title>
-          <RealDataChip />
-        </div>
-        <Card.Description>Distribución de los equipos por estado operativo.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        {isPending ? <ChartSkeleton /> : null}
-
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar la composición de la flota.'}
-          </p>
-        ) : null}
-
-        {!isPending && !isError && chartData ? (
-          <>
-            <div className="h-64 w-full">
-              <ResponsiveContainer height="100%" width="100%">
-                <PieChart>
-                  <Tooltip
-                    contentStyle={TOOLTIP_CONTENT_STYLE}
-                    formatter={(value, name) => [`${value} equipos`, name]}
-                    itemStyle={TOOLTIP_ITEM_STYLE}
-                  />
-                  <Pie
-                    cx="50%"
-                    cy="50%"
-                    data={chartData}
-                    dataKey="cantidad"
-                    innerRadius="58%"
-                    isAnimationActive={false}
-                    nameKey="label"
-                    outerRadius="85%"
-                    paddingAngle={3}
-                    stroke={CHART_NEUTRAL.surface}
-                    strokeWidth={2}
-                  >
-                    {chartData.map((entry) => (
-                      <Cell fill={entry.fill} key={entry.status} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ChartLegendRow
-              items={chartData.map((item) => ({
-                key: item.status,
-                label: item.label,
-                value: String(item.cantidad),
-                color: item.fill,
-              }))}
-            />
-          </>
-        ) : null}
-      </Card.Content>
-    </Card>
   );
 }
 
@@ -555,63 +391,6 @@ function HallazgosTendenciaSection() {
   );
 }
 
-/** Barras — horas máquina de trabajos extraordinarios por mes (~6 meses).
- * Usa HORAS, no ingresos: el campo `monto` no existe en el modelo real de
- * `TrabajoExtraordinario` (solo `totalHoras`), así que el KPI de ingresos
- * que tenía el mock se eliminó en vez de dejarlo roto. Serie única: sin
- * leyenda, el título de la card ya dice qué se mide. Datos ← Terreno, REAL
- * (agrupación en cliente, ver `config/dashboard-aggregations.ts#trabajosExtraPorMes`). */
-function TrabajosExtraordinariosSection() {
-  const { data, isPending, isError, error } = useTrabajosExtraordinariosMensual();
-
-  return (
-    <Card className="lg:col-span-2">
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Title>Horas extraordinarias por mes</Card.Title>
-          <RealDataChip />
-        </div>
-        <Card.Description>Horas máquina en trabajos extraordinarios, últimos 6 meses.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        {isPending ? <ChartSkeleton /> : null}
-
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar las horas extraordinarias.'}
-          </p>
-        ) : null}
-
-        {!isPending && !isError && data ? (
-          <div className="h-64 w-full">
-            <ResponsiveContainer height="100%" width="100%">
-              <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-                <XAxis axisLine={false} dataKey="mes" tick={AXIS_TICK_STYLE} tickLine={false} />
-                <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
-                  formatter={(value) => [`${value} h`, 'Horas']}
-                  itemStyle={TOOLTIP_ITEM_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                />
-                <Bar
-                  dataKey="horas"
-                  fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
-                  isAnimationActive={false}
-                  maxBarSize={28}
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : null}
-      </Card.Content>
-    </Card>
-  );
-}
-
 /** Lista de hallazgos recientes — filas dentro de una sola card (mismo
  * patrón de filas con separador que `ProfileView`), no una card por ítem.
  * Datos ← Terreno, REAL: top 5 de `GET /api/hallazgos`. */
@@ -669,67 +448,457 @@ function HallazgosRecientesSection() {
   );
 }
 
-/** Próximas mantenciones — `Table variant="secondary"`, mismo patrón que
- * `UsersView` (un solo contenedor, sin card anidada). */
-function MantencionesProximasSection() {
-  const { data: mantenciones, isPending, isError, error } = useMantencionesProximas();
+// ---------------------------------------------------------------------------
+// Sección Equipos: KPIs del rango, horas por equipo, drill-down diario,
+// próximos a mantenimiento y tendencia de hallazgos.
+// ---------------------------------------------------------------------------
+
+/** L/h; null (sin horas) o no finito se muestra «—», nunca NaN/Infinity. */
+function formatRendimiento(rendimiento: number | null): string {
+  return rendimiento !== null && Number.isFinite(rendimiento) ? `${NUM_CL_1.format(rendimiento)} L/h` : '—';
+}
+
+function formatLitros(litros: number): string {
+  return `${NUM_CL.format(litros)} L`;
+}
+
+/** KPIs del rango con los mismos criterios del backend: L/h = litros totales / horas totales. */
+function kpisEquipos(equipos: MetricasEquipo[]) {
+  const horas = equipos.reduce((acc, e) => acc + e.horas, 0);
+  const litros = equipos.reduce((acc, e) => acc + e.litros, 0);
+  return { horas, litros, rendimiento: horas > 0 ? litros / horas : null };
+}
+
+function EquiposKpis({ equipos }: { equipos: MetricasEquipo[] }) {
+  const { horas, litros, rendimiento } = kpisEquipos(equipos);
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div data-testid="kpi-horas">
+        <KpiCard hint="Suma de todos los equipos" label="Horas trabajadas" value={formatHoras(horas)} />
+      </div>
+      <div data-testid="kpi-litros">
+        <KpiCard hint="Combustible cargado en el mes" label="Litros" value={formatLitros(litros)} />
+      </div>
+      <div data-testid="kpi-rendimiento">
+        <KpiCard hint="Litros totales / horas totales" label="Rendimiento" value={formatRendimiento(rendimiento)} />
+      </div>
+    </div>
+  );
+}
+
+function EquiposHorasChart({ equipos }: { equipos: MetricasEquipo[] }) {
+  return (
+    <div className="h-64 w-full">
+      <ResponsiveContainer height="100%" width="100%">
+        <BarChart data={equipos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+          <XAxis axisLine={false} dataKey="internalCode" tick={AXIS_TICK_STYLE} tickLine={false} />
+          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
+          <Tooltip
+            contentStyle={TOOLTIP_CONTENT_STYLE}
+            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
+            formatter={(value) => [`${value} h`, 'Horas']}
+            itemStyle={TOOLTIP_ITEM_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
+          />
+          <Bar
+            dataKey="horas"
+            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
+            isAnimationActive={false}
+            maxBarSize={28}
+            radius={[4, 4, 0, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Un equipo por fila (ya ordenados por horas desc). El abierto se identifica
+ * por `equipmentId`, nunca por posición: el orden cambia al cambiar de mes. */
+function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
+  const [equipoAbierto, setEquipoAbierto] = useState<string | null>(null);
 
   return (
-    <Card className="flex flex-col gap-3">
-      <Card.Header>
-        <Card.Title>Próximas mantenciones</Card.Title>
-        <Card.Description>Equipos cerca de su umbral de horómetro.</Card.Description>
-      </Card.Header>
+    <div className="flex flex-col">
+      {equipos.map((equipo) => {
+        const abierto = equipoAbierto === equipo.equipmentId;
+        return (
+          <div
+            className="border-t border-border first:border-t-0"
+            data-testid={`fila-${equipo.equipmentId}`}
+            key={equipo.equipmentId}
+          >
+            <button
+              aria-expanded={abierto}
+              className="flex w-full items-center gap-3 py-2.5 text-start text-sm"
+              onClick={() => setEquipoAbierto(abierto ? null : equipo.equipmentId)}
+              type="button"
+            >
+              <span className="font-mono text-foreground">{equipo.internalCode}</span>
+              <span className="ms-auto font-mono text-muted-foreground">{formatHoras(equipo.horas)}</span>
+              <span className="w-20 text-end font-mono text-muted-foreground">{formatLitros(equipo.litros)}</span>
+              <span className="w-24 text-end font-mono text-muted-foreground">
+                {formatRendimiento(equipo.rendimiento)}
+              </span>
+            </button>
+            {abierto ? (
+              <ul className="grid grid-cols-2 gap-x-6 gap-y-1 pb-3 ps-2 sm:grid-cols-4">
+                {equipo.serieDiaria.map((dia) => (
+                  <li
+                    className={`flex justify-between font-mono text-xs ${dia.opero ? 'text-foreground' : 'text-muted-foreground opacity-50'}`}
+                    data-opero={dia.opero}
+                    data-testid={`dia-${equipo.equipmentId}-${dia.fecha}`}
+                    key={dia.fecha}
+                  >
+                    <span>{formatDia(dia.fecha)}</span>
+                    <span>{dia.opero ? formatHoras(dia.horas) : '0 h'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-      {isPending ? (
-        <div className="flex justify-center py-8">
-          <Spinner color="accent" size="sm" />
+/** Equipos con la próxima mantención dentro de su ventana de aviso
+ * (`next.remaining <= alertBefore`). Datos reales: `GET /api/maintenance-plans/status`. */
+function MantencionesProximasCard({ codigos }: { codigos: Map<string, string> }) {
+  const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
+
+  const proximas = mantencionesProximas(data?.values() ?? []);
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title>Próximos a mantenimiento</Card.Title>
+          <RealDataChip />
         </div>
-      ) : null}
+        <Card.Description>Equipos dentro de su ventana de aviso de la próxima mantención.</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        {isPending ? (
+          <div className="flex justify-center py-8">
+            <Spinner color="accent" size="sm" />
+          </div>
+        ) : null}
+
+        {isError ? (
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar el estado de mantención.'}
+          </p>
+        ) : null}
+
+        {!isPending && !isError
+          ? proximas.map((p) => (
+              <div
+                className="flex items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0"
+                data-testid={`mantencion-proxima-${p.equipmentId}`}
+                key={p.equipmentId}
+              >
+                <span className="font-mono text-sm text-foreground">{codigos.get(p.equipmentId) ?? '…'}</span>
+                <Chip className="ms-auto" color={p.remaining <= 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                  {p.remaining <= 0 ? 'Toca ahora' : `${p.remaining} ${p.unit}`}
+                </Chip>
+              </div>
+            ))
+          : null}
+
+        {!isPending && !isError && proximas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hay equipos próximos a mantención.</p>
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+}
+
+function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
+  const { data, isPending, isError, error } = useDashboardEquipos(rango);
+
+  const equipos = useMemo(() => [...(data ?? [])].sort((a, b) => b.horas - a.horas), [data]);
+  const codigos = useMemo(() => new Map(equipos.map((e) => [e.equipmentId, e.internalCode])), [equipos]);
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Equipos</h2>
+
+      {isPending ? <ChartSkeleton /> : null}
 
       {isError ? (
-        <p className="px-1 text-sm text-danger-soft-foreground" role="alert">
-          {error instanceof Error ? error.message : 'No se pudo cargar las mantenciones.'}
+        <p className="text-sm text-danger-soft-foreground" role="alert">
+          {error instanceof Error ? error.message : 'No se pudo cargar las métricas de equipos.'}
         </p>
       ) : null}
 
-      {!isPending && !isError && mantenciones.length > 0 ? (
-        <Table variant="secondary">
-          <Table.ScrollContainer>
-            <Table.Content aria-label="Próximas mantenciones" className="min-w-full">
-              <Table.Header>
-                <Table.Column isRowHeader>Equipo</Table.Column>
-                <Table.Column>Tipo</Table.Column>
-                <Table.Column>Horómetro restante</Table.Column>
-              </Table.Header>
-              <Table.Body>
-                <Table.Collection items={mantenciones}>
-                  {(mantencion) => (
-                    <Table.Row>
-                      <Table.Cell className="font-mono text-sm">{mantencion.equipo}</Table.Cell>
-                      <Table.Cell>{mantencion.tipo === 'PREVENTIVA' ? 'Preventiva' : 'Correctiva'}</Table.Cell>
-                      <Table.Cell>
-                        {mantencion.horometroRestante > 0 ? (
-                          `${mantencion.horometroRestante} h`
-                        ) : (
-                          <Chip color="danger" size="sm" variant="soft">
-                            Umbral alcanzado
-                          </Chip>
-                        )}
-                      </Table.Cell>
-                    </Table.Row>
-                  )}
-                </Table.Collection>
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
+      {!isPending && !isError && data ? (
+        <>
+          <EquiposKpis equipos={equipos} />
+          <Card>
+            <Card.Header>
+              <Card.Title>Horas por equipo</Card.Title>
+              <Card.Description>Ordenado de mayor a menor. Abre un equipo para ver su detalle diario.</Card.Description>
+            </Card.Header>
+            <Card.Content>
+              {equipos.length > 0 ? (
+                <>
+                  <EquiposHorasChart equipos={equipos} />
+                  <EquiposDrilldown equipos={equipos} />
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No hay equipos registrados.</p>
+              )}
+            </Card.Content>
+          </Card>
+        </>
       ) : null}
 
-      {!isPending && !isError && mantenciones.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">No hay mantenciones próximas.</p>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <MantencionesProximasCard codigos={codigos} />
+        <HallazgosTendenciaSection />
+      </div>
+    </section>
+  );
+}
+
+/** Error / skeleton comunes de las secciones del rango. */
+function EstadoSeccion({
+  isPending,
+  isError,
+  error,
+  fallback,
+}: {
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  fallback: string;
+}) {
+  if (isPending) return <ChartSkeleton />;
+  if (isError) {
+    return (
+      <p className="text-sm text-danger-soft-foreground" role="alert">
+        {error instanceof Error ? error.message : fallback}
+      </p>
+    );
+  }
+  return null;
+}
+
+/** Barras de una sola serie con los ejes/tooltip compartidos del dashboard. */
+function BarrasSimples({
+  data,
+  xKey,
+  yKey,
+  altura = 'h-64',
+  tickFormatter,
+}: {
+  data: object[];
+  xKey: string;
+  yKey: string;
+  altura?: string;
+  tickFormatter?: (value: string) => string;
+}) {
+  return (
+    <div className={`${altura} w-full`}>
+      <ResponsiveContainer height="100%" width="100%">
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+          <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
+          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
+          <Tooltip
+            contentStyle={TOOLTIP_CONTENT_STYLE}
+            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
+            formatter={(value) => [`${value}`, yKey === 'horas' ? 'Horas' : 'Vueltas']}
+            itemStyle={TOOLTIP_ITEM_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
+          />
+          <Bar
+            dataKey={yKey}
+            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
+            isAnimationActive={false}
+            maxBarSize={28}
+            radius={[4, 4, 0, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function SeccionSupervisores({ rango }: { rango: RangoDashboard }) {
+  const { data, isPending, isError, error } = useDashboardSupervisores(rango);
+
+  const turnos = (['DIURNO', 'NOCTURNO'] as const).map((turno) => ({
+    turno,
+    horas: data?.porTurno[turno]?.horas ?? 0,
+    equipos: data?.porTurno[turno]?.equipos ?? 0,
+  }));
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Supervisores</h2>
+      <EstadoSeccion
+        error={error}
+        fallback="No se pudo cargar el resumen por supervisor."
+        isError={isError}
+        isPending={isPending}
+      />
+      {!isPending && !isError && data ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <Card.Header>
+              <Card.Title>Horas por turno</Card.Title>
+              <Card.Description>Diurno vs. nocturno en el mes.</Card.Description>
+            </Card.Header>
+            <Card.Content>
+              <BarrasSimples altura="h-48" data={turnos} xKey="turno" yKey="horas" />
+              <ul className="flex flex-wrap gap-x-6 gap-y-1 pt-2">
+                {turnos.map((t) => (
+                  <li className="text-sm text-muted-foreground" data-testid={`turno-${t.turno}`} key={t.turno}>
+                    {t.turno}: <span className="font-mono text-foreground">{formatHoras(t.horas)}</span> · {t.equipos}{' '}
+                    equipos
+                  </li>
+                ))}
+              </ul>
+            </Card.Content>
+          </Card>
+
+          <Card>
+            <Card.Header>
+              <Card.Title>Por supervisor</Card.Title>
+            </Card.Header>
+            <Card.Content>
+              {data.porSupervisor.length > 0 ? (
+                <Table variant="secondary">
+                  <Table.ScrollContainer>
+                    <Table.Content aria-label="Horas por supervisor" className="min-w-full">
+                      <Table.Header>
+                        <Table.Column isRowHeader>Supervisor</Table.Column>
+                        <Table.Column>Horas</Table.Column>
+                        <Table.Column>Equipos</Table.Column>
+                        <Table.Column>Turnos</Table.Column>
+                      </Table.Header>
+                      <Table.Body>
+                        {data.porSupervisor.map((sup) => {
+                          // supervisorId puede venir "" (tarjetas sin asignar): solo es clave, nunca un id navegable.
+                          const clave = sup.supervisorId || 'sin-asignar';
+                          return (
+                            <Table.Row data-testid={`supervisor-${clave}`} id={clave} key={clave}>
+                              <Table.Cell>{sup.nombre}</Table.Cell>
+                              <Table.Cell className="font-mono text-sm">{formatHoras(sup.horas)}</Table.Cell>
+                              <Table.Cell className="font-mono text-sm">{sup.equipos}</Table.Cell>
+                              <Table.Cell className="font-mono text-sm">{sup.turnos}</Table.Cell>
+                            </Table.Row>
+                          );
+                        })}
+                      </Table.Body>
+                    </Table.Content>
+                  </Table.ScrollContainer>
+                </Table>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin turnos registrados en el mes.</p>
+              )}
+            </Card.Content>
+          </Card>
+        </div>
       ) : null}
-    </Card>
+    </section>
+  );
+}
+
+function SeccionMantenedores({ rango }: { rango: RangoDashboard }) {
+  const { data, isPending, isError, error } = useDashboardMantenedores(rango);
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Mantenedores</h2>
+      <EstadoSeccion
+        error={error}
+        fallback="No se pudo cargar el resumen de mantenedores."
+        isError={isError}
+        isPending={isPending}
+      />
+      {!isPending && !isError && data ? (
+        <Card>
+          <Card.Header>
+            <Card.Title>Horas de trabajos extra por equipo</Card.Title>
+            <Card.Description data-testid="mantenedores-total">
+              Total del mes: {formatHoras(data.total.horas)} en {data.total.trabajos} trabajos.
+            </Card.Description>
+          </Card.Header>
+          <Card.Content>
+            {data.porEquipo.length > 0 ? (
+              <>
+                <BarrasSimples data={data.porEquipo} xKey="internalCode" yKey="horas" />
+                <ul className="flex flex-col pt-2">
+                  {data.porEquipo.map((e) => (
+                    <li
+                      className="flex items-center gap-3 border-t border-border py-2 text-sm first:border-t-0"
+                      data-testid={`mantenedor-${e.equipmentId}`}
+                      key={e.equipmentId}
+                    >
+                      <span className="font-mono text-foreground">{e.internalCode}</span>
+                      <span className="ms-auto font-mono text-muted-foreground">{formatHoras(e.horas)}</span>
+                      <span className="w-24 text-end text-muted-foreground">{e.trabajos} trabajos</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No hay trabajos extra en el mes.</p>
+            )}
+          </Card.Content>
+        </Card>
+      ) : null}
+    </section>
+  );
+}
+
+function SeccionVueltas({ rango }: { rango: RangoDashboard }) {
+  const { data, isPending, isError, error } = useDashboardVueltas(rango);
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Vueltas</h2>
+      <EstadoSeccion
+        error={error}
+        fallback="No se pudieron cargar las vueltas."
+        isError={isError}
+        isPending={isPending}
+      />
+      {!isPending && !isError && data ? (
+        <>
+          <p className="text-sm text-muted-foreground">Las secciones no se suman: cada una tiene tarifa distinta.</p>
+          {data.porSeccion.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {data.porSeccion.map((sec) => (
+                <Card data-testid={`vueltas-${sec.seccion}`} key={sec.seccion}>
+                  <Card.Header>
+                    <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                      {SECCION_LABEL[sec.seccion] ?? sec.seccion}
+                    </Card.Description>
+                    <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+                      {NUM_CL.format(sec.vueltasTotales)}
+                    </Card.Title>
+                    <Card.Description>
+                      vueltas · {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
+                    </Card.Description>
+                  </Card.Header>
+                  <Card.Content>
+                    <BarrasSimples altura="h-32" data={sec.serieDiaria} tickFormatter={formatDia} xKey="fecha" yKey="vueltas" />
+                  </Card.Content>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin vueltas registradas en el mes.</p>
+          )}
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -810,6 +979,10 @@ function InsumosBajoStockSection() {
 
 export function DashboardView() {
   const { user } = useCurrentUser();
+  const [mes, setMes] = useState(() => mesValue(new Date()));
+  const meses = useMemo(() => opcionesMes(), []);
+  // Rango que consumen las secciones del dashboard.
+  const rango = useMemo(() => rangoDeMes(mes), [mes]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -823,23 +996,39 @@ export function DashboardView() {
           </h1>
           <p className="text-sm text-muted-foreground">Resumen general del sistema.</p>
         </div>
-        <Chip color="warning" size="sm" variant="soft">
-          Datos parcialmente de ejemplo
-        </Chip>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Mes
+            <select
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+              onChange={(event) => setMes(event.target.value)}
+              value={mes}
+            >
+              {meses.map((opcion) => (
+                <option key={opcion.value} value={opcion.value}>
+                  {opcion.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
+
+      <ResumenDia />
+
+      <FranjaHoy />
 
       <SummaryCards />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FlotaComposicionSection />
-        <HallazgosTendenciaSection />
-        <TrabajosExtraordinariosSection />
-      </div>
+      <SeccionEquipos rango={rango} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <HallazgosRecientesSection />
-        <MantencionesProximasSection />
-      </div>
+      <SeccionSupervisores rango={rango} />
+
+      <SeccionMantenedores rango={rango} />
+
+      <SeccionVueltas rango={rango} />
+
+      <HallazgosRecientesSection />
 
       <InsumosBajoStockSection />
     </div>

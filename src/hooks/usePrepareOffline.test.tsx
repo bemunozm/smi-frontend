@@ -284,10 +284,11 @@ describe('usePrepareOffline por rol', () => {
     expect(intervencionesListMock).not.toHaveBeenCalledWith('ot-' + String(BITACORA_ORDENES_PRECARGADAS));
   });
 
-  it('MANTENEDOR: panel, notificaciones, movimientos y bitácora sí; combustible no (es de Terreno)', async () => {
+  it('MANTENEDOR: notificaciones, movimientos y bitácora sí; combustible no (es de Terreno)', async () => {
     const resultado = await preparar(ROLES.MANTENEDOR);
 
-    expect(resultado).toMatchObject({ dashboard: 'ok', notificaciones: 'ok', movimientos: 'ok', bitacora: 'ok' });
+    expect(resultado).toMatchObject({ notificaciones: 'ok', movimientos: 'ok', bitacora: 'ok' });
+    expect(resultado.dashboard).toBeUndefined();
     expect(resultado.combustible).toBeUndefined();
     expect(combustibleListMock).not.toHaveBeenCalled();
   });

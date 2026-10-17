@@ -31,17 +31,19 @@ const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: Clipboard
  * Ítems primarios de la barra inferior, POR ROL: un único set fijo
  * (Inicio/Equipos/Inventario/Mantención) no calza con lo que cada rol puede
  * realmente ver ni con dónde vive su trabajo diario:
- * - SUPERVISOR vive en Terreno — va primero;
- * - ADMIN/MANTENEDOR mantienen el set original.
+ * - SUPERVISOR vive en Terreno y MANTENEDOR en Mantención (su home, ver
+ *   `config/home-path.ts`) — van primero, y no tienen «Inicio»: el dashboard
+ *   `/` es solo ADMIN;
+ * - ADMIN mantiene el set original.
  *
  * Este mapa decide ORDEN + qué mostrar por rol; el gate real de acceso sigue
  * viviendo en `routes.tsx`/`NAV_ITEMS` — por eso más abajo se sigue
  * filtrando contra `allowed` (`NAV_ITEMS`), no alcanza con este mapa solo.
  */
 const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
-  [ROLES.SUPERVISOR]: [TERRENO, INICIO, EQUIPOS, INVENTARIO],
+  [ROLES.SUPERVISOR]: [TERRENO, EQUIPOS, INVENTARIO],
   [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
-  [ROLES.MANTENEDOR]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
+  [ROLES.MANTENEDOR]: [MANTENCION, EQUIPOS, INVENTARIO],
 };
 
 /**
