@@ -67,6 +67,7 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
     'actividad.create',
     'umbral.create',
     'dailyChecklist.submit',
+    'reporteDiario.create',
   ];
 
   it('toda entrada que crea declara `creates` y la entidad que crea (a partir del id del body)', () => {

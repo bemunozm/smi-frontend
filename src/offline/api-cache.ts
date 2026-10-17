@@ -12,6 +12,7 @@ const API_PATH_BY_QUERY_KEY: Readonly<Record<QueryKeyName, string>> = {
   shiftCardsMine: '/api/shift-cards',
   hallazgos: '/api/hallazgos',
   trabajosExtra: '/api/trabajos-extra',
+  reporteDiario: '/api/reporte-diario',
   horometro: '/api/horometro',
   equipment: '/api/equipment',
   equipmentDocuments: '/api/equipment',

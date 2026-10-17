@@ -1,5 +1,11 @@
 import type { Hallazgo, EditHallazgoBody } from '../../types/hallazgos';
 import { HallazgoSchema } from '../../types/hallazgos';
+import {
+  ReporteDiarioSchema,
+  type CreateReporteDiarioInput,
+  type EditReporteDiarioBody,
+  type ReporteDiario,
+} from '../../types/reporte-diario';
 import { ShiftCardResponseSchema, type EditShiftCardBody, type ShiftCardResponse } from '../../types/shift';
 import {
   TrabajoExtraordinarioSchema,
@@ -7,13 +13,24 @@ import {
   type TrabajoExtraordinario,
 } from '../../types/trabajosExtra';
 import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache, cachedEquipoCode } from '../cache-upserts';
-import { hallazgoEntity, shiftCardEntity, trabajoExtraEntity } from '../db';
-import { defineDomain, entityOf, etiqueta, param, parseWith } from './define';
+import { hallazgoEntity, reporteDiarioEntity, shiftCardEntity, trabajoExtraEntity } from '../db';
+import {
+  bodyText,
+  defineDomain,
+  entityOf,
+  etiqueta,
+  param,
+  parseWith,
+  type NoParams,
+  type WithId,
+} from './define';
 
 export interface TerrenoEndpointMap {
   'shiftCard.edit': { params: { id: string }; body: EditShiftCardBody; result: ShiftCardResponse };
   'hallazgo.edit': { params: { id: string }; body: EditHallazgoBody; result: Hallazgo };
   'trabajoExtra.edit': { params: { id: string }; body: EditTrabajoExtraBody; result: TrabajoExtraordinario };
+  'reporteDiario.create': { params: NoParams; body: WithId<CreateReporteDiarioInput>; result: ReporteDiario };
+  'reporteDiario.edit': { params: { id: string }; body: EditReporteDiarioBody; result: ReporteDiario };
 }
 
 export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
@@ -52,5 +69,28 @@ export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(trabajoExtraEntity, params.id),
+  },
+  'reporteDiario.create': {
+    method: 'POST',
+    path: () => '/api/reporte-diario',
+    failMessage: 'No se pudo enviar el reporte diario.',
+    parse: parseWith(ReporteDiarioSchema),
+    invalidate: ['reporteDiario'],
+    label: (_params, body) => etiqueta('Reporte diario', bodyText(body, 'fecha')),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    creates: true,
+    entity: (_params, body) => entityOf(reporteDiarioEntity, bodyText(body, 'id')),
+  },
+  'reporteDiario.edit': {
+    method: 'PATCH',
+    path: (params) => `/api/reporte-diario/${param(params, 'id')}`,
+    failMessage: 'No se pudo guardar la corrección del reporte.',
+    parse: parseWith(ReporteDiarioSchema),
+    invalidate: ['reporteDiario'],
+    label: () => 'Corrección de reporte diario',
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(reporteDiarioEntity, params.id),
   },
 });

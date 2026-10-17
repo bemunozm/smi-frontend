@@ -37,6 +37,7 @@ export type OutboxOpType =
 export const shiftCardEntity = (cardId: string) => `shift-card:${cardId}`;
 export const hallazgoEntity = (id: string) => `hallazgo:${id}`;
 export const trabajoExtraEntity = (id: string) => `trabajo-extra:${id}`;
+export const reporteDiarioEntity = (id: string) => `reporte-diario:${id}`;
 export const equipmentEntity = (id: string) => `equipment:${id}`;
 export const equipmentDocumentEntity = (id: string) => `equipment-document:${id}`;
 export const horometroEntity = (id: string) => `horometro:${id}`;

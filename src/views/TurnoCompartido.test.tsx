@@ -7,6 +7,32 @@ vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { id: 'u1' }, role: null, isOfflineSnapshot: false }),
 }));
 
+const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK } = vi.hoisted(() => ({
+  PLANTAS_MOCK: [
+    { id: 'pl1', nombre: 'P.P.1', orden: 1, activa: true },
+    { id: 'pl2', nombre: 'Planta P.P.E', orden: 2, activa: true },
+  ],
+  EMPRESAS_MOCK: [
+    { id: 'em1', nombre: 'Hyd', orden: 1, activa: true },
+    { id: 'em2', nombre: 'Sijam', orden: 2, activa: true },
+  ],
+  TARJETAS_MOCK: [
+    { id: 'c1', operatorName: 'Patricio Rojas', equipo: { internalCode: 'CG-002' }, closedAt: null },
+    { id: 'c2', operatorName: 'Marcelo Soto', equipo: { internalCode: 'EX-001' }, closedAt: '2026-09-23T10:00:00Z' },
+  ],
+}));
+vi.mock('../hooks/useReporteDiario', () => ({
+  usePlantas: () => ({ data: PLANTAS_MOCK }),
+  useEmpresasExternas: () => ({ data: EMPRESAS_MOCK }),
+  useReportesDiarios: () => ({ data: [] }),
+  useCreateReporteDiario: () => ({ mutate: () => {}, isPending: false }),
+  useEditReporteDiario: () => ({ mutate: () => {}, isPending: false }),
+  useReporteCambios: () => ({ data: undefined, isLoading: false }),
+}));
+vi.mock('../hooks/useShiftCards', () => ({
+  useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
+}));
+
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useTurnoSelector } from '../hooks/useTurnoSelector';
 import { saveTurnoOverride } from '../lib/shift-turno-override';
