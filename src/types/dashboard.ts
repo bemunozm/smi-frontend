@@ -69,8 +69,8 @@ export const EstadoEquipoHoySchema = z.object({
   equipmentId: z.string(),
   internalCode: z.string(),
   estado: z.enum(['EN_USO', 'DISPONIBLE', 'INOPERATIVO']),
-  /** Estado crudo: distingue En taller de Fuera de servicio. */
-  status: z.enum(['OPERATIONAL', 'IN_WORKSHOP', 'OUT_OF_SERVICE']),
+  /** Estado crudo: distingue En taller de Fuera de servicio. Opcional: payloads cacheados (PWA) previos al campo. */
+  status: z.enum(['OPERATIONAL', 'IN_WORKSHOP', 'OUT_OF_SERVICE']).optional(),
   operador: z.string().optional(),
   turno: z.string().optional(),
   supervisor: z.string().optional(),

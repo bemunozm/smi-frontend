@@ -128,13 +128,6 @@ export function estadoHoyLabel(estado: EstadoHoy): string {
   return ESTADO_HOY_LABEL[estado];
 }
 
-/** Clases del número grande de cada contador (tokens de `index.css`). */
-export const ESTADO_HOY_NUMERO_CLASS: Record<EstadoHoy, string> = {
-  EN_USO: 'text-success',
-  DISPONIBLE: 'text-foreground',
-  INOPERATIVO: 'text-danger',
-};
-
 /**
  * Fondos plenos de las 5 tarjetas de la portada («resumen del día»), con texto
  * blanco como la lámina del cliente. Hex literales (mismo precedente que `HEX`

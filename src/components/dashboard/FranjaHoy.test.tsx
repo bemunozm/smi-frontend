@@ -66,6 +66,14 @@ describe('FranjaHoy', () => {
     expect(card('e4').getByText('Fuera de servicio')).toBeTruthy();
   });
 
+  it('inoperativo sin status (payload cacheado) muestra Fuera de servicio', () => {
+    mockHoy({
+      data: { ...DATA, equipos: [{ equipmentId: 'e9', internalCode: 'XX-009', estado: 'INOPERATIVO' }] },
+    });
+    render(<FranjaHoy />);
+    expect(card('e9').getByText('Fuera de servicio')).toBeTruthy();
+  });
+
   it('disponible: sin turno abierto', () => {
     mockHoy({ data: DATA });
     render(<FranjaHoy />);

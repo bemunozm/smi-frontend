@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe('DashboardView', () => {
-  it('la franja HOY muestra los tres contadores y los equipos en uso con operador y turno', async () => {
+  it('la franja HOY muestra los tres contadores como chips y los equipos en uso con operador y turno', async () => {
     mockHoy({
       data: {
         totales: { enUso: 2, disponibles: 3, inoperativos: 1 },

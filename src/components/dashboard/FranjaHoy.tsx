@@ -15,7 +15,7 @@ const CONTADORES: { estado: EstadoHoy; clave: 'enUso' | 'disponibles' | 'inopera
   { estado: 'INOPERATIVO', clave: 'inoperativos', texto: 'inoperativos' },
 ];
 
-const MOTIVO_INOPERATIVO: Record<EquipoHoy['status'], string> = {
+const MOTIVO_INOPERATIVO: Record<NonNullable<EquipoHoy['status']>, string> = {
   OPERATIONAL: 'No operativo',
   IN_WORKSHOP: 'En taller',
   OUT_OF_SERVICE: 'Fuera de servicio',
@@ -46,7 +46,7 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
             </>
           ) : null}
           {equipo.estado === 'INOPERATIVO' ? (
-            <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status]}</span>
+            <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
           ) : null}
           {equipo.estado === 'DISPONIBLE' ? <span className="text-muted-foreground">Sin turno abierto</span> : null}
         </div>
