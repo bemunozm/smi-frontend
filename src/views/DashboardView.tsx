@@ -1,5 +1,4 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 import {
   Area,
@@ -142,11 +141,8 @@ interface KpiCardProps {
   /** Marca discreta de que la card consume datos de otro dominio (Terreno,
    * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
   isReal?: boolean;
-  /** Ruta del detalle: con `to`, la card entera es un botón que navega ahí
-   * (requiere `ariaLabel`). Una card usa `to` u `onOpen`, no ambos; sin
-   * ninguno es una card informativa estática. */
-  to?: string;
-  /** Abre un popup de detalle (requiere `ariaLabel`); alternativa a `to`. */
+  /** Abre el popup de detalle: con `onOpen` la card entera es un botón
+   * (requiere `ariaLabel`); sin él es una card informativa estática. */
   onOpen?: () => void;
   ariaLabel?: string;
 }
@@ -161,9 +157,8 @@ function RealDataChip() {
   );
 }
 
-function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, onOpen, ariaLabel }: KpiCardProps) {
-  const navigate = useNavigate();
-  const interactiva = Boolean(to || onOpen);
+function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, onOpen, ariaLabel }: KpiCardProps) {
+  const interactiva = Boolean(onOpen);
   const contenido = (
     <Card
       className={`h-full ${interactiva ? 'transition-colors hover:bg-surface-secondary active:bg-surface-secondary' : ''}`}
@@ -191,7 +186,7 @@ function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, o
     <button
       aria-label={ariaLabel}
       className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-      onClick={() => (onOpen ? onOpen() : void navigate(to as string))}
+      onClick={onOpen}
       type="button"
     >
       {contenido}

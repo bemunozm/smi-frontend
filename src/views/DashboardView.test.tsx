@@ -140,6 +140,14 @@ describe('DashboardView', () => {
         expect(within(dialog).queryByText('EX-001')).toBeNull();
         const filas = within(dialog).getAllByTestId(/kpi-mantencion-/);
         expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['kpi-mantencion-e3', 'kpi-mantencion-e1']);
+        // La nota de exclusión aparece porque el conteo de la card (3) incluye la de km.
+        expect(within(dialog).getByText(/las de kilometraje están en «Ver todo»/)).toBeTruthy();
+      });
+
+      it('sin filas de km no muestra la nota de exclusión', () => {
+        mockMant([fila('e1', 'h', 20, 500)]);
+        const dialog = abrir('Ver próximas mantenciones');
+        expect(within(dialog).queryByText(/kilometraje/)).toBeNull();
       });
 
       it('muestra el estado vacío si solo hay mantenciones por km', () => {
