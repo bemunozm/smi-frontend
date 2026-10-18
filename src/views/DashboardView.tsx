@@ -1140,9 +1140,11 @@ export function DashboardView() {
         </div>
       </div>
 
-      <ResumenDia mantenciones={mantenciones} />
-
+      {/* Primero lo accionable: mantenciones próximas, stock bajo y hallazgos
+         (pedido del administrador: estas cards abren el dashboard). */}
       <SummaryCards rango={rango} />
+
+      <ResumenDia mantenciones={mantenciones} />
 
       <SeccionEquipos rango={rango} />
 
