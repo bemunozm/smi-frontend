@@ -77,14 +77,6 @@ export const CHART_NEUTRAL = {
   overlayShadow: HEX.overlayShadow,
 } as const;
 
-/** Serie "abiertos vs cerrados" del gráfico de tendencia de hallazgos —
- * mismo par que usa `hallazgoEstadoChipColor` para EN_PROCESO/CERRADO, así
- * la lectura del área coincide con los chips de las listas. */
-export const HALLAZGOS_TENDENCIA_COLOR = {
-  abiertos: CHART_FILL.accent,
-  cerrados: CHART_FILL.success,
-} as const;
-
 /** Serie única de los gráficos de barras de una sola métrica (horas, vueltas) — un solo hue, sin
  * necesidad de leyenda (el título de la card ya dice qué se mide). */
 export const TRABAJOS_EXTRAORDINARIOS_COLOR = CHART_FILL.accent;

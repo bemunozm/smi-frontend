@@ -39,7 +39,6 @@ vi.mock('../hooks/useDashboard', () => ({
   useHallazgosAbiertosResumen: () => hallazgosResumenHook(),
   useHallazgosAbiertosRecientes: () => abiertosHook(),
   useHallazgosRecientes: () => idle,
-  useHallazgosTendencia: () => idle,
 }));
 
 import { DashboardView } from './DashboardView';
@@ -148,6 +147,28 @@ describe('DashboardView', () => {
         mockMant([fila('e1', 'h', 20, 500)]);
         const dialog = abrir('Ver próximas mantenciones');
         expect(within(dialog).queryByText(/kilometraje/)).toBeNull();
+      });
+
+      it('excluye las que no cumplen remaining <= alertBefore o sin alertBefore', () => {
+        mockMant([
+          fila('e1', 'h', 40, 250),
+          fila('e2', 'h', 200, 500), // fuera de ventana (alertBefore 50)
+          { equipmentId: 'e3', unit: 'h', alertBefore: null, status: { next: { milestone: 250, remaining: 10 } } },
+        ]);
+        const dialog = abrir('Ver próximas mantenciones');
+        expect(within(dialog).getByTestId('kpi-mantencion-e1')).toBeTruthy();
+        expect(within(dialog).queryByTestId('kpi-mantencion-e2')).toBeNull();
+        expect(within(dialog).queryByTestId('kpi-mantencion-e3')).toBeNull();
+      });
+
+      it('sin código del equipo muestra un placeholder, nunca el UUID', () => {
+        const uuid = '3f2b8c1e-7a44-4d0e-9a51-0c6e2f9b7d10';
+        mockEquipos(undefined);
+        mockMant([fila(uuid, 'h', 10, 250)]);
+        const dialog = abrir('Ver próximas mantenciones');
+        const filaDom = within(dialog).getByTestId(`kpi-mantencion-${uuid}`);
+        expect(filaDom.textContent).not.toContain(uuid);
+        expect(filaDom.textContent).toContain('…');
       });
 
       it('muestra el estado vacío si solo hay mantenciones por km', () => {
@@ -366,35 +387,6 @@ describe('DashboardView', () => {
       expect(screen.getByTestId('dia-e2-2026-10-05')).toBeTruthy();
     });
 
-    it('lista como próximos a mantenimiento solo los que cumplen remaining <= alertBefore', () => {
-      mockEquipos([
-        equipo('e1', 'AA-001', 1, 0, null),
-        equipo('e2', 'BB-002', 1, 0, null),
-        equipo('e3', 'CC-003', 1, 0, null),
-      ]);
-      const status = (remaining: number) => ({ counter: 100, next: { milestone: 250, remaining, dueAt: 250 } });
-      mockMant([
-        { equipmentId: 'e1', unit: 'h', alertBefore: 50, status: status(40) },
-        { equipmentId: 'e2', unit: 'h', alertBefore: 50, status: status(200) },
-        { equipmentId: 'e3', unit: 'km', alertBefore: null, status: status(10) },
-      ]);
-      render(<DashboardView />);
-      const card = screen.getByTestId('mantencion-proxima-e1');
-      expect(card.textContent).toContain('AA-001');
-      expect(card.textContent).toContain('40 h');
-      expect(screen.queryByTestId('mantencion-proxima-e2')).toBeNull();
-      expect(screen.queryByTestId('mantencion-proxima-e3')).toBeNull();
-    });
-
-    it('sin código del equipo (fuente pendiente o con error) muestra un placeholder, nunca el UUID', () => {
-      const uuid = '3f2b8c1e-7a44-4d0e-9a51-0c6e2f9b7d10';
-      mockEquipos(undefined);
-      const status = { counter: 100, next: { milestone: 250, remaining: 10, dueAt: 250 } };
-      mockMant([{ equipmentId: uuid, unit: 'h', alertBefore: 50, status }]);
-      render(<DashboardView />);
-      expect(screen.getByTestId(`mantencion-proxima-${uuid}`).textContent).not.toContain(uuid);
-      expect(screen.getByTestId(`mantencion-proxima-${uuid}`).textContent).toContain('…');
-    });
   });
 
   describe('sección Supervisores', () => {

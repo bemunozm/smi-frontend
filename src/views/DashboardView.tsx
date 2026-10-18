@@ -1,8 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -25,11 +23,9 @@ import {
   useHallazgosAbiertosRecientes,
   useHallazgosAbiertosResumen,
   useHallazgosRecientes,
-  useHallazgosTendencia,
 } from '../hooks/useDashboard';
 import {
   CHART_NEUTRAL,
-  HALLAZGOS_TENDENCIA_COLOR,
   TRABAJOS_EXTRAORDINARIOS_COLOR,
   criticidadChipColor,
   hallazgoEstadoChipColor,
@@ -229,7 +225,7 @@ function KpiCardSkeleton() {
 }
 
 /** ← Mantenimiento (real): equipos dentro de su ventana de aviso; misma regla
- * que la card «Próximos a mantenimiento» de la sección Equipos. */
+ * del popup de mantenciones. */
 function ProximasMantencionesKpiCard({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
   // Mismos códigos que `MantencionesProximasCard`: el estado de mantención no trae `internalCode`.
@@ -459,82 +455,6 @@ function SummaryCards({ rango }: { rango: RangoDashboard }) {
   );
 }
 
-/** Área — tendencia semanal de hallazgos, abiertos vs cerrados (~8 semanas).
- * Aporta la dimensión TEMPORAL (¿se acumulan o se resuelven?) que ninguna
- * card muestra. Datos ← Terreno, REAL (agrupación en cliente, ver
- * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`). */
-function HallazgosTendenciaSection() {
-  const { data, isPending, isError, error } = useHallazgosTendencia();
-
-  return (
-    <Card>
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Title>Tendencia de hallazgos</Card.Title>
-          <RealDataChip />
-        </div>
-        <Card.Description>
-          Abiertos/en proceso vs. cerrados, agrupados por semana de reporte (últimas 8).
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        {isPending ? <ChartSkeleton /> : null}
-
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar la tendencia de hallazgos.'}
-          </p>
-        ) : null}
-
-        {!isPending && !isError && data ? (
-          <>
-            <div className="h-64 w-full">
-              <ResponsiveContainer height="100%" width="100%">
-                <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-                  <XAxis axisLine={false} dataKey="semana" tick={AXIS_TICK_STYLE} tickLine={false} />
-                  <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={28} />
-                  <Tooltip
-                    contentStyle={TOOLTIP_CONTENT_STYLE}
-                    cursor={{ stroke: CHART_NEUTRAL.border, strokeWidth: 1 }}
-                    itemStyle={TOOLTIP_ITEM_STYLE}
-                    labelStyle={TOOLTIP_LABEL_STYLE}
-                  />
-                  <Area
-                    dataKey="abiertos"
-                    fill={HALLAZGOS_TENDENCIA_COLOR.abiertos}
-                    fillOpacity={0.12}
-                    isAnimationActive={false}
-                    name="Abiertos"
-                    stroke={HALLAZGOS_TENDENCIA_COLOR.abiertos}
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                  <Area
-                    dataKey="cerrados"
-                    fill={HALLAZGOS_TENDENCIA_COLOR.cerrados}
-                    fillOpacity={0.12}
-                    isAnimationActive={false}
-                    name="Cerrados"
-                    stroke={HALLAZGOS_TENDENCIA_COLOR.cerrados}
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <ChartLegendRow
-              items={[
-                { key: 'abiertos', label: 'Abiertos', color: HALLAZGOS_TENDENCIA_COLOR.abiertos },
-                { key: 'cerrados', label: 'Cerrados', color: HALLAZGOS_TENDENCIA_COLOR.cerrados },
-              ]}
-            />
-          </>
-        ) : null}
-      </Card.Content>
-    </Card>
-  );
-}
 
 /** Lista de hallazgos recientes — filas dentro de una sola card (mismo
  * patrón de filas con separador que `ProfileView`), no una card por ítem.
@@ -692,57 +612,6 @@ function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
   );
 }
 
-/** Equipos con la próxima mantención dentro de su ventana de aviso
- * (`next.remaining <= alertBefore`). Datos reales: `GET /api/maintenance-plans/status`. */
-function MantencionesProximasCard({ codigos }: { codigos: Map<string, string> }) {
-  const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
-
-  const proximas = mantencionesProximas(data?.values() ?? []);
-
-  return (
-    <Card>
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Title>Próximos a mantenimiento</Card.Title>
-          <RealDataChip />
-        </div>
-        <Card.Description>Equipos dentro de su ventana de aviso de la próxima mantención.</Card.Description>
-      </Card.Header>
-      <Card.Content>
-        {isPending ? (
-          <div className="flex justify-center py-8">
-            <Spinner color="accent" size="sm" />
-          </div>
-        ) : null}
-
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar el estado de mantención.'}
-          </p>
-        ) : null}
-
-        {!isPending && !isError
-          ? proximas.map((p) => (
-              <div
-                className="flex items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0"
-                data-testid={`mantencion-proxima-${p.equipmentId}`}
-                key={p.equipmentId}
-              >
-                <span className="font-mono text-sm text-foreground">{codigos.get(p.equipmentId) ?? '…'}</span>
-                <Chip className="ms-auto" color={p.remaining <= 0 ? 'danger' : 'warning'} size="sm" variant="soft">
-                  {p.remaining <= 0 ? 'Toca ahora' : `${p.remaining} ${p.unit}`}
-                </Chip>
-              </div>
-            ))
-          : null}
-
-        {!isPending && !isError && proximas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay equipos próximos a mantención.</p>
-        ) : null}
-      </Card.Content>
-    </Card>
-  );
-}
 
 const OPCIONES_SEMANAS = [4, 8, 12, 26] as const;
 
@@ -854,7 +723,6 @@ function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useDashboardEquipos(rango);
 
   const equipos = useMemo(() => [...(data ?? [])].sort((a, b) => b.horas - a.horas), [data]);
-  const codigos = useMemo(() => new Map(equipos.map((e) => [e.equipmentId, e.internalCode])), [equipos]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -897,11 +765,6 @@ function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
           </Card>
         </>
       ) : null}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MantencionesProximasCard codigos={codigos} />
-        <HallazgosTendenciaSection />
-      </div>
     </section>
   );
 }

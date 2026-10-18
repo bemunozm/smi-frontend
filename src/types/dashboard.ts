@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Contrato de datos del dashboard del administrador.
  *
  * Dos grupos, ambos de datos reales:
- * - Hallazgos (Terreno): `HallazgoResumen`, `HallazgoTendenciaSemana` y
+ * - Hallazgos (Terreno): `HallazgoResumen` y
  *   `HallazgosPorCriticidad` son el shape de SALIDA que la vista consume; se
  *   derivan en cliente desde `hooks/useHallazgos.ts` vía
  *   `config/dashboard-aggregations.ts` (ver `hooks/useDashboard.ts`).
@@ -48,17 +48,6 @@ export const HallazgoResumenSchema = z.object({
 });
 export type HallazgoResumen = z.infer<typeof HallazgoResumenSchema>;
 
-/** ← Terreno (real): tendencia semanal de `Hallazgo.estado`/`fecha`, abiertos
- * vs cerrados (~8 semanas). Calculada en cliente —
- * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal` — documenta
- * ahí la semántica exacta (agrupa por semana de REPORTE, no de cierre; el
- * modelo no tiene fecha de cierre). */
-export const HallazgoTendenciaSemanaSchema = z.object({
-  semana: z.string(),
-  abiertos: z.number().int().nonnegative(),
-  cerrados: z.number().int().nonnegative(),
-});
-export type HallazgoTendenciaSemana = z.infer<typeof HallazgoTendenciaSemanaSchema>;
 
 // ---------------------------------------------------------------------------
 // Contrato real del dashboard administrador (endpoints de smi-backend).

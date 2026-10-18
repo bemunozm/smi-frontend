@@ -17,7 +17,6 @@ import {
   hallazgosAbiertosRecientes,
   hallazgosAbiertosPorPrioridad,
   hallazgosRecientes,
-  hallazgosTendenciaSemanal,
 } from '../config/dashboard-aggregations';
 
 /**
@@ -65,14 +64,6 @@ export function useHallazgosAbiertosRecientes() {
   return { ...query, data };
 }
 
-/** ← Terreno (real): agrupa `GET /api/hallazgos` por semana de reporte,
- * abiertos vs cerrados — semántica documentada en
- * `config/dashboard-aggregations.ts#hallazgosTendenciaSemanal`. */
-export function useHallazgosTendencia() {
-  const query = useHallazgosList();
-  const data = useMemo(() => (query.data ? hallazgosTendenciaSemanal(query.data) : undefined), [query.data]);
-  return { ...query, data };
-}
 
 // ---------------------------------------------------------------------------
 // Dashboard administrador: queries reales de `/api/dashboard/*` (solo lectura).

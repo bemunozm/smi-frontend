@@ -3,7 +3,6 @@ import type {
   Criticidad,
   HallazgoEstado,
   HallazgoResumen,
-  HallazgoTendenciaSemana,
   HallazgosPorCriticidad,
 } from '../types/dashboard';
 
@@ -78,57 +77,3 @@ export function hallazgosAbiertosRecientes(hallazgos: Hallazgo[], limit = 10): H
     .map(aResumen);
 }
 
-/** Lunes de la semana ISO que contiene `date`, en UTC (evita corrimientos de
- * huso horario en el agrupamiento). */
-function startOfIsoWeekUtc(date: Date): Date {
-  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const isoDay = start.getUTCDay() || 7; // domingo (0) → 7, así lunes=1..domingo=7
-  if (isoDay !== 1) start.setUTCDate(start.getUTCDate() - (isoDay - 1));
-  return start;
-}
-
-const WEEK_LABEL_FORMATTER = new Intl.DateTimeFormat('es-CL', {
-  day: 'numeric',
-  month: 'short',
-  timeZone: 'UTC',
-});
-
-/**
- * Tendencia semanal de hallazgos, abiertos vs. cerrados.
- *
- * Semántica elegida (documentada porque el modelo no da otra opción): el
- * `Hallazgo` solo tiene `fecha` de creación, no una `fecha` de cierre —
- * así que cada hallazgo se agrupa por la SEMANA EN QUE SE REPORTÓ, y dentro
- * de esa semana se cuenta según su ESTADO ACTUAL: `CERRADO` suma a
- * "cerrados", `ABIERTO`/`EN_PROCESO` suma a "abiertos". No es "cuántos se
- * cerraron esa semana" (no hay forma de saberlo con el shape actual), es
- * "de lo reportado esa semana, cuánto sigue pendiente vs. ya se resolvió".
- */
-export function hallazgosTendenciaSemanal(hallazgos: Hallazgo[], weeks = 8): HallazgoTendenciaSemana[] {
-  const buckets = new Map<string, { start: Date; abiertos: number; cerrados: number }>();
-
-  for (const hallazgo of hallazgos) {
-    const fecha = new Date(hallazgo.fecha);
-    if (Number.isNaN(fecha.getTime())) continue;
-
-    const weekStart = startOfIsoWeekUtc(fecha);
-    const key = weekStart.toISOString();
-    const bucket = buckets.get(key) ?? { start: weekStart, abiertos: 0, cerrados: 0 };
-
-    if (hallazgo.estado === 'CERRADO') {
-      bucket.cerrados += 1;
-    } else {
-      bucket.abiertos += 1;
-    }
-    buckets.set(key, bucket);
-  }
-
-  return Array.from(buckets.values())
-    .sort((a, b) => a.start.getTime() - b.start.getTime())
-    .slice(-weeks)
-    .map((bucket) => ({
-      semana: WEEK_LABEL_FORMATTER.format(bucket.start),
-      abiertos: bucket.abiertos,
-      cerrados: bucket.cerrados,
-    }));
-}
