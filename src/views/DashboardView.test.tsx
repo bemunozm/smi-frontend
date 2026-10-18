@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { hoyHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
-  hoyHook: vi.fn(),
+const { resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+  resumenHook: vi.fn(),
   equiposMock: vi.fn(),
   equiposHook: vi.fn(),
   mantHook: vi.fn(),
@@ -23,8 +23,7 @@ vi.mock('../hooks/useInventory', () => ({
   useItems: () => ({ data: [], isPending: false, isError: false, error: null }),
 }));
 vi.mock('../hooks/useDashboard', () => ({
-  useDashboardHoy: () => hoyHook(),
-  useDashboardResumenDia: () => idle,
+  useDashboardResumenDia: () => resumenHook(),
   useDashboardEquipos: (rango: unknown) => {
     equiposMock(rango);
     return equiposHook();
@@ -38,9 +37,6 @@ vi.mock('../hooks/useDashboard', () => ({
 }));
 
 import { DashboardView } from './DashboardView';
-
-const mockHoy = (value: object) =>
-  hoyHook.mockReturnValue({ isPending: false, isError: false, error: null, refetch: vi.fn(), ...value });
 
 const mockEquipos = (data: object[] | undefined) =>
   equiposHook.mockReturnValue(data ? { data, isPending: false, isError: false, error: null } : idle);
@@ -68,7 +64,7 @@ beforeEach(() => {
   supHook.mockReturnValue(idle);
   mantenedoresHook.mockReturnValue(idle);
   vueltasHook.mockReturnValue(idle);
-  mockHoy({ data: { totales: { enUso: 0, disponibles: 0, inoperativos: 0 }, equipos: [] } });
+  resumenHook.mockReturnValue(idle);
 });
 afterEach(() => {
   cleanup();
@@ -76,30 +72,41 @@ afterEach(() => {
 });
 
 describe('DashboardView', () => {
-  it('la franja HOY muestra los tres contadores como chips y los equipos en uso con operador y turno', async () => {
-    mockHoy({
+  it('el resumen del día incluye la flota de hoy (chips, equipos con operador y turno) en una sola sección', async () => {
+    resumenHook.mockReturnValue({
       data: {
-        totales: { enUso: 2, disponibles: 3, inoperativos: 1 },
-        equipos: [
+        fecha: '2026-10-16',
+        hm: { total: 0, dia: 0, noche: 0 },
+        diesel: { total: 0, dia: 0, noche: 0, porHm: null },
+        reports: { totalHoras: 0, porEquipo: [] },
+        produccion: { internos: 0, minaCaleta: 0, mineras: 0 },
+        adBlue: null,
+        operacionPorEquipo: [],
+        lecturas: [],
+        flota: [
           { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'P. Rojas', turno: 'DIURNO', supervisor: 'Limbert' },
           { equipmentId: 'e2', internalCode: 'EX-001', estado: 'DISPONIBLE', status: 'OPERATIONAL' },
         ],
       },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
     });
     render(<DashboardView />);
-    expect((await screen.findByTestId('contador-EN_USO')).textContent).toBe('2 en uso');
-    expect(screen.getByTestId('contador-DISPONIBLE').textContent).toBe('3 disponibles');
-    expect(screen.getByTestId('contador-INOPERATIVO').textContent).toBe('1 inoperativos');
-    expect(screen.getByText(/CG-002/)).toBeTruthy();
-    expect(screen.getByText(/P\. Rojas · DIURNO/)).toBeTruthy();
-    expect(screen.getByText(/EX-001/)).toBeTruthy();
+    expect((await screen.findByTestId('contador-EN_USO')).textContent).toBe('1 en uso');
+    expect(screen.getByTestId('contador-DISPONIBLE').textContent).toBe('1 disponibles');
+    expect(screen.getByText(/P. Rojas · DIURNO/)).toBeTruthy();
+    // Ya no hay una sección HOY independiente: la flota vive dentro del resumen del día.
+    expect(screen.queryByRole('region', { name: 'Flota hoy' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Resumen del día' })).getByRole('region', { name: 'Flota' })).toBeTruthy();
   });
 
-  it('muestra el error de la franja HOY con reintento', () => {
+  it('muestra el error del resumen del día (incluye la flota) con reintento', () => {
     const refetch = vi.fn();
-    hoyHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló HOY'), refetch });
+    resumenHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló resumen'), refetch });
     render(<DashboardView />);
-    expect(screen.getByText('Falló HOY')).toBeTruthy();
+    expect(screen.getByText('Falló resumen')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /reintentar/i }));
     expect(refetch).toHaveBeenCalled();
   });

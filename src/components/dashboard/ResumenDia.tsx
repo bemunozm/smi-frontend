@@ -5,6 +5,8 @@ import { RESUMEN_CARD_BG } from '../../config/dashboard-colors';
 import { useDashboardResumenDia } from '../../hooks/useDashboard';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
+import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
+import { FlotaDiaCarrusel } from './FlotaDiaCarrusel';
 import type { ResumenDia as ResumenDiaData } from '../../types/dashboard';
 import { UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 
@@ -145,11 +147,9 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
   const n = (v: number) => NUM_CL_1.format(v);
 
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>Operación por equipo – {formatDia(data.fecha)}</Card.Title>
-      </Card.Header>
-      <Card.Content>
+    <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
+      <h3 className="text-base font-semibold text-foreground">Operación por equipo – {formatDia(data.fecha)}</h3>
+      <div>
         {filas.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin actividad este día.</p>
         ) : (
@@ -193,18 +193,16 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
             </Table.ScrollContainer>
           </Table>
         )}
-      </Card.Content>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 function TablaLecturas({ data }: { data: ResumenDiaData }) {
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>Lecturas de horómetro</Card.Title>
-      </Card.Header>
-      <Card.Content>
+    <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
+      <h3 className="text-base font-semibold text-foreground">Lecturas de horómetro</h3>
+      <div>
         {data.lecturas.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin tarjetas este día.</p>
         ) : (
@@ -239,13 +237,16 @@ function TablaLecturas({ data }: { data: ResumenDiaData }) {
             </Table.ScrollContainer>
           </Table>
         )}
-      </Card.Content>
-    </Card>
+      </div>
+    </div>
   );
 }
 
-/** Portada del dashboard: cinco tarjetas KPI + operación por equipo y lecturas del día. */
-export function ResumenDia() {
+/**
+ * Portada del dashboard: UNA sola tarjeta «Resumen del día» (KPIs, tablas y flota), gobernada por
+ * un único filtro de día. `mantenciones` alimenta los avisos del carrusel de flota (solo hoy).
+ */
+export function ResumenDia({ mantenciones }: { mantenciones?: Map<string, MaintenanceStatusRow> }) {
   // `undefined` = hoy (consulta viva); un valor = día pasado puntual.
   const [fecha, setFecha] = useState<string | undefined>(undefined);
   const { data, isPending, isError, error, refetch } = useDashboardResumenDia(fecha);
@@ -263,67 +264,74 @@ export function ResumenDia() {
   const btn = 'rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground disabled:opacity-40';
 
   return (
-    <section aria-label="Resumen del día" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">Resumen del día</h2>
-        <div className="flex items-center gap-2">
-          <button aria-label="Día anterior" className={btn} onClick={() => mover(-1)} type="button">
-            ◀
-          </button>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            Fecha
-            <input
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
-              max={hoy}
-              onChange={(event) => irA(event.target.value)}
-              type="date"
-              value={actual}
-            />
-          </label>
-          <button
-            aria-label="Día siguiente"
-            className={btn}
-            disabled={actual >= hoy}
-            onClick={() => mover(1)}
-            type="button"
-          >
-            ▶
-          </button>
-          {fecha ? (
-            <button className={btn} onClick={() => setFecha(undefined)} type="button">
-              Hoy
+    <section aria-label="Resumen del día">
+      <Card>
+        <Card.Header className="flex flex-wrap items-center justify-between gap-3">
+          <Card.Title>Resumen del día</Card.Title>
+          <div className="flex items-center gap-2">
+            <button aria-label="Día anterior" className={btn} onClick={() => mover(-1)} type="button">
+              ◀
             </button>
-          ) : null}
-        </div>
-      </div>
-
-      {isPending ? (
-        <div className="flex justify-center py-8" data-testid="resumen-dia-skeleton">
-          <Spinner color="accent" size="sm" />
-        </div>
-      ) : null}
-
-      {isError ? (
-        <div
-          className="flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
-          <span>{error instanceof Error ? error.message : 'No se pudo cargar el resumen del día.'}</span>
-          <button className="font-medium underline" onClick={() => void refetch()} type="button">
-            Reintentar
-          </button>
-        </div>
-      ) : null}
-
-      {data ? (
-        <>
-          <TarjetasKpi data={data} pasado={fecha !== undefined} />
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <TablaOperacion data={data} />
-            <TablaLecturas data={data} />
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              Fecha
+              <input
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+                max={hoy}
+                onChange={(event) => irA(event.target.value)}
+                type="date"
+                value={actual}
+              />
+            </label>
+            <button
+              aria-label="Día siguiente"
+              className={btn}
+              disabled={actual >= hoy}
+              onClick={() => mover(1)}
+              type="button"
+            >
+              ▶
+            </button>
+            {fecha ? (
+              <button className={btn} onClick={() => setFecha(undefined)} type="button">
+                Hoy
+              </button>
+            ) : null}
           </div>
-        </>
-      ) : null}
+        </Card.Header>
+
+        <Card.Content className="flex flex-col gap-5">
+          {isPending ? (
+            <div className="flex justify-center py-8" data-testid="resumen-dia-skeleton">
+              <Spinner color="accent" size="sm" />
+            </div>
+          ) : null}
+
+          {isError ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
+              role="alert"
+            >
+              <span>{error instanceof Error ? error.message : 'No se pudo cargar el resumen del día.'}</span>
+              <button className="font-medium underline" onClick={() => void refetch()} type="button">
+                Reintentar
+              </button>
+            </div>
+          ) : null}
+
+          {data ? (
+            <>
+              <TarjetasKpi data={data} pasado={fecha !== undefined} />
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <TablaOperacion data={data} />
+                <TablaLecturas data={data} />
+              </div>
+              <div className="border-t border-border pt-5">
+                <FlotaDiaCarrusel esHoy={fecha === undefined} flota={data.flota} mantenciones={mantenciones} />
+              </div>
+            </>
+          ) : null}
+        </Card.Content>
+      </Card>
     </section>
   );
 }

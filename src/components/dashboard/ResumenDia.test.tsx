@@ -220,3 +220,90 @@ describe('ResumenDia', () => {
     });
   });
 });
+
+const FLOTA_HOY = [
+  { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'Hoy Op', turno: 'DIURNO', supervisor: 'Sup', unidadControl: 'HOURS', contadorActual: 10, nivelCombustible: 50 },
+  { equipmentId: 'e2', internalCode: 'EX-001', estado: 'INOPERATIVO', status: 'IN_WORKSHOP', unidadControl: 'KM', contadorActual: 5, nivelCombustible: null },
+];
+const FLOTA_PASADA = [
+  { equipmentId: 'e1', internalCode: 'CG-002', estado: 'OPERO', operador: 'Ayer Op', turno: 'NOCTURNO', supervisor: 'Sup', unidadControl: 'HOURS', contadorActual: 10, nivelCombustible: 20 },
+  { equipmentId: 'e2', internalCode: 'EX-001', estado: 'SIN_ACTIVIDAD', unidadControl: 'KM', contadorActual: 5, nivelCombustible: null },
+];
+
+describe('ResumenDia: una sección, una tarjeta', () => {
+  it('título y filtro de fecha viven en la misma cabecera; KPIs, tablas y flota dentro del mismo cuerpo', () => {
+    mock({ ...BASE, flota: FLOTA_HOY });
+    render(<ResumenDia />);
+    const seccion = screen.getByRole('region', { name: 'Resumen del día' });
+    expect(within(seccion).getByText('Resumen del día')).toBeTruthy();
+    expect(within(seccion).getByLabelText('Fecha')).toBeTruthy();
+    expect(within(seccion).getByTestId('kpi-hm')).toBeTruthy();
+    expect(within(seccion).getByTestId('op-TOTAL')).toBeTruthy();
+    expect(within(seccion).getByRole('region', { name: 'Flota' })).toBeTruthy();
+    // El filtro comparte contenedor de cabecera con el título.
+    const titulo = within(seccion).getByText('Resumen del día');
+    expect(titulo.parentElement!.contains(within(seccion).getByLabelText('Fecha'))).toBe(true);
+  });
+
+  it('hoy: chips en uso/disponibles/inoperativos y motivo «En taller»', () => {
+    mock({ ...BASE, flota: FLOTA_HOY });
+    render(<ResumenDia />);
+    expect(screen.getByTestId('contador-EN_USO').textContent).toBe('1 en uso');
+    expect(screen.getByTestId('contador-INOPERATIVO').textContent).toBe('1 inoperativos');
+    expect(screen.getByText('En taller')).toBeTruthy();
+  });
+
+  it('cambiar el filtro re-renderiza KPIs, tablas y carrusel desde el mismo estado', () => {
+    resumenHook.mockImplementation((f?: string) => ({
+      data: f
+        ? { ...BASE, fecha: f, hm: { total: 99, dia: 90, noche: 9 }, flota: FLOTA_PASADA }
+        : { ...BASE, flota: FLOTA_HOY },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    }));
+    render(<ResumenDia />);
+    expect(screen.getByTestId('contador-EN_USO')).toBeTruthy();
+    expect(within(screen.getByTestId('kpi-hm')).getByText('10,5')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-10' } });
+    expect(within(screen.getByTestId('kpi-hm')).getByText('99')).toBeTruthy();
+    expect(screen.getByText(/Operación por equipo – 10\/10/)).toBeTruthy();
+    expect(screen.getByTestId('contador-OPERO').textContent).toBe('1 operaron');
+    expect(screen.getByTestId('contador-SIN_ACTIVIDAD').textContent).toBe('1 sin actividad');
+    expect(screen.getByText('Ayer Op · NOCTURNO')).toBeTruthy();
+    expect(screen.getByText('Operó')).toBeTruthy();
+    expect(screen.getByText('Sin actividad', { selector: 'span' })).toBeTruthy();
+    expect(screen.queryByText('En taller')).toBeNull();
+    expect(screen.queryByTestId('contador-EN_USO')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hoy' }));
+    expect(screen.getByTestId('contador-EN_USO')).toBeTruthy();
+    expect(screen.getByText('Hoy Op · DIURNO')).toBeTruthy();
+  });
+
+  it('día pasado: sin badge de mantención aunque haya alerta; hoy sí', () => {
+    const mant = new Map([
+      ['e1', { equipmentId: 'e1', unit: 'h', alertBefore: 50, status: { next: { remaining: 10 } } } as never],
+    ]);
+    resumenHook.mockImplementation((f?: string) => ({
+      data: { ...BASE, flota: f ? FLOTA_PASADA : FLOTA_HOY },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    }));
+    render(<ResumenDia mantenciones={mant} />);
+    expect(screen.getByText('Mantención: quedan 10 h')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-10' } });
+    expect(screen.queryByText(/Mantención/)).toBeNull();
+  });
+
+  it('flota ausente en el payload (cacheado): estado vacío neutro y el resto se renderiza', () => {
+    mock(BASE);
+    render(<ResumenDia />);
+    expect(screen.getByTestId('flota-sin-datos')).toBeTruthy();
+    expect(screen.getByTestId('kpi-hm')).toBeTruthy();
+  });
+});

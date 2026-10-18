@@ -80,6 +80,12 @@ export const EstadoEquipoHoySchema = z.object({
   nivelCombustible: z.number().nullable().optional(),
 });
 
+/** Ítem de flota del resumen de un día: hoy = estados de /hoy; día pasado = OPERO / SIN_ACTIVIDAD. */
+export const FlotaDiaSchema = EstadoEquipoHoySchema.extend({
+  estado: z.enum(['EN_USO', 'DISPONIBLE', 'INOPERATIVO', 'OPERO', 'SIN_ACTIVIDAD']),
+});
+export type FlotaDia = z.infer<typeof FlotaDiaSchema>;
+
 export const ResumenHoySchema = z.object({
   totales: z.object({
     enUso: z.number().int(),
@@ -153,6 +159,8 @@ export interface RangoDashboard {
 const HmLitrosSchema = z.object({ hm: z.number(), litros: z.number() });
 export const ResumenDiaSchema = z.object({
   fecha: z.string(),
+  /** Opcional: payloads cacheados (PWA) previos al campo. */
+  flota: z.array(FlotaDiaSchema).optional(),
   hm: z.object({ total: z.number(), dia: z.number(), noche: z.number() }),
   diesel: z.object({
     total: z.number(),

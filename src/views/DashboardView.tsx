@@ -37,7 +37,6 @@ import { UNIT_SYMBOLS } from '../types/inventory';
 import { SECCION_LABEL } from '../types/reporte-diario';
 import type { MetricasEquipo, RangoDashboard } from '../types/dashboard';
 import { mantencionesProximas } from '../lib/mantenciones-proximas';
-import { FranjaHoy } from '../components/dashboard/FranjaHoy';
 import { ResumenDia } from '../components/dashboard/ResumenDia';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
 import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
@@ -983,7 +982,7 @@ export function DashboardView() {
   const meses = useMemo(() => opcionesMes(), []);
   // Rango que consumen las secciones del dashboard.
   const rango = useMemo(() => rangoDeMes(mes), [mes]);
-  // Estado de mantencion (compartido con la franja HOY para el aviso en cada equipo).
+  // Estado de mantencion (compartido con el carrusel de flota del resumen del día para el aviso en cada equipo).
   const { data: mantenciones } = useMaintenanceStatusByEquipment();
 
   return (
@@ -1016,9 +1015,7 @@ export function DashboardView() {
         </div>
       </div>
 
-      <ResumenDia />
-
-      <FranjaHoy mantenciones={mantenciones} />
+      <ResumenDia mantenciones={mantenciones} />
 
       <SummaryCards />
 

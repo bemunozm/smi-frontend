@@ -1,23 +1,20 @@
 import { useRef, type ReactNode } from 'react';
-import { Card, Chip, Spinner } from '@heroui/react';
+import { Card, Chip } from '@heroui/react';
 
-import { estadoHoyChipColor, estadoHoyLabel, type EstadoHoy } from '../../config/dashboard-colors';
+import { estadoFlotaChipColor, estadoFlotaLabel, type EstadoHoy } from '../../config/dashboard-colors';
 import { FuelGauge } from '../flota/FuelGauge';
-import { useDashboardHoy } from '../../hooks/useDashboard';
 import { NUM_CL_1 } from '../../lib/dashboard-format';
 import { mantencionesProximas, type MantencionProxima } from '../../lib/mantenciones-proximas';
-import type { ResumenHoy } from '../../types/dashboard';
+import type { FlotaDia } from '../../types/dashboard';
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
 
-type EquipoHoy = ResumenHoy['equipos'][number];
-
-const CONTADORES: { estado: EstadoHoy; clave: 'enUso' | 'disponibles' | 'inoperativos'; texto: string }[] = [
-  { estado: 'EN_USO', clave: 'enUso', texto: 'en uso' },
-  { estado: 'DISPONIBLE', clave: 'disponibles', texto: 'disponibles' },
-  { estado: 'INOPERATIVO', clave: 'inoperativos', texto: 'inoperativos' },
+const CONTADORES_HOY: { estado: EstadoHoy; texto: string }[] = [
+  { estado: 'EN_USO', texto: 'en uso' },
+  { estado: 'DISPONIBLE', texto: 'disponibles' },
+  { estado: 'INOPERATIVO', texto: 'inoperativos' },
 ];
 
-const MOTIVO_INOPERATIVO: Record<NonNullable<EquipoHoy['status']>, string> = {
+const MOTIVO_INOPERATIVO: Record<NonNullable<FlotaDia['status']>, string> = {
   OPERATIONAL: 'No operativo',
   IN_WORKSHOP: 'En taller',
   OUT_OF_SERVICE: 'Fuera de servicio',
@@ -35,20 +32,30 @@ function Fila({ etiqueta, children }: { etiqueta: string; children: ReactNode })
   );
 }
 
-function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: MantencionProxima }) {
-  const enUso = equipo.estado === 'EN_USO';
+function EquipoCard({
+  equipo,
+  esHoy,
+  mantencion,
+}: {
+  equipo: FlotaDia;
+  esHoy: boolean;
+  mantencion?: MantencionProxima;
+}) {
+  const conUso = equipo.estado === 'EN_USO' || equipo.estado === 'OPERO';
   const km = equipo.unidadControl === 'KM';
+  // El contador es el valor ACTUAL del equipo: en un día pasado se rotula para no leerlo como histórico.
+  const etiquetaContador = `${km ? 'Odómetro' : 'Horómetro'}${esHoy ? ' actual' : ' (actual)'}`;
   return (
     <Card className="h-full" data-testid={`equipo-card-${equipo.equipmentId}`}>
       <Card.Content className="flex h-full min-h-80 flex-col gap-3 py-5">
         <div className="flex items-start justify-between gap-2">
           <span className="font-mono text-4xl font-semibold text-foreground">{equipo.internalCode}</span>
-          <Chip color={estadoHoyChipColor(equipo.estado)} size="md" variant="soft">
-            {estadoHoyLabel(equipo.estado)}
+          <Chip color={estadoFlotaChipColor(equipo.estado)} size="md" variant="soft">
+            {estadoFlotaLabel(equipo.estado)}
           </Chip>
         </div>
 
-        {!enUso ? (
+        {esHoy && !conUso ? (
           <div className="min-h-5 text-base">
             {equipo.estado === 'INOPERATIVO' ? (
               <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
@@ -60,18 +67,18 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
 
         <div className="flex flex-col">
           <Fila etiqueta="Operador">
-            {enUso ? `${equipo.operador ?? 'Sin operador'}${equipo.turno ? ` · ${equipo.turno}` : ''}` : '—'}
+            {conUso ? `${equipo.operador ?? 'Sin operador'}${equipo.turno ? ` · ${equipo.turno}` : ''}` : '—'}
           </Fila>
-          <Fila etiqueta="Supervisor">{enUso && equipo.supervisor ? equipo.supervisor : '—'}</Fila>
+          <Fila etiqueta="Supervisor">{conUso && equipo.supervisor ? equipo.supervisor : '—'}</Fila>
           <Fila etiqueta="Combustible">
             <FuelGauge className="justify-end" pct={equipo.nivelCombustible ?? null} />
           </Fila>
-          <Fila etiqueta={km ? 'Odómetro actual' : 'Horómetro actual'}>
+          <Fila etiqueta={etiquetaContador}>
             {equipo.contadorActual == null ? '—' : `${NUM_CL_1.format(equipo.contadorActual)} ${km ? 'km' : 'h'}`}
           </Fila>
         </div>
 
-        {mantencion ? (
+        {esHoy && mantencion ? (
           <Chip className="self-start" color="warning" size="md" variant="soft">
             {mantencion.remaining <= 0
               ? 'Mantención: toca ahora'
@@ -84,12 +91,20 @@ function EquipoCard({ equipo, mantencion }: { equipo: EquipoHoy; mantencion?: Ma
 }
 
 /**
- * Franja HOY: contadores compactos + carrusel de tarjetas por equipo
- * (CSS scroll-snap, sin dependencias; el swipe táctil es scroll nativo).
- * `mantenciones` es el estado de mantención que ya cargó el dashboard.
+ * Sub-bloque «Flota» del resumen del día: chips de conteo + carrusel de tarjetas por equipo
+ * (CSS scroll-snap, sin dependencias; el swipe táctil es scroll nativo). No consulta nada:
+ * recibe `flota` del resumen del día (undefined = payload cacheado sin el campo) y `esHoy`.
+ * `mantenciones` es el estado de mantención que ya cargó el dashboard (solo se muestra hoy).
  */
-export function FranjaHoy({ mantenciones }: { mantenciones?: Map<string, MaintenanceStatusRow> }) {
-  const { data, isPending, isError, error, refetch } = useDashboardHoy();
+export function FlotaDiaCarrusel({
+  flota,
+  esHoy,
+  mantenciones,
+}: {
+  flota?: FlotaDia[];
+  esHoy: boolean;
+  mantenciones?: Map<string, MaintenanceStatusRow>;
+}) {
   const carruselRef = useRef<HTMLUListElement>(null);
 
   const mover = (sentido: 1 | -1) => {
@@ -98,51 +113,55 @@ export function FranjaHoy({ mantenciones }: { mantenciones?: Map<string, Mainten
   };
 
   const proximas = new Map(mantencionesProximas(mantenciones?.values() ?? []).map((m) => [m.equipmentId, m]));
+  const cuenta = (estado: FlotaDia['estado']) => (flota ?? []).filter((e) => e.estado === estado).length;
+  const fmt = (n: number, texto: string) => `${n.toLocaleString('es-CL')} ${texto}`;
 
   return (
-    <section aria-label="Flota hoy" className="flex flex-col gap-3">
+    <section aria-label="Flota" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">Hoy</h2>
-        {data ? (
+        <h3 className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">Flota</h3>
+        {flota && flota.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            {CONTADORES.map(({ estado, clave, texto }) => (
-              <Chip
-                color={estadoHoyChipColor(estado)}
-                data-testid={`contador-${estado}`}
-                key={estado}
-                size="md"
-                variant="soft"
-              >
-                {`${data.totales[clave].toLocaleString('es-CL')} ${texto}`}
-              </Chip>
-            ))}
+            {esHoy ? (
+              CONTADORES_HOY.map(({ estado, texto }) => (
+                <Chip
+                  color={estadoFlotaChipColor(estado)}
+                  data-testid={`contador-${estado}`}
+                  key={estado}
+                  size="md"
+                  variant="soft"
+                >
+                  {fmt(cuenta(estado), texto)}
+                </Chip>
+              ))
+            ) : (
+              <>
+                <Chip color={estadoFlotaChipColor('OPERO')} data-testid="contador-OPERO" size="md" variant="soft">
+                  {fmt(cuenta('OPERO'), 'operaron')}
+                </Chip>
+                <Chip
+                  color={estadoFlotaChipColor('SIN_ACTIVIDAD')}
+                  data-testid="contador-SIN_ACTIVIDAD"
+                  size="md"
+                  variant="soft"
+                >
+                  {fmt(cuenta('SIN_ACTIVIDAD'), 'sin actividad')}
+                </Chip>
+              </>
+            )}
           </div>
         ) : null}
       </div>
 
-      {isPending ? (
-        <div className="flex justify-center py-8">
-          <Spinner color="accent" size="sm" />
-        </div>
+      {flota === undefined ? (
+        <p className="text-sm text-muted-foreground" data-testid="flota-sin-datos">
+          Sin información de flota para este día.
+        </p>
       ) : null}
 
-      {isError ? (
-        <div
-          className="flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
-          <span>{error instanceof Error ? error.message : 'No se pudo cargar el estado de la flota.'}</span>
-          <button className="font-medium underline" onClick={() => void refetch()} type="button">
-            Reintentar
-          </button>
-        </div>
-      ) : null}
+      {flota && flota.length === 0 ? <p className="text-sm text-muted-foreground">No hay equipos registrados.</p> : null}
 
-      {data && data.equipos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No hay equipos registrados.</p>
-      ) : null}
-
-      {data && data.equipos.length > 0 ? (
+      {flota && flota.length > 0 ? (
         <div className="flex items-center gap-2">
           <button aria-label="Equipos anteriores" className={BOTON_FLECHA} onClick={() => mover(-1)} type="button">
             <span aria-hidden="true">◀</span>
@@ -152,12 +171,12 @@ export function FranjaHoy({ mantenciones }: { mantenciones?: Map<string, Mainten
             ref={carruselRef}
             role="list"
           >
-            {data.equipos.map((equipo) => (
+            {flota.map((equipo) => (
               <li
                 className="w-full shrink-0 snap-start md:w-[calc((100%-1rem)/2)] xl:w-[calc((100%-2rem)/3)]"
                 key={equipo.equipmentId}
               >
-                <EquipoCard equipo={equipo} mantencion={proximas.get(equipo.equipmentId)} />
+                <EquipoCard equipo={equipo} esHoy={esHoy} mantencion={proximas.get(equipo.equipmentId)} />
               </li>
             ))}
           </ul>

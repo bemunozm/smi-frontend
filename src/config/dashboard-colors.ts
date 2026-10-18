@@ -130,6 +130,21 @@ export function estadoHoyLabel(estado: EstadoHoy): string {
   return ESTADO_HOY_LABEL[estado];
 }
 
+/** Estados de un ítem de flota: los de hoy más los de un día pasado (opero / sin actividad). */
+export type EstadoFlota = EstadoHoy | 'OPERO' | 'SIN_ACTIVIDAD';
+
+export function estadoFlotaChipColor(estado: EstadoFlota): DashboardChipColor {
+  if (estado === 'OPERO') return ESTADO_HOY_COLOR.EN_USO; // mismo amarillo que «en uso»
+  if (estado === 'SIN_ACTIVIDAD') return 'default';
+  return ESTADO_HOY_COLOR[estado];
+}
+
+export function estadoFlotaLabel(estado: EstadoFlota): string {
+  if (estado === 'OPERO') return 'Operó';
+  if (estado === 'SIN_ACTIVIDAD') return 'Sin actividad';
+  return ESTADO_HOY_LABEL[estado];
+}
+
 /**
  * Fondos plenos de las 5 tarjetas de la portada («resumen del día»), con texto
  * blanco como la lámina del cliente. Hex literales (mismo precedente que `HEX`
