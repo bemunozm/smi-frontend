@@ -455,7 +455,6 @@ describe('DashboardView', () => {
       expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('30');
       expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('Vueltas camiones mineras');
       expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('12');
-      expect(screen.getByText('Las secciones no se suman: cada una tiene tarifa distinta.')).toBeTruthy();
       expect(screen.queryByTestId('vueltas-total')).toBeNull();
       expect(document.body.textContent).not.toMatch(/total de vueltas|vueltas totales:? ?42/i);
       expect(document.body.textContent).not.toContain('42');

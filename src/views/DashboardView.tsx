@@ -993,7 +993,6 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
       />
       {!isPending && !isError && data ? (
         <>
-          <p className="text-sm text-muted-foreground">Las secciones no se suman: cada una tiene tarifa distinta.</p>
           {data.porSeccion.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {data.porSeccion.map((sec) => (
