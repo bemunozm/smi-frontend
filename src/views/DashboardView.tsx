@@ -917,55 +917,62 @@ function SeccionSupervisores({ rango }: { rango: RangoDashboard }) {
           </Card>
         </div>
       ) : null}
+
+      <TrabajosExtraCard rango={rango} />
     </section>
   );
 }
 
-function SeccionMantenedores({ rango }: { rango: RangoDashboard }) {
+/** Card de trabajos extraordinarios (mantenedores). Vive DENTRO de la sección
+ * Supervisores (pedido del administrador: no amerita sección propia) con su
+ * propio estado de carga/error, independiente del de supervisores. */
+function TrabajosExtraCard({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useDashboardMantenedores(rango);
+  const plural = (n: number) => (n === 1 ? 'trabajo' : 'trabajos');
 
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Mantenedores</h2>
-      <EstadoSeccion
-        error={error}
-        fallback="No se pudo cargar el resumen de mantenedores."
-        isError={isError}
-        isPending={isPending}
-      />
-      {!isPending && !isError && data ? (
-        <Card>
-          <Card.Header>
-            <Card.Title>Horas de trabajos extra por equipo</Card.Title>
-            <Card.Description data-testid="mantenedores-total">
-              Total del mes: {formatHoras(data.total.horas)} en {data.total.trabajos} trabajos.
-            </Card.Description>
-          </Card.Header>
-          <Card.Content>
-            {data.porEquipo.length > 0 ? (
-              <>
-                <BarrasSimples data={data.porEquipo} xKey="internalCode" yKey="horas" />
-                <ul className="flex flex-col pt-2">
-                  {data.porEquipo.map((e) => (
-                    <li
-                      className="flex items-center gap-3 border-t border-border py-2 text-sm first:border-t-0"
-                      data-testid={`mantenedor-${e.equipmentId}`}
-                      key={e.equipmentId}
-                    >
-                      <span className="font-mono text-foreground">{e.internalCode}</span>
-                      <span className="ms-auto font-mono text-muted-foreground">{formatHoras(e.horas)}</span>
-                      <span className="w-24 text-end text-muted-foreground">{e.trabajos} trabajos</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">No hay trabajos extra en el mes.</p>
-            )}
-          </Card.Content>
-        </Card>
-      ) : null}
-    </section>
+    <Card>
+      <Card.Header>
+        <Card.Title>Horas de trabajos extra por equipo</Card.Title>
+        {!isPending && !isError && data ? (
+          <Card.Description data-testid="mantenedores-total">
+            Total del mes: {formatHoras(data.total.horas)} en {data.total.trabajos} {plural(data.total.trabajos)}.
+          </Card.Description>
+        ) : null}
+      </Card.Header>
+      <Card.Content>
+        <EstadoSeccion
+          error={error}
+          fallback="No se pudo cargar el resumen de trabajos extra."
+          isError={isError}
+          isPending={isPending}
+        />
+        {!isPending && !isError && data ? (
+          data.porEquipo.length > 0 ? (
+            <>
+              <BarrasSimples data={data.porEquipo} xKey="internalCode" yKey="horas" />
+              <ul className="flex flex-col pt-2">
+                {data.porEquipo.map((e) => (
+                  <li
+                    className="flex items-center gap-3 border-t border-border py-2 text-sm first:border-t-0"
+                    data-testid={`mantenedor-${e.equipmentId}`}
+                    key={e.equipmentId}
+                  >
+                    <span className="font-mono text-foreground">{e.internalCode}</span>
+                    <span className="ms-auto font-mono text-muted-foreground">{formatHoras(e.horas)}</span>
+                    <span className="w-24 text-end text-muted-foreground">
+                      {e.trabajos} {plural(e.trabajos)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No hay trabajos extra en el mes.</p>
+          )
+        ) : null}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -1137,8 +1144,6 @@ export function DashboardView() {
       <SeccionEquipos rango={rango} />
 
       <SeccionSupervisores rango={rango} />
-
-      <SeccionMantenedores rango={rango} />
 
       <SeccionVueltas rango={rango} />
 
