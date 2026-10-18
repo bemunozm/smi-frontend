@@ -140,9 +140,10 @@ interface KpiCardProps {
   /** Marca discreta de que la card consume datos de otro dominio (Terreno,
    * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
   isReal?: boolean;
-  /** Ruta del detalle: la card entera es un botón que navega ahí. */
-  to: string;
-  ariaLabel: string;
+  /** Ruta del detalle: con `to`, la card entera es un botón que navega ahí
+   * (requiere `ariaLabel`); sin `to` es una card informativa estática. */
+  to?: string;
+  ariaLabel?: string;
 }
 
 /** Indicador discreto de que la card se alimenta del dominio original (Terreno,
@@ -157,14 +158,10 @@ function RealDataChip() {
 
 function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, ariaLabel }: KpiCardProps) {
   const navigate = useNavigate();
-  return (
-    <button
-      aria-label={ariaLabel}
-      className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-      onClick={() => void navigate(to)}
-      type="button"
+  const contenido = (
+    <Card
+      className={`h-full ${to ? 'transition-colors hover:bg-surface-secondary active:bg-surface-secondary' : ''}`}
     >
-      <Card className="h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary">
         <Card.Header>
           <div className="flex items-center justify-between gap-2">
             <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
@@ -182,6 +179,16 @@ function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, a
           </p>
         </Card.Content>
       </Card>
+  );
+  if (!to) return contenido;
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+      onClick={() => void navigate(to)}
+      type="button"
+    >
+      {contenido}
     </button>
   );
 }
