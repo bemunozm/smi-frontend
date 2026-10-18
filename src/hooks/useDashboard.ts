@@ -14,6 +14,7 @@ import type { RangoDashboard } from '../types/dashboard';
 import { useHallazgosList } from './useHallazgos';
 import {
   countHallazgosAbiertos,
+  hallazgosAbiertosRecientes,
   hallazgosAbiertosPorPrioridad,
   hallazgosRecientes,
   hallazgosTendenciaSemanal,
@@ -54,6 +55,13 @@ export function useHallazgosAbiertosResumen() {
 export function useHallazgosRecientes() {
   const query = useHallazgosList();
   const data = useMemo(() => (query.data ? hallazgosRecientes(query.data) : undefined), [query.data]);
+  return { ...query, data };
+}
+
+/** ← Terreno (real): últimos 10 hallazgos ABIERTOS (popup del KPI). */
+export function useHallazgosAbiertosRecientes() {
+  const query = useHallazgosList();
+  const data = useMemo(() => (query.data ? hallazgosAbiertosRecientes(query.data) : undefined), [query.data]);
   return { ...query, data };
 }
 

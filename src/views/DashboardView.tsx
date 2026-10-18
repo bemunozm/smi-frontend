@@ -21,6 +21,7 @@ import {
   useDashboardMantenedores,
   useDashboardSupervisores,
   useDashboardVueltas,
+  useHallazgosAbiertosRecientes,
   useHallazgosAbiertosResumen,
   useHallazgosRecientes,
   useHallazgosTendencia,
@@ -36,9 +37,10 @@ import {
 } from '../config/dashboard-colors';
 import { UNIT_SYMBOLS } from '../types/inventory';
 import { SECCION_LABEL } from '../types/reporte-diario';
-import type { MetricasEquipo, RangoDashboard } from '../types/dashboard';
+import type { HallazgoResumen, MetricasEquipo, RangoDashboard } from '../types/dashboard';
 import { mantencionesProximas } from '../lib/mantenciones-proximas';
 import { ResumenDia } from '../components/dashboard/ResumenDia';
+import { KpiDetailModal } from '../components/dashboard/KpiDetailModal';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
 import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
 
@@ -141,8 +143,11 @@ interface KpiCardProps {
    * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
   isReal?: boolean;
   /** Ruta del detalle: con `to`, la card entera es un botón que navega ahí
-   * (requiere `ariaLabel`); sin `to` es una card informativa estática. */
+   * (requiere `ariaLabel`). Una card usa `to` u `onOpen`, no ambos; sin
+   * ninguno es una card informativa estática. */
   to?: string;
+  /** Abre un popup de detalle (requiere `ariaLabel`); alternativa a `to`. */
+  onOpen?: () => void;
   ariaLabel?: string;
 }
 
@@ -156,11 +161,12 @@ function RealDataChip() {
   );
 }
 
-function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, ariaLabel }: KpiCardProps) {
+function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, onOpen, ariaLabel }: KpiCardProps) {
   const navigate = useNavigate();
+  const interactiva = Boolean(to || onOpen);
   const contenido = (
     <Card
-      className={`h-full ${to ? 'transition-colors hover:bg-surface-secondary active:bg-surface-secondary' : ''}`}
+      className={`h-full ${interactiva ? 'transition-colors hover:bg-surface-secondary active:bg-surface-secondary' : ''}`}
     >
         <Card.Header>
           <div className="flex items-center justify-between gap-2">
@@ -180,16 +186,36 @@ function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, a
         </Card.Content>
       </Card>
   );
-  if (!to) return contenido;
+  if (!interactiva) return contenido;
   return (
     <button
       aria-label={ariaLabel}
       className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-      onClick={() => void navigate(to)}
+      onClick={() => (onOpen ? onOpen() : void navigate(to as string))}
       type="button"
     >
       {contenido}
     </button>
+  );
+}
+
+/** Fila de hallazgo (equipo, criticidad, estado, fecha, descripción): la usan la
+ * card «Hallazgos recientes» y el popup de «Hallazgos abiertos». */
+function HallazgoRow({ hallazgo }: { hallazgo: HallazgoResumen }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-muted-foreground">{hallazgo.equipo}</span>
+        <Chip color={criticidadChipColor(hallazgo.criticidad)} size="sm" variant="soft">
+          {hallazgo.criticidad}
+        </Chip>
+        <Chip color={hallazgoEstadoChipColor(hallazgo.estado)} size="sm" variant="secondary">
+          {hallazgoEstadoLabel(hallazgo.estado)}
+        </Chip>
+        <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
+      </div>
+      <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
+    </div>
   );
 }
 
@@ -205,8 +231,11 @@ function KpiCardSkeleton() {
 
 /** ← Mantenimiento (real): equipos dentro de su ventana de aviso; misma regla
  * que la card «Próximos a mantenimiento» de la sección Equipos. */
-function ProximasMantencionesKpiCard() {
+function ProximasMantencionesKpiCard({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
+  // Mismos códigos que `MantencionesProximasCard`: el estado de mantención no trae `internalCode`.
+  const { data: equipos } = useDashboardEquipos(rango);
+  const [abierto, setAbierto] = useState(false);
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -222,17 +251,56 @@ function ProximasMantencionesKpiCard() {
     );
   }
 
-  const cantidad = mantencionesProximas(data?.values() ?? []).length;
+  const proximas = mantencionesProximas(data?.values() ?? []);
+  const cantidad = proximas.length;
+  const porHorometro = proximas.filter((p) => p.unit === 'h');
+  const codigos = new Map((equipos ?? []).map((e) => [e.equipmentId, e.internalCode]));
   return (
-    <KpiCard
-      hint="Dentro de su ventana de aviso"
-      hintTone={cantidad > 0 ? 'warning' : 'muted'}
-      isReal
-      ariaLabel="Ver próximas mantenciones"
-      label="Próximas mantenciones"
-      to="/mantenimiento/preventivo"
-      value={String(cantidad)}
-    />
+    <>
+      <KpiCard
+        hint="Dentro de su ventana de aviso"
+        hintTone={cantidad > 0 ? 'warning' : 'muted'}
+        isReal
+        ariaLabel="Ver próximas mantenciones"
+        label="Próximas mantenciones"
+        onOpen={() => setAbierto(true)}
+        value={String(cantidad)}
+      />
+      <KpiDetailModal
+        isOpen={abierto}
+        onOpenChange={setAbierto}
+        title="Próximas mantenciones"
+        verTodoTo="/mantenimiento/preventivo"
+      >
+        {porHorometro.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin mantenciones próximas por horómetro.</p>
+        ) : (
+          porHorometro.map((p) => {
+            const hito = data?.get(p.equipmentId)?.status.next?.milestone;
+            return (
+              <div
+                className="flex items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0"
+                data-testid={`kpi-mantencion-${p.equipmentId}`}
+                key={p.equipmentId}
+              >
+                <span className="font-mono text-sm text-foreground">{codigos.get(p.equipmentId) ?? '…'}</span>
+                {hito !== undefined ? (
+                  <span className="text-xs text-muted-foreground">Pauta {NUM_CL.format(hito)} h</span>
+                ) : null}
+                <Chip className="ms-auto" color={p.remaining <= 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                  {p.remaining <= 0 ? 'Toca ahora' : `Quedan ${NUM_CL_1.format(p.remaining)} h`}
+                </Chip>
+              </div>
+            );
+          })
+        )}
+        {cantidad > porHorometro.length ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Solo se listan las mantenciones por horómetro; las de kilometraje están en «Ver todo».
+          </p>
+        ) : null}
+      </KpiDetailModal>
+    </>
   );
 }
 
@@ -264,6 +332,7 @@ function useLowStockRows() {
 /** ← Inventario (real): pares ítem-bodega bajo el mínimo de su sucursal. */
 function InsumosBajoMinimoKpiCard() {
   const { rows, isPending, isError, error } = useLowStockRows();
+  const [abierto, setAbierto] = useState(false);
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -279,16 +348,47 @@ function InsumosBajoMinimoKpiCard() {
     );
   }
 
+  // Peor primero: menor proporción existencia/mínimo (0 de N = sin stock).
+  const peorPrimero = [...rows].sort(
+    (a, b) => a.stock.quantity / a.stock.minimumQuantity - b.stock.quantity / b.stock.minimumQuantity,
+  );
   return (
-    <KpiCard
-      hint={rows.length > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
-      hintTone={rows.length > 0 ? 'warning' : 'muted'}
-      isReal
-      ariaLabel="Ver ítems bajo mínimo"
-      label="Ítems bajo mínimo"
-      to="/inventario?filtro=bajo-minimo"
-      value={String(rows.length)}
-    />
+    <>
+      <KpiCard
+        hint={rows.length > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
+        hintTone={rows.length > 0 ? 'warning' : 'muted'}
+        isReal
+        ariaLabel="Ver ítems bajo mínimo"
+        label="Ítems bajo mínimo"
+        onOpen={() => setAbierto(true)}
+        value={String(rows.length)}
+      />
+      <KpiDetailModal
+        isOpen={abierto}
+        onOpenChange={setAbierto}
+        title="Ítems bajo mínimo"
+        verTodoTo="/inventario?filtro=bajo-minimo"
+      >
+        {peorPrimero.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Ningún ítem está bajo el mínimo.</p>
+        ) : (
+          peorPrimero.map(({ item, stock }) => (
+            <div
+              className="flex items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0"
+              key={`${item.id}-${stock.branchId}`}
+            >
+              <div className="flex min-w-0 flex-col">
+                <span className="text-sm text-foreground">{item.name}</span>
+                <span className="text-xs text-muted-foreground">{stock.branch.name}</span>
+              </div>
+              <Chip className="ms-auto shrink-0" color={stock.quantity === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                {stock.quantity} de {stock.minimumQuantity} {UNIT_SYMBOLS[item.unit]}
+              </Chip>
+            </div>
+          ))
+        )}
+      </KpiDetailModal>
+    </>
   );
 }
 
@@ -298,6 +398,8 @@ function InsumosBajoMinimoKpiCard() {
  * con normalidad. */
 function HallazgosAbiertosKpiCard() {
   const { data, isPending, isError, error } = useHallazgosAbiertosResumen();
+  const { data: recientes } = useHallazgosAbiertosRecientes();
+  const [abierto, setAbierto] = useState(false);
 
   if (isPending) return <KpiCardSkeleton />;
 
@@ -315,23 +417,43 @@ function HallazgosAbiertosKpiCard() {
 
   if (!data) return null;
 
+  const lista = recientes ?? [];
   return (
-    <KpiCard
-      hint={hallazgosCriticidadHint(data.porPrioridad)}
-      hintTone={data.porPrioridad.critica > 0 ? 'warning' : 'muted'}
-      isReal
-      ariaLabel="Ver hallazgos abiertos"
-      label="Hallazgos abiertos"
-      to="/terreno/hallazgos"
-      value={String(data.abiertos)}
-    />
+    <>
+      <KpiCard
+        hint={hallazgosCriticidadHint(data.porPrioridad)}
+        hintTone={data.porPrioridad.critica > 0 ? 'warning' : 'muted'}
+        isReal
+        ariaLabel="Ver hallazgos abiertos"
+        label="Hallazgos abiertos"
+        onOpen={() => setAbierto(true)}
+        value={String(data.abiertos)}
+      />
+      <KpiDetailModal
+        isOpen={abierto}
+        onOpenChange={setAbierto}
+        title="Hallazgos abiertos"
+        verTodoTo="/terreno/hallazgos"
+      >
+        {lista.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hay hallazgos abiertos.</p>
+        ) : (
+          lista.map((hallazgo) => <HallazgoRow hallazgo={hallazgo} key={hallazgo.id} />)
+        )}
+        {data.abiertos > lista.length ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Mostrando los {lista.length} más recientes de {data.abiertos}.
+          </p>
+        ) : null}
+      </KpiDetailModal>
+    </>
   );
 }
 
-function SummaryCards() {
+function SummaryCards({ rango }: { rango: RangoDashboard }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <ProximasMantencionesKpiCard />
+      <ProximasMantencionesKpiCard rango={rango} />
       <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />
     </div>
@@ -444,24 +566,7 @@ function HallazgosRecientesSection() {
         ) : null}
 
         {!isPending && !isError && hallazgos
-          ? hallazgos.map((hallazgo) => (
-              <div
-                className="flex flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0"
-                key={hallazgo.id}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">{hallazgo.equipo}</span>
-                  <Chip color={criticidadChipColor(hallazgo.criticidad)} size="sm" variant="soft">
-                    {hallazgo.criticidad}
-                  </Chip>
-                  <Chip color={hallazgoEstadoChipColor(hallazgo.estado)} size="sm" variant="secondary">
-                    {hallazgoEstadoLabel(hallazgo.estado)}
-                  </Chip>
-                  <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
-                </div>
-                <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
-              </div>
-            ))
+          ? hallazgos.map((hallazgo) => <HallazgoRow hallazgo={hallazgo} key={hallazgo.id} />)
           : null}
 
         {!isPending && !isError && hallazgos && hallazgos.length === 0 ? (
@@ -1042,7 +1147,7 @@ export function DashboardView() {
 
       <ResumenDia mantenciones={mantenciones} />
 
-      <SummaryCards />
+      <SummaryCards rango={rango} />
 
       <SeccionEquipos rango={rango} />
 

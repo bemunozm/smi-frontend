@@ -53,14 +53,29 @@ export function hallazgosAbiertosPorPrioridad(hallazgos: Hallazgo[]): HallazgosP
  * dashboard: se castean acá, en el único punto que cruza ambos mundos, en
  * vez de relajar el contrato de salida que ya consumen los charts/chips. */
 export function hallazgosRecientes(hallazgos: Hallazgo[], limit = 5): HallazgoResumen[] {
-  return hallazgos.slice(0, limit).map((h) => ({
+  return hallazgos.slice(0, limit).map(aResumen);
+}
+
+function aResumen(h: Hallazgo): HallazgoResumen {
+  return {
     id: h.id,
     equipo: h.equipo?.internalCode ?? '—',
     descripcion: h.descripcion,
     criticidad: h.prioridad as Criticidad,
     estado: h.estado as HallazgoEstado,
     fecha: h.fecha,
-  }));
+  };
+}
+
+/** Los últimos `limit` hallazgos ABIERTOS, el más reciente primero. Ordena por
+ * `fecha` en vez de confiar en el orden del backend: el popup del KPI «Hallazgos
+ * abiertos» no debe depender de ese supuesto. */
+export function hallazgosAbiertosRecientes(hallazgos: Hallazgo[], limit = 10): HallazgoResumen[] {
+  return hallazgos
+    .filter((h) => h.estado === 'ABIERTO')
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, limit)
+    .map(aResumen);
 }
 
 /** Lunes de la semana ISO que contiene `date`, en UTC (evita corrimientos de

@@ -1,8 +1,10 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { navigateMock, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+const { navigateMock, itemsHook, abiertosHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
+  itemsHook: vi.fn(),
+  abiertosHook: vi.fn(),
   hallazgosResumenHook: vi.fn(),
   resumenHook: vi.fn(),
   equiposMock: vi.fn(),
@@ -23,7 +25,7 @@ vi.mock('../hooks/useMaintenancePlans', () => ({
   useMaintenanceStatusByEquipment: () => mantHook(),
 }));
 vi.mock('../hooks/useInventory', () => ({
-  useItems: () => ({ data: [], isPending: false, isError: false, error: null }),
+  useItems: () => itemsHook(),
 }));
 vi.mock('../hooks/useDashboard', () => ({
   useDashboardResumenDia: () => resumenHook(),
@@ -35,6 +37,7 @@ vi.mock('../hooks/useDashboard', () => ({
   useDashboardMantenedores: () => mantenedoresHook(),
   useDashboardVueltas: () => vueltasHook(),
   useHallazgosAbiertosResumen: () => hallazgosResumenHook(),
+  useHallazgosAbiertosRecientes: () => abiertosHook(),
   useHallazgosRecientes: () => idle,
   useHallazgosTendencia: () => idle,
 }));
@@ -69,6 +72,8 @@ beforeEach(() => {
   vueltasHook.mockReturnValue(idle);
   resumenHook.mockReturnValue(idle);
   hallazgosResumenHook.mockReturnValue(idle);
+  itemsHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
+  abiertosHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
 });
 afterEach(() => {
   cleanup();
@@ -76,24 +81,133 @@ afterEach(() => {
 });
 
 describe('DashboardView', () => {
-  describe('KPIs con datos reales navegan a su detalle', () => {
+  describe('KPIs con datos reales abren un popup con su detalle', () => {
+    const ok = (data: unknown) => ({ data, isPending: false, isError: false, error: null });
+    const fila = (equipmentId: string, unit: 'h' | 'km', remaining: number, milestone = 500) => ({
+      equipmentId,
+      unit,
+      alertBefore: 50,
+      status: { next: { milestone, remaining } },
+    });
+    const hallazgo = (id: string, equipo: string, descripcion: string) => ({
+      id,
+      equipo,
+      descripcion,
+      criticidad: 'ALTA',
+      estado: 'ABIERTO',
+      fecha: '2026-10-16T12:00:00.000Z',
+    });
+    const stockRow = (id: string, name: string, quantity: number, minimumQuantity: number) => ({
+      id,
+      name,
+      sku: `SKU-${id}`,
+      unit: 'LITER',
+      stocks: [{ branchId: 'b1', branch: { name: 'Bodega Central' }, quantity, minimumQuantity }],
+    });
+
     beforeEach(() => {
-      hallazgosResumenHook.mockReturnValue({
-        data: { abiertos: 3, porPrioridad: { critica: 0, alta: 1, media: 1, baja: 1 } },
-        isPending: false,
-        isError: false,
-        error: null,
+      hallazgosResumenHook.mockReturnValue(
+        ok({ abiertos: 12, porPrioridad: { critica: 0, alta: 1, media: 1, baja: 1 } }),
+      );
+      mockEquipos([equipo('e1', 'CG-002', 10, 5, 0.5), equipo('e2', 'EX-001', 10, 5, 0.5), equipo('e3', 'CM-009', 1, 1, 1)]);
+    });
+
+    const abrir = (nombre: string) => {
+      render(<DashboardView />);
+      fireEvent.click(screen.getByRole('button', { name: nombre }));
+      return screen.getByRole('dialog');
+    };
+
+    it.each(['Ver próximas mantenciones', 'Ver ítems bajo mínimo', 'Ver hallazgos abiertos'])(
+      '«%s» abre un popup y no navega directo',
+      (nombre) => {
+        abrir(nombre);
+        expect(navigateMock).not.toHaveBeenCalled();
+      },
+    );
+
+    describe('Próximas mantenciones', () => {
+      beforeEach(() => {
+        mockMant([fila('e1', 'h', 20, 500), fila('e2', 'km', 5, 10000), fila('e3', 'h', 0, 250)]);
+      });
+
+      it('lista solo las de horómetro (excluye km), la más urgente primero', () => {
+        const dialog = abrir('Ver próximas mantenciones');
+        expect(within(dialog).getByText('Próximas mantenciones')).toBeTruthy();
+        expect(within(dialog).getByText('CG-002')).toBeTruthy();
+        expect(within(dialog).getByText('Quedan 20 h')).toBeTruthy();
+        expect(within(dialog).getByText('Toca ahora')).toBeTruthy();
+        expect(within(dialog).queryByText('EX-001')).toBeNull();
+        const filas = within(dialog).getAllByTestId(/kpi-mantencion-/);
+        expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['kpi-mantencion-e3', 'kpi-mantencion-e1']);
+      });
+
+      it('muestra el estado vacío si solo hay mantenciones por km', () => {
+        mockMant([fila('e2', 'km', 5)]);
+        const dialog = abrir('Ver próximas mantenciones');
+        expect(within(dialog).getByText('Sin mantenciones próximas por horómetro.')).toBeTruthy();
+      });
+
+      it('«Ver todo» navega a la vista de preventivo', () => {
+        const dialog = abrir('Ver próximas mantenciones');
+        fireEvent.click(within(dialog).getByRole('button', { name: /Ver todo/ }));
+        expect(navigateMock).toHaveBeenCalledWith('/mantenimiento/preventivo');
+      });
+
+      it('se cierra con Esc y con el botón de cierre', () => {
+        const dialog = abrir('Ver próximas mantenciones');
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Ver próximas mantenciones' }));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /close|cerrar/i }));
+        expect(screen.queryByRole('dialog')).toBeNull();
       });
     });
 
-    it.each([
-      ['Ver próximas mantenciones', '/mantenimiento/preventivo'],
-      ['Ver ítems bajo mínimo', '/inventario?filtro=bajo-minimo'],
-      ['Ver hallazgos abiertos', '/terreno/hallazgos'],
-    ])('«%s» navega a %s', (nombre, ruta) => {
-      render(<DashboardView />);
-      fireEvent.click(screen.getByRole('button', { name: nombre }));
-      expect(navigateMock).toHaveBeenCalledWith(ruta);
+    describe('Ítems bajo mínimo', () => {
+      beforeEach(() => {
+        itemsHook.mockReturnValue(ok([stockRow('i1', 'Aceite 15W40', 8, 10), stockRow('i2', 'AdBlue', 0, 20), stockRow('i3', 'Grasa', 50, 10)]));
+      });
+
+      it('muestra «N de M unidad», peor primero, sin los que están sobre el mínimo', () => {
+        const dialog = abrir('Ver ítems bajo mínimo');
+        expect(within(dialog).getByText('Ítems bajo mínimo')).toBeTruthy();
+        expect(within(dialog).getByText('8 de 10 L')).toBeTruthy();
+        expect(within(dialog).getByText('0 de 20 L')).toBeTruthy();
+        expect(within(dialog).queryByText('Grasa')).toBeNull();
+        const nombres = within(dialog).getAllByText(/Aceite 15W40|AdBlue/).map((n) => n.textContent);
+        expect(nombres).toEqual(['AdBlue', 'Aceite 15W40']);
+      });
+
+      it('«Ver todo» navega al inventario filtrado', () => {
+        const dialog = abrir('Ver ítems bajo mínimo');
+        fireEvent.click(within(dialog).getByRole('button', { name: /Ver todo/ }));
+        expect(navigateMock).toHaveBeenCalledWith('/inventario?filtro=bajo-minimo');
+      });
+
+      it('estado vacío', () => {
+        itemsHook.mockReturnValue(ok([]));
+        const dialog = abrir('Ver ítems bajo mínimo');
+        expect(within(dialog).getByText('Ningún ítem está bajo el mínimo.')).toBeTruthy();
+      });
+    });
+
+    describe('Hallazgos abiertos', () => {
+      it('lista los abiertos recientes con equipo, chips y descripción, e indica el tope', () => {
+        abiertosHook.mockReturnValue(ok([hallazgo('h1', 'CG-002', 'Fuga de aceite'), hallazgo('h2', 'EX-001', 'Neumático gastado')]));
+        const dialog = abrir('Ver hallazgos abiertos');
+        expect(within(dialog).getByText('Hallazgos abiertos')).toBeTruthy();
+        expect(within(dialog).getByText('Fuga de aceite')).toBeTruthy();
+        expect(within(dialog).getByText('Neumático gastado')).toBeTruthy();
+        expect(within(dialog).getAllByText('ALTA')).toHaveLength(2);
+        expect(within(dialog).getByText('Mostrando los 2 más recientes de 12.')).toBeTruthy();
+      });
+
+      it('«Ver todo» navega a los hallazgos de terreno', () => {
+        const dialog = abrir('Ver hallazgos abiertos');
+        fireEvent.click(within(dialog).getByRole('button', { name: /Ver todo/ }));
+        expect(navigateMock).toHaveBeenCalledWith('/terreno/hallazgos');
+      });
     });
   });
 
