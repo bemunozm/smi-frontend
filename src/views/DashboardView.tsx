@@ -569,6 +569,13 @@ function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
 
   return (
     <div className="flex flex-col">
+      {/* Cabecera de columnas: mismos anchos que las filas de abajo. */}
+      <div className="flex items-center gap-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+        <span>Equipo</span>
+        <span className="ms-auto">HM</span>
+        <span className="w-20 text-end">Combustible</span>
+        <span className="w-24 text-end">Rendimiento</span>
+      </div>
       {equipos.map((equipo) => {
         const abierto = equipoAbierto === equipo.equipmentId;
         return (
