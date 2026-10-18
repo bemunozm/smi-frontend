@@ -226,10 +226,13 @@ function KpiCardSkeleton() {
 
 /** ← Mantenimiento (real): equipos dentro de su ventana de aviso; misma regla
  * del popup de mantenciones. */
-function ProximasMantencionesKpiCard({ rango }: { rango: RangoDashboard }) {
+function ProximasMantencionesKpiCard() {
   const { data, isPending, isError, error } = useMaintenanceStatusByEquipment();
   // Mismos códigos que `MantencionesProximasCard`: el estado de mantención no trae `internalCode`.
-  const { data: equipos } = useDashboardEquipos(rango);
+  // El rango solo sirve para mapear equipmentId → internalCode; el mes actual basta
+  // (si un equipo no operó este mes, cae al placeholder «…»).
+  const rangoActual = useMemo(() => rangoDeMes(mesValue(new Date())), []);
+  const { data: equipos } = useDashboardEquipos(rangoActual);
   const [abierto, setAbierto] = useState(false);
 
   if (isPending) return <KpiCardSkeleton />;
@@ -445,10 +448,10 @@ function HallazgosAbiertosKpiCard() {
   );
 }
 
-function SummaryCards({ rango }: { rango: RangoDashboard }) {
+function SummaryCards() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <ProximasMantencionesKpiCard rango={rango} />
+      <ProximasMantencionesKpiCard />
       <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />
     </div>
@@ -723,7 +726,37 @@ function HorasSemanalesCard({
   );
 }
 
-function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
+/** Rango de mes propio de una sección — cada sección filtra por su cuenta
+ * (pedido del administrador: el filtro es por sección, no global). */
+function useRangoMes() {
+  const [mes, setMes] = useState(() => mesValue(new Date()));
+  const rango = useMemo(() => rangoDeMes(mes), [mes]);
+  return { mes, setMes, rango };
+}
+
+/** Selector de mes de una sección — mismo control que tenía el header global. */
+function FiltroMes({ mes, onChange }: { mes: string; onChange: (mes: string) => void }) {
+  const meses = useMemo(() => opcionesMes(), []);
+  return (
+    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      Mes
+      <select
+        className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+        onChange={(event) => onChange(event.target.value)}
+        value={mes}
+      >
+        {meses.map((opcion) => (
+          <option key={opcion.value} value={opcion.value}>
+            {opcion.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SeccionEquipos() {
+  const { mes, setMes, rango } = useRangoMes();
   const [semanas, setSemanas] = useState(8);
   const rangoSem = useMemo(() => rangoSemanas(semanas), [semanas]);
   const semanal = useDashboardEquipos(rangoSem);
@@ -733,7 +766,10 @@ function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Equipos</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Equipos</h2>
+        <FiltroMes mes={mes} onChange={setMes} />
+      </div>
 
       {isPending ? <ChartSkeleton /> : null}
 
@@ -840,7 +876,8 @@ function BarrasSimples({
   );
 }
 
-function SeccionSupervisores({ rango }: { rango: RangoDashboard }) {
+function SeccionSupervisores() {
+  const { mes, setMes, rango } = useRangoMes();
   const { data, isPending, isError, error } = useDashboardSupervisores(rango);
 
   const turnos = (['DIURNO', 'NOCTURNO'] as const).map((turno) => ({
@@ -851,7 +888,10 @@ function SeccionSupervisores({ rango }: { rango: RangoDashboard }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Supervisores</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Supervisores</h2>
+        <FiltroMes mes={mes} onChange={setMes} />
+      </div>
       <EstadoSeccion
         error={error}
         fallback="No se pudo cargar el resumen por supervisor."
@@ -1112,52 +1152,30 @@ function SeccionOtros() {
 
 export function DashboardView() {
   const { user } = useCurrentUser();
-  const [mes, setMes] = useState(() => mesValue(new Date()));
-  const meses = useMemo(() => opcionesMes(), []);
-  // Rango que consumen las secciones del dashboard.
-  const rango = useMemo(() => rangoDeMes(mes), [mes]);
   // Estado de mantencion (compartido con el carrusel de flota del resumen del día para el aviso en cada equipo).
   const { data: mantenciones } = useMaintenanceStatusByEquipment();
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Dashboard
-          </span>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Hola, {user?.name || user?.email}
-          </h1>
-          <p className="text-sm text-muted-foreground">Resumen general del sistema.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            Mes
-            <select
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
-              onChange={(event) => setMes(event.target.value)}
-              value={mes}
-            >
-              {meses.map((opcion) => (
-                <option key={opcion.value} value={opcion.value}>
-                  {opcion.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+          SMI · Dashboard
+        </span>
+        <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+          Hola, {user?.name || user?.email}
+        </h1>
+        <p className="text-sm text-muted-foreground">Resumen general del sistema.</p>
       </div>
 
       {/* Primero lo accionable: mantenciones próximas, stock bajo y hallazgos
          (pedido del administrador: estas cards abren el dashboard). */}
-      <SummaryCards rango={rango} />
+      <SummaryCards />
 
       <ResumenDia mantenciones={mantenciones} />
 
-      <SeccionEquipos rango={rango} />
+      <SeccionEquipos />
 
-      <SeccionSupervisores rango={rango} />
+      <SeccionSupervisores />
 
       <SeccionOtros />
     </div>

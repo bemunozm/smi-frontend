@@ -279,15 +279,19 @@ describe('DashboardView', () => {
     expect(refetch).toHaveBeenCalled();
   });
 
-  it('el selector de mes parte en el mes actual y cambiarlo recalcula el rango', () => {
+  it('cada sección tiene su selector de mes; el de Equipos parte en el mes actual y recalcula su rango', () => {
     render(<DashboardView />);
     const hoy = new Date();
     const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
     expect(equiposMock).toHaveBeenCalledWith(expect.objectContaining({ desde: `${mesActual}-01` }));
 
+    // Un filtro por sección (Equipos y Supervisores), ya no uno global en el header.
+    const selectores = screen.getAllByLabelText(/mes/i);
+    expect(selectores).toHaveLength(2);
+
     const anterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
     const mesAnteriorValue = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`;
-    fireEvent.change(screen.getByLabelText(/mes/i), { target: { value: mesAnteriorValue } });
+    fireEvent.change(selectores[0], { target: { value: mesAnteriorValue } });
     expect(equiposMock).toHaveBeenCalledWith({
       desde: `${mesAnteriorValue}-01`,
       hasta: expect.stringMatching(new RegExp(`^${mesAnteriorValue}-(28|29|30|31)$`)),
