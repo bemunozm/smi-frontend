@@ -828,7 +828,7 @@ function HorasSemanalesCard({
                         key={codigo}
                         stroke={seriesColor(i)}
                         strokeWidth={2}
-                        type="monotone"
+                        type="linear"
                       />
                     ))}
                   </LineChart>
