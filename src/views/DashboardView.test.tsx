@@ -276,6 +276,49 @@ describe('DashboardView', () => {
   describe('sección Equipos', () => {
     const dia = (fecha: string, horas: number, opero: boolean) => ({ fecha, horas, opero });
 
+    describe('horas máquina por semana', () => {
+      const dia = (fecha: string, horas: number) => ({ fecha, horas, opero: horas > 0 });
+
+      it('muestra la leyenda de equipos activos y omite el de 0 horas', () => {
+        mockEquipos([
+          equipo('e1', 'CG-002', 5, 0, null, [dia('2026-10-13', 5)]),
+          equipo('e2', 'EX-001', 3, 0, null, [dia('2026-10-14', 3)]),
+          equipo('e3', 'CM-009', 0, 0, null, [dia('2026-10-14', 0)]),
+        ]);
+        render(<DashboardView />);
+        expect(screen.getByText('Horas máquina por semana')).toBeTruthy();
+        const leyenda = within(screen.getByTestId('leyenda-horas-semanales'));
+        expect(leyenda.getByText('CG-002')).toBeTruthy();
+        expect(leyenda.getByText('EX-001')).toBeTruthy();
+        expect(leyenda.queryByText('CM-009')).toBeNull();
+      });
+
+      it('sin actividad muestra el vacío', () => {
+        mockEquipos([equipo('e1', 'CG-002', 0, 0, null, [dia('2026-10-13', 0)])]);
+        render(<DashboardView />);
+        expect(screen.getByText('Sin actividad en el rango.')).toBeTruthy();
+      });
+
+      it('el select de semanas consulta un rango propio de N semanas atrás, sin tocar el del mes', () => {
+        mockEquipos([]);
+        render(<DashboardView />);
+        const select = screen.getByLabelText('Rango de semanas') as HTMLSelectElement;
+        expect(select.value).toBe('8');
+        fireEvent.change(select, { target: { value: '12' } });
+        const hoy = new Date();
+        const hoy0 = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime();
+        const llamadas = equiposMock.mock.calls.map((c) => c[0] as { desde: string; hasta: string });
+        const semanal = llamadas.at(-2)!; // la semanal se llama antes que la mensual en cada render
+        const [y, m, d] = semanal.desde.split('-').map(Number);
+        const dias = Math.round((hoy0 - new Date(y, m - 1, d).getTime()) / 86400000);
+        expect(dias).toBeGreaterThanOrEqual(12 * 7);
+        expect(dias).toBeLessThan(12 * 7 + 7);
+        expect(new Date(y, m - 1, d).getDay()).toBe(1); // lunes
+        // el rango mensual sigue siendo el último llamado
+        expect(equiposMock).toHaveBeenLastCalledWith(expect.objectContaining({ desde: expect.stringMatching(/-01$/) }));
+      });
+    });
+
     it('calcula los KPIs del rango: horas y litros sumados, L/h ponderado', () => {
       mockEquipos([equipo('e1', 'CG-002', 12, 120, 10), equipo('e2', 'EX-001', 8, 40, 5)]);
       render(<DashboardView />);

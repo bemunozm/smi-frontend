@@ -6,6 +6,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,6 +35,7 @@ import {
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
+  seriesColor,
 } from '../config/dashboard-colors';
 import { UNIT_SYMBOLS } from '../types/inventory';
 import { SECCION_LABEL } from '../types/reporte-diario';
@@ -41,7 +44,8 @@ import { mantencionesProximas } from '../lib/mantenciones-proximas';
 import { ResumenDia } from '../components/dashboard/ResumenDia';
 import { KpiDetailModal } from '../components/dashboard/KpiDetailModal';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
-import { mesValue, opcionesMes, rangoDeMes } from '../lib/dashboard-rango';
+import { mesValue, opcionesMes, rangoDeMes, rangoSemanas } from '../lib/dashboard-rango';
+import { horasSemanales } from '../lib/horas-semanales';
 
 /**
  * Specs compartidas por los 3 gráficos (Recharts) — ejes recesivos (hairline,
@@ -740,7 +744,114 @@ function MantencionesProximasCard({ codigos }: { codigos: Map<string, string> })
   );
 }
 
+const OPCIONES_SEMANAS = [4, 8, 12, 26] as const;
+
+/**
+ * Línea de horas por semana (lunes a domingo) por equipo, con su propio
+ * rango (últimas N semanas), independiente del selector de mes. Leyenda
+ * propia (`ChartLegendRow`), igual que el resto de los gráficos.
+ */
+function HorasSemanalesCard({
+  semanas,
+  onSemanasChange,
+  isPending,
+  isError,
+  error,
+  equipos,
+}: {
+  semanas: number;
+  onSemanasChange: (semanas: number) => void;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  equipos: MetricasEquipo[] | undefined;
+}) {
+  const { filas, codigos } = useMemo(() => horasSemanales(equipos ?? []), [equipos]);
+
+  return (
+    <Card>
+      <Card.Header>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Card.Title>Horas máquina por semana</Card.Title>
+            <Card.Description>Semanas de lunes a domingo; sólo equipos con actividad.</Card.Description>
+          </div>
+          <select
+            aria-label="Rango de semanas"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+            onChange={(event) => onSemanasChange(Number(event.target.value))}
+            value={semanas}
+          >
+            {OPCIONES_SEMANAS.map((n) => (
+              <option key={n} value={n}>
+                Últimas {n} semanas
+              </option>
+            ))}
+          </select>
+        </div>
+      </Card.Header>
+      <Card.Content>
+        <EstadoSeccion
+          error={error}
+          fallback="No se pudo cargar las horas semanales."
+          isError={isError}
+          isPending={isPending}
+        />
+        {!isPending && !isError ? (
+          codigos.length > 0 ? (
+            <>
+              <div className="h-64 w-full">
+                <ResponsiveContainer height="100%" width="100%">
+                  <LineChart data={filas} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+                    <XAxis axisLine={false} dataKey="semana" tick={AXIS_TICK_STYLE} tickLine={false} />
+                    <YAxis
+                      allowDecimals={false}
+                      axisLine={false}
+                      tick={AXIS_TICK_STYLE}
+                      tickFormatter={(v: number) => NUM_CL.format(v)}
+                      tickLine={false}
+                      width={36}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_CONTENT_STYLE}
+                      formatter={(value) => `${NUM_CL_1.format(Number(value))} h`}
+                      itemStyle={TOOLTIP_ITEM_STYLE}
+                      labelFormatter={(label) => `Semana del ${label}`}
+                      labelStyle={TOOLTIP_LABEL_STYLE}
+                    />
+                    {codigos.map((codigo, i) => (
+                      <Line
+                        dataKey={codigo}
+                        dot={false}
+                        isAnimationActive={false}
+                        key={codigo}
+                        stroke={seriesColor(i)}
+                        strokeWidth={2}
+                        type="monotone"
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div data-testid="leyenda-horas-semanales">
+                <ChartLegendRow items={codigos.map((codigo, i) => ({ key: codigo, label: codigo, color: seriesColor(i) }))} />
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin actividad en el rango.</p>
+          )
+        ) : null}
+      </Card.Content>
+    </Card>
+  );
+}
+
 function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
+  const [semanas, setSemanas] = useState(8);
+  const rangoSem = useMemo(() => rangoSemanas(semanas), [semanas]);
+  // Antes que la consulta del mes: la última llamada por render sigue siendo la del rango mensual.
+  const semanal = useDashboardEquipos(rangoSem);
   const { data, isPending, isError, error } = useDashboardEquipos(rango);
 
   const equipos = useMemo(() => [...(data ?? [])].sort((a, b) => b.horas - a.horas), [data]);
@@ -761,6 +872,14 @@ function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
       {!isPending && !isError && data ? (
         <>
           <EquiposKpis equipos={equipos} />
+          <HorasSemanalesCard
+            equipos={semanal.data}
+            error={semanal.error}
+            isError={semanal.isError}
+            isPending={semanal.isPending}
+            onSemanasChange={setSemanas}
+            semanas={semanas}
+          />
           <Card>
             <Card.Header>
               <Card.Title>Horas por equipo</Card.Title>

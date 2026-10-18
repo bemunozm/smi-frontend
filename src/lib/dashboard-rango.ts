@@ -1,5 +1,6 @@
 import type { RangoDashboard } from '../types/dashboard';
 import { toDateOnly } from './turno';
+import { inicioSemana } from './horas-semanales';
 
 /** Valor `YYYY-MM` del mes de una fecha (hora local). */
 export function mesValue(fecha: Date): string {
@@ -24,4 +25,13 @@ export function opcionesMes(hoy: Date = new Date(), cantidad = 12): { value: str
     const label = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(d);
     return { value: mesValue(d), label: label.charAt(0).toUpperCase() + label.slice(1) };
   });
+}
+
+/**
+ * Rango de las últimas `semanas` semanas: desde el lunes de la semana de
+ * `hoy - semanas*7` días hasta hoy (fechas locales, sin `toISOString`).
+ */
+export function rangoSemanas(semanas: number, hoy: Date = new Date()): RangoDashboard {
+  const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - semanas * 7);
+  return { desde: inicioSemana(toDateOnly(base)), hasta: toDateOnly(hoy) };
 }

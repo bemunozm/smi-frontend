@@ -158,3 +158,24 @@ export const RESUMEN_CARD_BG = {
   produccion: '#1d4ed8',
   adBlue: '#7e22ce',
 } as const;
+
+/**
+ * Paleta categórica para gráficos multi-serie (una línea por equipo), ciclada
+ * por índice. Hex literales (mismo precedente que `HEX`/`RESUMEN_CARD_BG`):
+ * los tokens semánticos no traen 8 tonos distinguibles. Tonos -600/-700 de
+ * Tailwind sobre fondo blanco, sin repetir hue cercano entre vecinos.
+ */
+export const SERIES_PALETTE = [
+  '#1d4ed8', // azul
+  '#c2410c', // naranjo
+  '#15803d', // verde
+  '#7e22ce', // morado
+  '#b91c1c', // rojo
+  '#0e7490', // cian
+  '#a16207', // ocre
+  '#be185d', // magenta
+] as const;
+
+export function seriesColor(index: number): string {
+  return SERIES_PALETTE[index % SERIES_PALETTE.length];
+}
