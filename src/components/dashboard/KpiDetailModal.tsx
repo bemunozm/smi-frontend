@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal } from '@heroui/react';
 
-import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
+import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../flota/modal-styles';
 
 interface KpiDetailModalProps {
   /** Espeja el label de la card que lo abre. */
@@ -25,7 +25,8 @@ export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, childre
   return (
     <Modal.Backdrop isDismissable isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
-        <Modal.Dialog className={RESPONSIVE_SHEET_DIALOG_CLASS}>
+        {/* Vista pensada para computador: diálogo ancho (768px) y a todo su ancho en sm+. */}
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">{title}</Modal.Heading>
