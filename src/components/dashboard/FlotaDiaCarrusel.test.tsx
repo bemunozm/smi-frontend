@@ -214,7 +214,7 @@ describe('FlotaDiaCarrusel (navegación)', () => {
   it('clic en la tarjeta navega a /equipos/<id> y es un botón accesible por teclado', () => {
     render(<FlotaDiaCarrusel esHoy flota={FLOTA_HOY} />);
     fireEvent.click(screen.getByTestId('equipo-card-e2'));
-    expect(navigateMock).toHaveBeenCalledWith('/equipos/e2');
+    expect(navigateMock).toHaveBeenCalledWith('/equipos/e2', { state: { from: '/' } });
     expect(screen.getByRole('button', { name: 'Ver ficha de CG-002' }).tagName).toBe('BUTTON');
   });
 });

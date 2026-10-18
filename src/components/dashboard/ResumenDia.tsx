@@ -16,9 +16,15 @@ const MAX_REPORTS_EQUIPOS = 3;
 /** Fila navegable a la ficha del equipo (`onAction` de react-aria: clic y Enter; Espacio queda reservado a selección en el patrón de grilla de react-aria). */
 const FILA_NAVEGABLE = 'cursor-pointer hover:bg-surface-secondary';
 
-/** Props de una fila de tabla que lleva a `/equipos/:id`; sin id (payload cacheado) no es navegable. */
-function filaAEquipo(equipmentId: string | undefined, navigate: (to: string) => void) {
-  return equipmentId ? { className: FILA_NAVEGABLE, onAction: () => navigate(`/equipos/${equipmentId}`) } : {};
+/** Props de una fila de tabla que lleva a `/equipos/:id`; sin id (payload cacheado) no es navegable.
+ * `from: '/'` deja que la ficha vuelva al dashboard en vez de a la lista. */
+function filaAEquipo(
+  equipmentId: string | undefined,
+  navigate: (to: string, opts?: { state?: { from: string } }) => void,
+) {
+  return equipmentId
+    ? { className: FILA_NAVEGABLE, onAction: () => navigate(`/equipos/${equipmentId}`, { state: { from: '/' } }) }
+    : {};
 }
 
 function KpiTile({

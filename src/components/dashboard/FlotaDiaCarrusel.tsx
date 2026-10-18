@@ -51,7 +51,7 @@ function EquipoCard({
     <button
       aria-label={`Ver ficha de ${equipo.internalCode}`}
       className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-      onClick={() => void navigate(`/equipos/${equipo.equipmentId}`)}
+      onClick={() => void navigate(`/equipos/${equipo.equipmentId}`, { state: { from: '/' } })}
       type="button"
     >
       <Card className="h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary" data-testid={`equipo-card-${equipo.equipmentId}`}>

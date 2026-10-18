@@ -315,14 +315,14 @@ describe('ResumenDia: una sección, una tarjeta', () => {
       mock(BASE);
       render(<ResumenDia />);
       fireEvent.click(screen.getByTestId('op-CG-002'));
-      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
     });
 
     it('clic en una fila de Lecturas navega a /equipos/<id>', () => {
       mock(BASE);
       render(<ResumenDia />);
       fireEvent.click(screen.getByTestId('lectura-c2'));
-      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
     });
 
     it('Enter sobre una fila con id navega a /equipos/<id>', () => {
@@ -332,7 +332,7 @@ describe('ResumenDia: una sección, una tarjeta', () => {
       fila.focus();
       fireEvent.keyDown(fila, { key: 'Enter' });
       fireEvent.keyUp(fila, { key: 'Enter' });
-      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
     });
 
     it('la fila TOTAL no navega', () => {

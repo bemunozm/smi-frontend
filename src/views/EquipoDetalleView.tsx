@@ -1,6 +1,6 @@
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -727,7 +727,12 @@ export function EquipoDetalleView({
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
   const { can, canAny } = usePermissions();
   const enTaller = contexto === 'taller';
-  const volverA = enTaller ? '/mantenimiento/equipos' : '/equipos';
+  const base = enTaller ? '/mantenimiento/equipos' : '/equipos';
+  /** Quien navega hasta acá puede declarar su origen (el dashboard pasa
+   * `{ state: { from: '/' } }`): el enlace «Volver» regresa ahí en vez de a
+   * la lista. `base` sigue siendo la raíz de los links internos de la ficha. */
+  const desde = (useLocation().state as { from?: string } | null)?.from;
+  const volverA = desde ?? base;
   // En el taller TODAS las escrituras quedan apagadas, sin mirar el rol: el
   // mantenedor (y el admin que entre por ahí) solo consulta.
   const puedeAsignar = !enTaller && can('equipment.assign');
@@ -826,7 +831,7 @@ export function EquipoDetalleView({
         className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
         to={volverA}
       >
-        {enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
+        {desde === '/' ? '← Volver al dashboard' : enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
       </Link>
 
       <PendientesStrip recursos={RECURSOS_DE_FLOTA} />
@@ -1156,7 +1161,7 @@ export function EquipoDetalleView({
         </div>
 
         <div className="flex flex-col gap-4">
-          <ActividadReciente equipoId={equipo.id} fichaBase={volverA} soloIntervenciones={enTaller} />
+          <ActividadReciente equipoId={equipo.id} fichaBase={base} soloIntervenciones={enTaller} />
 
           <Card>
             <Card.Header>
