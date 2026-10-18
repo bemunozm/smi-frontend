@@ -919,6 +919,8 @@ function SeccionSupervisores({ rango }: { rango: RangoDashboard }) {
       ) : null}
 
       <TrabajosExtraCard rango={rango} />
+
+      <VueltasBlock rango={rango} />
     </section>
   );
 }
@@ -976,12 +978,14 @@ function TrabajosExtraCard({ rango }: { rango: RangoDashboard }) {
   );
 }
 
-function SeccionVueltas({ rango }: { rango: RangoDashboard }) {
+/** Bloque de vueltas de producción. Vive DENTRO de la sección Supervisores
+ * (pedido del administrador), con estado propio independiente. */
+function VueltasBlock({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useDashboardVueltas(rango);
 
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Vueltas</h2>
+    <div className="flex flex-col gap-3">
+      <h3 className="font-display text-base font-semibold tracking-[-0.02em] text-foreground">Vueltas</h3>
       <EstadoSeccion
         error={error}
         fallback="No se pudieron cargar las vueltas."
@@ -1017,7 +1021,7 @@ function SeccionVueltas({ rango }: { rango: RangoDashboard }) {
           )}
         </>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -1144,8 +1148,6 @@ export function DashboardView() {
       <SeccionEquipos rango={rango} />
 
       <SeccionSupervisores rango={rango} />
-
-      <SeccionVueltas rango={rango} />
 
       <HallazgosRecientesSection />
 
