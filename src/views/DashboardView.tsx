@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 import {
   Area,
@@ -139,6 +140,9 @@ interface KpiCardProps {
   /** Marca discreta de que la card consume datos de otro dominio (Terreno,
    * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
   isReal?: boolean;
+  /** Ruta del detalle: la card entera es un botón que navega ahí. */
+  to: string;
+  ariaLabel: string;
 }
 
 /** Indicador discreto de que la card se alimenta del dominio original (Terreno,
@@ -151,26 +155,34 @@ function RealDataChip() {
   );
 }
 
-function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false }: KpiCardProps) {
+function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, to, ariaLabel }: KpiCardProps) {
+  const navigate = useNavigate();
   return (
-    <Card>
-      <Card.Header>
-        <div className="flex items-center justify-between gap-2">
-          <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-            {label}
-          </Card.Description>
-          {isReal ? <RealDataChip /> : null}
-        </div>
-        <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
-          {value}
-        </Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <p className={`text-xs ${hintTone === 'warning' ? 'text-warning-soft-foreground' : 'text-muted-foreground'}`}>
-          {hint}
-        </p>
-      </Card.Content>
-    </Card>
+    <button
+      aria-label={ariaLabel}
+      className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+      onClick={() => void navigate(to)}
+      type="button"
+    >
+      <Card className="h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary">
+        <Card.Header>
+          <div className="flex items-center justify-between gap-2">
+            <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+              {label}
+            </Card.Description>
+            {isReal ? <RealDataChip /> : null}
+          </div>
+          <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+            {value}
+          </Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <p className={`text-xs ${hintTone === 'warning' ? 'text-warning-soft-foreground' : 'text-muted-foreground'}`}>
+            {hint}
+          </p>
+        </Card.Content>
+      </Card>
+    </button>
   );
 }
 
@@ -209,7 +221,9 @@ function ProximasMantencionesKpiCard() {
       hint="Dentro de su ventana de aviso"
       hintTone={cantidad > 0 ? 'warning' : 'muted'}
       isReal
+      ariaLabel="Ver próximas mantenciones"
       label="Próximas mantenciones"
+      to="/mantenimiento/preventivo"
       value={String(cantidad)}
     />
   );
@@ -263,7 +277,9 @@ function InsumosBajoMinimoKpiCard() {
       hint={rows.length > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
       hintTone={rows.length > 0 ? 'warning' : 'muted'}
       isReal
+      ariaLabel="Ver ítems bajo mínimo"
       label="Ítems bajo mínimo"
+      to="/inventario?filtro=bajo-minimo"
       value={String(rows.length)}
     />
   );
@@ -297,7 +313,9 @@ function HallazgosAbiertosKpiCard() {
       hint={hallazgosCriticidadHint(data.porPrioridad)}
       hintTone={data.porPrioridad.critica > 0 ? 'warning' : 'muted'}
       isReal
+      ariaLabel="Ver hallazgos abiertos"
       label="Hallazgos abiertos"
+      to="/terreno/hallazgos"
       value={String(data.abiertos)}
     />
   );

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Button,
@@ -385,7 +386,12 @@ export function InventarioView() {
   const [tab, setTab] = useState<ItemType>('SUPPLY');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
-  const [stockFilter, setStockFilter] = useState<StockFilter>('todos');
+  // `?filtro=bajo-minimo` (link del KPI del dashboard) parte en «Requieren
+  // atención»; se lee una sola vez al montar.
+  const [searchParams] = useSearchParams();
+  const [stockFilter, setStockFilter] = useState<StockFilter>(() =>
+    searchParams.get('filtro') === 'bajo-minimo' ? 'atencion' : 'todos',
+  );
 
   const [target, setTarget] = useState<RowTarget | null>(null);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);

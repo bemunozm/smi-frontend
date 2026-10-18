@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+const { navigateMock, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+  hallazgosResumenHook: vi.fn(),
   resumenHook: vi.fn(),
   equiposMock: vi.fn(),
   equiposHook: vi.fn(),
@@ -13,7 +15,7 @@ const { resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHo
 
 const idle = { data: undefined, isPending: true, isError: false, error: null };
 
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { name: 'Admin', email: 'a@x.cl' } }),
 }));
@@ -32,7 +34,7 @@ vi.mock('../hooks/useDashboard', () => ({
   useDashboardSupervisores: () => supHook(),
   useDashboardMantenedores: () => mantenedoresHook(),
   useDashboardVueltas: () => vueltasHook(),
-  useHallazgosAbiertosResumen: () => idle,
+  useHallazgosAbiertosResumen: () => hallazgosResumenHook(),
   useHallazgosRecientes: () => idle,
   useHallazgosTendencia: () => idle,
 }));
@@ -66,6 +68,7 @@ beforeEach(() => {
   mantenedoresHook.mockReturnValue(idle);
   vueltasHook.mockReturnValue(idle);
   resumenHook.mockReturnValue(idle);
+  hallazgosResumenHook.mockReturnValue(idle);
 });
 afterEach(() => {
   cleanup();
@@ -73,6 +76,27 @@ afterEach(() => {
 });
 
 describe('DashboardView', () => {
+  describe('KPIs con datos reales navegan a su detalle', () => {
+    beforeEach(() => {
+      hallazgosResumenHook.mockReturnValue({
+        data: { abiertos: 3, porPrioridad: { critica: 0, alta: 1, media: 1, baja: 1 } },
+        isPending: false,
+        isError: false,
+        error: null,
+      });
+    });
+
+    it.each([
+      ['Ver próximas mantenciones', '/mantenimiento/preventivo'],
+      ['Ver ítems bajo mínimo', '/inventario?filtro=bajo-minimo'],
+      ['Ver hallazgos abiertos', '/terreno/hallazgos'],
+    ])('«%s» navega a %s', (nombre, ruta) => {
+      render(<DashboardView />);
+      fireEvent.click(screen.getByRole('button', { name: nombre }));
+      expect(navigateMock).toHaveBeenCalledWith(ruta);
+    });
+  });
+
   it('el resumen del día incluye la flota de hoy (chips, equipos con operador y turno) en una sola sección', async () => {
     resumenHook.mockReturnValue({
       data: {

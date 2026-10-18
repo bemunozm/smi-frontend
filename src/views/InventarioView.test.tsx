@@ -139,7 +139,8 @@ function renderView(
   {
     size = 'phone',
     branchId,
-  }: { size?: 'phone' | 'desktop'; branchId?: string } = {},
+    url = '/',
+  }: { size?: 'phone' | 'desktop'; branchId?: string; url?: string } = {},
 ) {
   setViewport(size);
   if (branchId) useUiStore.setState({ selectedBranchId: branchId });
@@ -155,7 +156,7 @@ function renderView(
 
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[url]}>
         <InventarioView />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -233,6 +234,22 @@ describe('InventarioView', () => {
 
     // El selector vuelve a «Todas» — si no, el listado quedaría vacío.
     expect(screen.getAllByText('Todas').length).toBeGreaterThan(0);
+  });
+
+  describe('filtro desde la URL', () => {
+    it('?filtro=bajo-minimo parte en «Requieren atención» y oculta lo que está OK', () => {
+      renderView([OK, RIESGO, BAJO], { size: 'desktop', branchId: 'b1', url: '/inventario?filtro=bajo-minimo' });
+
+      const tabla = within(screen.getByLabelText('Inventario'));
+      expect(tabla.queryByText('FIL-001')).toBeNull();
+      expect(tabla.getByText('COR-001')).toBeTruthy();
+    });
+
+    it('sin el parámetro parte en «Todos»', () => {
+      renderView([OK, RIESGO, BAJO], { size: 'desktop', branchId: 'b1' });
+
+      expect(within(screen.getByLabelText('Inventario')).getByText('FIL-001')).toBeTruthy();
+    });
   });
 
   describe('estados de existencia', () => {
