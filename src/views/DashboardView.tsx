@@ -850,7 +850,6 @@ function HorasSemanalesCard({
 function SeccionEquipos({ rango }: { rango: RangoDashboard }) {
   const [semanas, setSemanas] = useState(8);
   const rangoSem = useMemo(() => rangoSemanas(semanas), [semanas]);
-  // Antes que la consulta del mes: la última llamada por render sigue siendo la del rango mensual.
   const semanal = useDashboardEquipos(rangoSem);
   const { data, isPending, isError, error } = useDashboardEquipos(rango);
 

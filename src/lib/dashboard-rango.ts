@@ -28,10 +28,12 @@ export function opcionesMes(hoy: Date = new Date(), cantidad = 12): { value: str
 }
 
 /**
- * Rango de las últimas `semanas` semanas: desde el lunes de la semana de
- * `hoy - semanas*7` días hasta hoy (fechas locales, sin `toISOString`).
+ * Rango de las últimas `semanas` semanas, incluyendo la en curso (parcial):
+ * desde el lunes de la semana de `hoy - (semanas-1)*7` días hasta hoy, de modo
+ * que el gráfico muestra exactamente N buckets semanales (fechas locales, sin
+ * `toISOString`).
  */
 export function rangoSemanas(semanas: number, hoy: Date = new Date()): RangoDashboard {
-  const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - semanas * 7);
+  const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - (semanas - 1) * 7);
   return { desde: inicioSemana(toDateOnly(base)), hasta: toDateOnly(hoy) };
 }

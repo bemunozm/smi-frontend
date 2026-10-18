@@ -262,12 +262,12 @@ describe('DashboardView', () => {
     render(<DashboardView />);
     const hoy = new Date();
     const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
-    expect(equiposMock).toHaveBeenLastCalledWith(expect.objectContaining({ desde: `${mesActual}-01` }));
+    expect(equiposMock).toHaveBeenCalledWith(expect.objectContaining({ desde: `${mesActual}-01` }));
 
     const anterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
     const mesAnteriorValue = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, '0')}`;
     fireEvent.change(screen.getByLabelText(/mes/i), { target: { value: mesAnteriorValue } });
-    expect(equiposMock).toHaveBeenLastCalledWith({
+    expect(equiposMock).toHaveBeenCalledWith({
       desde: `${mesAnteriorValue}-01`,
       hasta: expect.stringMatching(new RegExp(`^${mesAnteriorValue}-(28|29|30|31)$`)),
     });
@@ -306,16 +306,15 @@ describe('DashboardView', () => {
         expect(select.value).toBe('8');
         fireEvent.change(select, { target: { value: '12' } });
         const hoy = new Date();
-        const hoy0 = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime();
-        const llamadas = equiposMock.mock.calls.map((c) => c[0] as { desde: string; hasta: string });
-        const semanal = llamadas.at(-2)!; // la semanal se llama antes que la mensual en cada render
-        const [y, m, d] = semanal.desde.split('-').map(Number);
-        const dias = Math.round((hoy0 - new Date(y, m - 1, d).getTime()) / 86400000);
-        expect(dias).toBeGreaterThanOrEqual(12 * 7);
-        expect(dias).toBeLessThan(12 * 7 + 7);
-        expect(new Date(y, m - 1, d).getDay()).toBe(1); // lunes
-        // el rango mensual sigue siendo el último llamado
-        expect(equiposMock).toHaveBeenLastCalledWith(expect.objectContaining({ desde: expect.stringMatching(/-01$/) }));
+        // lunes de la semana de (hoy - 11*7 días): exactamente 12 semanas incluyendo la actual
+        const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 11 * 7);
+        const lunes = new Date(base.getFullYear(), base.getMonth(), base.getDate() - ((base.getDay() + 6) % 7));
+        const f = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        expect(equiposMock).toHaveBeenCalledWith({ desde: f(lunes), hasta: f(hoy) });
+        // el rango mensual sigue consultándose aparte (desde = día 1)
+        const llamadas = equiposMock.mock.calls.map((c) => c[0] as { desde: string });
+        expect(llamadas.some((r) => r.desde.endsWith('-01'))).toBe(true);
       });
     });
 
