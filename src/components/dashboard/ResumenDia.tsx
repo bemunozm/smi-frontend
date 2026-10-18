@@ -13,7 +13,7 @@ import { UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 
 const MAX_REPORTS_EQUIPOS = 3;
 
-/** Fila navegable a la ficha del equipo (`onAction` de react-aria: clic, Enter y Espacio). */
+/** Fila navegable a la ficha del equipo (`onAction` de react-aria: clic y Enter; Espacio queda reservado a selección en el patrón de grilla de react-aria). */
 const FILA_NAVEGABLE = 'cursor-pointer hover:bg-surface-secondary';
 
 /** Props de una fila de tabla que lleva a `/equipos/:id`; sin id (payload cacheado) no es navegable. */

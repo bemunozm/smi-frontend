@@ -325,6 +325,16 @@ describe('ResumenDia: una sección, una tarjeta', () => {
       expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
     });
 
+    it('Enter sobre una fila con id navega a /equipos/<id>', () => {
+      mock(BASE);
+      render(<ResumenDia />);
+      const fila = screen.getByTestId('op-CG-002');
+      fila.focus();
+      fireEvent.keyDown(fila, { key: 'Enter' });
+      fireEvent.keyUp(fila, { key: 'Enter' });
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+    });
+
     it('la fila TOTAL no navega', () => {
       mock(BASE);
       render(<ResumenDia />);
