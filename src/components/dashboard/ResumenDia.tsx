@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Chip, Spinner, Table } from '@heroui/react';
 
 import { RESUMEN_CARD_BG } from '../../config/dashboard-colors';
@@ -11,6 +12,14 @@ import type { ResumenDia as ResumenDiaData } from '../../types/dashboard';
 import { UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 
 const MAX_REPORTS_EQUIPOS = 3;
+
+/** Fila navegable a la ficha del equipo (`onAction` de react-aria: clic, Enter y Espacio). */
+const FILA_NAVEGABLE = 'cursor-pointer hover:bg-surface-secondary';
+
+/** Props de una fila de tabla que lleva a `/equipos/:id`; sin id (payload cacheado) no es navegable. */
+function filaAEquipo(equipmentId: string | undefined, navigate: (to: string) => void) {
+  return equipmentId ? { className: FILA_NAVEGABLE, onAction: () => navigate(`/equipos/${equipmentId}`) } : {};
+}
 
 function KpiTile({
   bg,
@@ -132,6 +141,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
 }
 
 function TablaOperacion({ data }: { data: ResumenDiaData }) {
+  const navigate = useNavigate();
   const filas = data.operacionPorEquipo;
   const tot = filas.reduce(
     (a, f) => ({
@@ -168,7 +178,12 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
                 <Table.Body>
                   {[
                     ...filas.map((f) => (
-                      <Table.Row data-testid={`op-${f.internalCode}`} id={f.internalCode} key={f.internalCode}>
+                      <Table.Row
+                        data-testid={`op-${f.internalCode}`}
+                        id={f.internalCode}
+                        key={f.internalCode}
+                        {...filaAEquipo(f.equipmentId, navigate)}
+                      >
                         <Table.Cell className="font-mono text-sm">{f.internalCode}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{n(f.dia.hm)}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{n(f.dia.litros)}</Table.Cell>
@@ -199,6 +214,7 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
 }
 
 function TablaLecturas({ data }: { data: ResumenDiaData }) {
+  const navigate = useNavigate();
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
       <h3 className="text-base font-semibold text-foreground">Lecturas de horómetro</h3>
@@ -219,7 +235,7 @@ function TablaLecturas({ data }: { data: ResumenDiaData }) {
                 <Table.Body>
                   {data.lecturas.map((l) => {
                     return (
-                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id}>
+                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id} {...filaAEquipo(l.equipmentId, navigate)}>
                         <Table.Cell className="font-mono text-sm">{l.internalCode}</Table.Cell>
                         <Table.Cell className="text-sm">{l.turno}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{NUM_CL_1.format(l.inicial)}</Table.Cell>

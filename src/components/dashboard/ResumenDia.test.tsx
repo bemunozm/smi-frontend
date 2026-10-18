@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 
-const { resumenHook } = vi.hoisted(() => ({ resumenHook: vi.fn() }));
+const { resumenHook, navigateMock } = vi.hoisted(() => ({ resumenHook: vi.fn(), navigateMock: vi.fn() }));
+
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 
 vi.mock('../../hooks/useDashboard', () => ({
   useDashboardResumenDia: (fecha?: string) => resumenHook(fecha),
@@ -28,6 +30,7 @@ const BASE = {
   adBlue: null,
   operacionPorEquipo: [
     {
+      equipmentId: 'e-cg',
       internalCode: 'CG-002',
       dia: { hm: 6, litros: 40 },
       noche: { hm: 4, litros: 30 },
@@ -41,8 +44,8 @@ const BASE = {
     },
   ],
   lecturas: [
-    { id: 'c1', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
-    { id: 'c2', internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
+    { id: 'c1', equipmentId: 'e-cg', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
+    { id: 'c2', equipmentId: 'e-cg', internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
   ],
 };
 
@@ -305,5 +308,40 @@ describe('ResumenDia: una sección, una tarjeta', () => {
     render(<ResumenDia />);
     expect(screen.getByTestId('flota-sin-datos')).toBeTruthy();
     expect(screen.getByTestId('kpi-hm')).toBeTruthy();
+  });
+
+  describe('navegación a la ficha del equipo', () => {
+    it('clic en una fila de Operación navega a /equipos/<id>', () => {
+      mock(BASE);
+      render(<ResumenDia />);
+      fireEvent.click(screen.getByTestId('op-CG-002'));
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+    });
+
+    it('clic en una fila de Lecturas navega a /equipos/<id>', () => {
+      mock(BASE);
+      render(<ResumenDia />);
+      fireEvent.click(screen.getByTestId('lectura-c2'));
+      expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg');
+    });
+
+    it('la fila TOTAL no navega', () => {
+      mock(BASE);
+      render(<ResumenDia />);
+      fireEvent.click(screen.getByTestId('op-TOTAL'));
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it('filas sin equipmentId (payload cacheado) no navegan', () => {
+      mock({
+        ...BASE,
+        operacionPorEquipo: [{ ...BASE.operacionPorEquipo[1], equipmentId: undefined }],
+        lecturas: [{ ...BASE.lecturas[0], equipmentId: undefined }],
+      });
+      render(<ResumenDia />);
+      fireEvent.click(screen.getByTestId('op-EX-001'));
+      fireEvent.click(screen.getByTestId('lectura-c1'));
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
   });
 });

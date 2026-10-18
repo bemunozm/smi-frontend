@@ -178,6 +178,7 @@ export const ResumenDiaSchema = z.object({
     .nullable(),
   operacionPorEquipo: z.array(
     z.object({
+      equipmentId: z.string().optional(), // ausente en payloads cacheados por la PWA: fila no navegable
       internalCode: z.string(),
       dia: HmLitrosSchema,
       noche: HmLitrosSchema,
@@ -187,6 +188,7 @@ export const ResumenDiaSchema = z.object({
   lecturas: z.array(
     z.object({
       id: z.string(),
+      equipmentId: z.string().optional(),
       internalCode: z.string(),
       turno: z.string(),
       inicial: z.number(),

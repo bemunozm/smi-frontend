@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Chip } from '@heroui/react';
 
 import { estadoFlotaChipColor, estadoFlotaLabel, type EstadoHoy } from '../../config/dashboard-colors';
@@ -41,52 +42,60 @@ function EquipoCard({
   esHoy: boolean;
   mantencion?: MantencionProxima;
 }) {
+  const navigate = useNavigate();
   const conUso = equipo.estado === 'EN_USO' || equipo.estado === 'OPERO';
   const km = equipo.unidadControl === 'KM';
   // El contador es el valor ACTUAL del equipo: en un día pasado se rotula para no leerlo como histórico.
   const etiquetaContador = `${km ? 'Odómetro' : 'Horómetro'}${esHoy ? ' actual' : ' (actual)'}`;
   return (
-    <Card className="h-full" data-testid={`equipo-card-${equipo.equipmentId}`}>
-      <Card.Content className="flex h-full min-h-80 flex-col gap-3 py-5">
-        <div className="flex items-start justify-between gap-2">
-          <span className="font-mono text-4xl font-semibold text-foreground">{equipo.internalCode}</span>
-          <Chip color={estadoFlotaChipColor(equipo.estado)} size="md" variant="soft">
-            {estadoFlotaLabel(equipo.estado)}
-          </Chip>
-        </div>
-
-        {esHoy && !conUso ? (
-          <div className="min-h-5 text-base">
-            {equipo.estado === 'INOPERATIVO' ? (
-              <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
-            ) : (
-              <span className="text-muted-foreground">Sin turno abierto</span>
-            )}
+    <button
+      aria-label={`Ver ficha de ${equipo.internalCode}`}
+      className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+      onClick={() => void navigate(`/equipos/${equipo.equipmentId}`)}
+      type="button"
+    >
+      <Card className="h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary" data-testid={`equipo-card-${equipo.equipmentId}`}>
+        <Card.Content className="flex h-full min-h-80 flex-col gap-3 py-5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-mono text-4xl font-semibold text-foreground">{equipo.internalCode}</span>
+            <Chip color={estadoFlotaChipColor(equipo.estado)} size="md" variant="soft">
+              {estadoFlotaLabel(equipo.estado)}
+            </Chip>
           </div>
-        ) : null}
 
-        <div className="flex flex-col">
-          <Fila etiqueta="Operador">
-            {conUso ? `${equipo.operador ?? 'Sin operador'}${equipo.turno ? ` · ${equipo.turno}` : ''}` : '—'}
-          </Fila>
-          <Fila etiqueta="Supervisor">{conUso && equipo.supervisor ? equipo.supervisor : '—'}</Fila>
-          <Fila etiqueta="Combustible">
-            <FuelGauge className="justify-end" pct={equipo.nivelCombustible ?? null} />
-          </Fila>
-          <Fila etiqueta={etiquetaContador}>
-            {equipo.contadorActual == null ? '—' : `${NUM_CL_1.format(equipo.contadorActual)} ${km ? 'km' : 'h'}`}
-          </Fila>
-        </div>
+          {esHoy && !conUso ? (
+            <div className="min-h-5 text-base">
+              {equipo.estado === 'INOPERATIVO' ? (
+                <span className="text-foreground">{MOTIVO_INOPERATIVO[equipo.status ?? 'OUT_OF_SERVICE']}</span>
+              ) : (
+                <span className="text-muted-foreground">Sin turno abierto</span>
+              )}
+            </div>
+          ) : null}
 
-        {esHoy && mantencion ? (
-          <Chip className="self-start" color="warning" size="md" variant="soft">
-            {mantencion.remaining <= 0
-              ? 'Mantención: toca ahora'
-              : `Mantención: quedan ${mantencion.remaining.toLocaleString('es-CL')} ${mantencion.unit}`}
-          </Chip>
-        ) : null}
-      </Card.Content>
-    </Card>
+          <div className="flex flex-col">
+            <Fila etiqueta="Operador">
+              {conUso ? `${equipo.operador ?? 'Sin operador'}${equipo.turno ? ` · ${equipo.turno}` : ''}` : '—'}
+            </Fila>
+            <Fila etiqueta="Supervisor">{conUso && equipo.supervisor ? equipo.supervisor : '—'}</Fila>
+            <Fila etiqueta="Combustible">
+              <FuelGauge className="justify-end" pct={equipo.nivelCombustible ?? null} />
+            </Fila>
+            <Fila etiqueta={etiquetaContador}>
+              {equipo.contadorActual == null ? '—' : `${NUM_CL_1.format(equipo.contadorActual)} ${km ? 'km' : 'h'}`}
+            </Fila>
+          </div>
+
+          {esHoy && mantencion ? (
+            <Chip className="self-start" color="warning" size="md" variant="soft">
+              {mantencion.remaining <= 0
+                ? 'Mantención: toca ahora'
+                : `Mantención: quedan ${mantencion.remaining.toLocaleString('es-CL')} ${mantencion.unit}`}
+            </Chip>
+          ) : null}
+        </Card.Content>
+      </Card>
+    </button>
   );
 }
 

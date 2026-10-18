@@ -13,6 +13,7 @@ const { resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHo
 
 const idle = { data: undefined, isPending: true, isError: false, error: null };
 
+vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { name: 'Admin', email: 'a@x.cl' } }),
 }));

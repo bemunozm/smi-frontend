@@ -3,6 +3,9 @@ import { render, cleanup, screen, within, fireEvent } from '@testing-library/rea
 
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
 import { EstadoEquipoHoySchema, FlotaDiaSchema, ResumenDiaSchema, type FlotaDia } from '../../types/dashboard';
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+
 import { FlotaDiaCarrusel } from './FlotaDiaCarrusel';
 
 const FLOTA_HOY: FlotaDia[] = [
@@ -204,5 +207,14 @@ describe('FlotaDiaCarrusel (sin datos)', () => {
   it('flota vacía: sin equipos registrados', () => {
     render(<FlotaDiaCarrusel esHoy flota={[]} />);
     expect(screen.getByText('No hay equipos registrados.')).toBeTruthy();
+  });
+});
+
+describe('FlotaDiaCarrusel (navegación)', () => {
+  it('clic en la tarjeta navega a /equipos/<id> y es un botón accesible por teclado', () => {
+    render(<FlotaDiaCarrusel esHoy flota={FLOTA_HOY} />);
+    fireEvent.click(screen.getByTestId('equipo-card-e2'));
+    expect(navigateMock).toHaveBeenCalledWith('/equipos/e2');
+    expect(screen.getByRole('button', { name: 'Ver ficha de CG-002' }).tagName).toBe('BUTTON');
   });
 });
