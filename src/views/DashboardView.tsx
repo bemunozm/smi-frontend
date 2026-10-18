@@ -1098,6 +1098,18 @@ function InsumosBajoStockSection() {
   );
 }
 
+/** Sección «Otros»: agrupa hallazgos recientes e insumos bajo stock, que no
+ * pertenecen a Equipos ni Supervisores (pedido del administrador). */
+function SeccionOtros() {
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Otros</h2>
+      <HallazgosRecientesSection />
+      <InsumosBajoStockSection />
+    </section>
+  );
+}
+
 export function DashboardView() {
   const { user } = useCurrentUser();
   const [mes, setMes] = useState(() => mesValue(new Date()));
@@ -1147,9 +1159,7 @@ export function DashboardView() {
 
       <SeccionSupervisores rango={rango} />
 
-      <HallazgosRecientesSection />
-
-      <InsumosBajoStockSection />
+      <SeccionOtros />
     </div>
   );
 }
