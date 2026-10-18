@@ -451,9 +451,9 @@ describe('DashboardView', () => {
         error: null,
       });
       render(<DashboardView />);
-      expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('Camiones internos');
+      expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('Vueltas camiones internos');
       expect(screen.getByTestId('vueltas-INTERNOS').textContent).toContain('30');
-      expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('Camiones mineras');
+      expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('Vueltas camiones mineras');
       expect(screen.getByTestId('vueltas-MINERAS').textContent).toContain('12');
       expect(screen.getByText('Las secciones no se suman: cada una tiene tarifa distinta.')).toBeTruthy();
       expect(screen.queryByTestId('vueltas-total')).toBeNull();

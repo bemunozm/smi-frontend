@@ -985,7 +985,6 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="font-display text-base font-semibold tracking-[-0.02em] text-foreground">Vueltas</h3>
       <EstadoSeccion
         error={error}
         fallback="No se pudieron cargar las vueltas."
@@ -1001,13 +1000,13 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
                 <Card data-testid={`vueltas-${sec.seccion}`} key={sec.seccion}>
                   <Card.Header>
                     <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                      {SECCION_LABEL[sec.seccion] ?? sec.seccion}
+                      {`Vueltas ${(SECCION_LABEL[sec.seccion] ?? sec.seccion).toLowerCase()}`}
                     </Card.Description>
                     <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
                       {NUM_CL.format(sec.vueltasTotales)}
                     </Card.Title>
                     <Card.Description>
-                      vueltas · {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
+                      {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
                     </Card.Description>
                   </Card.Header>
                   <Card.Content>
