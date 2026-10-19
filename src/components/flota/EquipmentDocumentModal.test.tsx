@@ -36,6 +36,7 @@ const DOCUMENTO: EquipmentDocument = {
   updatedAt: '2026-01-01T00:00:00.000Z',
   status: 'VIGENTE',
   daysToExpiry: 71,
+  alertDaysBefore: 30,
 };
 
 const FILE = new File(['contenido'], 'nuevo.pdf', { type: 'application/pdf' });

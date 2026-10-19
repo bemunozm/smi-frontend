@@ -20,9 +20,11 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'equipment.status': [ADMIN, SUPERVISOR],
   'equipment.assign': [ADMIN, SUPERVISOR],
   'equipment.delete': [ADMIN],
-  'equipmentDocument.create': [ADMIN, SUPERVISOR],
-  'equipmentDocument.update': [ADMIN, SUPERVISOR],
-  'equipmentDocument.delete': [ADMIN, SUPERVISOR],
+  // Módulo 4: los documentos los carga solo el administrador (decisión de
+  // Joaquín, 19/10); mantenedor y administrador reciben los avisos.
+  'equipmentDocument.create': [ADMIN],
+  'equipmentDocument.update': [ADMIN],
+  'equipmentDocument.delete': [ADMIN],
   'horometro.create': [ADMIN, SUPERVISOR],
   'horometro.close': [ADMIN, SUPERVISOR],
   'combustible.create': [ADMIN, SUPERVISOR],

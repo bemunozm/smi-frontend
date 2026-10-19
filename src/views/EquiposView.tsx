@@ -769,6 +769,9 @@ const TODOS = '__todos__';
 export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'taller' }) {
   const { can } = usePermissions();
   const enTaller = contexto === 'taller';
+  // Módulo 4: el calendario lo ven los que reciben los avisos de vencimiento.
+  const { role: rolActual } = usePermissions();
+  const puedeVerVencimientos = rolActual === ROLES.ADMIN || rolActual === ROLES.MANTENEDOR;
   // Detalle en el MISMO shell: desde el taller la barra del módulo no cambia.
   const detalleBase = enTaller ? '/mantenimiento/equipos' : '/equipos';
   // La próxima mantención de todos los equipos con pauta, en una sola llamada;
@@ -824,6 +827,15 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
               Foto, horómetro, combustible, quién lo usa y su estado — en solo lectura.
             </p>
           </div>
+        ) : null}
+        {enTaller ? (
+          // Módulo 4: el calendario de vencimientos de los livianos.
+          <Link
+            className="inline-flex min-h-[48px] items-center rounded-2xl border-[1.5px] border-(--line2,#c3c9d1) bg-card px-4 text-[15px] font-semibold text-foreground hover:border-foreground"
+            to="/mantenimiento/vencimientos"
+          >
+            Vencimientos de livianos
+          </Link>
         ) : (
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
@@ -837,6 +849,15 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
             </p>
           </div>
         )}
+        {!enTaller && puedeVerVencimientos ? (
+          // Módulo 4: el calendario de vencimientos de todos los livianos.
+          <Link
+            className="inline-flex min-h-10 items-center rounded-xl bg-default px-4 text-sm font-medium text-default-foreground hover:bg-default-hover"
+            to="/equipos/vencimientos"
+          >
+            Vencimientos de livianos
+          </Link>
+        ) : null}
         {/* PC: botón de texto en el header. En tablet/celular la creación es
            por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
            calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}

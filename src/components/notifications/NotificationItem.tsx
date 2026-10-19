@@ -9,6 +9,7 @@ import { relativeTime } from '../../lib/relative-time';
 import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
 import { rutaDeChecklist } from './checklist-route';
 import { rutaDeRegistroEditado } from './record-edited-route';
+import { rutaDeVencimiento } from './vencimiento-route';
 
 function equipoIdFrom(data: Notificacion['data']): string | null {
   if (!data) return null;
@@ -63,6 +64,13 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
     ) {
       const ruta = rutaDeChecklist(notificacion, role);
       if (ruta) navigate(ruta);
+      onAfterClick?.();
+      return;
+    }
+
+    const rutaVencimiento = rutaDeVencimiento(notificacion, role);
+    if (rutaVencimiento) {
+      navigate(rutaVencimiento);
       onAfterClick?.();
       return;
     }
