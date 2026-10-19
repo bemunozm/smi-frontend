@@ -1,8 +1,8 @@
-import { useRef, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRef, useState, type ReactNode } from 'react';
 import { Card, Chip } from '@heroui/react';
 
 import { estadoFlotaChipColor, estadoFlotaLabel, type EstadoHoy } from '../../config/dashboard-colors';
+import { FichaEquipoModal } from './FichaEquipoModal';
 import { FuelGauge } from '../flota/FuelGauge';
 import { NUM_CL_1 } from '../../lib/dashboard-format';
 import { mantencionesProximas, type MantencionProxima } from '../../lib/mantenciones-proximas';
@@ -37,12 +37,14 @@ function EquipoCard({
   equipo,
   esHoy,
   mantencion,
+  onOpen,
 }: {
   equipo: FlotaDia;
   esHoy: boolean;
   mantencion?: MantencionProxima;
+  /** Abre la ficha del equipo en un popup (ver `FichaEquipoModal`), sin navegar. */
+  onOpen: () => void;
 }) {
-  const navigate = useNavigate();
   const conUso = equipo.estado === 'EN_USO' || equipo.estado === 'OPERO';
   const km = equipo.unidadControl === 'KM';
   // El contador es el valor ACTUAL del equipo: en un día pasado se rotula para no leerlo como histórico.
@@ -51,7 +53,7 @@ function EquipoCard({
     <button
       aria-label={`Ver ficha de ${equipo.internalCode}`}
       className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
-      onClick={() => void navigate(`/equipos/${equipo.equipmentId}`, { state: { from: '/' } })}
+      onClick={onOpen}
       type="button"
     >
       <Card className="h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary" data-testid={`equipo-card-${equipo.equipmentId}`}>
@@ -115,6 +117,8 @@ export function FlotaDiaCarrusel({
   mantenciones?: Map<string, MaintenanceStatusRow>;
 }) {
   const carruselRef = useRef<HTMLUListElement>(null);
+  // Equipo cuya ficha está abierta en el popup; null = cerrado.
+  const [fichaId, setFichaId] = useState<string | null>(null);
 
   const mover = (sentido: 1 | -1) => {
     const el = carruselRef.current;
@@ -185,7 +189,12 @@ export function FlotaDiaCarrusel({
                 className="w-full shrink-0 snap-start md:w-[calc((100%-1rem)/2)] xl:w-[calc((100%-2rem)/3)]"
                 key={equipo.equipmentId}
               >
-                <EquipoCard equipo={equipo} esHoy={esHoy} mantencion={proximas.get(equipo.equipmentId)} />
+                <EquipoCard
+                  equipo={equipo}
+                  esHoy={esHoy}
+                  mantencion={proximas.get(equipo.equipmentId)}
+                  onOpen={() => setFichaId(equipo.equipmentId)}
+                />
               </li>
             ))}
           </ul>
@@ -194,6 +203,8 @@ export function FlotaDiaCarrusel({
           </button>
         </div>
       ) : null}
+
+      <FichaEquipoModal equipoId={fichaId} onClose={() => setFichaId(null)} />
     </section>
   );
 }

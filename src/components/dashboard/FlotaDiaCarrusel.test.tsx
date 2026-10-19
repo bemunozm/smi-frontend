@@ -5,6 +5,11 @@ import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
 import { EstadoEquipoHoySchema, FlotaDiaSchema, ResumenDiaSchema, type FlotaDia } from '../../types/dashboard';
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+// La ficha real arrastra media app (queries, permisos, modales) — acá solo
+// importa QUE se monte en el popup con el id correcto.
+vi.mock('../../views/EquipoDetalleView', () => ({
+  EquipoDetalleView: ({ equipoId }: { equipoId?: string }) => <div data-testid="ficha-en-modal">{equipoId}</div>,
+}));
 
 import { FlotaDiaCarrusel } from './FlotaDiaCarrusel';
 
@@ -210,11 +215,22 @@ describe('FlotaDiaCarrusel (sin datos)', () => {
   });
 });
 
-describe('FlotaDiaCarrusel (navegación)', () => {
-  it('clic en la tarjeta navega a /equipos/<id> y es un botón accesible por teclado', () => {
+describe('FlotaDiaCarrusel (ficha en popup)', () => {
+  it('clic en la tarjeta abre la ficha en un popup, sin navegar, y es un botón accesible por teclado', () => {
+    render(<FlotaDiaCarrusel esHoy flota={FLOTA_HOY} />);
+    expect(screen.queryByTestId('ficha-en-modal')).toBeNull();
+    // Antes de abrir: con el popup abierto react-aria esconde el fondo (aria-hidden).
+    expect(screen.getByRole('button', { name: 'Ver ficha de CG-002' }).tagName).toBe('BUTTON');
+    fireEvent.click(screen.getByTestId('equipo-card-e2'));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ficha-en-modal').textContent).toBe('e2');
+  });
+
+  it('«Abrir en página completa» cierra el popup y navega a la ficha declarando el origen', () => {
     render(<FlotaDiaCarrusel esHoy flota={FLOTA_HOY} />);
     fireEvent.click(screen.getByTestId('equipo-card-e2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir en página completa →' }));
     expect(navigateMock).toHaveBeenCalledWith('/equipos/e2', { state: { from: '/' } });
-    expect(screen.getByRole('button', { name: 'Ver ficha de CG-002' }).tagName).toBe('BUTTON');
+    expect(screen.queryByTestId('ficha-en-modal')).toBeNull();
   });
 });

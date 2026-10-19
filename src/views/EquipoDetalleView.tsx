@@ -716,13 +716,21 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
  */
 export function EquipoDetalleView({
   contexto = 'flota',
+  equipoId,
+  enModal = false,
 }: {
   /** Montada en Flota (`/equipos/:id`) o dentro del taller
    * (`/mantenimiento/equipos/:id`). En el taller es SOLO LECTURA para todos
    * los roles —la regla del módulo— y los enlaces no salen de su shell. */
   contexto?: 'flota' | 'taller';
+  /** Id explícito cuando la ficha se monta fuera de su ruta (el popup del
+   * dashboard, ver `FichaEquipoModal`); sin él se lee de la URL. */
+  equipoId?: string;
+  /** Dentro de un modal el «Volver» sobra: el cierre es del propio modal. */
+  enModal?: boolean;
 }) {
-  const { id = '' } = useParams<{ id: string }>();
+  const { id: idParam = '' } = useParams<{ id: string }>();
+  const id = equipoId ?? idParam;
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
   const { can, canAny } = usePermissions();
@@ -782,9 +790,11 @@ export function EquipoDetalleView({
         >
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha del equipo.'}
         </div>
-        <Link className="text-sm text-(--accent) hover:underline" to={volverA}>
-          ← Volver a equipos
-        </Link>
+        {!enModal ? (
+          <Link className="text-sm text-(--accent) hover:underline" to={volverA}>
+            ← Volver a equipos
+          </Link>
+        ) : null}
       </div>
     );
   }
@@ -827,12 +837,14 @@ export function EquipoDetalleView({
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
-        to={volverA}
-      >
-        {desde === '/' ? '← Volver al dashboard' : enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
-      </Link>
+      {!enModal ? (
+        <Link
+          className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
+          to={volverA}
+        >
+          {desde === '/' ? '← Volver al dashboard' : enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
+        </Link>
+      ) : null}
 
       <PendientesStrip recursos={RECURSOS_DE_FLOTA} />
 
