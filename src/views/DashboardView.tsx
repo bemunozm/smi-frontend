@@ -623,23 +623,21 @@ function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
 }
 
 
-const OPCIONES_SEMANAS = [4, 8, 12, 26] as const;
+/** Rango fijo del gráfico semanal: últimas 8 semanas incluyendo la actual
+ * (el administrador pidió sacar el selector de semanas). */
+const SEMANAS_GRAFICO = 8;
 
 /**
- * Línea de horas por semana (lunes a domingo) por equipo, con su propio
- * rango (últimas N semanas), independiente del selector de mes. Leyenda
- * propia (`ChartLegendRow`), igual que el resto de los gráficos.
+ * Línea de horas por semana (lunes a domingo) por equipo, con rango fijo
+ * (últimas `SEMANAS_GRAFICO` semanas), independiente del selector de mes.
+ * Leyenda propia (`ChartLegendRow`), igual que el resto de los gráficos.
  */
 function HorasSemanalesCard({
-  semanas,
-  onSemanasChange,
   isPending,
   isError,
   error,
   equipos,
 }: {
-  semanas: number;
-  onSemanasChange: (semanas: number) => void;
   isPending: boolean;
   isError: boolean;
   error: unknown;
@@ -650,24 +648,10 @@ function HorasSemanalesCard({
   return (
     <Card>
       <Card.Header>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <Card.Title>Horas máquina por semana</Card.Title>
-            <Card.Description>Semanas de lunes a domingo; sólo equipos con actividad.</Card.Description>
-          </div>
-          <select
-            aria-label="Rango de semanas"
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
-            onChange={(event) => onSemanasChange(Number(event.target.value))}
-            value={semanas}
-          >
-            {OPCIONES_SEMANAS.map((n) => (
-              <option key={n} value={n}>
-                Últimas {n} semanas
-              </option>
-            ))}
-          </select>
-        </div>
+        <Card.Title>Horas máquina por semana</Card.Title>
+        <Card.Description>
+          Últimas {SEMANAS_GRAFICO} semanas, de lunes a domingo; sólo equipos con actividad.
+        </Card.Description>
       </Card.Header>
       <Card.Content>
         <EstadoSeccion
@@ -757,8 +741,7 @@ function FiltroMes({ mes, onChange }: { mes: string; onChange: (mes: string) => 
 
 function SeccionEquipos() {
   const { mes, setMes, rango } = useRangoMes();
-  const [semanas, setSemanas] = useState(8);
-  const rangoSem = useMemo(() => rangoSemanas(semanas), [semanas]);
+  const rangoSem = useMemo(() => rangoSemanas(SEMANAS_GRAFICO), []);
   const semanal = useDashboardEquipos(rangoSem);
   const { data, isPending, isError, error } = useDashboardEquipos(rango);
 
@@ -787,8 +770,6 @@ function SeccionEquipos() {
             error={semanal.error}
             isError={semanal.isError}
             isPending={semanal.isPending}
-            onSemanasChange={setSemanas}
-            semanas={semanas}
           />
           <Card>
             <Card.Header>

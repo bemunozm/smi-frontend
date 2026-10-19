@@ -324,15 +324,14 @@ describe('DashboardView', () => {
         expect(screen.getByText('Sin actividad en el rango.')).toBeTruthy();
       });
 
-      it('el select de semanas consulta un rango propio de N semanas atrás, sin tocar el del mes', () => {
+      it('consulta un rango fijo de 8 semanas atrás, sin selector y sin tocar el del mes', () => {
         mockEquipos([]);
         render(<DashboardView />);
-        const select = screen.getByLabelText('Rango de semanas') as HTMLSelectElement;
-        expect(select.value).toBe('8');
-        fireEvent.change(select, { target: { value: '12' } });
+        // El selector de semanas se sacó a pedido del administrador: rango fijo.
+        expect(screen.queryByLabelText('Rango de semanas')).toBeNull();
         const hoy = new Date();
-        // lunes de la semana de (hoy - 11*7 días): exactamente 12 semanas incluyendo la actual
-        const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 11 * 7);
+        // lunes de la semana de (hoy - 7*7 días): exactamente 8 semanas incluyendo la actual
+        const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 7 * 7);
         const lunes = new Date(base.getFullYear(), base.getMonth(), base.getDate() - ((base.getDay() + 6) % 7));
         const f = (d: Date) =>
           `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
