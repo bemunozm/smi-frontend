@@ -1147,9 +1147,18 @@ function TrabajosExtraCard({ rango }: { rango: RangoDashboard }) {
 }
 
 /** Bloque de vueltas de producción. Vive DENTRO de la sección Supervisores
- * (pedido del administrador), con estado propio independiente. */
+ * (pedido del administrador), con estado propio independiente. Cada tarjeta
+ * abre un popup con el detalle DÍA A DÍA de SU sección — nunca una lista que
+ * mezcle secciones: tienen tarifa distinta y no se combinan ni suman. */
 function VueltasBlock({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useDashboardVueltas(rango);
+  // Sección cuyo detalle diario está abierto; null = cerrado.
+  const [detalleSeccion, setDetalleSeccion] = useState<string | null>(null);
+
+  const seccionAbierta = data?.porSeccion.find((sec) => sec.seccion === detalleSeccion) ?? null;
+  // Promedio diario de la sección abierta — mismos niveles/colores que sus barras.
+  const dias = seccionAbierta ? [...seccionAbierta.serieDiaria].sort((a, b) => b.fecha.localeCompare(a.fecha)) : [];
+  const promedio = dias.length > 0 ? dias.reduce((acc, d) => acc + d.vueltas, 0) / dias.length : 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1166,15 +1175,22 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
               {data.porSeccion.map((sec) => (
                 <Card data-testid={`vueltas-${sec.seccion}`} key={sec.seccion}>
                   <Card.Header>
-                    <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                      {`Vueltas ${(SECCION_LABEL[sec.seccion] ?? sec.seccion).toLowerCase()}`}
-                    </Card.Description>
-                    <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
-                      {NUM_CL.format(sec.vueltasTotales)}
-                    </Card.Title>
-                    <Card.Description>
-                      {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
-                    </Card.Description>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                          {`Vueltas ${(SECCION_LABEL[sec.seccion] ?? sec.seccion).toLowerCase()}`}
+                        </Card.Description>
+                        <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+                          {NUM_CL.format(sec.vueltasTotales)}
+                        </Card.Title>
+                        <Card.Description>
+                          {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
+                        </Card.Description>
+                      </div>
+                      <Button onPress={() => setDetalleSeccion(sec.seccion)} size="sm" variant="secondary">
+                        Por día
+                      </Button>
+                    </div>
                   </Card.Header>
                   <Card.Content>
                     <BarrasSimples altura="h-32" data={sec.serieDiaria} tickFormatter={formatDia} xKey="fecha" yKey="vueltas" />
@@ -1187,6 +1203,48 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
           )}
         </>
       ) : null}
+
+      <KpiDetailModal
+        isOpen={seccionAbierta !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetalleSeccion(null);
+        }}
+        title={
+          seccionAbierta
+            ? `Vueltas ${(SECCION_LABEL[seccionAbierta.seccion] ?? seccionAbierta.seccion).toLowerCase()} · por día`
+            : 'Vueltas por día'
+        }
+        verTodoTo="/reportes-diarios"
+      >
+        {seccionAbierta ? (
+          <>
+            <p className="pb-2 text-sm text-muted-foreground">
+              Promedio diario: <span className="font-mono text-foreground">{NUM_CL_1.format(promedio)}</span> vueltas.
+            </p>
+            {dias.map((dia) => {
+              const nivel = nivelRespectoPromedio(dia.vueltas, promedio);
+              return (
+                <div
+                  className="flex items-center gap-3 border-t border-border py-2 first:border-t-0"
+                  data-testid={`vueltas-dia-${dia.fecha}`}
+                  key={dia.fecha}
+                >
+                  <span className="font-mono text-sm text-muted-foreground">{formatDia(dia.fecha)}</span>
+                  <span
+                    aria-hidden="true"
+                    className="inline-block size-2.5 rounded-full"
+                    style={{ backgroundColor: NIVEL_PROMEDIO_COLOR[nivel] }}
+                  />
+                  <span className="text-xs text-muted-foreground">{NIVEL_PROMEDIO_LABEL[nivel]}</span>
+                  <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                    {NUM_CL.format(dia.vueltas)}
+                  </span>
+                </div>
+              );
+            })}
+          </>
+        ) : null}
+      </KpiDetailModal>
     </div>
   );
 }

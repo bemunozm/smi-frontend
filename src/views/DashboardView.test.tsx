@@ -554,5 +554,49 @@ describe('DashboardView', () => {
       expect(document.body.textContent).not.toMatch(/total de vueltas|vueltas totales:? ?42/i);
       expect(document.body.textContent).not.toContain('42');
     });
+
+    it('«Por día» abre un popup con las vueltas diarias de ESA sección y su nivel vs el promedio', () => {
+      vueltasHook.mockReturnValue({
+        data: {
+          porSeccion: [
+            {
+              seccion: 'INTERNOS',
+              camiones: 2,
+              vueltasTotales: 60,
+              serieDiaria: [
+                { fecha: '2026-10-01', vueltas: 10 },
+                { fecha: '2026-10-02', vueltas: 20 },
+                { fecha: '2026-10-03', vueltas: 30 },
+              ],
+            },
+            { seccion: 'MINERAS', camiones: 1, vueltasTotales: 12, serieDiaria: [{ fecha: '2026-10-01', vueltas: 12 }] },
+          ],
+        },
+        isPending: false,
+        isError: false,
+        error: null,
+      });
+      render(<DashboardView />);
+      fireEvent.click(within(screen.getByTestId('vueltas-INTERNOS')).getByRole('button', { name: 'Por día' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Vueltas camiones internos · por día')).toBeTruthy();
+      // Promedio 20: el 03 es alto, el 02 medio, el 01 bajo; más reciente primero.
+      expect(within(dialog).getByText(/Promedio diario:/)).toBeTruthy();
+      const filas = within(dialog).getAllByTestId(/vueltas-dia-/);
+      expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual([
+        'vueltas-dia-2026-10-03',
+        'vueltas-dia-2026-10-02',
+        'vueltas-dia-2026-10-01',
+      ]);
+      expect(within(filas[0]).getByText('Sobre el promedio')).toBeTruthy();
+      expect(within(filas[1]).getByText('En torno al promedio')).toBeTruthy();
+      expect(within(filas[2]).getByText('Bajo el promedio')).toBeTruthy();
+      // Solo la sección abierta: nada de la serie de MINERAS en el popup.
+      expect(within(dialog).queryByTestId('vueltas-dia-2026-10-01-MINERAS')).toBeNull();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+      expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios');
+    });
   });
 });
