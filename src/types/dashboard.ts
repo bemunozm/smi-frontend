@@ -45,6 +45,9 @@ export const HallazgoResumenSchema = z.object({
   criticidad: z.enum(CRITICIDADES),
   estado: z.enum(HALLAZGO_ESTADOS),
   fecha: z.string().datetime(),
+  /** Foto adjunta (URL firmada del listado de Terreno) — la muestra el popup
+   * de detalle del dashboard. Opcional: derivaciones previas al campo. */
+  fotoUrl: z.string().nullable().optional(),
 });
 export type HallazgoResumen = z.infer<typeof HallazgoResumenSchema>;
 

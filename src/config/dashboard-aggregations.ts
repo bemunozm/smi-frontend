@@ -63,6 +63,7 @@ function aResumen(h: Hallazgo): HallazgoResumen {
     criticidad: h.prioridad as Criticidad,
     estado: h.estado as HallazgoEstado,
     fecha: h.fecha,
+    fotoUrl: h.fotoUrl ?? null,
   };
 }
 

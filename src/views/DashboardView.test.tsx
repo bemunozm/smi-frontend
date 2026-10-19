@@ -1,10 +1,11 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { navigateMock, itemsHook, abiertosHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+const { navigateMock, itemsHook, abiertosHook, recientesHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   itemsHook: vi.fn(),
   abiertosHook: vi.fn(),
+  recientesHook: vi.fn(),
   hallazgosResumenHook: vi.fn(),
   resumenHook: vi.fn(),
   equiposMock: vi.fn(),
@@ -38,7 +39,7 @@ vi.mock('../hooks/useDashboard', () => ({
   useDashboardVueltas: () => vueltasHook(),
   useHallazgosAbiertosResumen: () => hallazgosResumenHook(),
   useHallazgosAbiertosRecientes: () => abiertosHook(),
-  useHallazgosRecientes: () => idle,
+  useHallazgosRecientes: () => recientesHook(),
 }));
 
 import { DashboardView } from './DashboardView';
@@ -71,6 +72,7 @@ beforeEach(() => {
   vueltasHook.mockReturnValue(idle);
   resumenHook.mockReturnValue(idle);
   hallazgosResumenHook.mockReturnValue(idle);
+  recientesHook.mockReturnValue(idle);
   itemsHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
   abiertosHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
 });
@@ -295,6 +297,40 @@ describe('DashboardView', () => {
     expect(equiposMock).toHaveBeenCalledWith({
       desde: `${mesAnteriorValue}-01`,
       hasta: expect.stringMatching(new RegExp(`^${mesAnteriorValue}-(28|29|30|31)$`)),
+    });
+  });
+
+  describe('hallazgos recientes', () => {
+    const reciente = (fotoUrl: string | null) => ({
+      id: 'h9',
+      equipo: 'PE-004',
+      descripcion: 'Fuga de aceite hidráulico en cilindro de levante',
+      criticidad: 'ALTA',
+      estado: 'ABIERTO',
+      fecha: '2026-10-14T15:02:00.000Z',
+      fotoUrl,
+    });
+
+    it('clic en un hallazgo abre un popup con su detalle, foto incluida', () => {
+      recientesHook.mockReturnValue({ data: [reciente('https://signed/foto.jpg')], isPending: false, isError: false, error: null });
+      render(<DashboardView />);
+      fireEvent.click(screen.getByRole('button', { name: 'Ver detalle del hallazgo de PE-004' }));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Hallazgo · PE-004')).toBeTruthy();
+      expect(within(dialog).getByText('Fuga de aceite hidráulico en cilindro de levante')).toBeTruthy();
+      expect(within(dialog).getByText('ALTA')).toBeTruthy();
+      expect(within(dialog).getByText('Abierto')).toBeTruthy();
+      const foto = within(dialog).getByRole('img', { name: 'Foto del hallazgo de PE-004' });
+      expect(foto.getAttribute('src')).toBe('https://signed/foto.jpg');
+    });
+
+    it('sin foto adjunta, el popup lo dice en vez de romper', () => {
+      recientesHook.mockReturnValue({ data: [reciente(null)], isPending: false, isError: false, error: null });
+      render(<DashboardView />);
+      fireEvent.click(screen.getByRole('button', { name: 'Ver detalle del hallazgo de PE-004' }));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Sin foto adjunta.')).toBeTruthy();
+      expect(within(dialog).queryByRole('img')).toBeNull();
     });
   });
 

@@ -196,9 +196,11 @@ function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, onOpe
 
 /** Fila de hallazgo (equipo, criticidad, estado, fecha, descripción): la usan la
  * card «Hallazgos recientes» y el popup de «Hallazgos abiertos». */
-function HallazgoRow({ hallazgo }: { hallazgo: HallazgoResumen }) {
-  return (
-    <div className="flex flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0">
+const FILA_HALLAZGO = 'flex w-full flex-col gap-1.5 border-t border-border py-3 first:border-t-0 first:pt-0';
+
+function HallazgoRow({ hallazgo, onOpen }: { hallazgo: HallazgoResumen; onOpen?: () => void }) {
+  const contenido = (
+    <>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs text-muted-foreground">{hallazgo.equipo}</span>
         <Chip color={criticidadChipColor(hallazgo.criticidad)} size="sm" variant="soft">
@@ -210,6 +212,51 @@ function HallazgoRow({ hallazgo }: { hallazgo: HallazgoResumen }) {
         <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
       </div>
       <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
+    </>
+  );
+
+  if (!onOpen) return <div className={FILA_HALLAZGO}>{contenido}</div>;
+
+  return (
+    <button
+      aria-label={`Ver detalle del hallazgo de ${hallazgo.equipo}`}
+      className={`${FILA_HALLAZGO} rounded-md text-left transition-colors hover:bg-surface-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)`}
+      onClick={onOpen}
+      type="button"
+    >
+      {contenido}
+    </button>
+  );
+}
+
+/** Detalle de UN hallazgo dentro del popup de «Hallazgos recientes»: misma
+ * info de la fila más la foto adjunta (si la tiene), mismo patrón de imagen
+ * firmada que `StartFromHallazgoModal`. */
+function HallazgoDetalle({ hallazgo }: { hallazgo: HallazgoResumen }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-sm text-foreground">{hallazgo.equipo}</span>
+        <Chip color={criticidadChipColor(hallazgo.criticidad)} size="sm" variant="soft">
+          {hallazgo.criticidad}
+        </Chip>
+        <Chip color={hallazgoEstadoChipColor(hallazgo.estado)} size="sm" variant="secondary">
+          {hallazgoEstadoLabel(hallazgo.estado)}
+        </Chip>
+        <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
+      </div>
+      <p className="text-base text-foreground">{hallazgo.descripcion}</p>
+      {hallazgo.fotoUrl ? (
+        <a href={hallazgo.fotoUrl} rel="noreferrer" target="_blank">
+          <img
+            alt={`Foto del hallazgo de ${hallazgo.equipo}`}
+            className="max-h-72 w-fit rounded-2xl border border-border object-cover"
+            src={hallazgo.fotoUrl}
+          />
+        </a>
+      ) : (
+        <p className="text-xs text-muted-foreground">Sin foto adjunta.</p>
+      )}
     </div>
   );
 }
@@ -464,6 +511,8 @@ function SummaryCards() {
  * Datos ← Terreno, REAL: top 5 de `GET /api/hallazgos`. */
 function HallazgosRecientesSection() {
   const { data: hallazgos, isPending, isError, error } = useHallazgosRecientes();
+  // Hallazgo cuyo detalle está abierto en el popup; null = cerrado.
+  const [detalle, setDetalle] = useState<HallazgoResumen | null>(null);
 
   return (
     <Card>
@@ -488,13 +537,26 @@ function HallazgosRecientesSection() {
         ) : null}
 
         {!isPending && !isError && hallazgos
-          ? hallazgos.map((hallazgo) => <HallazgoRow hallazgo={hallazgo} key={hallazgo.id} />)
+          ? hallazgos.map((hallazgo) => (
+              <HallazgoRow hallazgo={hallazgo} key={hallazgo.id} onOpen={() => setDetalle(hallazgo)} />
+            ))
           : null}
 
         {!isPending && !isError && hallazgos && hallazgos.length === 0 ? (
           <p className="py-4 text-sm text-muted-foreground">No hay hallazgos recientes.</p>
         ) : null}
       </Card.Content>
+
+      <KpiDetailModal
+        isOpen={detalle !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetalle(null);
+        }}
+        title={detalle ? `Hallazgo · ${detalle.equipo}` : 'Hallazgo'}
+        verTodoTo="/terreno/hallazgos"
+      >
+        {detalle ? <HallazgoDetalle hallazgo={detalle} /> : null}
+      </KpiDetailModal>
     </Card>
   );
 }
