@@ -17,6 +17,8 @@ const NOTIF_TIPO_CONFIG: Record<NotificacionTipo, NotifTipoConfig> = {
   [NOTIF_TIPOS.RECORD_EDITED]: { label: 'Registro corregido', color: 'warning' },
   [NOTIF_TIPOS.CHECKLIST_SUBMITTED]: { label: 'Checklist por validar', color: 'warning' },
   [NOTIF_TIPOS.CHECKLIST_REVIEWED]: { label: 'Checklist validado', color: 'accent' },
+  [NOTIF_TIPOS.DOCUMENT_EXPIRING]: { label: 'Vencimiento', color: 'danger' },
+  [NOTIF_TIPOS.LIGHT_SERVICE_DUE]: { label: 'Mantención por km', color: 'warning' },
 };
 
 /**

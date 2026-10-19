@@ -11,6 +11,7 @@ import { EquipoDetalleView } from './views/EquipoDetalleView';
 import { EquiposView } from './views/EquiposView';
 import { FichaEquipoView } from './views/FichaEquipoView';
 import { ForbiddenView } from './views/ForbiddenView';
+import { NotFoundView } from './views/NotFoundView';
 import { FichaItemView } from './views/FichaItemView';
 import { InventarioView } from './views/InventarioView';
 import { MovimientosView } from './views/MovimientosView';
@@ -31,6 +32,7 @@ import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
+import { VencimientosView } from './views/VencimientosView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
 import { RegistroEquipoView } from './views/RegistroEquipoView';
 
@@ -85,6 +87,17 @@ export const router = createBrowserRouter([
                 ),
                 children: [
                   { path: '/equipos', element: <EquiposView /> },
+                  // El calendario estuvo un tiempo en `/vencimientos` (menú propio):
+                  // un enlace o pestaña vieja llega a su lugar nuevo.
+                  { path: '/vencimientos', element: <Navigate replace to="/equipos/vencimientos" /> },
+                  // Módulo 4: el calendario de vencimientos de los livianos vive
+                  // dentro de Equipos (botón en la lista y tarjeta en cada
+                  // ficha), no como módulo aparte. Lo ven quienes reciben los
+                  // avisos. Antes que `:id`, que lo leería como un id.
+                  {
+                    element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
+                    children: [{ path: '/equipos/vencimientos', element: <VencimientosView /> }],
+                  },
                   { path: '/equipos/:id', element: <EquipoDetalleView /> },
                   { path: '/equipos/:id/ficha', element: <FichaEquipoView /> },
                   { path: '/inventario', element: <InventarioView /> },
@@ -147,6 +160,12 @@ export const router = createBrowserRouter([
                   // bitácora consolidada en SOLO LECTURA (el contexto apaga
                   // todas las escrituras, sin mirar el rol), dentro del shell.
                   { path: '/mantenimiento/equipos', element: <EquiposView contexto="taller" /> },
+                  // Módulo 4: el mismo calendario, dentro del taller (se entra
+                  // desde Equipos; la barra mantiene sus cuatro secciones).
+                  {
+                    path: '/mantenimiento/vencimientos',
+                    element: <VencimientosView contexto="taller" />,
+                  },
                   {
                     path: '/mantenimiento/equipos/:id',
                     element: <EquipoDetalleView contexto="taller" />,
@@ -197,4 +216,7 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  // Cualquier otra dirección: página «No encontrada» en vez del error técnico
+  // del router.
+  { path: '*', element: <NotFoundView /> },
 ]);

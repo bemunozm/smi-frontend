@@ -27,6 +27,7 @@ import { useFicha } from '../hooks/useFicha';
 import { useUsers } from '../hooks/useUsers';
 import { usePermissions } from '../hooks/usePermissions';
 import { CicloMantencionesCard } from '../components/mantenimiento/CicloMantenciones';
+import { CalendarioVencimientosCard } from '../components/vencimientos/CalendarioVencimientosCard';
 import { OperatorPicker } from '../components/operators/OperatorPicker';
 import {
   controlUnitLabel,
@@ -1014,6 +1015,10 @@ export function EquipoDetalleView({
           </Card>
 
           <DocumentsCard equipoId={equipo.id} puedeGestionar={puedeGestionarDocumentos} />
+
+          {/* Módulo 4: el calendario de vencimientos del liviano (documentos y
+             mantención por km), solo para administrador y mantenedor. */}
+          <CalendarioVencimientosCard base={base} equipo={equipo} />
 
           {/* Registro de las mantenciones de la pauta hechas en cada vuelta del
              ciclo (Mantenimiento). Se oculta solo a los roles que no ven pautas. */}

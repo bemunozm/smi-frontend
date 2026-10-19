@@ -54,9 +54,12 @@ export interface UpdateEquipmentDocumentVars {
   file?: File | null;
 }
 
-const CAMPOS_DE_DOCUMENTO = ['type', 'title', 'expiryDate', 'notes'] as const;
+const CAMPOS_DE_DOCUMENTO = ['type', 'title', 'expiryDate', 'notes', 'alertDaysBefore'] as const;
 
-type CamposDeDocumento = Pick<UpdateEquipmentDocumentInput, 'type' | 'title' | 'expiryDate' | 'notes' | 'fileName'>;
+type CamposDeDocumento = Pick<
+  UpdateEquipmentDocumentInput,
+  'type' | 'title' | 'expiryDate' | 'notes' | 'fileName' | 'alertDaysBefore'
+>;
 
 function camposDeDocumento(documento: EquipmentDocument): CamposDeDocumento {
   return {
@@ -66,6 +69,7 @@ function camposDeDocumento(documento: EquipmentDocument): CamposDeDocumento {
     expiryDate: documento.expiryDate ? documento.expiryDate.slice(0, 10) : null,
     notes: documento.notes,
     fileName: documento.fileName,
+    alertDaysBefore: documento.alertDaysBefore,
   };
 }
 

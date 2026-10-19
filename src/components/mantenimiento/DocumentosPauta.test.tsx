@@ -28,6 +28,7 @@ const doc = (id: string, type: EquipmentDocument['type'], title: string): Equipm
   updatedAt: '2026-10-06T12:00:00.000Z',
   status: 'SIN_DATO',
   daysToExpiry: null,
+  alertDaysBefore: 30,
 });
 
 function renderComo(rol: Role) {

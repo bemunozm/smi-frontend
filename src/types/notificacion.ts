@@ -24,6 +24,12 @@ export const NOTIF_TIPOS = {
   /** El supervisor lo aceptó o rechazó (al mantenedor y al administrador) —
    * `data: { checklistId, equipmentId, decision }`. */
   CHECKLIST_REVIEWED: 'checklist.reviewed',
+  /** Un documento de equipo entró en su plazo de aviso o venció (Módulo 4) —
+   * `data: { documentId, equipmentId, kind }`. */
+  DOCUMENT_EXPIRING: 'document.expiring',
+  /** A un liviano le falta poco para la mantención de cada 10.000 km (Módulo 4)
+   * — `data: { equipmentId, ordenId }`. */
+  LIGHT_SERVICE_DUE: 'light-service.due',
 } as const;
 
 /** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */
