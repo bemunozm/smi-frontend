@@ -1,6 +1,6 @@
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -716,18 +716,31 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
  */
 export function EquipoDetalleView({
   contexto = 'flota',
+  equipoId,
+  enModal = false,
 }: {
   /** Montada en Flota (`/equipos/:id`) o dentro del taller
    * (`/mantenimiento/equipos/:id`). En el taller es SOLO LECTURA para todos
    * los roles —la regla del módulo— y los enlaces no salen de su shell. */
   contexto?: 'flota' | 'taller';
+  /** Id explícito cuando la ficha se monta fuera de su ruta (el popup del
+   * dashboard, ver `FichaEquipoModal`); sin él se lee de la URL. */
+  equipoId?: string;
+  /** Dentro de un modal el «Volver» sobra: el cierre es del propio modal. */
+  enModal?: boolean;
 }) {
-  const { id = '' } = useParams<{ id: string }>();
+  const { id: idParam = '' } = useParams<{ id: string }>();
+  const id = equipoId ?? idParam;
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
   const { can, canAny } = usePermissions();
   const enTaller = contexto === 'taller';
-  const volverA = enTaller ? '/mantenimiento/equipos' : '/equipos';
+  const base = enTaller ? '/mantenimiento/equipos' : '/equipos';
+  /** Quien navega hasta acá puede declarar su origen (el dashboard pasa
+   * `{ state: { from: '/' } }`): el enlace «Volver» regresa ahí en vez de a
+   * la lista. `base` sigue siendo la raíz de los links internos de la ficha. */
+  const desde = (useLocation().state as { from?: string } | null)?.from;
+  const volverA = desde ?? base;
   // En el taller TODAS las escrituras quedan apagadas, sin mirar el rol: el
   // mantenedor (y el admin que entre por ahí) solo consulta.
   const puedeAsignar = !enTaller && can('equipment.assign');
@@ -777,9 +790,11 @@ export function EquipoDetalleView({
         >
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha del equipo.'}
         </div>
-        <Link className="text-sm text-(--accent) hover:underline" to={volverA}>
-          ← Volver a equipos
-        </Link>
+        {!enModal ? (
+          <Link className="text-sm text-(--accent) hover:underline" to={volverA}>
+            ← Volver a equipos
+          </Link>
+        ) : null}
       </div>
     );
   }
@@ -822,12 +837,14 @@ export function EquipoDetalleView({
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
-        to={volverA}
-      >
-        {enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
-      </Link>
+      {!enModal ? (
+        <Link
+          className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
+          to={volverA}
+        >
+          {desde === '/' ? '← Volver al dashboard' : enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
+        </Link>
+      ) : null}
 
       <PendientesStrip recursos={RECURSOS_DE_FLOTA} />
 
@@ -1156,7 +1173,7 @@ export function EquipoDetalleView({
         </div>
 
         <div className="flex flex-col gap-4">
-          <ActividadReciente equipoId={equipo.id} fichaBase={volverA} soloIntervenciones={enTaller} />
+          <ActividadReciente equipoId={equipo.id} fichaBase={base} soloIntervenciones={enTaller} />
 
           <Card>
             <Card.Header>

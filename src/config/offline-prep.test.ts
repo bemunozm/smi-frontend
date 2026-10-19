@@ -35,10 +35,16 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     expect(prepKeysFor(ROLES.ADMIN)).toEqual([...PREP_KEYS]);
   });
 
-  it('todos los roles con menú precargan el panel y las notificaciones; los movimientos acompañan a Inventario', () => {
+  it('todos los roles con menú precargan las notificaciones; los movimientos acompañan a Inventario', () => {
     for (const role of [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]) {
-      expect(prepKeysFor(role), role).toEqual(expect.arrayContaining(['dashboard', 'notificaciones', 'movimientos']));
+      expect(prepKeysFor(role), role).toEqual(expect.arrayContaining(['notificaciones', 'movimientos']));
     }
+  });
+
+  it('el panel (dashboard) se precarga solo para ADMIN: `/` es solo de ese rol', () => {
+    expect(prepKeysFor(ROLES.ADMIN)).toContain('dashboard');
+    expect(prepKeysFor(ROLES.SUPERVISOR)).not.toContain('dashboard');
+    expect(prepKeysFor(ROLES.MANTENEDOR)).not.toContain('dashboard');
   });
 
   it('la bitácora acompaña a Mantenimiento y el combustible a Terreno', () => {

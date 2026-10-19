@@ -28,6 +28,8 @@ import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
+import { HallazgosAdminView } from './views/HallazgosAdminView';
+import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
 import { RegistroEquipoView } from './views/RegistroEquipoView';
@@ -63,7 +65,7 @@ export const router = createBrowserRouter([
               // sigue detrás de su propio `allowedRoles`, igual que
               // Equipos/Inventario.
               {
-                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]} />,
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [{ path: '/', element: <DashboardView /> }],
               },
               { path: '/perfil', element: <ProfileView /> },
@@ -103,6 +105,12 @@ export const router = createBrowserRouter([
               {
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [
+                  // Gestión de hallazgos del administrador (ver/corregir/eliminar);
+                  // Terreno conserva su propia vista en /terreno/hallazgos.
+                  { path: '/hallazgos', element: <HallazgosAdminView /> },
+                  // Trabajos extraordinarios del administrador (solo lectura,
+                  // con filtros); Terreno conserva /terreno/trabajos-extra.
+                  { path: '/trabajos-extra', element: <TrabajosExtraAdminView /> },
                   { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],

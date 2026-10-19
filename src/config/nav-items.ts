@@ -21,7 +21,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Dashboard',
     to: '/',
-    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+    // Solo ADMIN: el dashboard consulta `/api/dashboard/*` (403 para el resto).
+    // SUPERVISOR/MANTENEDOR tienen su propio home (ver `config/home-path.ts`).
+    roles: [ROLES.ADMIN],
   },
   {
     label: 'Equipos',
@@ -34,6 +36,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
   },
   { label: 'Terreno', to: '/terreno', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
+  // Gestión de hallazgos (corregir/eliminar) — vista del administrador, no la de Terreno.
+  { label: 'Hallazgos', to: '/hallazgos', roles: [ROLES.ADMIN] },
+  // Trabajos extraordinarios con filtros — vista del administrador, no la de Terreno.
+  { label: 'Trabajos extra', to: '/trabajos-extra', roles: [ROLES.ADMIN] },
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   { label: 'Mantenimiento', to: '/mantenimiento', roles: [ROLES.ADMIN, ROLES.MANTENEDOR] },
   // Universal: todos los roles autenticados ven y usan notificaciones.

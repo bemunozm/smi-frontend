@@ -1,8 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { listHallazgos, listCambiosHallazgo, type CorreccionHallazgo } from '../api/HallazgosAPI';
+import {
+  deleteHallazgo,
+  editHallazgo,
+  listHallazgos,
+  listCambiosHallazgo,
+  type CorreccionHallazgo,
+} from '../api/HallazgosAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { useQueuedMutation } from './useQueuedMutation';
 import { edicionContraBase } from '../lib/edit-diff';
@@ -11,7 +17,7 @@ import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
 import { enqueueCreateHallazgo } from '../offline/outbox';
-import type { Hallazgo, HallazgoForm } from '../types/hallazgos';
+import type { EditHallazgoBody, Hallazgo, HallazgoForm } from '../types/hallazgos';
 
 const cambiosKey = (id: string) => [...HALLAZGOS_KEY, id, 'cambios'];
 
@@ -108,6 +114,40 @@ export function useEditarHallazgo(): UseEditarHallazgoResult {
   };
 
   return { guardar, isGuardando: edicion.isPending };
+}
+
+/**
+ * Edición directa para la vista de hallazgos del administrador (escritorio,
+ * online): PATCH inmediato + invalidación del listado — sin outbox ni
+ * precondiciones, a diferencia de `useEditarHallazgo` (Terreno).
+ */
+export function useActualizarHallazgo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, cambios }: { id: string; cambios: EditHallazgoBody }) => editHallazgo(id, cambios),
+    onSuccess: () => {
+      toast.success('Hallazgo actualizado');
+      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+    },
+    onError: (error) => {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo actualizar el hallazgo.');
+    },
+  });
+}
+
+/** Eliminación definitiva (solo ADMIN en el backend). */
+export function useEliminarHallazgo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteHallazgo(id),
+    onSuccess: () => {
+      toast.success('Hallazgo eliminado');
+      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+    },
+    onError: (error) => {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo eliminar el hallazgo.');
+    },
+  });
 }
 
 export function useCambiosHallazgo(id: string | null) {

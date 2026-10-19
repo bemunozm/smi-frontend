@@ -94,12 +94,11 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
   const navEnHeader = useMediaQuery(DESKTOP_QUERY);
 
   /**
-   * "Ir al panel" lleva al escritorio del administrador. Para el MANTENEDOR
-   * el panel no es parte de su trabajo —su módulo ES el taller, como Terreno
-   * para el supervisor—, así que el atajo no se ofrece; ADMIN y SUPERVISOR
-   * lo conservan.
+   * "Ir al panel" lleva al dashboard del administrador (`/`, solo ADMIN).
+   * Para SUPERVISOR y MANTENEDOR el panel no existe —su módulo ES su home—,
+   * así que el atajo solo se ofrece al ADMIN.
    */
-  const ofreceIrAlPanel = role !== ROLES.MANTENEDOR;
+  const ofreceIrAlPanel = role === ROLES.ADMIN;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--terreno-warm)' }}>

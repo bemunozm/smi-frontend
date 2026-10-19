@@ -29,8 +29,9 @@ vi.mock('../hooks/useDailyChecklists', () => ({ useChecklistsPorEstado: () => ({
 // `offline/outbox.ts` importa Dexie: acá solo importa el número de registros
 // sin enviar que ve la confirmación de cerrar sesión.
 vi.mock('../offline/outbox', () => ({ countPending: countPendingMock }));
+let mockRole: 'SUPERVISOR' | 'ADMIN' = 'SUPERVISOR';
 vi.mock('../hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { id: 'u1', name: 'Ana Soto', email: 'ana@smi.cl' }, role: 'SUPERVISOR' }),
+  useCurrentUser: () => ({ user: { id: 'u1', name: 'Ana Soto', email: 'ana@smi.cl' }, role: mockRole }),
 }));
 
 vi.mock('@heroui/react', async (importOriginal) => ({
@@ -81,6 +82,7 @@ const SECCIONES = {
 } as const;
 
 afterEach(() => {
+  mockRole = 'SUPERVISOR';
   cleanup();
   vi.clearAllMocks();
   porValidar = [];
@@ -129,7 +131,15 @@ describe('TerrenoLayout', () => {
     }
   });
 
+  it('el SUPERVISOR no ve «Ir al panel»: el dashboard es solo ADMIN y Terreno ya es su home', () => {
+    renderLayout('phone');
+    fireEvent.click(screen.getByLabelText('Menú'));
+
+    expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
+  });
+
   it('en escritorio el drawer guarda lo que no está en el header, sin repetir las secciones', () => {
+    mockRole = 'ADMIN';
     renderLayout('desktop');
     fireEvent.click(screen.getByLabelText('Menú'));
 
@@ -141,6 +151,7 @@ describe('TerrenoLayout', () => {
   });
 
   it('en teléfono el drawer sí repite las secciones, porque es el menú completo', () => {
+    mockRole = 'ADMIN';
     renderLayout('phone');
     fireEvent.click(screen.getByLabelText('Menú'));
 
