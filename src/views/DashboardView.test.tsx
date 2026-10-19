@@ -350,6 +350,12 @@ describe('DashboardView', () => {
     });
   });
 
+  it('«Ver inventario» de la card de insumos navega al inventario con el filtro de bajo mínimo', () => {
+    render(<DashboardView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ver inventario →' }));
+    expect(navigateMock).toHaveBeenCalledWith('/inventario?filtro=bajo-minimo');
+  });
+
   describe('hallazgos recientes', () => {
     const reciente = (fotoUrl: string | null) => ({
       id: 'h9',

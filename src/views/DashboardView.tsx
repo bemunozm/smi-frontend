@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { Card, Chip, Spinner, Table } from '@heroui/react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, Chip, Spinner, Table } from '@heroui/react';
 import {
   Bar,
   BarChart,
@@ -1181,13 +1182,21 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
 /** Ítems bajo el mínimo de su bodega — mismo dato que el KPI de arriba. */
 function InsumosBajoStockSection() {
   const { rows, isPending, isError, error } = useLowStockRows();
+  const navigate = useNavigate();
 
   return (
     <Card className="flex flex-col gap-3">
       <Card.Header>
         <div className="flex items-center justify-between gap-2">
           <Card.Title>Insumos bajo stock mínimo</Card.Title>
-          <RealDataChip />
+          <div className="flex items-center gap-2">
+            {/* Mismo destino que el «Ver todo» del KPI: el inventario con el
+               filtro de atención preseleccionado. */}
+            <Button onPress={() => void navigate('/inventario?filtro=bajo-minimo')} size="sm" variant="secondary">
+              Ver inventario →
+            </Button>
+            <RealDataChip />
+          </div>
         </div>
         <Card.Description>
           Repuestos e insumos que requieren reposición, con la bodega donde faltan.
