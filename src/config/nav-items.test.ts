@@ -8,4 +8,9 @@ describe('NAV_ITEMS', () => {
     const dashboard = NAV_ITEMS.find((item) => item.to === '/');
     expect(dashboard?.roles).toEqual([ROLES.ADMIN]);
   });
+
+  it('Terreno y Mantenimiento no van en el menú: son los home de sus roles', () => {
+    expect(NAV_ITEMS.find((item) => item.to === '/terreno')).toBeUndefined();
+    expect(NAV_ITEMS.find((item) => item.to === '/mantenimiento')).toBeUndefined();
+  });
 });
