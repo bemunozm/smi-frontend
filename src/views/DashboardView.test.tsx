@@ -555,7 +555,7 @@ describe('DashboardView', () => {
       expect(document.body.textContent).not.toContain('42');
     });
 
-    it('«Por día» abre un popup con las vueltas diarias de ESA sección y su nivel vs el promedio', () => {
+    it('«Por día» abre un popup con TODOS los días de la sección y su nivel vs el promedio', () => {
       vueltasHook.mockReturnValue({
         data: {
           porSeccion: [
@@ -564,12 +564,13 @@ describe('DashboardView', () => {
               camiones: 2,
               vueltasTotales: 60,
               serieDiaria: [
-                { fecha: '2026-10-01', vueltas: 10 },
-                { fecha: '2026-10-02', vueltas: 20 },
-                { fecha: '2026-10-03', vueltas: 30 },
+                { fecha: '2026-09-01', vueltas: 10 },
+                { fecha: '2026-09-02', vueltas: 20 },
+                // Hueco: el 03 no viene en la serie, pero igual debe listarse.
+                { fecha: '2026-09-04', vueltas: 30 },
               ],
             },
-            { seccion: 'MINERAS', camiones: 1, vueltasTotales: 12, serieDiaria: [{ fecha: '2026-10-01', vueltas: 12 }] },
+            { seccion: 'MINERAS', camiones: 1, vueltasTotales: 12, serieDiaria: [{ fecha: '2026-09-01', vueltas: 12 }] },
           ],
         },
         isPending: false,
@@ -577,26 +578,28 @@ describe('DashboardView', () => {
         error: null,
       });
       render(<DashboardView />);
+      // El popup rellena el calendario del MES FILTRADO: se fija septiembre
+      // para que el relleno cubra los días de la serie sin depender de hoy.
+      const selectores = screen.getAllByLabelText(/mes/i);
+      fireEvent.change(selectores[1], { target: { value: '2026-09' } });
       fireEvent.click(within(screen.getByTestId('vueltas-INTERNOS')).getByRole('button', { name: 'Por día' }));
 
       const dialog = screen.getByRole('dialog');
       expect(within(dialog).getByText('Vueltas camiones internos · por día')).toBeTruthy();
-      // Promedio 20: el 03 es alto, el 02 medio, el 01 bajo; más reciente primero.
-      expect(within(dialog).getByText(/Promedio diario:/)).toBeTruthy();
+      // Promedio 20 sobre los días CON vueltas: el 04 alto, el 02 medio, el 01 bajo.
+      expect(within(dialog).getByText(/Promedio diario/)).toBeTruthy();
+      // Más reciente primero y calendario completo: el mes entero (30 días), hueco incluido.
       const filas = within(dialog).getAllByTestId(/vueltas-dia-/);
-      expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual([
-        'vueltas-dia-2026-10-03',
-        'vueltas-dia-2026-10-02',
-        'vueltas-dia-2026-10-01',
-      ]);
-      expect(within(filas[0]).getByText('Sobre el promedio')).toBeTruthy();
-      expect(within(filas[1]).getByText('En torno al promedio')).toBeTruthy();
-      expect(within(filas[2]).getByText('Bajo el promedio')).toBeTruthy();
-      // Solo la sección abierta: nada de la serie de MINERAS en el popup.
-      expect(within(dialog).queryByTestId('vueltas-dia-2026-10-01-MINERAS')).toBeNull();
-
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
-      expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios');
+      expect(filas).toHaveLength(30);
+      expect(filas[0].getAttribute('data-testid')).toBe('vueltas-dia-2026-09-30');
+      expect(filas[29].getAttribute('data-testid')).toBe('vueltas-dia-2026-09-01');
+      expect(within(screen.getByTestId('vueltas-dia-2026-09-04')).getByText('Sobre el promedio')).toBeTruthy();
+      expect(within(screen.getByTestId('vueltas-dia-2026-09-02')).getByText('En torno al promedio')).toBeTruthy();
+      expect(within(screen.getByTestId('vueltas-dia-2026-09-01')).getByText('Bajo el promedio')).toBeTruthy();
+      // El día sin vueltas se muestra como tal, sin nivel.
+      expect(within(screen.getByTestId('vueltas-dia-2026-09-03')).getByText('Sin vueltas')).toBeTruthy();
+      // Sin pie «Ver todo»: el detalle ya es completo.
+      expect(within(dialog).queryByRole('button', { name: 'Ver todo →' })).toBeNull();
     });
   });
 });

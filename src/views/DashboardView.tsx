@@ -48,6 +48,7 @@ import { ResumenDia } from '../components/dashboard/ResumenDia';
 import { KpiDetailModal } from '../components/dashboard/KpiDetailModal';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
 import { mesValue, opcionesMes, rangoDeMes, rangoSemanas } from '../lib/dashboard-rango';
+import { fromDateOnly, toDateOnly } from '../lib/turno';
 import { horasSemanales } from '../lib/horas-semanales';
 
 /**
@@ -1146,6 +1147,20 @@ function TrabajosExtraCard({ rango }: { rango: RangoDashboard }) {
   );
 }
 
+/** Días locales (YYYY-MM-DD) de `desde` a `hasta`, ambos incluidos. */
+function diasDelRango(desde: string, hasta: string): string[] {
+  const dias: string[] = [];
+  const fin = fromDateOnly(hasta);
+  for (
+    let dia = fromDateOnly(desde);
+    dia <= fin && dias.length < 100;
+    dia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1)
+  ) {
+    dias.push(toDateOnly(dia));
+  }
+  return dias;
+}
+
 /** Bloque de vueltas de producción. Vive DENTRO de la sección Supervisores
  * (pedido del administrador), con estado propio independiente. Cada tarjeta
  * abre un popup con el detalle DÍA A DÍA de SU sección — nunca una lista que
@@ -1156,9 +1171,23 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
   const [detalleSeccion, setDetalleSeccion] = useState<string | null>(null);
 
   const seccionAbierta = data?.porSeccion.find((sec) => sec.seccion === detalleSeccion) ?? null;
-  // Promedio diario de la sección abierta — mismos niveles/colores que sus barras.
-  const dias = seccionAbierta ? [...seccionAbierta.serieDiaria].sort((a, b) => b.fecha.localeCompare(a.fecha)) : [];
-  const promedio = dias.length > 0 ? dias.reduce((acc, d) => acc + d.vueltas, 0) / dias.length : 0;
+  // El popup lista TODOS los días del rango (pedido del administrador), no
+  // solo los que traen vueltas: se rellena el calendario hasta hoy (los días
+  // futuros del mes en curso no aportan) y los días de la serie se conservan
+  // siempre, vengan o no dentro del relleno.
+  const hoy = toDateOnly(new Date());
+  const hastaVisible = rango.hasta < hoy ? rango.hasta : hoy;
+  const porFecha = new Map((seccionAbierta?.serieDiaria ?? []).map((d) => [d.fecha, d.vueltas]));
+  const fechas = new Set(rango.desde <= hastaVisible ? diasDelRango(rango.desde, hastaVisible) : []);
+  for (const fecha of porFecha.keys()) fechas.add(fecha);
+  const dias = [...fechas].sort((a, b) => b.localeCompare(a)).map((fecha) => ({
+    fecha,
+    vueltas: porFecha.get(fecha) ?? 0,
+  }));
+  // El promedio (el mismo criterio de las barras) se calcula sobre los días
+  // CON vueltas: el relleno en cero no debe hundirlo.
+  const activos = dias.filter((d) => d.vueltas > 0);
+  const promedio = activos.length > 0 ? activos.reduce((acc, d) => acc + d.vueltas, 0) / activos.length : 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1214,12 +1243,12 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
             ? `Vueltas ${(SECCION_LABEL[seccionAbierta.seccion] ?? seccionAbierta.seccion).toLowerCase()} · por día`
             : 'Vueltas por día'
         }
-        verTodoTo="/reportes-diarios"
       >
         {seccionAbierta ? (
           <>
             <p className="pb-2 text-sm text-muted-foreground">
-              Promedio diario: <span className="font-mono text-foreground">{NUM_CL_1.format(promedio)}</span> vueltas.
+              Promedio diario (días con vueltas):{' '}
+              <span className="font-mono text-foreground">{NUM_CL_1.format(promedio)}</span> vueltas.
             </p>
             {dias.map((dia) => {
               const nivel = nivelRespectoPromedio(dia.vueltas, promedio);
@@ -1230,15 +1259,24 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
                   key={dia.fecha}
                 >
                   <span className="font-mono text-sm text-muted-foreground">{formatDia(dia.fecha)}</span>
-                  <span
-                    aria-hidden="true"
-                    className="inline-block size-2.5 rounded-full"
-                    style={{ backgroundColor: NIVEL_PROMEDIO_COLOR[nivel] }}
-                  />
-                  <span className="text-xs text-muted-foreground">{NIVEL_PROMEDIO_LABEL[nivel]}</span>
-                  <span className="ms-auto font-mono text-sm font-semibold text-foreground">
-                    {NUM_CL.format(dia.vueltas)}
-                  </span>
+                  {dia.vueltas > 0 ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="inline-block size-2.5 rounded-full"
+                        style={{ backgroundColor: NIVEL_PROMEDIO_COLOR[nivel] }}
+                      />
+                      <span className="text-xs text-muted-foreground">{NIVEL_PROMEDIO_LABEL[nivel]}</span>
+                      <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                        {NUM_CL.format(dia.vueltas)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-muted-foreground">Sin vueltas</span>
+                      <span className="ms-auto font-mono text-sm text-muted-foreground">—</span>
+                    </>
+                  )}
                 </div>
               );
             })}
