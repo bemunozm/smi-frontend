@@ -1,11 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { navigateMock, itemsHook, abiertosHook, recientesHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+const { navigateMock, itemsHook, abiertosHook, recientesHook, trabajosExtraHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   itemsHook: vi.fn(),
   abiertosHook: vi.fn(),
   recientesHook: vi.fn(),
+  trabajosExtraHook: vi.fn(),
   hallazgosResumenHook: vi.fn(),
   resumenHook: vi.fn(),
   equiposMock: vi.fn(),
@@ -41,6 +42,9 @@ vi.mock('../hooks/useDashboard', () => ({
   useHallazgosAbiertosRecientes: () => abiertosHook(),
   useHallazgosRecientes: () => recientesHook(),
 }));
+vi.mock('../hooks/useTrabajosExtra', () => ({
+  useTrabajosExtraList: () => trabajosExtraHook(),
+}));
 
 import { DashboardView } from './DashboardView';
 
@@ -75,6 +79,7 @@ beforeEach(() => {
   recientesHook.mockReturnValue(idle);
   itemsHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
   abiertosHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
+  trabajosExtraHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
 });
 afterEach(() => {
   cleanup();
@@ -119,13 +124,58 @@ describe('DashboardView', () => {
       return screen.getByRole('dialog');
     };
 
-    it.each(['Ver próximas mantenciones', 'Ver ítems bajo mínimo', 'Ver hallazgos abiertos'])(
-      '«%s» abre un popup y no navega directo',
-      (nombre) => {
-        abrir(nombre);
-        expect(navigateMock).not.toHaveBeenCalled();
-      },
-    );
+    it.each([
+      'Ver trabajos extraordinarios recientes',
+      'Ver próximas mantenciones',
+      'Ver ítems bajo mínimo',
+      'Ver hallazgos abiertos',
+    ])('«%s» abre un popup y no navega directo', (nombre) => {
+      abrir(nombre);
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    describe('HM Trabajos extraordinarios', () => {
+      const trabajo = (id: string, codigo: string, totalHoras: number, fecha: string) => ({
+        id,
+        equipoId: `eq-${id}`,
+        operatorId: null,
+        operador: 'P. Rojas',
+        faena: 'Mina Caleta',
+        turno: 'DIURNO',
+        horometroInicial: 100,
+        horometroFinal: 100 + totalHoras,
+        totalHoras,
+        actividades: ['LIMPIEZA_CANCHA'],
+        otraActividad: null,
+        descripcion: 'Limpieza',
+        observaciones: null,
+        fecha,
+        equipo: { internalCode: codigo },
+      });
+
+      it('la card suma las HM de todos los trabajos y el popup lista los recientes primero', () => {
+        trabajosExtraHook.mockReturnValue(
+          ok([
+            trabajo('t1', 'CG-002', 3.5, '2026-10-10T10:00:00.000Z'),
+            trabajo('t2', 'EX-001', 2, '2026-10-16T10:00:00.000Z'),
+          ]),
+        );
+        const dialog = abrir('Ver trabajos extraordinarios recientes');
+        expect(screen.getByText('5,5 h')).toBeTruthy();
+        expect(within(dialog).getByText('Trabajos extraordinarios recientes')).toBeTruthy();
+        const filas = within(dialog).getAllByTestId(/kpi-trabajo-/);
+        expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['kpi-trabajo-t2', 'kpi-trabajo-t1']);
+        expect(within(dialog).getByText('CG-002')).toBeTruthy();
+        expect(within(dialog).getByText('3,5 h')).toBeTruthy();
+      });
+
+      it('«Ver todo» navega a la vista admin de trabajos extra', () => {
+        trabajosExtraHook.mockReturnValue(ok([trabajo('t1', 'CG-002', 3.5, '2026-10-10T10:00:00.000Z')]));
+        const dialog = abrir('Ver trabajos extraordinarios recientes');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+        expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra');
+      });
+    });
 
     describe('Próximas mantenciones', () => {
       beforeEach(() => {

@@ -15,6 +15,8 @@ import {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useItems } from '../hooks/useInventory';
 import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
+import { useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { turnoLabel } from '../config/flota-colors';
 import {
   useDashboardEquipos,
   useDashboardMantenedores,
@@ -271,6 +273,75 @@ function KpiCardSkeleton() {
   );
 }
 
+/** ← Terreno (real): horas máquina acumuladas de TODOS los trabajos
+ * extraordinarios. El popup lista los 10 más recientes; «Ver todo» abre la
+ * vista del administrador (`/trabajos-extra`) con sus filtros. */
+function TrabajosExtraKpiCard() {
+  const { data, isPending, isError, error } = useTrabajosExtraList();
+  const [abierto, setAbierto] = useState(false);
+
+  if (isPending) return <KpiCardSkeleton />;
+
+  if (isError) {
+    return (
+      <Card>
+        <Card.Content className="py-6">
+          <p className="text-sm text-danger-soft-foreground" role="alert">
+            {error instanceof Error ? error.message : 'No se pudo cargar los trabajos extraordinarios.'}
+          </p>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  const trabajos = data ?? [];
+  const totalHoras = trabajos.reduce((acc, t) => acc + t.totalHoras, 0);
+  const recientes = [...trabajos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 10);
+  return (
+    <>
+      <KpiCard
+        hint={`${NUM_CL.format(trabajos.length)} ${trabajos.length === 1 ? 'trabajo registrado' : 'trabajos registrados'}`}
+        isReal
+        ariaLabel="Ver trabajos extraordinarios recientes"
+        label="HM Trabajos extraordinarios"
+        onOpen={() => setAbierto(true)}
+        value={`${NUM_CL_1.format(totalHoras)} h`}
+      />
+      <KpiDetailModal
+        isOpen={abierto}
+        onOpenChange={setAbierto}
+        title="Trabajos extraordinarios recientes"
+        verTodoTo="/trabajos-extra"
+      >
+        {recientes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hay trabajos extraordinarios registrados.</p>
+        ) : (
+          recientes.map((t) => (
+            <div
+              className="flex flex-wrap items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0"
+              data-testid={`kpi-trabajo-${t.id}`}
+              key={t.id}
+            >
+              <span className="font-mono text-sm text-foreground">{t.equipo?.internalCode ?? '—'}</span>
+              <span className="text-xs text-muted-foreground">
+                {formatFecha(t.fecha)} · {turnoLabel(t.turno)} · {t.faena}
+              </span>
+              <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                {NUM_CL_1.format(t.totalHoras)} h
+              </span>
+            </div>
+          ))
+        )}
+        {trabajos.length > recientes.length ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Mostrando los {recientes.length} más recientes de {NUM_CL.format(trabajos.length)}.
+          </p>
+        ) : null}
+      </KpiDetailModal>
+    </>
+  );
+}
+
 /** ← Mantenimiento (real): equipos dentro de su ventana de aviso; misma regla
  * del popup de mantenciones. */
 function ProximasMantencionesKpiCard() {
@@ -497,7 +568,8 @@ function HallazgosAbiertosKpiCard() {
 
 function SummaryCards() {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <TrabajosExtraKpiCard />
       <ProximasMantencionesKpiCard />
       <InsumosBajoMinimoKpiCard />
       <HallazgosAbiertosKpiCard />

@@ -38,6 +38,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Terreno', to: '/terreno', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   // Gestión de hallazgos (corregir/eliminar) — vista del administrador, no la de Terreno.
   { label: 'Hallazgos', to: '/hallazgos', roles: [ROLES.ADMIN] },
+  // Trabajos extraordinarios con filtros — vista del administrador, no la de Terreno.
+  { label: 'Trabajos extra', to: '/trabajos-extra', roles: [ROLES.ADMIN] },
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   { label: 'Mantenimiento', to: '/mantenimiento', roles: [ROLES.ADMIN, ROLES.MANTENEDOR] },
   // Universal: todos los roles autenticados ven y usan notificaciones.
