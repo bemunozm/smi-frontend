@@ -5,8 +5,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,8 +31,10 @@ import {
 } from '../hooks/useDashboard';
 import {
   CHART_NEUTRAL,
-  TRABAJOS_EXTRAORDINARIOS_COLOR,
+  NIVEL_PROMEDIO_COLOR,
+  NIVEL_PROMEDIO_LABEL,
   criticidadChipColor,
+  nivelRespectoPromedio,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
@@ -675,34 +679,6 @@ function EquiposKpis({ equipos }: { equipos: MetricasEquipo[] }) {
   );
 }
 
-function EquiposHorasChart({ equipos }: { equipos: MetricasEquipo[] }) {
-  return (
-    <div className="h-64 w-full">
-      <ResponsiveContainer height="100%" width="100%">
-        <BarChart data={equipos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-          <XAxis axisLine={false} dataKey="internalCode" tick={AXIS_TICK_STYLE} tickLine={false} />
-          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
-          <Tooltip
-            contentStyle={TOOLTIP_CONTENT_STYLE}
-            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
-            formatter={(value) => [`${value} h`, 'Horas']}
-            itemStyle={TOOLTIP_ITEM_STYLE}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-          />
-          <Bar
-            dataKey="horas"
-            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
-            isAnimationActive={false}
-            maxBarSize={28}
-            radius={[4, 4, 0, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 /** Un equipo por fila (ya ordenados por horas desc). El abierto se identifica
  * por `equipmentId`, nunca por posición: el orden cambia al cambiar de mes. */
 function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
@@ -918,7 +894,7 @@ function SeccionEquipos() {
             <Card.Content>
               {equipos.length > 0 ? (
                 <>
-                  <EquiposHorasChart equipos={equipos} />
+                  <BarrasSimples data={equipos} unidad="h" xKey="internalCode" yKey="horas" />
                   <EquiposDrilldown equipos={equipos} />
                 </>
               ) : (
@@ -955,43 +931,75 @@ function EstadoSeccion({
   return null;
 }
 
-/** Barras de una sola serie con los ejes/tooltip compartidos del dashboard. */
+/**
+ * Barras de una sola serie con los ejes/tooltip compartidos del dashboard.
+ * Cada barra se pinta según su nivel respecto del PROMEDIO del propio gráfico
+ * (verde sobre +10%, ámbar en torno, rojo bajo −10%) y el promedio se marca
+ * como línea punteada — pedido del administrador: distinguir altos, medios y
+ * bajos de un vistazo.
+ */
 function BarrasSimples({
   data,
   xKey,
   yKey,
   altura = 'h-64',
   tickFormatter,
+  unidad,
 }: {
   data: object[];
   xKey: string;
   yKey: string;
   altura?: string;
   tickFormatter?: (value: string) => string;
+  /** Sufijo del tooltip y de la etiqueta del promedio (p. ej. «h»). */
+  unidad?: string;
 }) {
+  const valores = data.map((d) => Number((d as Record<string, unknown>)[yKey]) || 0);
+  const promedio = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : 0;
+  const sufijo = unidad ? ` ${unidad}` : '';
   return (
-    <div className={`${altura} w-full`}>
-      <ResponsiveContainer height="100%" width="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-          <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
-          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
-          <Tooltip
-            contentStyle={TOOLTIP_CONTENT_STYLE}
-            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
-            formatter={(value) => [`${value}`, yKey === 'horas' ? 'Horas' : 'Vueltas']}
-            itemStyle={TOOLTIP_ITEM_STYLE}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-          />
-          <Bar
-            dataKey={yKey}
-            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
-            isAnimationActive={false}
-            maxBarSize={28}
-            radius={[4, 4, 0, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="flex flex-col gap-1">
+      <div className={`${altura} w-full`}>
+        <ResponsiveContainer height="100%" width="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+            <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
+            <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
+            <Tooltip
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
+              formatter={(value) => [`${value}${sufijo}`, yKey === 'horas' ? 'Horas' : 'Vueltas']}
+              itemStyle={TOOLTIP_ITEM_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+            />
+            {promedio > 0 ? (
+              <ReferenceLine
+                label={{
+                  value: `Prom. ${NUM_CL_1.format(promedio)}${sufijo}`,
+                  fill: CHART_NEUTRAL.muted,
+                  fontSize: 11,
+                  position: 'insideTopRight',
+                }}
+                stroke={CHART_NEUTRAL.muted}
+                strokeDasharray="4 4"
+                y={promedio}
+              />
+            ) : null}
+            <Bar dataKey={yKey} isAnimationActive={false} maxBarSize={28} radius={[4, 4, 0, 0]}>
+              {valores.map((valor, indice) => (
+                <Cell fill={NIVEL_PROMEDIO_COLOR[nivelRespectoPromedio(valor, promedio)]} key={indice} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ChartLegendRow
+        items={(['alto', 'medio', 'bajo'] as const).map((nivel) => ({
+          key: nivel,
+          label: NIVEL_PROMEDIO_LABEL[nivel],
+          color: NIVEL_PROMEDIO_COLOR[nivel],
+        }))}
+      />
     </div>
   );
 }

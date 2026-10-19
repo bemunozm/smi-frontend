@@ -77,9 +77,32 @@ export const CHART_NEUTRAL = {
   overlayShadow: HEX.overlayShadow,
 } as const;
 
-/** Serie única de los gráficos de barras de una sola métrica (horas, vueltas) — un solo hue, sin
- * necesidad de leyenda (el título de la card ya dice qué se mide). */
-export const TRABAJOS_EXTRAORDINARIOS_COLOR = CHART_FILL.accent;
+/** Nivel de una barra respecto del promedio de su propio gráfico (pedido del
+ * administrador: que se distingan altos, medios y bajos). En torno = ±10% del
+ * promedio. Con promedio 0 (todo en cero) no hay comparación: todo es medio. */
+export type NivelPromedio = 'alto' | 'medio' | 'bajo';
+
+export function nivelRespectoPromedio(valor: number, promedio: number): NivelPromedio {
+  if (promedio <= 0) return 'medio';
+  // ×10/×11/×9 en vez de ×1.1/×0.9: evita que el borde exacto (110 vs 100)
+  // caiga mal por representación binaria (100 * 1.1 === 110.00000000000001).
+  if (valor * 10 >= promedio * 11) return 'alto';
+  if (valor * 10 <= promedio * 9) return 'bajo';
+  return 'medio';
+}
+
+/** Verde sobre el promedio, ámbar en torno, rojo bajo — mismos hex de `CHART_FILL`. */
+export const NIVEL_PROMEDIO_COLOR: Record<NivelPromedio, string> = {
+  alto: CHART_FILL.success,
+  medio: CHART_FILL.warning,
+  bajo: CHART_FILL.danger,
+};
+
+export const NIVEL_PROMEDIO_LABEL: Record<NivelPromedio, string> = {
+  alto: 'Sobre el promedio',
+  medio: 'En torno al promedio',
+  bajo: 'Bajo el promedio',
+};
 
 /** Subtítulo de la card "Hallazgos abiertos": desglosa por criticidad en vez
  * de repetir el total que ya muestra el valor grande de la card. */
