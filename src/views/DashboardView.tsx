@@ -734,7 +734,8 @@ function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
               <span className="font-mono text-foreground">{equipo.internalCode}</span>
               <span className="ms-auto font-mono text-muted-foreground">{formatHoras(equipo.horas)}</span>
               <span className="w-20 text-end font-mono text-muted-foreground">{formatLitros(equipo.litros)}</span>
-              <span className="w-24 text-end font-mono text-muted-foreground">
+              {/* En negrita y en foreground: es el dato que el administrador compara. */}
+              <span className="w-24 text-end font-mono font-bold text-foreground">
                 {formatRendimiento(equipo.rendimiento)}
               </span>
             </button>
