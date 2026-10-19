@@ -1,11 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { Chip } from '@heroui/react';
 
+import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useMarkRead } from '../../hooks/useNotificaciones';
 import { notificacionTipoConfig } from '../../config/notificacion-colors';
 import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { relativeTime } from '../../lib/relative-time';
 import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
+import { rutaDeChecklist } from './checklist-route';
 import { rutaDeRegistroEditado } from './record-edited-route';
 
 function equipoIdFrom(data: Notificacion['data']): string | null {
@@ -37,6 +39,7 @@ export interface NotificationItemProps {
 export function NotificationItem({ notificacion, onAfterClick }: NotificationItemProps) {
   const markRead = useMarkRead();
   const navigate = useNavigate();
+  const { role } = useCurrentUser();
   const { label, color } = notificacionTipoConfig(notificacion.tipo);
 
   const handleClick = (): void => {
@@ -50,6 +53,16 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
     const reportId = notificacion.tipo === NOTIF_TIPOS.SHIFT_EXIT_REPORT ? reportIdFrom(notificacion.data) : null;
     if (reportId) {
       window.open(ShiftReportAPI.fileUrl(reportId), '_blank', 'noopener');
+      onAfterClick?.();
+      return;
+    }
+
+    if (
+      notificacion.tipo === NOTIF_TIPOS.CHECKLIST_SUBMITTED ||
+      notificacion.tipo === NOTIF_TIPOS.CHECKLIST_REVIEWED
+    ) {
+      const ruta = rutaDeChecklist(notificacion, role);
+      if (ruta) navigate(ruta);
       onAfterClick?.();
       return;
     }

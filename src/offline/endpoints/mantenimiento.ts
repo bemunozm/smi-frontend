@@ -24,9 +24,17 @@ import {
   type SaveMaintenancePlanInput,
   type SetMaintenanceRecordInput,
 } from '../../types/maintenance-plan';
+import {
+  DailyChecklistDetailSchema,
+  type DailyChecklistDetail,
+  type ResubmitDailyChecklistInput,
+  type ReviewDailyChecklistInput,
+  type SubmitDailyChecklistInput,
+} from '../../types/daily-checklist';
 import { cachedName } from '../cache-upserts';
 import {
   actividadEntity,
+  dailyChecklistEntity,
   equipmentEntity,
   hallazgoEntity,
   intervencionEntity,
@@ -82,6 +90,27 @@ export interface MantenimientoEndpointMap {
     params: { equipmentId: string };
     body: SetMaintenanceRecordInput;
     result: MaintenanceCycleView;
+  };
+  /** Checklist diario de un equipo, enviado entero al supervisor. Las fotos
+   * de cada ítem viajan como archivos y el replay las pone en
+   * `entries.i.photoKeys.j`. */
+  'dailyChecklist.submit': {
+    params: NoParams;
+    body: WithId<SubmitDailyChecklistInput>;
+    result: DailyChecklistDetail;
+  };
+  /** Corregir un checklist rechazado y reenviarlo. Las fotos nuevas viajan
+   * como archivos (`entries.i.photoKeys.j`); las conservadas, por su id. */
+  'dailyChecklist.resubmit': {
+    params: { id: string };
+    body: ResubmitDailyChecklistInput;
+    result: DailyChecklistDetail;
+  };
+  /** Módulo 3: el supervisor acepta (libera el equipo) o rechaza con comentario. */
+  'dailyChecklist.review': {
+    params: { id: string };
+    body: ReviewDailyChecklistInput;
+    result: DailyChecklistDetail;
   };
 }
 
@@ -206,5 +235,43 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(equipmentEntity, params.equipmentId),
+  },
+  'dailyChecklist.submit': {
+    method: 'POST',
+    path: () => '/api/daily-checklists',
+    failMessage: 'No se pudo enviar el checklist.',
+    parse: parseWith(DailyChecklistDetailSchema),
+    // 'inventory': los insumos de las mantenciones salen del stock de faena.
+    invalidate: ['dailyChecklists', 'inventory'],
+    label: (_params, body) => etiqueta('Checklist diario', cachedName('equipment', body.equipmentId)),
+    notFoundIsDone: false,
+    carriesFiles: true,
+    creates: true,
+    entity: (_params, body) => entityOf(dailyChecklistEntity, bodyText(body, 'id')),
+    parents: (_params, body) => referencias(entityOf(equipmentEntity, bodyText(body, 'equipmentId'))),
+  },
+  'dailyChecklist.resubmit': {
+    method: 'PUT',
+    path: (params) => `/api/daily-checklists/${param(params, 'id')}`,
+    failMessage: 'No se pudo reenviar el checklist.',
+    parse: parseWith(DailyChecklistDetailSchema),
+    // 'inventory': devuelve a bodega los insumos anteriores y descuenta los nuevos.
+    invalidate: ['dailyChecklists', 'inventory'],
+    label: () => 'Checklist corregido',
+    notFoundIsDone: false,
+    carriesFiles: true,
+    entity: (params) => entityOf(dailyChecklistEntity, params.id),
+  },
+  'dailyChecklist.review': {
+    method: 'POST',
+    path: (params) => `/api/daily-checklists/${param(params, 'id')}/review`,
+    failMessage: 'No se pudo guardar la validación del checklist.',
+    parse: parseWith(DailyChecklistDetailSchema),
+    invalidate: ['dailyChecklists'],
+    label: (_params, body) =>
+      body.decision === 'ACCEPTED' ? 'Checklist aceptado' : 'Checklist rechazado',
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(dailyChecklistEntity, params.id),
   },
 });

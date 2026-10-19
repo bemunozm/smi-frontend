@@ -232,7 +232,7 @@ describe('DashboardView', () => {
       it('«Ver todo» navega a la vista de preventivo', () => {
         const dialog = abrir('Ver próximas mantenciones');
         fireEvent.click(within(dialog).getByRole('button', { name: /Ver todo/ }));
-        expect(navigateMock).toHaveBeenCalledWith('/mantenimiento/preventivo');
+        expect(navigateMock).toHaveBeenCalledWith('/mantenimiento/ordenes');
       });
 
       it('se cierra con Esc y con el botón de cierre', () => {

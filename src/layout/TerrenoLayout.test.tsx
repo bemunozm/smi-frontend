@@ -23,6 +23,9 @@ const { logoutMock, countPendingMock, toastDangerMock } = vi.hoisted(() => ({
   toastDangerMock: vi.fn(),
 }));
 vi.mock('../lib/logout', () => ({ logout: logoutMock }));
+// La pestaña Checklists muestra cuántos esperan la validación del supervisor.
+let porValidar: unknown[] = [];
+vi.mock('../hooks/useDailyChecklists', () => ({ useChecklistsPorEstado: () => ({ data: porValidar }) }));
 // `offline/outbox.ts` importa Dexie: acá solo importa el número de registros
 // sin enviar que ve la confirmación de cerrar sesión.
 vi.mock('../offline/outbox', () => ({ countPending: countPendingMock }));
@@ -74,14 +77,15 @@ function renderLayout(size: 'phone' | 'desktop') {
  * un único nombre accesible — el que corresponde a la barra que está en uso.
  */
 const SECCIONES = {
-  phone: ['Registro', 'Reporte', 'Trabajos', 'Hallazgos'],
-  desktop: ['Registro de equipo', 'Reporte diario', 'Trabajos extra', 'Hallazgos'],
+  phone: ['Registro', 'Reporte', 'Trabajos', 'Hallazgos', 'Checklists'],
+  desktop: ['Registro de equipo', 'Reporte diario', 'Trabajos extra', 'Hallazgos', 'Checklists'],
 } as const;
 
 afterEach(() => {
   mockRole = 'SUPERVISOR';
   cleanup();
   vi.clearAllMocks();
+  porValidar = [];
 });
 
 describe('TerrenoLayout', () => {
@@ -92,6 +96,14 @@ describe('TerrenoLayout', () => {
     for (const seccion of SECCIONES.phone) {
       expect(within(nav).getByRole('link', { name: seccion })).toBeTruthy();
     }
+  });
+
+  it('la pestaña Checklists dice cuántos esperan la validación del supervisor', () => {
+    porValidar = [{ id: 'a' }, { id: 'b' }];
+    renderLayout('phone');
+
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Terreno' });
+    expect(within(nav).getByLabelText('2 pendientes')).toBeTruthy();
   });
 
   it('desde escritorio sube las secciones al header', () => {

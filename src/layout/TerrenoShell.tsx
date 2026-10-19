@@ -20,6 +20,21 @@ export interface ShellTab {
   label: string;
   corto: string;
   icon: LucideIcon;
+  /** Cuántas cosas esperan en esa sección (p. ej. checklists por validar). */
+  badge?: number;
+}
+
+/** El número de pendientes junto a una pestaña. Nada si no hay. */
+function Badge({ n }: { n?: number }) {
+  if (!n) return null;
+  return (
+    <span
+      aria-label={`${n} pendientes`}
+      className="tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1.5 text-[11px] leading-none font-bold text-white"
+    >
+      {n > 99 ? '99+' : n}
+    </span>
+  );
 }
 
 interface TerrenoShellProps {
@@ -131,6 +146,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                     >
                       <Icon className="h-[17px] w-[17px]" />
                       {t.label}
+                      <Badge n={t.badge} />
                     </NavLink>
                   );
                 })}
@@ -174,7 +190,14 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                   >
                     {({ isActive }) => (
                       <>
-                        <Icon className="h-[23px] w-[23px]" strokeWidth={isActive ? 2.4 : 2} />
+                        <span className="relative">
+                          <Icon className="h-[23px] w-[23px]" strokeWidth={isActive ? 2.4 : 2} />
+                          {t.badge ? (
+                            <span className="absolute -top-1.5 -right-3">
+                              <Badge n={t.badge} />
+                            </span>
+                          ) : null}
+                        </span>
                         {t.corto}
                       </>
                     )}
@@ -237,6 +260,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                       >
                         <Icon className="h-[19px] w-[19px]" />
                         {t.label}
+                        <Badge n={t.badge} />
                       </NavLink>
                     );
                   })}

@@ -383,11 +383,14 @@ function ProximasMantencionesKpiCard() {
         onOpen={() => setAbierto(true)}
         value={String(cantidad)}
       />
+      {/* «Ver todo» → órdenes del taller: la vista Preventivo se retiró en
+         main (la reemplazó el checklist diario) y las mantenciones que tocan
+         viven como OTs. */}
       <KpiDetailModal
         isOpen={abierto}
         onOpenChange={setAbierto}
         title="Próximas mantenciones"
-        verTodoTo="/mantenimiento/preventivo"
+        verTodoTo="/mantenimiento/ordenes"
       >
         {porHorometro.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin mantenciones próximas por horómetro.</p>

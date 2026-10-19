@@ -66,6 +66,7 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
     'intervencion.create',
     'actividad.create',
     'umbral.create',
+    'dailyChecklist.submit',
     'reporteDiario.create',
   ];
 
@@ -124,6 +125,10 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
         'intervencion.create',
         // La foto de respaldo de cada tarea del checklist preventivo.
         'orden.toggleTarea',
+        // Las fotos de cada ítem del checklist diario (varias por ítem).
+        'dailyChecklist.submit',
+        // Las fotos nuevas al corregir un checklist rechazado.
+        'dailyChecklist.resubmit',
       ].sort(),
     );
   });

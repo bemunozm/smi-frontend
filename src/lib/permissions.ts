@@ -51,6 +51,10 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'umbral.create': [ADMIN],
   'maintenancePlan.save': [ADMIN, MANTENEDOR],
   'maintenanceRecord.set': [MANTENEDOR],
+  'dailyChecklist.submit': [MANTENEDOR],
+  'dailyChecklist.resubmit': [MANTENEDOR],
+  // Módulo 3: valida el supervisor, que es quien prueba el equipo en terreno.
+  'dailyChecklist.review': [SUPERVISOR],
   // Catálogos
   'branch.create': [ADMIN, SUPERVISOR],
   'branch.update': [ADMIN, SUPERVISOR],

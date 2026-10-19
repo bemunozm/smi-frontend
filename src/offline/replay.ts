@@ -17,6 +17,7 @@ import { purgeApiCacheFor } from './api-cache';
 import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache } from './cache-upserts';
 import { closeCrossTab, listenCrossTab, publishOutcome, requestRemoteSync, type SharedOutcome } from './cross-tab';
 import { ENDPOINTS, isEndpointKey } from './endpoints';
+import { injectFileKeys } from './inject-file-keys';
 import { useOtherAccountsOpCount, useOutboxOps } from './useOutboxOps';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
@@ -770,8 +771,7 @@ async function processHttpWrite(op: HttpWriteOp, allowExpiredRetry = true): Prom
       await db.outbox.put(current);
     }
 
-    const body = { ...current.body };
-    for (const file of current.files ?? []) body[file.field] = file.tmpKey;
+    const body = injectFileKeys(current.body, current.files ?? []);
     const headers: Record<string, string> = { 'X-Client-Time': new Date().toISOString() };
     // Los valores base pueden traer texto libre (observaciones con "—", comillas
     // tipográficas, emojis) y un header HTTP solo admite Latin-1: el servidor lo
