@@ -478,7 +478,7 @@ function HallazgosAbiertosKpiCard() {
         isOpen={abierto}
         onOpenChange={setAbierto}
         title="Hallazgos abiertos"
-        verTodoTo="/terreno/hallazgos"
+        verTodoTo="/hallazgos"
       >
         {lista.length === 0 ? (
           <p className="text-sm text-muted-foreground">No hay hallazgos abiertos.</p>
@@ -553,7 +553,7 @@ function HallazgosRecientesSection() {
           if (!open) setDetalle(null);
         }}
         title={detalle ? `Hallazgo · ${detalle.equipo}` : 'Hallazgo'}
-        verTodoTo="/terreno/hallazgos"
+        verTodoTo="/hallazgos"
       >
         {detalle ? <HallazgoDetalle hallazgo={detalle} /> : null}
       </KpiDetailModal>

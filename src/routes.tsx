@@ -29,6 +29,7 @@ import { TerrenoLayout } from './layout/TerrenoLayout';
 import { CombustibleView } from './views/CombustibleView';
 import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
+import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
 import { RegistroEquipoView } from './views/RegistroEquipoView';
 
@@ -103,6 +104,9 @@ export const router = createBrowserRouter([
               {
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [
+                  // Gestión de hallazgos del administrador (ver/corregir/eliminar);
+                  // Terreno conserva su propia vista en /terreno/hallazgos.
+                  { path: '/hallazgos', element: <HallazgosAdminView /> },
                   { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],

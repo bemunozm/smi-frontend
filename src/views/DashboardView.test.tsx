@@ -237,7 +237,7 @@ describe('DashboardView', () => {
       it('«Ver todo» navega a los hallazgos de terreno', () => {
         const dialog = abrir('Ver hallazgos abiertos');
         fireEvent.click(within(dialog).getByRole('button', { name: /Ver todo/ }));
-        expect(navigateMock).toHaveBeenCalledWith('/terreno/hallazgos');
+        expect(navigateMock).toHaveBeenCalledWith('/hallazgos');
       });
     });
   });
