@@ -601,31 +601,42 @@ function Fotos({
   return (
     <div className="flex flex-col gap-2">
       <Label requerido={requerida}>Fotos</Label>
-      <div className="flex flex-wrap gap-2">
-        {urls.map((url, i) => (
-          <div key={url} className="relative h-20 w-20 overflow-hidden rounded-xl border border-border">
-            <img alt={`Foto ${i + 1}`} className="h-full w-full object-cover" src={url} />
-            <button
-              aria-label={`Quitar foto ${i + 1}`}
-              className="absolute top-1 right-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full bg-black/60 text-white"
-              type="button"
-              onClick={() => onChange(fotos.filter((_, j) => j !== i))}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
-        {fotos.length < 10 && (
-          <button
-            className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] border-dashed border-[var(--line2,#c3c9d1)] text-[12px] font-semibold text-muted-foreground hover:border-foreground"
-            type="button"
-            onClick={() => input.current?.click()}
-          >
-            <Camera className="h-5 w-5" />
-            Agregar
-          </button>
-        )}
-      </div>
+      {/* Fotos a todo el ancho: una por fila en el teléfono, dos desde `sm`. */}
+      {urls.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {urls.map((url, i) => (
+            <div key={url} className="relative overflow-hidden rounded-2xl border border-border">
+              <img alt={`Foto ${i + 1}`} className="h-44 w-full object-cover" src={url} />
+              <button
+                aria-label={`Quitar foto ${i + 1}`}
+                className="absolute top-2 right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/75"
+                type="button"
+                onClick={() => onChange(fotos.filter((_, j) => j !== i))}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* El mismo recuadro que «Foto del hallazgo» y «Foto del surtidor». */}
+      {fotos.length < 10 && (
+        <button
+          className="flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-(--accent)/40 bg-(--accent-soft)/60 px-4 py-8 text-center transition hover:bg-(--accent-soft)"
+          type="button"
+          onClick={() => input.current?.click()}
+        >
+          <Camera className="h-6 w-6 text-(--accent)" aria-hidden />
+          <span className="text-[15px] font-semibold text-(--accent-soft-foreground)">
+            {fotos.length === 0 ? 'Agregar foto' : 'Agregar otra foto'}
+          </span>
+          <span className="text-[13px] text-(--muted)">
+            {requerida
+              ? 'Obligatoria: es la mantención de un ítem crítico. Puedes agregar varias.'
+              : 'Opcional. Puedes agregar varias, hasta 10.'}
+          </span>
+        </button>
+      )}
       <input
         ref={input}
         hidden
