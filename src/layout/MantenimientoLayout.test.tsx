@@ -15,6 +15,12 @@ vi.mock('../lib/auth-client', () => ({
 vi.mock('../components/terreno/SyncStatus', () => ({
   SyncStatus: () => <div data-testid="sync-status-stub" />,
 }));
+
+// Mismo criterio que `TerrenoLayout.test.tsx`: la campana tiene suite propia y
+// sus hooks usan react-query, que este archivo no monta.
+vi.mock('../components/notifications/NotificationBell', () => ({
+  NotificationBell: () => <div data-testid="notification-bell-stub" />,
+}));
 vi.mock('../lib/logout', () => ({ logout: vi.fn() }));
 // La pestaña Checklist muestra cuántos rechazados hay por corregir.
 let rechazados: unknown[] = [];
@@ -105,6 +111,18 @@ describe('MantenimientoLayout', () => {
     fireEvent.click(screen.getByLabelText('Menú'));
 
     expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
+  });
+
+  /**
+   * El home del MANTENEDOR es el taller, no el escritorio con Topbar: sin la
+   * campana acá, "hallazgo creado" o "checklist validado" no tenían ninguna
+   * superficie in-app para él.
+   */
+  it('el header muestra la campana de notificaciones', () => {
+    renderLayout('phone', ROLES.MANTENEDOR);
+
+    const header = screen.getByRole('banner');
+    expect(header.contains(screen.getByTestId('notification-bell-stub'))).toBe(true);
   });
 
   it('desde escritorio las secciones suben al header, con sus etiquetas largas', () => {
