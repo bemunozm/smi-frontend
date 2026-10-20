@@ -29,10 +29,10 @@ const NOTIFICACIONES: Notificacion[] = [
   {
     id: 'n3',
     userId: 'u1',
-    tipo: 'insumo.low-stock',
+    tipo: 'item.low-stock',
     titulo: 'Stock bajo de filtro de aceite',
     cuerpo: 'Quedan 2 unidades en bodega',
-    data: { insumoId: 'ins1' },
+    data: { itemId: 'ins1', branchId: 'b1' },
     leida: false,
     createdAt: '2026-08-02T10:00:00.000Z',
   },

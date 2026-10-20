@@ -30,8 +30,8 @@ const tabs: ShellTab[] = [
  * el shell, compartida con `MantenimientoLayout`.
  */
 export function TerrenoLayout() {
-  // El supervisor no tiene campana en Terreno: la pestaña dice cuántos
-  // checklists esperan su validación.
+  // La campana del shell trae todas las notificaciones; el badge de la
+  // pestaña es el vistazo rápido de cuántos checklists esperan validación.
   const { data: pendientes } = useChecklistsPorEstado(POR_VALIDAR);
   const conBadge = tabs.map((t) =>
     t.to === '/terreno/checklists' ? { ...t, badge: pendientes?.length ?? 0 } : t,
