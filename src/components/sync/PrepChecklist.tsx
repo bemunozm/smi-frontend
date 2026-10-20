@@ -20,10 +20,13 @@ const ETIQUETAS: Record<PrepKey, string> = {
   movimientos: 'Movimientos de inventario precargados',
   maintenance: 'Mantenimiento precargado',
   bitacora: 'Bitácora de las órdenes recientes precargada',
+  dailyChecklists: 'Checklists diarios precargados',
+  vencimientos: 'Calendario de vencimientos precargado',
   notificaciones: 'Notificaciones precargadas',
   shiftCards: 'Tarjetas propias precargadas',
   hallazgos: 'Hallazgos precargados',
   trabajosExtra: 'Trabajos extra precargados',
+  reporteDiario: 'Reportes diarios y sus catálogos precargados',
   horometro: 'Equipos en turno precargados',
   combustible: 'Cargas de combustible precargadas',
 };

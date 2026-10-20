@@ -4,20 +4,26 @@ import { IntervencionesAPI, ActividadesAPI, OrdenesAPI, UmbralesAPI } from '../a
 import { BranchAPI } from '../api/BranchAPI';
 import { CategoryAPI } from '../api/CategoryAPI';
 import { listCombustible } from '../api/CombustibleAPI';
+import { DailyChecklistAPI } from '../api/DailyChecklistAPI';
 import { EquipmentAPI } from '../api/EquipmentAPI';
 import { listHallazgos } from '../api/HallazgosAPI';
 import { listHorometro } from '../api/HorometroAPI';
 import { InventoryAPI } from '../api/InventoryAPI';
 import { NotificacionAPI } from '../api/NotificacionAPI';
 import { OperatorAPI } from '../api/OperatorAPI';
+import { listEmpresasExternas, listPlantas, listReportesDiarios } from '../api/ReporteDiarioAPI';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { listTrabajosExtra } from '../api/TrabajosExtraAPI';
+import { VencimientosAPI } from '../api/VencimientosAPI';
 import { BITACORA_ORDENES_PRECARGADAS, prepKeysFor, type PrepKey } from '../config/offline-prep';
 import { queryClient } from '../lib/query-client';
 import {
   ACTIVIDADES_KEY,
   BRANCHES_KEY,
   COMBUSTIBLE_KEY,
+  DAILY_CHECKLISTS_KEY,
+  EMPRESAS_EXTERNAS_KEY,
+  EQUIPMENT_DOCUMENTS_KEY,
   EQUIPMENT_KEY,
   HALLAZGOS_KEY,
   HOROMETRO_KEY,
@@ -27,10 +33,13 @@ import {
   NOTIFICACIONES_UNREAD_KEY,
   OPERATORS_KEY,
   ORDENES_KEY,
+  PLANTAS_KEY,
+  REPORTE_DIARIO_KEY,
   SHIFT_CARDS_MINE_KEY,
   TRABAJOS_EXTRA_KEY,
   UMBRALES_KEY,
 } from '../lib/query-keys';
+import { toDateOnly } from '../lib/turno';
 import { requestPersistentStorage } from '../offline/persist-storage';
 import type { Role } from '../types/roles';
 
@@ -116,9 +125,39 @@ const PRECARGAS: Readonly<Record<PrepKey, () => Promise<unknown>>> = {
       precargar(NOTIFICACIONES_KEY, NotificacionAPI.list),
       precargar(NOTIFICACIONES_UNREAD_KEY, NotificacionAPI.unreadCount),
     ]),
+  // Módulo 2 y 3: el catálogo de ítems (sin él el mantenedor no puede armar el
+  // formulario), los enviados de hoy y los estados que miran las pestañas de
+  // ambos shells (por validar → supervisor, rechazados → mantenedor).
+  dailyChecklists: () => {
+    const hoy = toDateOnly(new Date());
+    return Promise.all([
+      precargar([...DAILY_CHECKLISTS_KEY, 'items'], DailyChecklistAPI.items),
+      precargar([...DAILY_CHECKLISTS_KEY, 'list', hoy], () => DailyChecklistAPI.list({ date: hoy })),
+      precargar([...DAILY_CHECKLISTS_KEY, 'status', 'SUBMITTED'], () => DailyChecklistAPI.list({ status: ['SUBMITTED'] })),
+      precargar([...DAILY_CHECKLISTS_KEY, 'status', 'REJECTED'], () => DailyChecklistAPI.list({ status: ['REJECTED'] })),
+    ]);
+  },
+  // Módulo 4: el calendario completo, misma key que `useCalendarioVencimientos()`
+  // sin filtros (`VencimientosView` abre así).
+  vencimientos: () => precargar([...EQUIPMENT_DOCUMENTS_KEY, 'calendario', 'actual', 'todos'], () => VencimientosAPI.calendario()),
   shiftCards: () => precargar(SHIFT_CARDS_MINE_KEY, ShiftCardAPI.listMine),
   hallazgos: () => precargar(HALLAZGOS_KEY, listHallazgos),
   trabajosExtra: () => precargar(TRABAJOS_EXTRA_KEY, listTrabajosExtra),
+  // Los reportes de la última semana (la MISMA ventana con que abre
+  // `ReporteDiarioView`) y los catálogos de sus selectores. La ventana se calcula
+  // con la fecha local, igual que la vista; en un turno nocturno que cruza la
+  // medianoche la del contexto puede diferir en un día — el Service Worker igual
+  // guarda la respuesta por URL y la ventana de 7 días cubre ambas fechas.
+  reporteDiario: () => {
+    const ahora = new Date();
+    const desde = toDateOnly(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 7));
+    const hasta = toDateOnly(ahora);
+    return Promise.all([
+      precargar([...REPORTE_DIARIO_KEY, { desde, hasta }], () => listReportesDiarios({ desde, hasta })),
+      precargar(PLANTAS_KEY, listPlantas),
+      precargar(EMPRESAS_EXTERNAS_KEY, listEmpresasExternas),
+    ]);
+  },
   horometro: () => precargar(HOROMETRO_KEY, listHorometro),
   combustible: () => precargar(COMBUSTIBLE_KEY, listCombustible),
 };
