@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 import type { Hallazgo } from '../types/hallazgos';
 
@@ -24,6 +25,15 @@ vi.mock('../hooks/useEquipment', () => ({
 }));
 
 import { HallazgosAdminView } from './HallazgosAdminView';
+
+/** El detalle vive en `?id=` (destino del aviso del admin) → necesita Router. */
+function renderView(entrada = '/hallazgos') {
+  return render(
+    <MemoryRouter initialEntries={[entrada]}>
+      <HallazgosAdminView />
+    </MemoryRouter>,
+  );
+}
 
 const hallazgo = (over: Partial<Hallazgo> & Pick<Hallazgo, 'id'>): Hallazgo => ({
   equipoId: 'e1',
@@ -64,7 +74,7 @@ afterEach(() => {
 
 describe('HallazgosAdminView', () => {
   it('lista todos los hallazgos con equipo, chips y conteos por estado', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     expect(screen.getByTestId('hallazgo-fila-h1')).toBeTruthy();
     expect(screen.getByText('Fuga de aceite hidráulico')).toBeTruthy();
     expect(screen.getByText('Ruido anormal en motor')).toBeTruthy();
@@ -74,7 +84,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('filtra por estado y por texto (descripción o equipo)', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.change(screen.getByLabelText(/estado/i), { target: { value: 'CERRADO' } });
     expect(screen.queryByTestId('hallazgo-fila-h1')).toBeNull();
     expect(screen.getByTestId('hallazgo-fila-h3')).toBeTruthy();
@@ -86,7 +96,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('clic en una fila abre el detalle con la foto y las acciones del admin', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Hallazgo · PE-004')).toBeTruthy();
@@ -99,7 +109,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('eliminar pide confirmación y recién ahí llama al DELETE', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h2'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Eliminar' }));
 
@@ -112,7 +122,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('editar guarda SOLO los campos cambiados', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
@@ -135,12 +145,12 @@ describe('HallazgosAdminView', () => {
 
   it('muestra el error del listado', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
-    render(<HallazgosAdminView />);
+    renderView();
     expect(screen.getByText('Falló Terreno')).toBeTruthy();
   });
 
   it('la tabla y el detalle muestran quién registró cada hallazgo', () => {
-    render(<HallazgosAdminView />);
+    renderView();
 
     expect(within(screen.getByTestId('hallazgo-fila-h1')).getByText('Ana Soto')).toBeTruthy();
     expect(within(screen.getByTestId('hallazgo-fila-h2')).getByText('Pedro Pérez')).toBeTruthy();
@@ -150,7 +160,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('el detalle presenta fecha, hora, equipo y quién lo registró como filas de dato, con la descripción y la foto', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
 
     const dialog = screen.getByRole('dialog');
@@ -162,8 +172,15 @@ describe('HallazgosAdminView', () => {
     expect(within(dialog).getByRole('img', { name: 'Foto del hallazgo de PE-004' })).toBeTruthy();
   });
 
+  it('abre el detalle directo con ?id= (el destino de la notificación de hallazgo)', () => {
+    renderView('/hallazgos?id=h2');
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Ruido anormal en motor')).toBeTruthy();
+  });
+
   it('el detalle sin nombre de quien registró muestra raya, y sin foto lo dice', () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h3'));
 
     const dialog = screen.getByRole('dialog');
@@ -172,7 +189,7 @@ describe('HallazgosAdminView', () => {
   });
 
   it('«Nuevo hallazgo» registra con equipo, prioridad y descripción', async () => {
-    render(<HallazgosAdminView />);
+    renderView();
     fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
 
     const dialog = screen.getByRole('dialog');

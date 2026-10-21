@@ -5,7 +5,7 @@ import { ROLES, type Role } from '../../types/roles';
  * Destinos de GESTIÓN por rol: al administrador cada aviso lo lleva a la vista
  * donde ese registro se gestiona —no a la ficha del equipo—:
  *
- * - `hallazgo.created` → `/hallazgos` (corregir/eliminar, crear OT desde ahí).
+ * - `hallazgo.created` → `/hallazgos?id=…`, ESE hallazgo abierto en su detalle.
  * - `orden.completed` → `/mantenciones?id=…`, el detalle de la mantención.
  * - `item.low-stock` → `/inventario` (también para el supervisor, que puede
  *   revisar el stock desde el escritorio).
@@ -15,7 +15,10 @@ import { ROLES, type Role } from '../../types/roles';
  */
 export function rutaDeGestion(notificacion: Notificacion, role: Role | null): string | null {
   if (notificacion.tipo === NOTIF_TIPOS.HALLAZGO_CREATED && role === ROLES.ADMIN) {
-    return '/hallazgos';
+    const hallazgoId = notificacion.data?.hallazgoId;
+    return typeof hallazgoId === 'string' && hallazgoId.length > 0
+      ? `/hallazgos?id=${encodeURIComponent(hallazgoId)}`
+      : '/hallazgos';
   }
 
   if (notificacion.tipo === NOTIF_TIPOS.ORDEN_COMPLETED && role === ROLES.ADMIN) {

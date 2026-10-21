@@ -83,9 +83,18 @@ describe('NotificationItem — destinos de gestión por rol', () => {
     createdAt: '2026-10-21T10:00:00.000Z',
   });
 
-  it('ADMIN + hallazgo creado → su vista de gestión /hallazgos, no la ficha del equipo', () => {
+  it('ADMIN + hallazgo creado → ESE hallazgo abierto dentro de /hallazgos, no la ficha del equipo', () => {
     roleRef.value = 'ADMIN';
     render(<NotificationItem notificacion={notificacion('hallazgo.created', { hallazgoId: 'h1', equipoId: 'eq_1' })} />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/hallazgos?id=h1');
+  });
+
+  it('ADMIN + hallazgo creado sin hallazgoId en la metadata cae al listado /hallazgos', () => {
+    roleRef.value = 'ADMIN';
+    render(<NotificationItem notificacion={notificacion('hallazgo.created', { equipoId: 'eq_1' })} />);
 
     fireEvent.click(screen.getByRole('button'));
 

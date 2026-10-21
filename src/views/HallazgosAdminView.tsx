@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertDialog,
   Button,
@@ -418,9 +419,9 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
 export function HallazgosAdminView() {
   const { data: hallazgos, isPending, isError, error } = useHallazgosList();
   const eliminar = useEliminarHallazgo();
+  const [params, setParams] = useSearchParams();
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('TODOS');
-  const [detalle, setDetalle] = useState<Hallazgo | null>(null);
   const [editando, setEditando] = useState<Hallazgo | null>(null);
   const [eliminando, setEliminando] = useState<Hallazgo | null>(null);
   const [creando, setCreando] = useState(false);
@@ -439,6 +440,21 @@ export function HallazgosAdminView() {
 
   const porId = useMemo(() => new Map((hallazgos ?? []).map((h) => [h.id, h])), [hallazgos]);
   const cuenta = (estado: string) => (hallazgos ?? []).filter((h) => h.estado === estado).length;
+
+  // El detalle vive en `?id=`: la notificación «hallazgo creado» del admin
+  // llega acá con el id y el popup se abre solo (mismo patrón que /mantenciones).
+  const detalleId = params.get('id');
+  const detalle = detalleId ? (porId.get(detalleId) ?? null) : null;
+  const abrirDetalle = (id: string) => {
+    const siguientes = new URLSearchParams(params);
+    siguientes.set('id', id);
+    setParams(siguientes, { replace: true });
+  };
+  const cerrarDetalle = () => {
+    const siguientes = new URLSearchParams(params);
+    siguientes.delete('id');
+    setParams(siguientes, { replace: true });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -529,7 +545,7 @@ export function HallazgosAdminView() {
                         className="cursor-pointer"
                         data-testid={`hallazgo-fila-${h.id}`}
                         key={h.id}
-                        onAction={() => setDetalle(porId.get(h.id) ?? h)}
+                        onAction={() => abrirDetalle(h.id)}
                       >
                         {/* `whitespace-nowrap` en las columnas cortas: sin él, la columna
                            ancha (Descripción, `w-full`) las aprieta y la fecha y los
@@ -565,14 +581,14 @@ export function HallazgosAdminView() {
 
       <DetalleHallazgoModal
         hallazgo={detalle}
-        onClose={() => setDetalle(null)}
+        onClose={cerrarDetalle}
         onEditar={() => {
           if (detalle) setEditando(detalle);
-          setDetalle(null);
+          cerrarDetalle();
         }}
         onEliminar={() => {
           if (detalle) setEliminando(detalle);
-          setDetalle(null);
+          cerrarDetalle();
         }}
       />
 
