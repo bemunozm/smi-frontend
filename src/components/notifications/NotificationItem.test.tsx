@@ -5,6 +5,13 @@ const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('../../hooks/useNotificaciones', () => ({ useMarkRead: () => ({ mutate: vi.fn() }) }));
 
+// El destino de varios avisos depende del rol (el admin va a SUS vistas de
+// gestión; terreno/taller a la ficha del equipo) — se controla desde acá.
+const { roleRef } = vi.hoisted(() => ({ roleRef: { value: null as string | null } }));
+vi.mock('../../hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({ user: { id: 'u1', name: 'Admin SMI' }, role: roleRef.value }),
+}));
+
 import { NotificationItem } from './NotificationItem';
 import { rutaDeRegistroEditado } from './record-edited-route';
 import type { Notificacion } from '../../types/notificacion';
@@ -12,6 +19,7 @@ import type { Notificacion } from '../../types/notificacion';
 afterEach(() => {
   cleanup();
   navigateMock.mockReset();
+  roleRef.value = null;
 });
 
 function editada(data: Notificacion['data']): Notificacion {
@@ -60,5 +68,56 @@ describe('NotificationItem — registro corregido', () => {
 describe('rutaDeRegistroEditado', () => {
   it('null sin data', () => {
     expect(rutaDeRegistroEditado(null)).toBeNull();
+  });
+});
+
+describe('NotificationItem — destinos de gestión por rol', () => {
+  const notificacion = (tipo: string, data: Notificacion['data']): Notificacion => ({
+    id: 'n1',
+    userId: 'u1',
+    tipo,
+    titulo: 'Aviso',
+    cuerpo: 'Detalle del aviso',
+    data,
+    leida: false,
+    createdAt: '2026-10-21T10:00:00.000Z',
+  });
+
+  it('ADMIN + hallazgo creado → su vista de gestión /hallazgos, no la ficha del equipo', () => {
+    roleRef.value = 'ADMIN';
+    render(<NotificationItem notificacion={notificacion('hallazgo.created', { hallazgoId: 'h1', equipoId: 'eq_1' })} />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/hallazgos');
+  });
+
+  it('MANTENEDOR + hallazgo creado conserva el destino actual: la ficha del equipo', () => {
+    roleRef.value = 'MANTENEDOR';
+    render(<NotificationItem notificacion={notificacion('hallazgo.created', { hallazgoId: 'h1', equipoId: 'eq_1' })} />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/equipos/eq_1/ficha');
+  });
+
+  it('ADMIN + orden completada → el detalle en /mantenciones', () => {
+    roleRef.value = 'ADMIN';
+    render(<NotificationItem notificacion={notificacion('orden.completed', { ordenId: 'ot1', equipoId: 'eq_1' })} />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/mantenciones?id=ot1');
+  });
+
+  it('ADMIN + stock bajo → /inventario', () => {
+    roleRef.value = 'ADMIN';
+    render(
+      <NotificationItem notificacion={notificacion('item.low-stock', { itemId: 'i1', branchId: 'b1' })} />,
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/inventario');
   });
 });

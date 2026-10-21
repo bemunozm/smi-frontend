@@ -189,6 +189,9 @@ export const IntervencionSchema = z.object({
   /** URL firmada de la foto del cierre (el backend nunca expone la key). */
   fotoUrl: z.string().nullable(),
   soloLectura: z.boolean(),
+  /** Nombre de quien la realizó — null en filas viejas o cuenta borrada;
+   * opcional para tolerar un backend que aún no manda el campo. */
+  realizadaPor: z.string().nullable().optional(),
   insumos: z.array(InsumoUsadoSchema),
   fecha: z.string(),
 });

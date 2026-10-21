@@ -43,6 +43,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Trabajos extra', to: '/trabajos-extra', roles: [ROLES.ADMIN] },
   // Reportes diarios de los supervisores — vista del administrador, no la de Terreno.
   { label: 'Reportes diarios', to: '/reportes-diarios', roles: [ROLES.ADMIN] },
+  // Registro de mantenciones completadas del taller — vista del administrador.
+  { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN] },
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR] },
   // Universal: todos los roles autenticados ven y usan notificaciones.
   { label: 'Notificaciones', to: '/notificaciones', roles: ALL_ROLES },

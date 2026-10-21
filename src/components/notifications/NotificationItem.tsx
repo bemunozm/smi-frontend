@@ -8,6 +8,7 @@ import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { relativeTime } from '../../lib/relative-time';
 import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
 import { rutaDeChecklist } from './checklist-route';
+import { rutaDeGestion } from './gestion-route';
 import { rutaDeRegistroEditado } from './record-edited-route';
 import { rutaDeVencimiento } from './vencimiento-route';
 
@@ -78,6 +79,15 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
     if (notificacion.tipo === NOTIF_TIPOS.RECORD_EDITED) {
       const ruta = rutaDeRegistroEditado(notificacion.data);
       if (ruta) navigate(ruta);
+      onAfterClick?.();
+      return;
+    }
+
+    // El administrador va a su vista de gestión (hallazgos, mantenciones,
+    // inventario); los demás roles caen al default de abajo (la ficha).
+    const rutaGestion = rutaDeGestion(notificacion, role);
+    if (rutaGestion) {
+      navigate(rutaGestion);
       onAfterClick?.();
       return;
     }

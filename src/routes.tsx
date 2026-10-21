@@ -31,6 +31,7 @@ import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
+import { MantencionesAdminView } from './views/MantencionesAdminView';
 import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { VencimientosView } from './views/VencimientosView';
@@ -128,6 +129,10 @@ export const router = createBrowserRouter([
                   // Reportes diarios de los supervisores (solo lectura, con
                   // filtros); Terreno conserva /terreno/reporte-diario.
                   { path: '/reportes-diarios', element: <ReportesDiariosAdminView /> },
+                  // Registro de mantenciones completadas del taller (solo
+                  // lectura, con filtros y detalle); destino del aviso
+                  // «Orden de trabajo completada» del administrador.
+                  { path: '/mantenciones', element: <MantencionesAdminView /> },
                   { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],
