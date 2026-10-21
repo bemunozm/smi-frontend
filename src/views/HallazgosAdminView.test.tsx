@@ -3,10 +3,11 @@ import { render, cleanup, screen, fireEvent, within } from '@testing-library/rea
 
 import type { Hallazgo } from '../types/hallazgos';
 
-const { listHook, actualizarMock, eliminarMock, actualizarPending, eliminarPending } = vi.hoisted(() => ({
+const { listHook, actualizarMock, eliminarMock, crearMock, actualizarPending, eliminarPending } = vi.hoisted(() => ({
   listHook: vi.fn(),
   actualizarMock: vi.fn(),
   eliminarMock: vi.fn(),
+  crearMock: vi.fn(),
   actualizarPending: { value: false },
   eliminarPending: { value: false },
 }));
@@ -15,6 +16,7 @@ vi.mock('../hooks/useHallazgos', () => ({
   useHallazgosList: () => listHook(),
   useActualizarHallazgo: () => ({ mutate: actualizarMock, isPending: actualizarPending.value }),
   useEliminarHallazgo: () => ({ mutate: eliminarMock, isPending: eliminarPending.value }),
+  useCrearHallazgo: () => ({ mutate: crearMock, isPending: false }),
 }));
 
 vi.mock('../hooks/useEquipment', () => ({
@@ -35,7 +37,7 @@ const hallazgo = (over: Partial<Hallazgo> & Pick<Hallazgo, 'id'>): Hallazgo => (
 });
 
 const LISTA: Hallazgo[] = [
-  hallazgo({ id: 'h1', fotoUrl: 'https://signed/h1.jpg' }),
+  hallazgo({ id: 'h1', fotoUrl: 'https://signed/h1.jpg', registradoPor: 'Ana Soto' }),
   hallazgo({
     id: 'h2',
     equipoId: 'e2',
@@ -43,8 +45,10 @@ const LISTA: Hallazgo[] = [
     descripcion: 'Ruido anormal en motor',
     prioridad: 'MEDIA',
     estado: 'EN_PROCESO',
+    registradoPor: 'Pedro Pérez',
   }),
-  hallazgo({ id: 'h3', descripcion: 'Frenos reparados', estado: 'CERRADO' }),
+  // Sin `registradoPor`: registro legacy o cuenta borrada — la fila muestra raya.
+  hallazgo({ id: 'h3', descripcion: 'Frenos reparados', estado: 'CERRADO', registradoPor: null }),
 ];
 
 const ok = (data: Hallazgo[]) => ({ data, isPending: false, isError: false, error: null });
@@ -133,5 +137,37 @@ describe('HallazgosAdminView', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
     render(<HallazgosAdminView />);
     expect(screen.getByText('Falló Terreno')).toBeTruthy();
+  });
+
+  it('la tabla y el detalle muestran quién registró cada hallazgo', () => {
+    render(<HallazgosAdminView />);
+
+    expect(within(screen.getByTestId('hallazgo-fila-h1')).getByText('Ana Soto')).toBeTruthy();
+    expect(within(screen.getByTestId('hallazgo-fila-h2')).getByText('Pedro Pérez')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
+    expect(within(screen.getByRole('dialog')).getByText(/Ana Soto/)).toBeTruthy();
+  });
+
+  it('«Nuevo hallazgo» registra con equipo, prioridad y descripción', async () => {
+    render(<HallazgosAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
+
+    const dialog = screen.getByRole('dialog');
+    const registrar = within(dialog).getByRole('button', { name: 'Registrar hallazgo' });
+    // Sin equipo ni descripción todavía no hay nada que registrar.
+    expect(registrar.hasAttribute('disabled') || registrar.getAttribute('aria-disabled') === 'true').toBe(true);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), {
+      target: { value: 'Neumático delantero cortado' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar hallazgo' }));
+
+    expect(crearMock).toHaveBeenCalledWith(
+      { equipoId: 'e2', descripcion: 'Neumático delantero cortado', prioridad: 'MEDIA' },
+      expect.anything(),
+    );
   });
 });

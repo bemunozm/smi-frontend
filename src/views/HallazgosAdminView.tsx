@@ -16,7 +16,7 @@ import {
 } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
-import { useActualizarHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
+import { useActualizarHallazgo, useCrearHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
 import {
   criticidadChipColor,
   hallazgoEstadoChipColor,
@@ -101,6 +101,9 @@ function DetalleHallazgoModal({
                   <ChipsHallazgo hallazgo={hallazgo} />
                   <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
                 </div>
+                {hallazgo.registradoPor ? (
+                  <p className="text-xs text-muted-foreground">Registrado por {hallazgo.registradoPor}</p>
+                ) : null}
                 <p className="text-base text-foreground">{hallazgo.descripcion}</p>
                 {hallazgo.fotoUrl ? (
                   <a href={hallazgo.fotoUrl} rel="noreferrer" target="_blank">
@@ -121,6 +124,108 @@ function DetalleHallazgoModal({
               Eliminar
             </Button>
             <Button onPress={onEditar}>Editar</Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+/**
+ * Alta directa del administrador: equipo, prioridad y descripción — la foto no
+ * va acá (se adjunta desde Terreno, donde se saca). El POST es online, con id
+ * idempotente del cliente (`useCrearHallazgo`); el hallazgo nace ABIERTO y
+ * dispara el mismo aviso al taller que uno reportado en terreno.
+ */
+function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
+  const { data: equipos } = useEquipment();
+  const crear = useCrearHallazgo();
+  const [equipoId, setEquipoId] = useState('');
+  const [prioridad, setPrioridad] = useState<string>('MEDIA');
+  const [descripcion, setDescripcion] = useState('');
+
+  const valido = equipoId.length > 0 && descripcion.trim().length >= 3;
+
+  const registrar = () => {
+    crear.mutate(
+      { equipoId, descripcion: descripcion.trim(), prioridad: prioridad as (typeof PRIORIDADES)[number] },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Nuevo hallazgo
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select fullWidth placeholder="Elegir equipo" value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
+                  <Label>Equipo</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(equipos ?? []).map((equipo) => (
+                        <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
+                          {equipo.internalCode}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                <Select fullWidth value={prioridad} onChange={(value) => value && setPrioridad(String(value))}>
+                  <Label>Prioridad</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {PRIORIDADES.map((opcion) => (
+                        <ListBox.Item id={opcion} key={opcion} textValue={PRIORIDAD_LABEL[opcion]}>
+                          {PRIORIDAD_LABEL[opcion]}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </div>
+
+              <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
+                <Label>Descripción</Label>
+                <TextArea placeholder="Qué se encontró y dónde…" rows={3} />
+              </TextField>
+
+              <p className="text-xs text-muted-foreground">
+                La foto del hallazgo se adjunta desde Terreno, al momento de reportarlo en la máquina.
+              </p>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={onClose} variant="tertiary">
+              Cancelar
+            </Button>
+            <Button isDisabled={!valido} isPending={crear.isPending} onPress={registrar}>
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar hallazgo')}
+            </Button>
           </Modal.Footer>
         </Modal.Dialog>
       </Modal.Container>
@@ -271,6 +376,7 @@ export function HallazgosAdminView() {
   const [detalle, setDetalle] = useState<Hallazgo | null>(null);
   const [editando, setEditando] = useState<Hallazgo | null>(null);
   const [eliminando, setEliminando] = useState<Hallazgo | null>(null);
+  const [creando, setCreando] = useState(false);
 
   const lista = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
@@ -305,6 +411,7 @@ export function HallazgosAdminView() {
               {cuenta(estado).toLocaleString('es-CL')} {hallazgoEstadoLabel(estado).toLowerCase()}
             </Chip>
           ))}
+          <Button onPress={() => setCreando(true)}>Nuevo hallazgo</Button>
         </div>
       </div>
 
@@ -366,6 +473,7 @@ export function HallazgosAdminView() {
                     <Table.Column className="w-full">Descripción</Table.Column>
                     <Table.Column>Prioridad</Table.Column>
                     <Table.Column>Estado</Table.Column>
+                    <Table.Column>Registrado por</Table.Column>
                     <Table.Column>Foto</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -396,6 +504,7 @@ export function HallazgosAdminView() {
                             {hallazgoEstadoLabel(h.estado as HallazgoEstado)}
                           </Chip>
                         </Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{h.registradoPor ?? '—'}</Table.Cell>
                         <Table.Cell className="text-sm text-muted-foreground">{h.fotoUrl ? 'Sí' : '—'}</Table.Cell>
                       </Table.Row>
                     ))}
@@ -421,6 +530,8 @@ export function HallazgosAdminView() {
       />
 
       {editando ? <EditarHallazgoModal hallazgo={editando} onClose={() => setEditando(null)} /> : null}
+
+      {creando ? <CrearHallazgoModal onClose={() => setCreando(false)} /> : null}
 
       <AlertDialog.Backdrop
         isOpen={eliminando !== null}

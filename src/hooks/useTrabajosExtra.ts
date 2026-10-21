@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
+import { createTrabajoExtra, listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { useQueuedMutation } from './useQueuedMutation';
 import { DomainError } from '../lib/api-error';
@@ -45,6 +45,27 @@ function mensajeErrorTrabajoExtra(
     return 'El operador elegido ya no existe en el catálogo. Actualizá la página e intentá de nuevo.';
   }
   return mensajeErrorOperacion(error, fallback);
+}
+
+/**
+ * Creación directa para la vista de trabajos extra del administrador
+ * (escritorio, online): POST inmediato + invalidación del listado — sin
+ * outbox, a diferencia de `useRegistrarTrabajoExtra` (Terreno). El `id` lo
+ * genera el cliente igual: un reintento del POST no duplica el registro.
+ */
+export function useCrearTrabajoExtra() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (values: TrabajoExtraForm) =>
+      createTrabajoExtra({ ...values, id: generateUuid(), capturedAt: new Date().toISOString() }),
+    onSuccess: () => {
+      toast.success('Trabajo extraordinario registrado');
+      void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorTrabajoExtra(error));
+    },
+  });
 }
 
 export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {

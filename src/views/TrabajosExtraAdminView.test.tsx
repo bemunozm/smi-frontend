@@ -3,10 +3,19 @@ import { render, cleanup, screen, fireEvent, within } from '@testing-library/rea
 
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
-const { listHook } = vi.hoisted(() => ({ listHook: vi.fn() }));
+const { listHook, crearMock } = vi.hoisted(() => ({ listHook: vi.fn(), crearMock: vi.fn() }));
 
 vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => listHook(),
+  useCrearTrabajoExtra: () => ({ mutate: crearMock, isPending: false }),
+}));
+
+vi.mock('../hooks/useEquipment', () => ({
+  useEquipment: () => ({ data: [{ id: 'e1', internalCode: 'CG-002' }, { id: 'e2', internalCode: 'EX-001' }] }),
+}));
+
+vi.mock('../hooks/useOperators', () => ({
+  useOperators: () => ({ data: [{ id: 'op_1', name: 'Juan Rojas', isActive: true }] }),
 }));
 
 import { TrabajosExtraAdminView } from './TrabajosExtraAdminView';
@@ -30,7 +39,7 @@ const trabajo = (over: Partial<TrabajoExtraordinario> & Pick<TrabajoExtraordinar
 });
 
 const LISTA: TrabajoExtraordinario[] = [
-  trabajo({ id: 't1' }),
+  trabajo({ id: 't1', registradoPor: 'Ana Soto' }),
   trabajo({
     id: 't2',
     equipoId: 'e2',
@@ -41,8 +50,9 @@ const LISTA: TrabajoExtraordinario[] = [
     actividades: ['OTRO'],
     otraActividad: 'Rescate de camión',
     observaciones: 'Con apoyo del cargador',
+    registradoPor: 'Pedro Pérez',
   }),
-  trabajo({ id: 't3', totalHoras: 4, fecha: '2026-10-10T09:00:00.000Z' }),
+  trabajo({ id: 't3', totalHoras: 4, fecha: '2026-10-10T09:00:00.000Z', registradoPor: null }),
 ];
 
 const ok = (data: TrabajoExtraordinario[]) => ({ data, isPending: false, isError: false, error: null });
@@ -115,5 +125,45 @@ describe('TrabajosExtraAdminView', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
     render(<TrabajosExtraAdminView />);
     expect(screen.getByText('Falló Terreno')).toBeTruthy();
+  });
+
+  it('la tabla y el detalle muestran quién registró cada trabajo', () => {
+    render(<TrabajosExtraAdminView />);
+
+    expect(within(screen.getByTestId('trabajo-fila-t1')).getByText('Ana Soto')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
+    expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
+  });
+
+  it('«Nuevo trabajo extra» registra con operador del catálogo, horómetros y actividades', async () => {
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo trabajo extra' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Operador/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Juan Rojas' }));
+    fireEvent.change(within(dialog).getByLabelText('Faena'), { target: { value: 'Rajo Norte' } });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro inicial'), { target: { value: '1200' } });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Regulación y carga' }));
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
+
+    expect(crearMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        equipoId: 'e2',
+        operatorId: 'op_1',
+        faena: 'Rajo Norte',
+        turno: 'DIURNO',
+        horometroInicial: 1200,
+        horometroFinal: 1212,
+        actividades: ['REGULACION_CARGA'],
+        descripcion: 'Carga de material',
+      }),
+      expect.anything(),
+    );
   });
 });
