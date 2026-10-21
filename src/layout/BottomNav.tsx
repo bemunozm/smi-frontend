@@ -36,15 +36,22 @@ const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: Clipboard
  *   `/` es solo ADMIN;
  * - ADMIN mantiene el set original.
  *
- * Este mapa decide ORDEN + qué mostrar por rol; el gate real de acceso sigue
- * viviendo en `routes.tsx`/`NAV_ITEMS` — por eso más abajo se sigue
- * filtrando contra `allowed` (`NAV_ITEMS`), no alcanza con este mapa solo.
+ * Este mapa decide ORDEN + qué mostrar por rol; el gate real de acceso vive
+ * en `routes.tsx` — las pantallas del menú se siguen filtrando contra
+ * `NAV_ITEMS` (`allowed`), pero los shells de faena (Terreno/Mantención) ya
+ * NO están en el menú (pedido del administrador), así que su gate por rol es
+ * este mismo mapa, que espeja los `allowedRoles` de sus rutas. Sin esa
+ * excepción, sacar los shells del menú dejaría a SUPERVISOR/MANTENEDOR sin
+ * botón de vuelta a su módulo desde Equipos/Inventario en el teléfono.
  */
 const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.SUPERVISOR]: [TERRENO, EQUIPOS, INVENTARIO],
   [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
   [ROLES.MANTENEDOR]: [MANTENCION, EQUIPOS, INVENTARIO],
 };
+
+/** Destinos que viven fuera del menú: se muestran sin pasar por `allowed`. */
+const SHELLS = new Set([TERRENO.to, MANTENCION.to]);
 
 /**
  * Navegación inferior para teléfono y tablet — el patrón que dibuja el diseño
@@ -74,7 +81,7 @@ export function BottomNav({ role }: { role: Role | null }) {
       : [],
   );
   const primary = role ? PRIMARY_BY_ROLE[role] : [];
-  const visible = primary.filter((item) => allowed.has(item.to));
+  const visible = primary.filter((item) => SHELLS.has(item.to) || allowed.has(item.to));
 
   if (visible.length === 0) return null;
 
