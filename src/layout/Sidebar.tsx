@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 
 import { useUiStore } from '../store/ui';
-import { NAV_ITEMS } from '../config/nav-items';
+import { NAV_ITEMS, NAV_SECCIONES } from '../config/nav-items';
 import type { Role } from '../types/roles';
 
 export interface SidebarProps {
@@ -48,24 +48,46 @@ export function Sidebar({ role }: SidebarProps) {
           </div>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-          {visibleItems.map((item) => (
-            <NavLink
-              className={({ isActive }) =>
-                `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-accent-soft text-accent-soft-foreground'
-                    : 'text-(--label-color) hover:bg-default-hover hover:text-foreground'
-                }`
-              }
-              end={item.to === '/'}
-              key={item.to}
-              onClick={() => setSidebarOpen(false)}
-              to={item.to}
-            >
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3">
+          {/* Agrupado por sección; una sección sin items visibles para el rol
+              no pinta su título (p. ej. SUPERVISOR no tiene «Reportes»). Cada
+              sección siguiente abre con su divisor: el título solo no bastaba
+              para distinguir dónde termina un grupo y empieza el otro. */}
+          {NAV_SECCIONES.filter((seccion) =>
+            visibleItems.some((item) => item.seccion === seccion),
+          ).map((seccion, indice) => {
+            const items = visibleItems.filter((item) => item.seccion === seccion);
+            return (
+              <div
+                className={`flex flex-col gap-1 ${indice > 0 ? 'border-t border-border pt-4' : ''}`}
+                key={seccion}
+              >
+                <span
+                  className="px-3 pb-1 text-[10.5px] font-bold tracking-[0.14em] text-(--eyebrow-color) uppercase"
+                  data-testid={`seccion-${seccion}`}
+                >
+                  {seccion}
+                </span>
+                {items.map((item) => (
+                  <NavLink
+                    className={({ isActive }) =>
+                      `rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-accent-soft text-accent-soft-foreground'
+                          : 'text-(--label-color) hover:bg-default-hover hover:text-foreground'
+                      }`
+                    }
+                    end={item.to === '/'}
+                    key={item.to}
+                    onClick={() => setSidebarOpen(false)}
+                    to={item.to}
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
       </aside>
     </>
