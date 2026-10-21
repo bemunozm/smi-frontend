@@ -48,6 +48,29 @@ function formatFecha(iso: string): string {
   }).format(date);
 }
 
+/** Solo el día, para la fila «Fecha» del detalle (la hora va en su propia fila). */
+function formatSoloFecha(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
+}
+
+function formatHora(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+/** Fila etiqueta/valor del detalle — mismo patrón que el popup de trabajos extra. */
+function Dato({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3.5 border-t border-separator py-2.5">
+      <span className="shrink-0 text-[11px] font-bold tracking-wider text-(--label-color) uppercase">{label}</span>
+      <span className="text-right text-sm text-foreground">{value}</span>
+    </div>
+  );
+}
+
 /** Chips de prioridad/estado — mismos mapeos del dashboard; el dominio de
  * Terreno tipa estos campos como `string`, se castean acá igual que en
  * `config/dashboard-aggregations.ts`. */
@@ -92,30 +115,54 @@ function DetalleHallazgoModal({
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               {`Hallazgo · ${hallazgo?.equipo?.internalCode ?? '—'}`}
             </Modal.Heading>
+            {hallazgo ? (
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                <ChipsHallazgo hallazgo={hallazgo} />
+              </div>
+            ) : null}
           </Modal.Header>
           <Modal.Body>
             {hallazgo ? (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm text-foreground">{hallazgo.equipo?.internalCode ?? '—'}</span>
-                  <ChipsHallazgo hallazgo={hallazgo} />
-                  <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
+              <div className="flex flex-col gap-4">
+                {/* Mismo patrón de filas de dato que el detalle de trabajos extra:
+                   fecha y hora separadas (lo que se lee primero al revisar un
+                   reporte) y quién lo registró, para pedir contexto directo. */}
+                <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
+                  <Dato label="Fecha" value={formatSoloFecha(hallazgo.fecha)} />
+                  <Dato label="Hora" value={formatHora(hallazgo.fecha)} />
+                  <Dato label="Equipo" value={hallazgo.equipo?.internalCode ?? '—'} />
+                  <Dato label="Registrado por" value={hallazgo.registradoPor ?? '—'} />
                 </div>
-                {hallazgo.registradoPor ? (
-                  <p className="text-xs text-muted-foreground">Registrado por {hallazgo.registradoPor}</p>
-                ) : null}
-                <p className="text-base text-foreground">{hallazgo.descripcion}</p>
-                {hallazgo.fotoUrl ? (
-                  <a href={hallazgo.fotoUrl} rel="noreferrer" target="_blank">
-                    <img
-                      alt={`Foto del hallazgo de ${hallazgo.equipo?.internalCode ?? 'equipo'}`}
-                      className="max-h-72 w-fit rounded-2xl border border-border object-cover"
-                      src={hallazgo.fotoUrl}
-                    />
-                  </a>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Sin foto adjunta.</p>
-                )}
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
+                    Descripción
+                  </span>
+                  <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">Foto</span>
+                  {hallazgo.fotoUrl ? (
+                    <a
+                      className="group relative block overflow-hidden rounded-2xl border border-border"
+                      href={hallazgo.fotoUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <img
+                        alt={`Foto del hallazgo de ${hallazgo.equipo?.internalCode ?? 'equipo'}`}
+                        className="max-h-80 w-full bg-surface-secondary object-contain"
+                        src={hallazgo.fotoUrl}
+                      />
+                      <span className="absolute right-2 bottom-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Abrir en tamaño completo
+                      </span>
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sin foto adjunta.</p>
+                  )}
+                </div>
               </div>
             ) : null}
           </Modal.Body>

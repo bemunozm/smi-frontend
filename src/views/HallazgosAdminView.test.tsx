@@ -149,6 +149,28 @@ describe('HallazgosAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText(/Ana Soto/)).toBeTruthy();
   });
 
+  it('el detalle presenta fecha, hora, equipo y quién lo registró como filas de dato, con la descripción y la foto', () => {
+    render(<HallazgosAdminView />);
+    fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
+
+    const dialog = screen.getByRole('dialog');
+    for (const label of ['Fecha', 'Hora', 'Equipo', 'Registrado por', 'Descripción', 'Foto']) {
+      expect(within(dialog).getByText(label)).toBeTruthy();
+    }
+    expect(within(dialog).getByText('Ana Soto')).toBeTruthy();
+    expect(within(dialog).getByText('Fuga de aceite hidráulico')).toBeTruthy();
+    expect(within(dialog).getByRole('img', { name: 'Foto del hallazgo de PE-004' })).toBeTruthy();
+  });
+
+  it('el detalle sin nombre de quien registró muestra raya, y sin foto lo dice', () => {
+    render(<HallazgosAdminView />);
+    fireEvent.click(screen.getByTestId('hallazgo-fila-h3'));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('—')).toBeTruthy();
+    expect(within(dialog).getByText('Sin foto adjunta.')).toBeTruthy();
+  });
+
   it('«Nuevo hallazgo» registra con equipo, prioridad y descripción', async () => {
     render(<HallazgosAdminView />);
     fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
