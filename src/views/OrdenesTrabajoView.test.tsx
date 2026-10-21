@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
@@ -224,8 +224,17 @@ vi.mock('../hooks/useIntervenciones', () => ({
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 
+// Escritorio por defecto: las tres columnas a la vista. En tablet (`false`)
+// se ve una columna a la vez, con el selector.
+let escritorio = true;
+vi.mock('../hooks/useMediaQuery', async (original) => ({
+  ...(await original<typeof import('../hooks/useMediaQuery')>()),
+  useMediaQuery: () => escritorio,
+}));
+
 afterEach(() => {
   cleanup();
+  escritorio = true;
   allowed = CAN_MANTENEDOR;
   marcaDeMock = () => null;
   hallazgosResult = { data: HALLAZGOS, isPending: false, isError: false };
@@ -240,14 +249,33 @@ function renderView() {
 }
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
-  it('en tablet las TRES columnas siguen en pantalla (grid desde md)', () => {
+  it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
     renderView();
     const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;
-    expect(board?.className).toContain('md:grid-cols-3');
-    // Y los KPI son el bloque `Cifras` del kit de Terreno: 4 celdas comparables.
+    expect(board?.className).toContain('lg:grid-cols-3');
+    expect(screen.getByRole('region', { name: 'Operaciones en proceso' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Columna del tablero' })).toBeNull();
+    // El resumen: 4 cifras comparables.
     const kpis = screen.getByText('Hallazgos pendientes').closest('dl');
-    expect(kpis).toBeTruthy();
-    expect(kpis?.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+    expect(kpis?.children).toHaveLength(4);
+  });
+
+  it('en tablet se ve UNA columna a todo el ancho y se cambia con el selector', () => {
+    escritorio = false;
+    renderView();
+
+    expect(screen.getByRole('region', { name: 'Órdenes' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Operaciones en proceso' })).toBeNull();
+
+    const selector = screen.getByRole('group', { name: 'Columna del tablero' });
+    fireEvent.click(within(selector).getByRole('button', { name: /En proceso/ }));
+
+    expect(screen.queryByRole('region', { name: 'Órdenes' })).toBeNull();
+    expect(
+      within(screen.getByRole('region', { name: 'Operaciones en proceso' })).getByText(
+        'Cambio de aceite motor y filtro',
+      ),
+    ).toBeTruthy();
   });
 
   it('reparte las órdenes en las tres columnas del tablero', () => {

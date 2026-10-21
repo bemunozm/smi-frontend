@@ -11,7 +11,10 @@ export const NOTIF_TIPOS = {
   HALLAZGO_CREATED: 'hallazgo.created',
   ORDEN_ASSIGNED: 'orden.assigned',
   ORDEN_COMPLETED: 'orden.completed',
-  INSUMO_LOW_STOCK: 'insumo.low-stock',
+  /** Stock de una bodega cruzó su mínimo — mismo literal que
+   * `DOMAIN_EVENTS.ITEM_LOW_STOCK` del backend (antes decía `insumo.low-stock`
+   * y el chip caía al fallback genérico). */
+  ITEM_LOW_STOCK: 'item.low-stock',
   /** Reporte de salida de turno (`POST /api/shift-reports`) —
    * `data: { reportId, shiftId }`. */
   SHIFT_EXIT_REPORT: 'shift.exit-report',
@@ -24,10 +27,16 @@ export const NOTIF_TIPOS = {
   /** El supervisor lo aceptó o rechazó (al mantenedor y al administrador) —
    * `data: { checklistId, equipmentId, decision }`. */
   CHECKLIST_REVIEWED: 'checklist.reviewed',
+  /** Un documento de equipo entró en su plazo de aviso o venció (Módulo 4) —
+   * `data: { documentId, equipmentId, kind }`. */
+  DOCUMENT_EXPIRING: 'document.expiring',
+  /** A un liviano le falta poco para la mantención de cada 10.000 km (Módulo 4)
+   * — `data: { equipmentId, ordenId }`. */
+  LIGHT_SERVICE_DUE: 'light-service.due',
 } as const;
 
 /** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */
-export const RECORD_EDITED_ENTITIES = ['shift_card', 'hallazgo', 'trabajo_extra'] as const;
+export const RECORD_EDITED_ENTITIES = ['shift_card', 'hallazgo', 'trabajo_extra', 'reporte_diario'] as const;
 export type RecordEditedEntity = (typeof RECORD_EDITED_ENTITIES)[number];
 
 export type NotificacionTipo = (typeof NOTIF_TIPOS)[keyof typeof NOTIF_TIPOS];

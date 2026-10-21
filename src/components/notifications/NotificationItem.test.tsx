@@ -39,6 +39,7 @@ describe('NotificationItem — registro corregido', () => {
     ['shift_card', '/terreno/registro'],
     ['hallazgo', '/terreno/hallazgos'],
     ['trabajo_extra', '/terreno/trabajos-extra'],
+    ['reporte_diario', '/reportes-diarios'],
   ])('al tocarla, %s lleva a %s', (entity, ruta) => {
     render(<NotificationItem notificacion={editada({ entity, entityId: 'x1' })} />);
 

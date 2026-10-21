@@ -9,15 +9,26 @@ import { NotificationItem } from './NotificationItem';
 /** Máximo de notificaciones que se listan en el dropdown — el resto se ve en `/notificaciones`. */
 const MAX_ITEMS = 8;
 
+export interface NotificationBellProps {
+  /**
+   * `true` cuando la campana vive en el header oscuro del shell de faena
+   * (Terreno/Taller): trigger claro sobre el fondo oscuro y tamaño de guante
+   * (el mismo 44px del botón de menú del shell). Sin la prop queda el look
+   * del Topbar de escritorio.
+   */
+  faena?: boolean;
+}
+
 /**
- * Campana del Topbar: ícono con badge de no-leídas (`useUnreadCount`, polling
- * cada 30s) que abre un `Dropdown` con las últimas notificaciones
- * (`useNotificaciones`). El `isOpen` se controla a mano porque el contenido
- * del popover no son `Dropdown.Item` (son botones con navegación propia vía
- * `NotificationItem`), así que nada lo cierra solo — cada click adentro debe
- * cerrarlo explícitamente.
+ * Campana de notificaciones: ícono con badge de no-leídas (`useUnreadCount`,
+ * polling cada 30s) que abre un `Dropdown` con las últimas notificaciones
+ * (`useNotificaciones`). Vive en el Topbar de escritorio y, con `faena`, en el
+ * header de los shells de Terreno/Taller. El `isOpen` se controla a mano
+ * porque el contenido del popover no son `Dropdown.Item` (son botones con
+ * navegación propia vía `NotificationItem`), así que nada lo cierra solo —
+ * cada click adentro debe cerrarlo explícitamente.
  */
-export function NotificationBell() {
+export function NotificationBell({ faena = false }: NotificationBellProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { data: unreadCount } = useUnreadCount();
@@ -31,8 +42,13 @@ export function NotificationBell() {
   return (
     <Dropdown isOpen={isOpen} onOpenChange={setIsOpen}>
       <Badge.Anchor>
-        <Button aria-label="Notificaciones" isIconOnly variant="ghost">
-          <Bell size={18} />
+        <Button
+          aria-label="Notificaciones"
+          className={faena ? 'h-11 w-11 rounded-xl text-white/90 hover:bg-white/10' : undefined}
+          isIconOnly
+          variant="ghost"
+        >
+          <Bell size={faena ? 22 : 18} />
         </Button>
         {hasUnread ? (
           <Badge color="danger" size="sm">

@@ -31,8 +31,9 @@ const TABS: ShellTab[] = [
  * drawer («Ir al panel»).
  */
 export function MantenimientoLayout() {
-  // Sin campana en el taller: la pestaña dice cuántos checklists rechazados
-  // esperan que el mantenedor los corrija.
+  // La campana del shell trae todas las notificaciones (hallazgos nuevos,
+  // checklists validados); el badge de la pestaña es el vistazo rápido de
+  // cuántos rechazados esperan que el mantenedor los corrija.
   const { can } = usePermissions();
   const { data: rechazados } = useChecklistsPorEstado(RECHAZADOS, can('dailyChecklist.resubmit'));
   const tabs = TABS.map((t) =>

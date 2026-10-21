@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { NAV_ITEMS } from './nav-items';
 import { PREP_KEYS, prepKeysFor } from './offline-prep';
 import { ROLES } from '../types/roles';
 
@@ -13,13 +12,14 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     }
   });
 
-  it('MANTENEDOR no ve Terreno: no precarga tarjetas, hallazgos ni trabajos', () => {
+  it('MANTENEDOR no ve Terreno: no precarga tarjetas, hallazgos, trabajos ni reportes diarios', () => {
     const keys = prepKeysFor(ROLES.MANTENEDOR);
 
     expect(keys).not.toContain('shiftCards');
     expect(keys).not.toContain('hallazgos');
     expect(keys).not.toContain('trabajosExtra');
     expect(keys).not.toContain('horometro');
+    expect(keys).not.toContain('reporteDiario');
   });
 
   it('SUPERVISOR no ve Mantenimiento pero sí Terreno, Equipos, Inventario y Operadores', () => {
@@ -29,6 +29,22 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     expect(keys).toEqual(
       expect.arrayContaining(['equipment', 'inventory', 'branches', 'operators', 'shiftCards', 'hallazgos', 'trabajosExtra', 'horometro']),
     );
+  });
+
+  it('los checklists diarios se precargan para los dos roles de faena: M2 (mantenedor) y M3 (supervisor)', () => {
+    expect(prepKeysFor(ROLES.MANTENEDOR)).toContain('dailyChecklists');
+    expect(prepKeysFor(ROLES.SUPERVISOR)).toContain('dailyChecklists');
+  });
+
+  it('el reporte diario (con sus catálogos) acompaña a Terreno: SUPERVISOR sí, MANTENEDOR no', () => {
+    expect(prepKeysFor(ROLES.SUPERVISOR)).toContain('reporteDiario');
+    expect(prepKeysFor(ROLES.MANTENEDOR)).not.toContain('reporteDiario');
+  });
+
+  it('el calendario de vencimientos acompaña al taller: MANTENEDOR y ADMIN, no SUPERVISOR', () => {
+    expect(prepKeysFor(ROLES.MANTENEDOR)).toContain('vencimientos');
+    expect(prepKeysFor(ROLES.ADMIN)).toContain('vencimientos');
+    expect(prepKeysFor(ROLES.SUPERVISOR)).not.toContain('vencimientos');
   });
 
   it('ADMIN ve todo: precarga todas las listas', () => {
@@ -58,20 +74,35 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     expect(prepKeysFor(null)).toEqual([
       'equipment',
       'operators',
+      'dailyChecklists',
       'shiftCards',
       'hallazgos',
       'trabajosExtra',
+      'reporteDiario',
       'horometro',
       'combustible',
     ]);
     expect(prepKeysFor(undefined)).toEqual(prepKeysFor(null));
   });
 
-  it('sigue al menú: una pantalla que el rol no ve en NAV_ITEMS no aporta listas', () => {
-    for (const role of Object.values(ROLES)) {
-      const rutas = NAV_ITEMS.filter((item) => item.roles.includes(role)).map((item) => item.to);
-      if (!rutas.includes('/mantenimiento')) expect(prepKeysFor(role)).not.toContain('maintenance');
-      if (!rutas.includes('/inventario')) expect(prepKeysFor(role)).not.toContain('inventory');
+  /**
+   * El punto del desacople: los shells de Terreno/Taller son el home de
+   * SUPERVISOR/MANTENEDOR aunque NO aparezcan en el menú (`NAV_ITEMS`). Si la
+   * precarga volviera a derivarse del menú, sacar una entrada del menú dejaría
+   * a esos roles sin sus listas en el arranque sin señal — este test lo
+   * detecta simulando un menú vacío.
+   */
+  it('no sigue al menú: con NAV_ITEMS vacío, cada rol conserva las listas de sus módulos', async () => {
+    vi.resetModules();
+    vi.doMock('./nav-items', () => ({ NAV_ITEMS: [] }));
+    try {
+      const { prepKeysFor: prepSinMenu } = await import('./offline-prep');
+
+      expect(prepSinMenu(ROLES.SUPERVISOR)).toEqual(expect.arrayContaining(['shiftCards', 'hallazgos', 'combustible']));
+      expect(prepSinMenu(ROLES.MANTENEDOR)).toEqual(expect.arrayContaining(['maintenance', 'bitacora', 'dailyChecklists']));
+    } finally {
+      vi.doUnmock('./nav-items');
+      vi.resetModules();
     }
   });
 

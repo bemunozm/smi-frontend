@@ -30,6 +30,7 @@ function buildFormValues(documento: EquipmentDocument | null): EquipmentDocument
     title: documento?.title ?? '',
     expiryDate: toDateInputValue(documento?.expiryDate ?? null),
     notes: documento?.notes ?? '',
+    alertDaysBefore: String(documento?.alertDaysBefore ?? 30),
   };
 }
 
@@ -314,6 +315,33 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
                     <Label>Vencimiento (opcional)</Label>
                     <Input />
                     {errors.expiryDate ? <FieldError>{errors.expiryDate.message}</FieldError> : null}
+                  </TextField>
+                )}
+              />
+
+              {/* Módulo 4: el mantenedor y el administrador reciben el aviso
+                  con esta anticipación, y la ficha lo marca «por vencer». */}
+              <Controller
+                control={control}
+                name="alertDaysBefore"
+                render={({ field }) => (
+                  <TextField
+                    fullWidth
+                    isInvalid={!!errors.alertDaysBefore}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={(v) => field.onChange(v.replace(/\D/g, ''))}
+                    value={field.value}
+                  >
+                    <Label>Avisar con anticipación (días)</Label>
+                    <Input inputMode="numeric" placeholder="30" />
+                    {errors.alertDaysBefore ? (
+                      <FieldError>{errors.alertDaysBefore.message}</FieldError>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Cuántos días antes del vencimiento se avisa al mantenedor y al administrador.
+                      </span>
+                    )}
                   </TextField>
                 )}
               />

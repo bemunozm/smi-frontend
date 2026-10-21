@@ -42,6 +42,8 @@ export const EquipmentDocumentSchema = z.object({
    * ahora lleva query de firma, no un nombre de archivo legible). */
   fileName: z.string().nullable(),
   notes: z.string().nullable(),
+  /** Módulo 4: con cuántos días de anticipación se avisa que vence (30 por defecto). */
+  alertDaysBefore: z.number().int().default(30),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   status: z.enum(DOCUMENT_STATUS),
@@ -69,6 +71,8 @@ export interface CreateEquipmentDocumentInput {
   expiryDate?: string;
   fileName?: string;
   notes?: string;
+  /** Días de anticipación del aviso de vencimiento (1 a 365). */
+  alertDaysBefore?: number;
 }
 
 /** Body de `PATCH /api/equipment/documents/:id` — todos los campos son
@@ -85,6 +89,7 @@ export interface UpdateEquipmentDocumentInput {
   fileKey?: null;
   fileName?: string | null;
   notes?: string | null;
+  alertDaysBefore?: number;
 }
 
 // --- Formulario (RHF + zodResolver) ------------------------------------------
@@ -106,6 +111,12 @@ export const EquipmentDocumentFormSchema = z.object({
   title: z.string(),
   expiryDate: dateOnlyField,
   notes: z.string(),
+  /** Texto del campo: entero de 1 a 365 (el aviso de vencimiento). */
+  alertDaysBefore: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}$/, 'Escribe un número de días, sin decimales.')
+    .refine((v) => Number(v) >= 1 && Number(v) <= 365, 'Entre 1 y 365 días.'),
 });
 export type EquipmentDocumentFormValues = z.infer<typeof EquipmentDocumentFormSchema>;
 
@@ -123,6 +134,7 @@ export function toCreateEquipmentDocumentPayload(
     ...(values.expiryDate ? { expiryDate: values.expiryDate } : {}),
     ...(file ? { fileName: file.name } : {}),
     ...(values.notes.trim() ? { notes: values.notes.trim() } : {}),
+    alertDaysBefore: Number(values.alertDaysBefore),
   };
 }
 
@@ -142,5 +154,6 @@ export function toUpdateEquipmentDocumentPayload(
     title: values.title.trim() ? values.title.trim() : null,
     expiryDate: values.expiryDate ? values.expiryDate : null,
     notes: values.notes.trim() ? values.notes.trim() : null,
+    alertDaysBefore: Number(values.alertDaysBefore),
   };
 }

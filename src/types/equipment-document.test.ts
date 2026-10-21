@@ -12,6 +12,7 @@ describe('EquipmentDocumentFormSchema', () => {
     title: '',
     expiryDate: '',
     notes: '',
+    alertDaysBefore: '30',
   };
 
   it('acepta el form mínimo (solo tipo, el resto vacío)', () => {
@@ -38,9 +39,10 @@ describe('toCreateEquipmentDocumentPayload', () => {
       title: '',
       expiryDate: '',
       notes: '',
+      alertDaysBefore: '30',
     });
 
-    expect(payload).toEqual({ type: 'OTHER' });
+    expect(payload).toEqual({ type: 'OTHER', alertDaysBefore: 30 });
   });
 
   it('manda title/expiryDate/notes recortados cuando vienen informados', () => {
@@ -49,6 +51,7 @@ describe('toCreateEquipmentDocumentPayload', () => {
       title: '  Póliza 2026 ',
       expiryDate: '2026-11-15',
       notes: '  Cubre robo y daños ',
+      alertDaysBefore: '30',
     });
 
     expect(payload).toEqual({
@@ -56,18 +59,20 @@ describe('toCreateEquipmentDocumentPayload', () => {
       title: 'Póliza 2026',
       expiryDate: '2026-11-15',
       notes: 'Cubre robo y daños',
+      alertDaysBefore: 30,
     });
   });
 
   it('manda solo fileName cuando el usuario adjuntó un archivo (el archivo viaja aparte)', () => {
     const payload = toCreateEquipmentDocumentPayload(
-      { type: 'INSURANCE', title: '', expiryDate: '', notes: '' },
+      { type: 'INSURANCE', title: '', expiryDate: '', notes: '', alertDaysBefore: '30' },
       new File(['x'], 'Póliza Seguro.pdf', { type: 'application/pdf' }),
     );
 
     expect(payload).toEqual({
       type: 'INSURANCE',
       fileName: 'Póliza Seguro.pdf',
+      alertDaysBefore: 30,
     });
   });
 });
@@ -81,6 +86,7 @@ describe('toUpdateEquipmentDocumentPayload', () => {
       title: '',
       expiryDate: '',
       notes: '',
+      alertDaysBefore: '30',
     });
 
     expect(payload).toEqual({
@@ -88,6 +94,7 @@ describe('toUpdateEquipmentDocumentPayload', () => {
       title: null,
       expiryDate: null,
       notes: null,
+      alertDaysBefore: 30,
     });
   });
 
@@ -97,6 +104,7 @@ describe('toUpdateEquipmentDocumentPayload', () => {
       title: '  Permiso municipal ',
       expiryDate: '2027-03-01',
       notes: '  Renovar en marzo ',
+      alertDaysBefore: '30',
     });
 
     expect(payload).toEqual({
@@ -104,11 +112,12 @@ describe('toUpdateEquipmentDocumentPayload', () => {
       title: 'Permiso municipal',
       expiryDate: '2027-03-01',
       notes: 'Renovar en marzo',
+      alertDaysBefore: 30,
     });
   });
 
   it('el archivo no va en este body: lo recibe aparte el hook', () => {
-    const payload = toUpdateEquipmentDocumentPayload({ type: 'OTHER', title: '', expiryDate: '', notes: '' });
+    const payload = toUpdateEquipmentDocumentPayload({ type: 'OTHER', title: '', expiryDate: '', notes: '', alertDaysBefore: '30' });
 
     expect('fileKey' in payload).toBe(false);
     expect('fileName' in payload).toBe(false);

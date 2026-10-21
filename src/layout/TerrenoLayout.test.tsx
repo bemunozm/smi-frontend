@@ -17,6 +17,13 @@ vi.mock('../components/terreno/SyncStatus', () => ({
   SyncStatus: () => <div data-testid="sync-status-stub" />,
 }));
 
+// La campana tiene suite propia (`components/notifications/NotificationBell.test.tsx`)
+// y sus hooks usan react-query, que este archivo no monta: acá solo importa
+// que el shell la ponga en el header — mismo criterio que `Topbar.test.tsx`.
+vi.mock('../components/notifications/NotificationBell', () => ({
+  NotificationBell: () => <div data-testid="notification-bell-stub" />,
+}));
+
 const { logoutMock, countPendingMock, toastDangerMock } = vi.hoisted(() => ({
   logoutMock: vi.fn(),
   countPendingMock: vi.fn(),
@@ -162,6 +169,18 @@ describe('TerrenoLayout', () => {
   it('monta el `SyncStatus` real (reemplaza a la vieja `BarraSinSenal`)', () => {
     renderLayout('desktop');
     expect(screen.getByTestId('sync-status-stub')).toBeTruthy();
+  });
+
+  /**
+   * El home del SUPERVISOR es este shell, no el escritorio con Topbar: sin la
+   * campana acá, sus notificaciones (checklist por validar, stock bajo) no
+   * tenían ninguna superficie in-app.
+   */
+  it.each(['phone', 'desktop'] as const)('el header muestra la campana de notificaciones en %s', (size) => {
+    renderLayout(size);
+
+    const header = screen.getByRole('banner');
+    expect(header.contains(screen.getByTestId('notification-bell-stub'))).toBe(true);
   });
 
   /**

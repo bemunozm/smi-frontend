@@ -20,6 +20,12 @@ const {
   notifUnreadMock,
   intervencionesListMock,
   combustibleListMock,
+  checklistItemsMock,
+  checklistListMock,
+  reportesDiariosMock,
+  plantasMock,
+  empresasMock,
+  vencimientosMock,
 } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
   operatorListMock: vi.fn(),
@@ -39,6 +45,12 @@ const {
   notifUnreadMock: vi.fn(),
   intervencionesListMock: vi.fn(),
   combustibleListMock: vi.fn(),
+  checklistItemsMock: vi.fn(),
+  checklistListMock: vi.fn(),
+  reportesDiariosMock: vi.fn(),
+  plantasMock: vi.fn(),
+  empresasMock: vi.fn(),
+  vencimientosMock: vi.fn(),
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock, resumen: resumenMock } }));
@@ -58,12 +70,23 @@ vi.mock('../api/MantenimientoAPI', () => ({
   UmbralesAPI: { list: umbralesListMock },
   IntervencionesAPI: { list: intervencionesListMock },
 }));
+vi.mock('../api/DailyChecklistAPI', () => ({
+  DailyChecklistAPI: { items: checklistItemsMock, list: checklistListMock },
+}));
+vi.mock('../api/ReporteDiarioAPI', () => ({
+  listReportesDiarios: reportesDiariosMock,
+  listPlantas: plantasMock,
+  listEmpresasExternas: empresasMock,
+}));
+vi.mock('../api/VencimientosAPI', () => ({ VencimientosAPI: { calendario: vencimientosMock } }));
 
 import { usePrepareOffline } from './usePrepareOffline';
 import { queryClient } from '../lib/query-client';
 import {
   ACTIVIDADES_KEY,
   BRANCHES_KEY,
+  DAILY_CHECKLISTS_KEY,
+  EQUIPMENT_DOCUMENTS_KEY,
   EQUIPMENT_KEY,
   HALLAZGOS_KEY,
   COMBUSTIBLE_KEY,
@@ -76,6 +99,7 @@ import {
   TRABAJOS_EXTRA_KEY,
   UMBRALES_KEY,
 } from '../lib/query-keys';
+import { toDateOnly } from '../lib/turno';
 import { BITACORA_ORDENES_PRECARGADAS, PREP_KEYS } from '../config/offline-prep';
 import { ROLES } from '../types/roles';
 
@@ -98,6 +122,12 @@ beforeEach(() => {
   notifUnreadMock.mockResolvedValue(2);
   intervencionesListMock.mockResolvedValue([{ id: 'in-1' }]);
   combustibleListMock.mockResolvedValue([{ id: 'cb-1' }]);
+  checklistItemsMock.mockResolvedValue([{ id: 'ci-1' }]);
+  checklistListMock.mockResolvedValue([]);
+  reportesDiariosMock.mockResolvedValue([{ id: 'rd-1' }]);
+  plantasMock.mockResolvedValue([{ id: 'pl-1' }]);
+  empresasMock.mockResolvedValue([{ id: 'ee-1' }]);
+  vencimientosMock.mockResolvedValue({ meses: [] });
 });
 
 afterEach(() => {
@@ -291,6 +321,40 @@ describe('usePrepareOffline por rol', () => {
     expect(resultado.dashboard).toBeUndefined();
     expect(resultado.combustible).toBeUndefined();
     expect(combustibleListMock).not.toHaveBeenCalled();
+  });
+
+  it('SUPERVISOR: checklists diarios (M3) y reporte diario con sus catálogos; vencimientos no', async () => {
+    const resultado = await preparar(ROLES.SUPERVISOR);
+
+    expect(resultado).toMatchObject({ dailyChecklists: 'ok', reporteDiario: 'ok' });
+    // Bajo las MISMAS keys/filtros con que abren las pantallas (`ValidarChecklistsView`,
+    // `ChecklistDiarioView`, `ReporteDiarioView`), para que el caché quede tibio.
+    expect(checklistItemsMock).toHaveBeenCalledTimes(1);
+    expect(checklistListMock).toHaveBeenCalledWith({ date: toDateOnly(new Date()) });
+    expect(checklistListMock).toHaveBeenCalledWith({ status: ['SUBMITTED'] });
+    expect(checklistListMock).toHaveBeenCalledWith({ status: ['REJECTED'] });
+    expect(queryClient.getQueryData([...DAILY_CHECKLISTS_KEY, 'items'])).toEqual([{ id: 'ci-1' }]);
+    expect(queryClient.getQueryData([...DAILY_CHECKLISTS_KEY, 'status', 'SUBMITTED'])).toEqual([]);
+    expect(plantasMock).toHaveBeenCalledTimes(1);
+    expect(empresasMock).toHaveBeenCalledTimes(1);
+    expect(reportesDiariosMock).toHaveBeenCalledTimes(1);
+
+    expect(resultado.vencimientos).toBeUndefined();
+    expect(vencimientosMock).not.toHaveBeenCalled();
+  });
+
+  it('MANTENEDOR: checklists diarios (M2) y calendario de vencimientos; reporte diario no', async () => {
+    const resultado = await preparar(ROLES.MANTENEDOR);
+
+    expect(resultado).toMatchObject({ dailyChecklists: 'ok', vencimientos: 'ok' });
+    expect(checklistItemsMock).toHaveBeenCalledTimes(1);
+    // La misma key que arma `useCalendarioVencimientos()` sin filtros (`VencimientosView`).
+    expect(queryClient.getQueryData([...EQUIPMENT_DOCUMENTS_KEY, 'calendario', 'actual', 'todos'])).toEqual({
+      meses: [],
+    });
+
+    expect(resultado.reporteDiario).toBeUndefined();
+    expect(reportesDiariosMock).not.toHaveBeenCalled();
   });
 
   it('SUPERVISOR: combustible sí; bitácora no (no ve Mantenimiento)', async () => {

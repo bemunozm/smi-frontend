@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router';
 import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { NotificationBell } from '../components/notifications/NotificationBell';
 import { useLogoutConfirmation } from '../components/sync/useLogoutConfirmation';
 import { SyncStatus } from '../components/terreno/SyncStatus';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -65,8 +66,9 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
 }
 
 /**
- * Shell de módulo de trabajo en faena: header SMI + estado de sync + contenido
- * + navegación de secciones + drawer (usuario, "Ir al panel", "Salir").
+ * Shell de módulo de trabajo en faena: header SMI + campana de notificaciones
+ * + estado de sync + contenido + navegación de secciones + drawer (usuario,
+ * "Ir al panel", "Salir").
  * Reemplaza por completo al chrome de escritorio (`AppLayout`): al entrar al
  * módulo no aparece el sidebar/topbar/barra del administrador.
  *
@@ -153,6 +155,12 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
               </nav>
             )}
 
+            {/* La campana es la única superficie in-app de las notificaciones
+                para SUPERVISOR y MANTENEDOR (su home es este shell, no el
+                escritorio con Topbar): sin ella, "checklist por validar",
+                "hallazgo creado" o "stock bajo" solo se verían navegando a
+                mano a /notificaciones. */}
+            <NotificationBell faena />
             <StatusPill enLinea={enLinea} />
           </div>
         </header>

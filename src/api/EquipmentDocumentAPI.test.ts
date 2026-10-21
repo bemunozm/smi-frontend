@@ -37,6 +37,7 @@ const DOCUMENTO = {
   updatedAt: '2026-01-01T00:00:00.000Z',
   status: 'VIGENTE',
   daysToExpiry: 71,
+  alertDaysBefore: 30,
 };
 
 /** Construye un error "de axios" tal como lo entrega `toDomainError`: con
