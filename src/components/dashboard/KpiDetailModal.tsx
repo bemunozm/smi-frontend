@@ -9,8 +9,9 @@ interface KpiDetailModalProps {
   title: string;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  /** Vista completa: destino de «Ver todo →». */
-  verTodoTo: string;
+  /** Vista completa: destino de «Ver todo →». Sin él, el popup no lleva pie
+   * (el detalle ya es completo y no hay adónde ir). */
+  verTodoTo?: string;
   children: ReactNode;
 }
 
@@ -32,17 +33,19 @@ export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, childre
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">{title}</Modal.Heading>
           </Modal.Header>
           <Modal.Body>{children}</Modal.Body>
-          <Modal.Footer>
-            <Button
-              onPress={() => {
-                onOpenChange(false);
-                void navigate(verTodoTo);
-              }}
-              variant="secondary"
-            >
-              Ver todo →
-            </Button>
-          </Modal.Footer>
+          {verTodoTo ? (
+            <Modal.Footer>
+              <Button
+                onPress={() => {
+                  onOpenChange(false);
+                  void navigate(verTodoTo);
+                }}
+                variant="secondary"
+              >
+                Ver todo →
+              </Button>
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

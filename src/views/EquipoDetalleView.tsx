@@ -1080,7 +1080,9 @@ export function EquipoDetalleView({
                     </p>
                     {historialCombustible.length > 0 ? (
                       <Table variant="secondary">
-                        <Table.ScrollContainer>
+                        {/* ~3 filas visibles con scroll propio (pedido del administrador:
+                           que el historial no estire la ficha); el encabezado queda fijo. */}
+                        <Table.ScrollContainer className="max-h-48 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
                           <Table.Content aria-label="Historial de cargas de combustible" className="min-w-full">
                             <Table.Header>
                               <Table.Column isRowHeader>Fecha</Table.Column>
@@ -1133,7 +1135,8 @@ export function EquipoDetalleView({
                 </div>
               ) : historialHorometro.length > 0 ? (
                 <Table variant="secondary">
-                  <Table.ScrollContainer>
+                  {/* Misma regla que el historial de cargas: ~3 filas y scroll propio. */}
+                  <Table.ScrollContainer className="max-h-48 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
                     <Table.Content aria-label="Historial de horómetro" className="min-w-full">
                       <Table.Header>
                         <Table.Column isRowHeader>Entrada</Table.Column>

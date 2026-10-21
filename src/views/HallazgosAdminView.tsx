@@ -376,15 +376,22 @@ export function HallazgosAdminView() {
                         key={h.id}
                         onAction={() => setDetalle(porId.get(h.id) ?? h)}
                       >
-                        <Table.Cell className="text-sm text-muted-foreground">{formatFecha(h.fecha)}</Table.Cell>
-                        <Table.Cell className="font-mono text-sm">{h.equipo?.internalCode ?? '—'}</Table.Cell>
+                        {/* `whitespace-nowrap` en las columnas cortas: sin él, la columna
+                           ancha (Descripción, `w-full`) las aprieta y la fecha y los
+                           chips se parten en varias líneas. */}
+                        <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
+                          {formatFecha(h.fecha)}
+                        </Table.Cell>
+                        <Table.Cell className="font-mono text-sm whitespace-nowrap">
+                          {h.equipo?.internalCode ?? '—'}
+                        </Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{h.descripcion}</Table.Cell>
-                        <Table.Cell>
+                        <Table.Cell className="whitespace-nowrap">
                           <Chip color={criticidadChipColor(h.prioridad as Criticidad)} size="sm" variant="soft">
                             {PRIORIDAD_LABEL[h.prioridad] ?? h.prioridad}
                           </Chip>
                         </Table.Cell>
-                        <Table.Cell>
+                        <Table.Cell className="whitespace-nowrap">
                           <Chip color={hallazgoEstadoChipColor(h.estado as HallazgoEstado)} size="sm" variant="secondary">
                             {hallazgoEstadoLabel(h.estado as HallazgoEstado)}
                           </Chip>

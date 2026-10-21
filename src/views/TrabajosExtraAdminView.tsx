@@ -274,13 +274,20 @@ export function TrabajosExtraAdminView() {
                         key={t.id}
                         onAction={() => setDetalle(t)}
                       >
-                        <Table.Cell className="text-sm text-muted-foreground">{formatFecha(t.fecha)}</Table.Cell>
-                        <Table.Cell className="font-mono text-sm">{t.equipo?.internalCode ?? '—'}</Table.Cell>
-                        <Table.Cell className="text-sm">{t.operador}</Table.Cell>
-                        <Table.Cell className="text-sm">{turnoLabel(t.turno)}</Table.Cell>
-                        <Table.Cell className="text-sm">{t.faena}</Table.Cell>
+                        {/* `whitespace-nowrap` en todas las columnas cortas: sin él, la
+                           columna ancha (Actividades, `w-full`) las aprieta y la fecha
+                           se parte en 5 líneas. */}
+                        <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
+                          {formatFecha(t.fecha)}
+                        </Table.Cell>
+                        <Table.Cell className="font-mono text-sm whitespace-nowrap">
+                          {t.equipo?.internalCode ?? '—'}
+                        </Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{t.faena}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
-                        <Table.Cell className="text-right font-mono text-sm font-semibold">
+                        <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
                           {NUM_CL_1.format(t.totalHoras)} h
                         </Table.Cell>
                       </Table.Row>

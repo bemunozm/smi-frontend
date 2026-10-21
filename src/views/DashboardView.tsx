@@ -5,8 +5,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,8 +31,10 @@ import {
 } from '../hooks/useDashboard';
 import {
   CHART_NEUTRAL,
-  TRABAJOS_EXTRAORDINARIOS_COLOR,
+  NIVEL_PROMEDIO_COLOR,
+  NIVEL_PROMEDIO_LABEL,
   criticidadChipColor,
+  nivelRespectoPromedio,
   hallazgoEstadoChipColor,
   hallazgoEstadoLabel,
   hallazgosCriticidadHint,
@@ -44,6 +48,7 @@ import { ResumenDia } from '../components/dashboard/ResumenDia';
 import { KpiDetailModal } from '../components/dashboard/KpiDetailModal';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
 import { mesValue, opcionesMes, rangoDeMes, rangoSemanas } from '../lib/dashboard-rango';
+import { fromDateOnly, toDateOnly } from '../lib/turno';
 import { horasSemanales } from '../lib/horas-semanales';
 
 /**
@@ -675,34 +680,6 @@ function EquiposKpis({ equipos }: { equipos: MetricasEquipo[] }) {
   );
 }
 
-function EquiposHorasChart({ equipos }: { equipos: MetricasEquipo[] }) {
-  return (
-    <div className="h-64 w-full">
-      <ResponsiveContainer height="100%" width="100%">
-        <BarChart data={equipos} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-          <XAxis axisLine={false} dataKey="internalCode" tick={AXIS_TICK_STYLE} tickLine={false} />
-          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
-          <Tooltip
-            contentStyle={TOOLTIP_CONTENT_STYLE}
-            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
-            formatter={(value) => [`${value} h`, 'Horas']}
-            itemStyle={TOOLTIP_ITEM_STYLE}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-          />
-          <Bar
-            dataKey="horas"
-            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
-            isAnimationActive={false}
-            maxBarSize={28}
-            radius={[4, 4, 0, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 /** Un equipo por fila (ya ordenados por horas desc). El abierto se identifica
  * por `equipmentId`, nunca por posición: el orden cambia al cambiar de mes. */
 function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
@@ -734,7 +711,8 @@ function EquiposDrilldown({ equipos }: { equipos: MetricasEquipo[] }) {
               <span className="font-mono text-foreground">{equipo.internalCode}</span>
               <span className="ms-auto font-mono text-muted-foreground">{formatHoras(equipo.horas)}</span>
               <span className="w-20 text-end font-mono text-muted-foreground">{formatLitros(equipo.litros)}</span>
-              <span className="w-24 text-end font-mono text-muted-foreground">
+              {/* En negrita y en foreground: es el dato que el administrador compara. */}
+              <span className="w-24 text-end font-mono font-bold text-foreground">
                 {formatRendimiento(equipo.rendimiento)}
               </span>
             </button>
@@ -917,7 +895,7 @@ function SeccionEquipos() {
             <Card.Content>
               {equipos.length > 0 ? (
                 <>
-                  <EquiposHorasChart equipos={equipos} />
+                  <BarrasSimples data={equipos} unidad="h" xKey="internalCode" yKey="horas" />
                   <EquiposDrilldown equipos={equipos} />
                 </>
               ) : (
@@ -954,43 +932,75 @@ function EstadoSeccion({
   return null;
 }
 
-/** Barras de una sola serie con los ejes/tooltip compartidos del dashboard. */
+/**
+ * Barras de una sola serie con los ejes/tooltip compartidos del dashboard.
+ * Cada barra se pinta según su nivel respecto del PROMEDIO del propio gráfico
+ * (verde sobre +10%, ámbar en torno, rojo bajo −10%) y el promedio se marca
+ * como línea punteada — pedido del administrador: distinguir altos, medios y
+ * bajos de un vistazo.
+ */
 function BarrasSimples({
   data,
   xKey,
   yKey,
   altura = 'h-64',
   tickFormatter,
+  unidad,
 }: {
   data: object[];
   xKey: string;
   yKey: string;
   altura?: string;
   tickFormatter?: (value: string) => string;
+  /** Sufijo del tooltip y de la etiqueta del promedio (p. ej. «h»). */
+  unidad?: string;
 }) {
+  const valores = data.map((d) => Number((d as Record<string, unknown>)[yKey]) || 0);
+  const promedio = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : 0;
+  const sufijo = unidad ? ` ${unidad}` : '';
   return (
-    <div className={`${altura} w-full`}>
-      <ResponsiveContainer height="100%" width="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
-          <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
-          <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
-          <Tooltip
-            contentStyle={TOOLTIP_CONTENT_STYLE}
-            cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
-            formatter={(value) => [`${value}`, yKey === 'horas' ? 'Horas' : 'Vueltas']}
-            itemStyle={TOOLTIP_ITEM_STYLE}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-          />
-          <Bar
-            dataKey={yKey}
-            fill={TRABAJOS_EXTRAORDINARIOS_COLOR}
-            isAnimationActive={false}
-            maxBarSize={28}
-            radius={[4, 4, 0, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="flex flex-col gap-1">
+      <div className={`${altura} w-full`}>
+        <ResponsiveContainer height="100%" width="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART_NEUTRAL.border} vertical={false} />
+            <XAxis axisLine={false} dataKey={xKey} tick={AXIS_TICK_STYLE} tickFormatter={tickFormatter} tickLine={false} />
+            <YAxis allowDecimals={false} axisLine={false} tick={AXIS_TICK_STYLE} tickLine={false} width={36} />
+            <Tooltip
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              cursor={{ fill: CHART_NEUTRAL.surfaceSecondary }}
+              formatter={(value) => [`${value}${sufijo}`, yKey === 'horas' ? 'Horas' : 'Vueltas']}
+              itemStyle={TOOLTIP_ITEM_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+            />
+            {promedio > 0 ? (
+              <ReferenceLine
+                label={{
+                  value: `Prom. ${NUM_CL_1.format(promedio)}${sufijo}`,
+                  fill: CHART_NEUTRAL.muted,
+                  fontSize: 11,
+                  position: 'insideTopRight',
+                }}
+                stroke={CHART_NEUTRAL.muted}
+                strokeDasharray="4 4"
+                y={promedio}
+              />
+            ) : null}
+            <Bar dataKey={yKey} isAnimationActive={false} maxBarSize={28} radius={[4, 4, 0, 0]}>
+              {valores.map((valor, indice) => (
+                <Cell fill={NIVEL_PROMEDIO_COLOR[nivelRespectoPromedio(valor, promedio)]} key={indice} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ChartLegendRow
+        items={(['alto', 'medio', 'bajo'] as const).map((nivel) => ({
+          key: nivel,
+          label: NIVEL_PROMEDIO_LABEL[nivel],
+          color: NIVEL_PROMEDIO_COLOR[nivel],
+        }))}
+      />
     </div>
   );
 }
@@ -1137,10 +1147,47 @@ function TrabajosExtraCard({ rango }: { rango: RangoDashboard }) {
   );
 }
 
+/** Días locales (YYYY-MM-DD) de `desde` a `hasta`, ambos incluidos. */
+function diasDelRango(desde: string, hasta: string): string[] {
+  const dias: string[] = [];
+  const fin = fromDateOnly(hasta);
+  for (
+    let dia = fromDateOnly(desde);
+    dia <= fin && dias.length < 100;
+    dia = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1)
+  ) {
+    dias.push(toDateOnly(dia));
+  }
+  return dias;
+}
+
 /** Bloque de vueltas de producción. Vive DENTRO de la sección Supervisores
- * (pedido del administrador), con estado propio independiente. */
+ * (pedido del administrador), con estado propio independiente. Cada tarjeta
+ * abre un popup con el detalle DÍA A DÍA de SU sección — nunca una lista que
+ * mezcle secciones: tienen tarifa distinta y no se combinan ni suman. */
 function VueltasBlock({ rango }: { rango: RangoDashboard }) {
   const { data, isPending, isError, error } = useDashboardVueltas(rango);
+  // Sección cuyo detalle diario está abierto; null = cerrado.
+  const [detalleSeccion, setDetalleSeccion] = useState<string | null>(null);
+
+  const seccionAbierta = data?.porSeccion.find((sec) => sec.seccion === detalleSeccion) ?? null;
+  // El popup lista TODOS los días del rango (pedido del administrador), no
+  // solo los que traen vueltas: se rellena el calendario hasta hoy (los días
+  // futuros del mes en curso no aportan) y los días de la serie se conservan
+  // siempre, vengan o no dentro del relleno.
+  const hoy = toDateOnly(new Date());
+  const hastaVisible = rango.hasta < hoy ? rango.hasta : hoy;
+  const porFecha = new Map((seccionAbierta?.serieDiaria ?? []).map((d) => [d.fecha, d.vueltas]));
+  const fechas = new Set(rango.desde <= hastaVisible ? diasDelRango(rango.desde, hastaVisible) : []);
+  for (const fecha of porFecha.keys()) fechas.add(fecha);
+  const dias = [...fechas].sort((a, b) => b.localeCompare(a)).map((fecha) => ({
+    fecha,
+    vueltas: porFecha.get(fecha) ?? 0,
+  }));
+  // El promedio (el mismo criterio de las barras) se calcula sobre los días
+  // CON vueltas: el relleno en cero no debe hundirlo.
+  const activos = dias.filter((d) => d.vueltas > 0);
+  const promedio = activos.length > 0 ? activos.reduce((acc, d) => acc + d.vueltas, 0) / activos.length : 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1157,15 +1204,22 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
               {data.porSeccion.map((sec) => (
                 <Card data-testid={`vueltas-${sec.seccion}`} key={sec.seccion}>
                   <Card.Header>
-                    <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
-                      {`Vueltas ${(SECCION_LABEL[sec.seccion] ?? sec.seccion).toLowerCase()}`}
-                    </Card.Description>
-                    <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
-                      {NUM_CL.format(sec.vueltasTotales)}
-                    </Card.Title>
-                    <Card.Description>
-                      {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
-                    </Card.Description>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
+                          {`Vueltas ${(SECCION_LABEL[sec.seccion] ?? sec.seccion).toLowerCase()}`}
+                        </Card.Description>
+                        <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
+                          {NUM_CL.format(sec.vueltasTotales)}
+                        </Card.Title>
+                        <Card.Description>
+                          {sec.camiones} {sec.camiones === 1 ? 'camión' : 'camiones'}
+                        </Card.Description>
+                      </div>
+                      <Button onPress={() => setDetalleSeccion(sec.seccion)} size="sm" variant="secondary">
+                        Por día
+                      </Button>
+                    </div>
                   </Card.Header>
                   <Card.Content>
                     <BarrasSimples altura="h-32" data={sec.serieDiaria} tickFormatter={formatDia} xKey="fecha" yKey="vueltas" />
@@ -1178,6 +1232,57 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
           )}
         </>
       ) : null}
+
+      <KpiDetailModal
+        isOpen={seccionAbierta !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetalleSeccion(null);
+        }}
+        title={
+          seccionAbierta
+            ? `Vueltas ${(SECCION_LABEL[seccionAbierta.seccion] ?? seccionAbierta.seccion).toLowerCase()} · por día`
+            : 'Vueltas por día'
+        }
+      >
+        {seccionAbierta ? (
+          <>
+            <p className="pb-2 text-sm text-muted-foreground">
+              Promedio diario (días con vueltas):{' '}
+              <span className="font-mono text-foreground">{NUM_CL_1.format(promedio)}</span> vueltas.
+            </p>
+            {dias.map((dia) => {
+              const nivel = nivelRespectoPromedio(dia.vueltas, promedio);
+              return (
+                <div
+                  className="flex items-center gap-3 border-t border-border py-2 first:border-t-0"
+                  data-testid={`vueltas-dia-${dia.fecha}`}
+                  key={dia.fecha}
+                >
+                  <span className="font-mono text-sm text-muted-foreground">{formatDia(dia.fecha)}</span>
+                  {dia.vueltas > 0 ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="inline-block size-2.5 rounded-full"
+                        style={{ backgroundColor: NIVEL_PROMEDIO_COLOR[nivel] }}
+                      />
+                      <span className="text-xs text-muted-foreground">{NIVEL_PROMEDIO_LABEL[nivel]}</span>
+                      <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                        {NUM_CL.format(dia.vueltas)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-muted-foreground">Sin vueltas</span>
+                      <span className="ms-auto font-mono text-sm text-muted-foreground">—</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        ) : null}
+      </KpiDetailModal>
     </div>
   );
 }

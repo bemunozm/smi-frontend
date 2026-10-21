@@ -31,6 +31,7 @@ import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
+import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { VencimientosView } from './views/VencimientosView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
@@ -124,6 +125,9 @@ export const router = createBrowserRouter([
                   // Trabajos extraordinarios del administrador (solo lectura,
                   // con filtros); Terreno conserva /terreno/trabajos-extra.
                   { path: '/trabajos-extra', element: <TrabajosExtraAdminView /> },
+                  // Reportes diarios de los supervisores (solo lectura, con
+                  // filtros); Terreno conserva /terreno/reporte-diario.
+                  { path: '/reportes-diarios', element: <ReportesDiariosAdminView /> },
                   { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],
