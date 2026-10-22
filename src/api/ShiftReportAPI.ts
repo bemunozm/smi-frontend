@@ -4,8 +4,10 @@ import { axiosInstance } from '../lib/axios';
 import { env } from '../config/env';
 import { toDomainError } from '../lib/api-error';
 import {
+  ShiftReportListResponseSchema,
   ShiftReportWrapperSchema,
   type SendExitReportInput,
+  type ShiftReportListItem,
   type ShiftReportResponse,
 } from '../types/shift';
 
@@ -32,6 +34,17 @@ async function sendExitReport(
   }
 }
 
+/** Registro completo de reportes (`GET /api/shift-reports`, solo ADMIN) —
+ * alimenta la vista «Reportes» del administrador. */
+async function list(): Promise<ShiftReportListItem[]> {
+  try {
+    const response = await axiosInstance.get('/api/shift-reports');
+    return ShiftReportListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cargar los reportes de salida.');
+  }
+}
+
 /**
  * URL de descarga (`GET /api/shift-reports/:id/file`, 302 a una URL
  * firmada) — un `<a target="_blank">` directo, no un `fetch` desde acá: el
@@ -44,5 +57,6 @@ function fileUrl(id: string): string {
 
 export const ShiftReportAPI = {
   sendExitReport,
+  list,
   fileUrl,
 };

@@ -170,3 +170,25 @@ export const ShiftReportResponseSchema = z.object({
 export type ShiftReportResponse = z.infer<typeof ShiftReportResponseSchema>;
 
 export const ShiftReportWrapperSchema = z.object({ data: ShiftReportResponseSchema, message: z.string() });
+
+/** Una fila del registro de reportes (`GET /api/shift-reports`, solo ADMIN). */
+export const ShiftReportListItemSchema = z.object({
+  id: z.string(),
+  /** `YYYY-MM-DD` del turno reportado. */
+  shiftDate: z.string(),
+  /** DIURNO | NOCTURNO. */
+  shiftType: z.string(),
+  /** Nombre del supervisor del turno — null si la cuenta ya no existe. */
+  supervisor: z.string().nullable(),
+  cardCount: z.number(),
+  /** PENDING | SENT | FAILED | SKIPPED. */
+  emailStatus: z.string(),
+  fileName: z.string(),
+  createdAt: z.string(),
+});
+export type ShiftReportListItem = z.infer<typeof ShiftReportListItemSchema>;
+
+export const ShiftReportListResponseSchema = z.object({
+  data: z.array(ShiftReportListItemSchema),
+  message: z.string(),
+});
