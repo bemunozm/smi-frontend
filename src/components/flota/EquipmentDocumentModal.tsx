@@ -24,9 +24,12 @@ function toDateInputValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : '';
 }
 
-function buildFormValues(documento: EquipmentDocument | null): EquipmentDocumentFormValues {
+function buildFormValues(
+  documento: EquipmentDocument | null,
+  tipoInicial: EquipmentDocumentType = 'TECHNICAL_INSPECTION',
+): EquipmentDocumentFormValues {
   return {
-    type: documento?.type ?? 'TECHNICAL_INSPECTION',
+    type: documento?.type ?? tipoInicial,
     title: documento?.title ?? '',
     expiryDate: toDateInputValue(documento?.expiryDate ?? null),
     notes: documento?.notes ?? '',
@@ -137,7 +140,18 @@ export interface EquipmentDocumentModalProps {
   document: EquipmentDocument | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
+  /**
+   * Módulo 4: en un liviano, el aviso de revisión técnica, permiso y seguro lo
+   * fija su «Asignar mantenciones» (el backend lo aplica), así que el campo de
+   * días no se muestra para esos tipos.
+   */
+  esLiviano?: boolean;
+  /** Al crear, el tipo que viene elegido (p. ej. desde «Asignar mantenciones» del liviano). */
+  tipoInicial?: EquipmentDocumentType;
 }
+
+/** Los papeles cuyo aviso lo fija la configuración del liviano. */
+const PAPELES_LIVIANO: readonly EquipmentDocumentType[] = ['TECHNICAL_INSPECTION', 'CIRCULATION_PERMIT', 'INSURANCE'];
 
 /**
  * Modal de crear/editar UN documento del equipo (tipo, título, vencimiento,
@@ -146,7 +160,14 @@ export interface EquipmentDocumentModalProps {
  * (controlado por `document`/`isOpen`), mismo patrón que
  * `RegistrarCargaCombustibleModal`.
  */
-export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenChange }: EquipmentDocumentModalProps) {
+export function EquipmentDocumentModal({
+  equipmentId,
+  document,
+  isOpen,
+  onOpenChange,
+  esLiviano = false,
+  tipoInicial,
+}: EquipmentDocumentModalProps) {
   const isEditing = !!document;
   const createDocument = useCreateEquipmentDocument(equipmentId);
   const updateDocument = useUpdateEquipmentDocument();
@@ -167,6 +188,7 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<EquipmentDocumentFormValues>({
     resolver: zodResolver(EquipmentDocumentFormSchema),
@@ -177,7 +199,7 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
     // referencia nueva. `keepDirtyValues` evita que ese re-sync en segundo
     // plano pise texto que el usuario ya escribió y no ha guardado (review
     // QA: mismo bug de refetch que `EditEquipoModal`).
-    values: buildFormValues(document),
+    values: buildFormValues(document, tipoInicial),
     resetOptions: { keepDirtyValues: true },
   });
 
@@ -200,12 +222,12 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
       // (arriba, `keepDirtyValues: true`) como DEFAULT de cualquier llamada,
       // así que sin este override este reset "de apertura" NO limpiaría los
       // campos editados y cancelados.
-      reset(buildFormValues(document), { keepDirtyValues: false });
+      reset(buildFormValues(document, tipoInicial), { keepDirtyValues: false });
       setFileState(undefined);
       setFileResetKey((n) => n + 1);
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, document, reset]);
+  }, [isOpen, document, reset, tipoInicial]);
 
   const cerrar = () => onOpenChange(false);
 
@@ -320,7 +342,14 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
               />
 
               {/* Módulo 4: el mantenedor y el administrador reciben el aviso
-                  con esta anticipación, y la ficha lo marca «por vencer». */}
+                  con esta anticipación, y la ficha lo marca «por vencer». En
+                  un liviano, para sus papeles lo fija «Asignar mantenciones». */}
+              {esLiviano && PAPELES_LIVIANO.includes(watch('type')) ? (
+                <p className="rounded-xl bg-surface-secondary px-3 py-2.5 text-sm text-muted-foreground">
+                  El aviso de este papel se configura en «Asignar mantenciones» del liviano (desde la lista de
+                  Equipos).
+                </p>
+              ) : (
               <Controller
                 control={control}
                 name="alertDaysBefore"
@@ -345,6 +374,7 @@ export function EquipmentDocumentModal({ equipmentId, document, isOpen, onOpenCh
                   </TextField>
                 )}
               />
+              )}
 
               <DocumentFileField
                 fileState={fileState}

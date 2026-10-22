@@ -327,7 +327,15 @@ function DocumentoItemRow({
  * acá — ya no se editan desde "Editar equipo" (ver `EquipoEditDelete.tsx`,
  * que perdió esos 2 campos).
  */
-function DocumentsCard({ equipoId, puedeGestionar }: { equipoId: string; puedeGestionar: boolean }) {
+function DocumentsCard({
+  equipoId,
+  puedeGestionar,
+  esLiviano,
+}: {
+  equipoId: string;
+  puedeGestionar: boolean;
+  esLiviano: boolean;
+}) {
   const { data: documentos, isPending, isError } = useEquipmentDocuments(equipoId);
   const deleteDocument = useDeleteEquipmentDocument();
   const [modalDoc, setModalDoc] = useState<EquipmentDocument | null>(null);
@@ -388,6 +396,7 @@ function DocumentsCard({ equipoId, puedeGestionar }: { equipoId: string; puedeGe
       <EquipmentDocumentModal
         document={modalDoc}
         equipmentId={equipoId}
+        esLiviano={esLiviano}
         isOpen={isModalOpen}
         onOpenChange={setIsModalOpen}
       />
@@ -1014,7 +1023,11 @@ export function EquipoDetalleView({
             </Card.Content>
           </Card>
 
-          <DocumentsCard equipoId={equipo.id} puedeGestionar={puedeGestionarDocumentos} />
+          <DocumentsCard
+            equipoId={equipo.id}
+            esLiviano={equipo.equipmentClass === 'LIGHT'}
+            puedeGestionar={puedeGestionarDocumentos}
+          />
 
           {/* Módulo 4: el calendario de vencimientos del liviano (documentos y
              mantención por km), solo para administrador y mantenedor. */}

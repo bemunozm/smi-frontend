@@ -19,6 +19,7 @@ import {
 } from '@heroui/react';
 
 import { ActionTile } from '../components/ActionTile';
+import { MantencionLivianoModal } from '../components/mantenimiento/MantencionLivianoModal';
 import { PautaMantencionModal } from '../components/mantenimiento/PautaMantencionModal';
 import {
   CamposEquipo,
@@ -407,12 +408,23 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
       {puedeVerPauta ? (
-        <PautaMantencionModal
-          equipo={equipo}
-          isOpen={isPautaOpen}
-          onOpenChange={setIsPautaOpen}
-          soloLectura={!puedeEditarPauta}
-        />
+        // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
+        // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
+        equipo.equipmentClass === 'LIGHT' ? (
+          <MantencionLivianoModal
+            equipo={equipo}
+            isOpen={isPautaOpen}
+            onOpenChange={setIsPautaOpen}
+            soloLectura={!puedeEditarPauta}
+          />
+        ) : (
+          <PautaMantencionModal
+            equipo={equipo}
+            isOpen={isPautaOpen}
+            onOpenChange={setIsPautaOpen}
+            soloLectura={!puedeEditarPauta}
+          />
+        )
       ) : null}
     </>
   );
@@ -738,12 +750,23 @@ function EquipoCardMobile({
       <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
       <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
       {puedeVerPauta ? (
-        <PautaMantencionModal
-          equipo={equipo}
-          isOpen={isPautaOpen}
-          onOpenChange={setIsPautaOpen}
-          soloLectura={!puedeEditarPauta}
-        />
+        // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
+        // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
+        equipo.equipmentClass === 'LIGHT' ? (
+          <MantencionLivianoModal
+            equipo={equipo}
+            isOpen={isPautaOpen}
+            onOpenChange={setIsPautaOpen}
+            soloLectura={!puedeEditarPauta}
+          />
+        ) : (
+          <PautaMantencionModal
+            equipo={equipo}
+            isOpen={isPautaOpen}
+            onOpenChange={setIsPautaOpen}
+            soloLectura={!puedeEditarPauta}
+          />
+        )
       ) : null}
       <RegistrarCargaCombustibleModal
         equipoId={equipo.id}

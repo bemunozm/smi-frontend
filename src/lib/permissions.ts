@@ -52,6 +52,8 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
   'maintenancePlan.save': [ADMIN, MANTENEDOR],
+  // «Asignar mantenciones» de un liviano: los mismos que guardan la pauta.
+  'lightVehicleConfig.save': [ADMIN, MANTENEDOR],
   'maintenanceRecord.set': [MANTENEDOR],
   'dailyChecklist.submit': [MANTENEDOR],
   'dailyChecklist.resubmit': [MANTENEDOR],
