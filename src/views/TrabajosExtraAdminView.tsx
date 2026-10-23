@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import { Button, Card, Checkbox, Chip, Input, Label, ListBox, Modal, Select, Spinner, Table, TextArea, TextField } from '@heroui/react';
 
-import { useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { useEquipment } from '../hooks/useEquipment';
+import { useOperators } from '../hooks/useOperators';
+import { useCrearTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
-import { actividadLabel } from '../types/trabajosExtra';
+import { ACTIVIDADES, actividadLabel, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
@@ -82,6 +84,7 @@ function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordina
                   />
                   <Dato label="Horas máquina" value={`${NUM_CL_1.format(trabajo.totalHoras)} h`} />
                   <Dato label="Actividades" value={actividadesDe(trabajo)} />
+                  <Dato label="Registrado por" value={trabajo.registradoPor ?? '—'} />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
@@ -109,6 +112,196 @@ function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordina
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
+ * Alta directa del administrador: el mismo formulario que Terreno (operador
+ * del catálogo, horómetros, actividades múltiples), validado con
+ * `trabajoExtraFormSchema`. El POST es online, con id idempotente del cliente
+ * (`useCrearTrabajoExtra`).
+ */
+function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
+  const { data: equipos } = useEquipment();
+  const { data: operadores } = useOperators();
+  const crear = useCrearTrabajoExtra();
+  const [equipoId, setEquipoId] = useState('');
+  const [operatorId, setOperatorId] = useState('');
+  const [turno, setTurno] = useState('DIURNO');
+  const [faena, setFaena] = useState('');
+  const [horometroInicial, setHorometroInicial] = useState('');
+  const [horometroFinal, setHorometroFinal] = useState('');
+  const [actividades, setActividades] = useState<string[]>([]);
+  const [otraActividad, setOtraActividad] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [observaciones, setObservaciones] = useState('');
+
+  const alternarActividad = (valor: string, marcada: boolean) => {
+    setActividades((previas) => (marcada ? [...previas, valor] : previas.filter((a) => a !== valor)));
+  };
+
+  // El schema espera números (inputs `valueAsNumber` en Terreno); acá los
+  // campos son de texto — vacío queda NaN, que el schema trata como requerido.
+  const aNumero = (texto: string) => (texto.trim() === '' ? Number.NaN : Number(texto));
+
+  const parsed = trabajoExtraFormSchema.safeParse({
+    equipoId,
+    operatorId,
+    faena,
+    turno,
+    horometroInicial: aNumero(horometroInicial),
+    horometroFinal: aNumero(horometroFinal),
+    actividades,
+    otraActividad: otraActividad.trim() || undefined,
+    descripcion,
+    observaciones: observaciones.trim() || undefined,
+  });
+
+  const registrar = () => {
+    if (!parsed.success) return;
+    crear.mutate(parsed.data, { onSuccess: onClose });
+  };
+
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Nuevo trabajo extraordinario
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Select fullWidth placeholder="Elegir equipo" value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
+                  <Label>Equipo</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(equipos ?? []).map((equipo) => (
+                        <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
+                          {equipo.internalCode}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                <Select fullWidth placeholder="Elegir operador" value={operatorId} onChange={(value) => value && setOperatorId(String(value))}>
+                  <Label>Operador</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(operadores ?? [])
+                        .filter((operador) => operador.isActive)
+                        .map((operador) => (
+                          <ListBox.Item id={operador.id} key={operador.id} textValue={operador.name}>
+                            {operador.name}
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                <Select fullWidth value={turno} onChange={(value) => value && setTurno(String(value))}>
+                  <Label>Turno</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {TURNOS.map((opcion) => (
+                        <ListBox.Item id={opcion} key={opcion} textValue={turnoLabel(opcion)}>
+                          {turnoLabel(opcion)}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <TextField fullWidth name="faena" onChange={setFaena} value={faena}>
+                  <Label>Faena</Label>
+                  <Input placeholder="Dónde se hizo el trabajo" />
+                </TextField>
+                <TextField fullWidth name="horometroInicial" onChange={setHorometroInicial} value={horometroInicial}>
+                  <Label>Horómetro inicial</Label>
+                  <Input inputMode="decimal" placeholder="0" />
+                </TextField>
+                <TextField fullWidth name="horometroFinal" onChange={setHorometroFinal} value={horometroFinal}>
+                  <Label>Horómetro final</Label>
+                  <Input inputMode="decimal" placeholder="0" />
+                </TextField>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-foreground">Actividades</span>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {ACTIVIDADES.map((actividad) => (
+                    <Checkbox
+                      aria-label={actividad.label}
+                      isSelected={actividades.includes(actividad.value)}
+                      key={actividad.value}
+                      onChange={(marcada) => alternarActividad(actividad.value, marcada)}
+                    >
+                      <Checkbox.Content>
+                        <Checkbox.Control>
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
+                        <span className="text-sm text-foreground">{actividad.label}</span>
+                      </Checkbox.Content>
+                    </Checkbox>
+                  ))}
+                </div>
+                {actividades.includes('OTRO') ? (
+                  <TextField fullWidth name="otraActividad" onChange={setOtraActividad} value={otraActividad}>
+                    <Label>Cuál fue la otra actividad</Label>
+                    <Input placeholder="Describí la actividad" />
+                  </TextField>
+                ) : null}
+              </div>
+
+              <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
+                <Label>Descripción</Label>
+                <TextArea placeholder="Qué se hizo…" rows={3} />
+              </TextField>
+
+              <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
+                <Label>Observaciones (opcional)</Label>
+                <TextArea rows={2} />
+              </TextField>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={onClose} variant="tertiary">
+              Cancelar
+            </Button>
+            <Button isDisabled={!parsed.success} isPending={crear.isPending} onPress={registrar}>
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar trabajo')}
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+/**
  * Vista de trabajos extraordinarios del ADMINISTRADOR (`/trabajos-extra`,
  * ruta solo ADMIN): todos los registros de Terreno con filtros por equipo,
  * turno y rango de fechas, el total de horas máquina de lo filtrado y el
@@ -123,6 +316,7 @@ export function TrabajosExtraAdminView() {
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
+  const [creando, setCreando] = useState(false);
 
   const trabajos = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
@@ -165,10 +359,13 @@ export function TrabajosExtraAdminView() {
             Todos los trabajos extra registrados en terreno. Abre uno para ver su detalle completo.
           </p>
         </div>
-        <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-          {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
-          {lista.length === 1 ? 'trabajo' : 'trabajos'}
-        </Chip>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
+            {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
+            {lista.length === 1 ? 'trabajo' : 'trabajos'}
+          </Chip>
+          <Button onPress={() => setCreando(true)}>Nuevo trabajo extra</Button>
+        </div>
       </div>
 
       <Card>
@@ -263,6 +460,7 @@ export function TrabajosExtraAdminView() {
                     <Table.Column>Operador</Table.Column>
                     <Table.Column>Turno</Table.Column>
                     <Table.Column>Faena</Table.Column>
+                    <Table.Column>Registrado por</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
                     <Table.Column className="text-right">HM</Table.Column>
                   </Table.Header>
@@ -286,6 +484,7 @@ export function TrabajosExtraAdminView() {
                         <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.faena}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? '—'}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
                         <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
                           {NUM_CL_1.format(t.totalHoras)} h
@@ -301,6 +500,8 @@ export function TrabajosExtraAdminView() {
       </Card>
 
       <DetalleTrabajoModal trabajo={detalle} onClose={() => setDetalle(null)} />
+
+      {creando ? <CrearTrabajoExtraModal onClose={() => setCreando(false)} /> : null}
     </div>
   );
 }

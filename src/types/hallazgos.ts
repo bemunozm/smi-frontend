@@ -45,6 +45,9 @@ export interface Hallazgo {
   fotoUrl: string | null;
   fecha: string;
   equipo?: { internalCode: string };
+  /** Nombre de quien lo registró — null si la cuenta ya no existe; opcional
+   * para tolerar un backend que aún no manda el campo. */
+  registradoPor?: string | null;
 }
 
 /** Forma de un hallazgo en las respuestas del servidor. */
@@ -57,6 +60,7 @@ export const HallazgoSchema = z.object({
   fotoUrl: z.string().nullable(),
   fecha: z.string(),
   equipo: z.object({ internalCode: z.string() }).optional(),
+  registradoPor: z.string().nullable().optional(),
 });
 
 /** `PATCH /api/hallazgos/:id`: solo los campos que cambiaron (la foto no se edita). */

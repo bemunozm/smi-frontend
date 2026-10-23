@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertDialog,
   Button,
@@ -16,7 +17,7 @@ import {
 } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
-import { useActualizarHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
+import { useActualizarHallazgo, useCrearHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
 import {
   criticidadChipColor,
   hallazgoEstadoChipColor,
@@ -46,6 +47,29 @@ function formatFecha(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+/** Solo el día, para la fila «Fecha» del detalle (la hora va en su propia fila). */
+function formatSoloFecha(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }).format(date);
+}
+
+function formatHora(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+/** Fila etiqueta/valor del detalle — mismo patrón que el popup de trabajos extra. */
+function Dato({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3.5 border-t border-separator py-2.5">
+      <span className="shrink-0 text-[11px] font-bold tracking-wider text-(--label-color) uppercase">{label}</span>
+      <span className="text-right text-sm text-foreground">{value}</span>
+    </div>
+  );
 }
 
 /** Chips de prioridad/estado — mismos mapeos del dashboard; el dominio de
@@ -92,27 +116,54 @@ function DetalleHallazgoModal({
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               {`Hallazgo · ${hallazgo?.equipo?.internalCode ?? '—'}`}
             </Modal.Heading>
+            {hallazgo ? (
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                <ChipsHallazgo hallazgo={hallazgo} />
+              </div>
+            ) : null}
           </Modal.Header>
           <Modal.Body>
             {hallazgo ? (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm text-foreground">{hallazgo.equipo?.internalCode ?? '—'}</span>
-                  <ChipsHallazgo hallazgo={hallazgo} />
-                  <span className="ms-auto font-mono text-xs text-muted-foreground">{formatFecha(hallazgo.fecha)}</span>
+              <div className="flex flex-col gap-4">
+                {/* Mismo patrón de filas de dato que el detalle de trabajos extra:
+                   fecha y hora separadas (lo que se lee primero al revisar un
+                   reporte) y quién lo registró, para pedir contexto directo. */}
+                <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
+                  <Dato label="Fecha" value={formatSoloFecha(hallazgo.fecha)} />
+                  <Dato label="Hora" value={formatHora(hallazgo.fecha)} />
+                  <Dato label="Equipo" value={hallazgo.equipo?.internalCode ?? '—'} />
+                  <Dato label="Registrado por" value={hallazgo.registradoPor ?? '—'} />
                 </div>
-                <p className="text-base text-foreground">{hallazgo.descripcion}</p>
-                {hallazgo.fotoUrl ? (
-                  <a href={hallazgo.fotoUrl} rel="noreferrer" target="_blank">
-                    <img
-                      alt={`Foto del hallazgo de ${hallazgo.equipo?.internalCode ?? 'equipo'}`}
-                      className="max-h-72 w-fit rounded-2xl border border-border object-cover"
-                      src={hallazgo.fotoUrl}
-                    />
-                  </a>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Sin foto adjunta.</p>
-                )}
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
+                    Descripción
+                  </span>
+                  <p className="text-sm text-foreground">{hallazgo.descripcion}</p>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">Foto</span>
+                  {hallazgo.fotoUrl ? (
+                    <a
+                      className="group relative block overflow-hidden rounded-2xl border border-border"
+                      href={hallazgo.fotoUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <img
+                        alt={`Foto del hallazgo de ${hallazgo.equipo?.internalCode ?? 'equipo'}`}
+                        className="max-h-80 w-full bg-surface-secondary object-contain"
+                        src={hallazgo.fotoUrl}
+                      />
+                      <span className="absolute right-2 bottom-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Abrir en tamaño completo
+                      </span>
+                    </a>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sin foto adjunta.</p>
+                  )}
+                </div>
               </div>
             ) : null}
           </Modal.Body>
@@ -121,6 +172,108 @@ function DetalleHallazgoModal({
               Eliminar
             </Button>
             <Button onPress={onEditar}>Editar</Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+/**
+ * Alta directa del administrador: equipo, prioridad y descripción — la foto no
+ * va acá (se adjunta desde Terreno, donde se saca). El POST es online, con id
+ * idempotente del cliente (`useCrearHallazgo`); el hallazgo nace ABIERTO y
+ * dispara el mismo aviso al taller que uno reportado en terreno.
+ */
+function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
+  const { data: equipos } = useEquipment();
+  const crear = useCrearHallazgo();
+  const [equipoId, setEquipoId] = useState('');
+  const [prioridad, setPrioridad] = useState<string>('MEDIA');
+  const [descripcion, setDescripcion] = useState('');
+
+  const valido = equipoId.length > 0 && descripcion.trim().length >= 3;
+
+  const registrar = () => {
+    crear.mutate(
+      { equipoId, descripcion: descripcion.trim(), prioridad: prioridad as (typeof PRIORIDADES)[number] },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Nuevo hallazgo
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select fullWidth placeholder="Elegir equipo" value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
+                  <Label>Equipo</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {(equipos ?? []).map((equipo) => (
+                        <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
+                          {equipo.internalCode}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                <Select fullWidth value={prioridad} onChange={(value) => value && setPrioridad(String(value))}>
+                  <Label>Prioridad</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {PRIORIDADES.map((opcion) => (
+                        <ListBox.Item id={opcion} key={opcion} textValue={PRIORIDAD_LABEL[opcion]}>
+                          {PRIORIDAD_LABEL[opcion]}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </div>
+
+              <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
+                <Label>Descripción</Label>
+                <TextArea placeholder="Qué se encontró y dónde…" rows={3} />
+              </TextField>
+
+              <p className="text-xs text-muted-foreground">
+                La foto del hallazgo se adjunta desde Terreno, al momento de reportarlo en la máquina.
+              </p>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={onClose} variant="tertiary">
+              Cancelar
+            </Button>
+            <Button isDisabled={!valido} isPending={crear.isPending} onPress={registrar}>
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar hallazgo')}
+            </Button>
           </Modal.Footer>
         </Modal.Dialog>
       </Modal.Container>
@@ -266,11 +419,12 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
 export function HallazgosAdminView() {
   const { data: hallazgos, isPending, isError, error } = useHallazgosList();
   const eliminar = useEliminarHallazgo();
+  const [params, setParams] = useSearchParams();
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('TODOS');
-  const [detalle, setDetalle] = useState<Hallazgo | null>(null);
   const [editando, setEditando] = useState<Hallazgo | null>(null);
   const [eliminando, setEliminando] = useState<Hallazgo | null>(null);
+  const [creando, setCreando] = useState(false);
 
   const lista = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
@@ -286,6 +440,21 @@ export function HallazgosAdminView() {
 
   const porId = useMemo(() => new Map((hallazgos ?? []).map((h) => [h.id, h])), [hallazgos]);
   const cuenta = (estado: string) => (hallazgos ?? []).filter((h) => h.estado === estado).length;
+
+  // El detalle vive en `?id=`: la notificación «hallazgo creado» del admin
+  // llega acá con el id y el popup se abre solo (mismo patrón que /mantenciones).
+  const detalleId = params.get('id');
+  const detalle = detalleId ? (porId.get(detalleId) ?? null) : null;
+  const abrirDetalle = (id: string) => {
+    const siguientes = new URLSearchParams(params);
+    siguientes.set('id', id);
+    setParams(siguientes, { replace: true });
+  };
+  const cerrarDetalle = () => {
+    const siguientes = new URLSearchParams(params);
+    siguientes.delete('id');
+    setParams(siguientes, { replace: true });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -305,6 +474,7 @@ export function HallazgosAdminView() {
               {cuenta(estado).toLocaleString('es-CL')} {hallazgoEstadoLabel(estado).toLowerCase()}
             </Chip>
           ))}
+          <Button onPress={() => setCreando(true)}>Nuevo hallazgo</Button>
         </div>
       </div>
 
@@ -366,6 +536,7 @@ export function HallazgosAdminView() {
                     <Table.Column className="w-full">Descripción</Table.Column>
                     <Table.Column>Prioridad</Table.Column>
                     <Table.Column>Estado</Table.Column>
+                    <Table.Column>Registrado por</Table.Column>
                     <Table.Column>Foto</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -374,7 +545,7 @@ export function HallazgosAdminView() {
                         className="cursor-pointer"
                         data-testid={`hallazgo-fila-${h.id}`}
                         key={h.id}
-                        onAction={() => setDetalle(porId.get(h.id) ?? h)}
+                        onAction={() => abrirDetalle(h.id)}
                       >
                         {/* `whitespace-nowrap` en las columnas cortas: sin él, la columna
                            ancha (Descripción, `w-full`) las aprieta y la fecha y los
@@ -396,6 +567,7 @@ export function HallazgosAdminView() {
                             {hallazgoEstadoLabel(h.estado as HallazgoEstado)}
                           </Chip>
                         </Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{h.registradoPor ?? '—'}</Table.Cell>
                         <Table.Cell className="text-sm text-muted-foreground">{h.fotoUrl ? 'Sí' : '—'}</Table.Cell>
                       </Table.Row>
                     ))}
@@ -409,18 +581,20 @@ export function HallazgosAdminView() {
 
       <DetalleHallazgoModal
         hallazgo={detalle}
-        onClose={() => setDetalle(null)}
+        onClose={cerrarDetalle}
         onEditar={() => {
           if (detalle) setEditando(detalle);
-          setDetalle(null);
+          cerrarDetalle();
         }}
         onEliminar={() => {
           if (detalle) setEliminando(detalle);
-          setDetalle(null);
+          cerrarDetalle();
         }}
       />
 
       {editando ? <EditarHallazgoModal hallazgo={editando} onClose={() => setEditando(null)} /> : null}
+
+      {creando ? <CrearHallazgoModal onClose={() => setCreando(false)} /> : null}
 
       <AlertDialog.Backdrop
         isOpen={eliminando !== null}

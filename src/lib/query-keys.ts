@@ -15,6 +15,9 @@
  */
 export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
 
+/** Registro de reportes de salida de turno (vista «Reportes» del admin). */
+export const SHIFT_REPORTS_KEY = ['shift-reports'] as const;
+
 /**
  * Listas de Hallazgos y Trabajos extra — las lee `hooks/useHallazgos.ts` /
  * `hooks/useTrabajosExtra.ts` y las escribe `offline/replay.ts` (upsert del

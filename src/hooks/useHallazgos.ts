@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import {
+  createHallazgo,
   deleteHallazgo,
   editHallazgo,
   listHallazgos,
@@ -114,6 +115,27 @@ export function useEditarHallazgo(): UseEditarHallazgoResult {
   };
 
   return { guardar, isGuardando: edicion.isPending };
+}
+
+/**
+ * Creación directa para la vista de hallazgos del administrador (escritorio,
+ * online): POST inmediato + invalidación del listado — sin outbox, a
+ * diferencia de `useRegistrarHallazgo` (Terreno, con foto). El `id` lo genera
+ * el cliente igual: un reintento del POST no duplica el registro.
+ */
+export function useCrearHallazgo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (form: Pick<HallazgoForm, 'equipoId' | 'descripcion' | 'prioridad'>) =>
+      createHallazgo({ ...form, id: generateUuid(), capturedAt: new Date().toISOString() }),
+    onSuccess: () => {
+      toast.success('Hallazgo registrado');
+      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo registrar el hallazgo.');
+    },
+  });
 }
 
 /**

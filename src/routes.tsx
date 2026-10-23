@@ -22,7 +22,6 @@ import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
 import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
-import { PlaceholderView } from './views/PlaceholderView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
 import { TerrenoLayout } from './layout/TerrenoLayout';
@@ -31,7 +30,9 @@ import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
+import { MantencionesAdminView } from './views/MantencionesAdminView';
 import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
+import { ReportesView } from './views/ReportesView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { VencimientosView } from './views/VencimientosView';
 import { ReporteDiarioView } from './views/ReporteDiarioView';
@@ -128,7 +129,13 @@ export const router = createBrowserRouter([
                   // Reportes diarios de los supervisores (solo lectura, con
                   // filtros); Terreno conserva /terreno/reporte-diario.
                   { path: '/reportes-diarios', element: <ReportesDiariosAdminView /> },
-                  { path: '/reportes', element: <PlaceholderView title="Reportes" /> },
+                  // Registro de mantenciones completadas del taller (solo
+                  // lectura, con filtros y detalle); destino del aviso
+                  // «Orden de trabajo completada» del administrador.
+                  { path: '/mantenciones', element: <MantencionesAdminView /> },
+                  // Registro de reportes de salida de turno de los
+                  // supervisores, con descarga del PDF.
+                  { path: '/reportes', element: <ReportesView /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],
               },

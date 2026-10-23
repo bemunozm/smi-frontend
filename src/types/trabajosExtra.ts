@@ -84,6 +84,9 @@ export interface TrabajoExtraordinario {
   observaciones: string | null;
   fecha: string;
   equipo?: { internalCode: string };
+  /** Nombre de quien lo registró — null si la cuenta ya no existe; opcional
+   * para tolerar un backend que aún no manda el campo. */
+  registradoPor?: string | null;
 }
 
 /** Forma de un trabajo extraordinario en las respuestas del servidor. */
@@ -103,6 +106,7 @@ export const TrabajoExtraordinarioSchema = z.object({
   observaciones: z.string().nullable(),
   fecha: z.string(),
   equipo: z.object({ internalCode: z.string() }).optional(),
+  registradoPor: z.string().nullable().optional(),
 });
 
 /** `PATCH /api/trabajos-extra/:id`: solo los campos que cambiaron. */
