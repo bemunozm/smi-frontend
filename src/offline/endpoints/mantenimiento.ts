@@ -24,6 +24,7 @@ import {
   type SaveMaintenancePlanInput,
   type SetMaintenanceRecordInput,
 } from '../../types/maintenance-plan';
+import { LightConfigViewSchema, type LightConfig, type LightConfigView } from '../../types/vencimientos';
 import {
   DailyChecklistDetailSchema,
   type DailyChecklistDetail,
@@ -105,6 +106,12 @@ export interface MantenimientoEndpointMap {
     params: { id: string };
     body: ResubmitDailyChecklistInput;
     result: DailyChecklistDetail;
+  };
+  /** «Asignar mantenciones» de un liviano (`PUT`, last-write-wins). */
+  'lightVehicleConfig.save': {
+    params: { equipmentId: string };
+    body: LightConfig;
+    result: LightConfigView;
   };
   /** Módulo 3: el supervisor acepta (libera el equipo) o rechaza con comentario. */
   'dailyChecklist.review': {
@@ -261,6 +268,19 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     notFoundIsDone: false,
     carriesFiles: true,
     entity: (params) => entityOf(dailyChecklistEntity, params.id),
+  },
+  'lightVehicleConfig.save': {
+    method: 'PUT',
+    path: (params) => `/api/vencimientos/livianos/${param(params, 'equipmentId')}`,
+    failMessage: 'No se pudo guardar la mantención del liviano.',
+    parse: parseWith(LightConfigViewSchema),
+    // Cambian los días de aviso de sus papeles (y el calendario, que cuelga de
+    // esa key); con un aviso en km más amplio puede aparecer una orden.
+    invalidate: ['equipmentDocuments', 'ordenes'],
+    label: (params) => etiqueta('Mantención del liviano', cachedName('equipment', params.equipmentId)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(equipmentEntity, params.equipmentId),
   },
   'dailyChecklist.review': {
     method: 'POST',
