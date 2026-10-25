@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { CONTROL_UNIT } from './equipment';
+import { CONTROL_UNIT, EQUIPMENT_CLASS } from './equipment';
 
 /**
  * Contrato de tarjetas de turno (`POST/GET /api/shift-cards`, backend
@@ -40,6 +40,9 @@ export const ShiftCardResponseSchema = z.object({
     internalCode: z.string(),
     type: z.string(),
     controlUnit: z.enum(CONTROL_UNIT),
+    /** Liviano (camioneta, en km) o pesado; sin el campo, pesado. Opcional: cubre respuestas
+     * guardadas por el Service Worker antes de que el servidor lo incluyera. */
+    equipmentClass: z.enum(EQUIPMENT_CLASS).optional(),
   }),
   operatorId: z.string().nullable(),
   /** Snapshot de texto (`RegistroHorometro.operador`) — se mantiene aunque
@@ -67,6 +70,12 @@ export const ShiftCardResponseSchema = z.object({
   fechaSalida: z.string().nullable(),
   createdAt: z.string(),
   closedAt: z.string().nullable(),
+  /** Quién cerró la tarjeta. En un liviano puede ser otro supervisor que el
+   * que la abrió; `null` mientras sigue abierta (o en datos legacy). */
+  closedById: z.string().nullish(),
+  closedByName: z.string().nullish(),
+  /** Turno de quien la cerró — el liviano entra en el reporte de ESE turno. */
+  closedShift: z.object({ id: z.string(), date: z.string(), type: z.string() }).nullish(),
 });
 export type ShiftCardResponse = z.infer<typeof ShiftCardResponseSchema>;
 
@@ -86,7 +95,8 @@ export const ShiftCardListResponseSchema = z.object({
 export interface OpenShiftCardInput {
   id: string;
   equipoId: string;
-  operatorId: string;
+  /** Obligatorio en pesados. Un liviano lo maneja el supervisor: va sin operador. */
+  operatorId?: string;
   valorInicial: number;
   /** `YYYY-MM-DD` — armado con partes LOCALES, nunca `toISOString()` (ver
    * `lib/turno.ts#toDateOnly`). */
@@ -116,6 +126,10 @@ export interface CloseShiftCardInput {
   capturedAt: string;
   /** Hora del DISPOSITIVO al tomar la foto, si difiere de `capturedAt`. */
   photoCapturedAt?: string;
+  /** Turno de QUIEN CIERRA. Lo exige un liviano (lo puede cerrar otro
+   * supervisor, horas o días después); en un pesado el servidor lo ignora. */
+  shiftDate?: string;
+  shiftType?: ShiftType;
 }
 
 /**

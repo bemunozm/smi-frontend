@@ -31,6 +31,9 @@ import {
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
 import { CreateOperationModal } from '../components/mantenimiento/CreateOperationModal';
+import { MiCamioneta } from '../components/mantenimiento/MiCamioneta';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { ROLES } from '../types/roles';
 import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
 import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
@@ -279,6 +282,8 @@ export function OrdenesTrabajoView() {
   // cortados y botones partidos en dos líneas. Por debajo de `lg` se ve UNA
   // columna a todo el ancho y se cambia con el selector; desde `lg`, las tres.
   const tresColumnas = useMediaQuery(DESKTOP_QUERY);
+  // «Mi camioneta»: el km de la camioneta con que el mantenedor se mueve en faena.
+  const esMantenedor = useCurrentUser().role === ROLES.MANTENEDOR;
   const [columna, setColumna] = useState<'ordenes' | 'proceso' | 'finalizadas'>('ordenes');
   const conteos = {
     ordenes: openFindings.length + board.backlog.length,
@@ -300,6 +305,8 @@ export function OrdenesTrabajoView() {
         </div>
         {canCreate ? <CreateOperationModal /> : null}
       </div>
+
+      {esMantenedor ? <MiCamioneta /> : null}
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
 

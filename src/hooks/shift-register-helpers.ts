@@ -35,6 +35,8 @@ export interface TarjetaTurno {
   /** Quién abrió la tarjeta — un supervisor ve las suyas, el administrador
    * ve todas (lo decide el backend, ver `ShiftsService.mine`). */
   supervisor: string;
+  /** `user.id` de quien la abrió (para «Mi camioneta» del mantenedor). */
+  supervisorId?: string;
   cerradaA?: string;
   observaciones?: string;
   /** URL firmada de la foto del surtidor (`ShiftCardResponse.pumpPhotoUrl`)
@@ -51,8 +53,28 @@ export interface TarjetaTurno {
    * cambió el mismo dato): no se encadena otra encima. */
   edicionRequiereAtencion?: boolean;
   /** Quedó abierta al terminar el turno anterior (todavía sin definir quién la
-   * cierra). */
+   * cierra). Nunca en un liviano: esos quedan abiertos a propósito. */
   arrastrada?: boolean;
+  /** Camioneta: se mide en km, va sin operador y la puede cerrar cualquier
+   * supervisor, en otro turno (la carga de combustible llega 24 o 48 h después). */
+  liviano?: boolean;
+  /** Cuándo se abrió, `mié 22/10 08:15` — en un liviano puede ser de hace días. */
+  abiertaEl?: string;
+  /** Quién la cerró y si fue en el turno que muestra la pantalla. */
+  cerradaPor?: string;
+  cerradaPorId?: string;
+  cerradaEnActual?: boolean;
+}
+
+/** Un liviano sin conductor registrado: lo maneja el supervisor. */
+export const SIN_CONDUCTOR = 'Sin conductor';
+
+/** `mié 22/10 08:15` — fecha y hora cortas, en hora local. */
+export function fechaHoraCorta(iso: string): string {
+  const d = new Date(iso);
+  const dia = d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  return `${dia.replace(',', '')} ${hora}`;
 }
 
 /** `true` si el (fecha, tipo) de un shift/tarjeta calza con el turno que
@@ -81,11 +103,12 @@ function esActualCard(card: ShiftCardResponse, ctx: ContextoTurno): boolean {
 export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): TarjetaTurno {
   const grupo: Grupo = esActualCard(card, ctx) ? 'actual' : 'anterior';
   const estado: Estado = card.closedAt != null ? 'cerrada' : 'curso';
+  const liviano = card.equipo.equipmentClass === 'LIGHT';
   return {
     id: card.id,
     equipo: card.equipo.internalCode,
     tipo: card.equipo.type,
-    operador: card.operatorName,
+    operador: card.operatorName || (liviano ? SIN_CONDUCTOR : 'Operador'),
     operatorId: card.operatorId,
     inicial: card.valorInicial,
     final: card.valorFinal ?? undefined,
@@ -95,13 +118,19 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
     grupo,
     estado,
     supervisor: card.supervisorName ?? 'Sin identificar',
+    supervisorId: card.supervisorId ?? undefined,
     cerradaA: card.closedAt
       ? new Date(card.closedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
       : undefined,
     observaciones: card.observaciones ?? undefined,
     pumpPhotoUrl: card.pumpPhotoUrl ?? undefined,
     // "arrastrada": sigue abierta y no pertenece al turno que corre ahora.
-    arrastrada: grupo === 'anterior' && estado === 'curso',
+    arrastrada: !liviano && grupo === 'anterior' && estado === 'curso',
+    liviano,
+    abiertaEl: fechaHoraCorta(card.createdAt),
+    cerradaPor: card.closedByName ?? undefined,
+    cerradaPorId: card.closedById ?? undefined,
+    cerradaEnActual: card.closedShift != null && esActual(card.closedShift.date, card.closedShift.type, ctx),
   };
 }
 

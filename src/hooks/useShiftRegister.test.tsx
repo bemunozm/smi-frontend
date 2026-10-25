@@ -785,3 +785,145 @@ describe('useShiftRegister — AdBlue y ediciones pendientes en la proyección',
     await waitFor(() => expect(result.current.detalleCerrada?.final).toBe(150));
   });
 });
+
+// --- Livianos (camionetas) ------------------------------------------------------
+
+describe('useShiftRegister — livianos', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 8, 24, 10, 0)); // DIURNO, 2026-09-24
+  });
+
+  const CAMIONETA = {
+    ...EQUIPO,
+    id: 'eq_l1',
+    internalCode: 'CM-001',
+    type: 'Camioneta',
+    equipmentClass: 'LIGHT',
+    currentHourmeter: null,
+    currentMileage: 45120,
+  };
+
+  /** Abierta por OTRA supervisora dos días antes: no es "arrastrada". */
+  const LIVIANO_AJENO: ShiftCardResponse = {
+    ...CARD_ABIERTA_ACTUAL,
+    id: 'l1',
+    equipoId: 'eq_l1',
+    equipo: { internalCode: 'CM-001', type: 'Camioneta', controlUnit: 'KM', equipmentClass: 'LIGHT' },
+    operatorId: null,
+    operatorName: '',
+    supervisorId: 'u2',
+    supervisorName: 'Marta Díaz',
+    shift: { id: 'sh_0', date: '2026-09-22', type: 'DIURNO', exitReports: [] },
+    valorInicial: 45120,
+  };
+
+  it('mapCardToTarjeta: un liviano sin operador dice "Sin conductor" y nunca queda arrastrado', () => {
+    const t = mapCardToTarjeta(LIVIANO_AJENO, contextoTurno(new Date(2026, 8, 24, 10, 0)));
+
+    expect(t).toMatchObject({ liviano: true, operador: 'Sin conductor', arrastrada: false, grupo: 'anterior' });
+  });
+
+  it('los livianos van en su propia lista, y sus equipos no aparecen entre los pesados', async () => {
+    mockApis({ equipos: [EQUIPO, CAMIONETA], tarjetas: [CARD_ABIERTA_ACTUAL, LIVIANO_AJENO] });
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.livianosAbiertos).toHaveLength(1));
+    expect(result.current.abiertasActual.map((t) => t.id)).toEqual(['c1']);
+    expect(result.current.abiertasAnterior).toHaveLength(0);
+    expect(result.current.disponibles.map((e) => e.id)).toEqual(['eq_1']);
+    expect(result.current.disponiblesLivianos.map((e) => e.id)).toEqual(['eq_l1']);
+  });
+
+  it('abrir un liviano: sin operador y con el kilometraje de la camioneta', async () => {
+    mockApis({ equipos: [CAMIONETA] });
+    enqueueOpenCardMock.mockResolvedValueOnce(undefined);
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.aperturaLiviano.valorInicialApertura).toBe(45120));
+
+    act(() => result.current.aperturaLiviano.abrir());
+
+    await waitFor(() => expect(enqueueOpenCardMock).toHaveBeenCalledTimes(1));
+    const [, payload] = enqueueOpenCardMock.mock.calls[0]!;
+    expect(payload).toMatchObject({ equipoId: 'eq_l1', valorInicial: 45120 });
+    expect('operatorId' in payload).toBe(false);
+  });
+
+  it('cerrar manda el turno de quien cierra', async () => {
+    mockApis({ equipos: [CAMIONETA], tarjetas: [LIVIANO_AJENO] });
+    mockFotoFile = new File(['x'], 'surtidor.jpg', { type: 'image/jpeg' });
+    enqueueCloseCardMock.mockResolvedValueOnce(undefined);
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.livianosAbiertos).toHaveLength(1));
+    act(() => result.current.abrirCierre('l1'));
+    act(() => result.current.setCierre((c) => ({ ...c, final: '45300', litros: '40' })));
+    await waitFor(() => expect(result.current.finalNum).toBe(45300));
+
+    await act(async () => {
+      await result.current.cerrar();
+    });
+
+    const [, cardId, input] = enqueueCloseCardMock.mock.calls[0]!;
+    expect(cardId).toBe('l1');
+    expect(input).toMatchObject({ valorFinal: 45300, fuelLiters: 40, shiftDate: '2026-09-24', shiftType: 'DIURNO' });
+  });
+
+  it('un liviano que YO cerré en este turno entra en el reporte; uno cerrado por otro, no', async () => {
+    const cerradoPorMi: ShiftCardResponse = {
+      ...LIVIANO_AJENO,
+      valorFinal: 45300,
+      fuelLiters: 40,
+      closedAt: '2026-09-24T09:30:00.000Z',
+      closedById: 'u1',
+      closedByName: 'Ana Soto',
+      closedShift: { id: 'sh_1', date: '2026-09-24', type: 'DIURNO' },
+    };
+    const cerradoPorOtro: ShiftCardResponse = {
+      ...cerradoPorMi,
+      id: 'l2',
+      supervisorId: 'u1',
+      closedById: 'u2',
+      closedByName: 'Marta Díaz',
+    };
+    mockApis({ equipos: [CAMIONETA], tarjetas: [CARD_ABIERTA_ACTUAL, cerradoPorMi, cerradoPorOtro] });
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.livianosCerrados).toHaveLength(2));
+    expect(result.current.enCurso.map((t) => t.id)).toEqual(['c1', 'l1']);
+    expect(result.current.cerradas).toHaveLength(0);
+  });
+
+  it('un cierre pendiente de un liviano ya cuenta para el reporte de este turno', async () => {
+    mockApis({ equipos: [CAMIONETA], tarjetas: [LIVIANO_AJENO] });
+    mockOps = [
+      closeOp('l1', {
+        payload: {
+          cardId: 'l1',
+          input: {
+            closeClientId: 'pend-close-1',
+            valorFinal: 45300,
+            fuelLiters: 40,
+            capturedAt: '2026-09-24T09:30:00.000Z',
+            shiftDate: '2026-09-24',
+            shiftType: 'DIURNO',
+          },
+        },
+      } as Partial<OutboxOp>),
+    ];
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.livianosCerrados).toHaveLength(1));
+    expect(result.current.livianosCerrados[0]).toMatchObject({ cerradaPor: 'Ana Soto', sinSincronizar: true });
+    expect(result.current.enCurso.map((t) => t.id)).toEqual(['l1']);
+  });
+});

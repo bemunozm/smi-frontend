@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { esActual, mapCardToTarjeta, type TarjetaTurno } from './shift-register-helpers';
+import { esActual, fechaHoraCorta, mapCardToTarjeta, SIN_CONDUCTOR, type TarjetaTurno } from './shift-register-helpers';
 import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp } from '../offline/db';
 import type { ContextoTurno } from '../lib/turno';
 import type { Equipment } from '../types/equipment';
@@ -21,26 +21,37 @@ function mapOpenOpToTarjeta(
   const equipo = equipos.find((e) => e.id === op.payload.equipoId);
   const operador = operadores.find((o) => o.id === op.payload.operatorId);
   const grupo = esActual(op.payload.shiftDate, op.payload.shiftType, ctx) ? 'actual' : 'anterior';
+  const liviano = equipo?.equipmentClass === 'LIGHT';
   return {
     id: op.id,
     equipo: equipo?.internalCode ?? '—',
     tipo: equipo?.type ?? '—',
-    operador: operador?.name ?? 'Operador',
-    operatorId: op.payload.operatorId,
+    operador: operador?.name ?? (op.payload.operatorId ? 'Operador' : SIN_CONDUCTOR),
+    operatorId: op.payload.operatorId ?? null,
     inicial: op.payload.valorInicial,
     adBlue: false,
     grupo,
     estado: 'curso',
     supervisor,
+    supervisorId: op.userId,
     sinSincronizar: true,
-    arrastrada: grupo === 'anterior',
+    arrastrada: !liviano && grupo === 'anterior',
+    liviano,
+    abiertaEl: fechaHoraCorta(op.payload.capturedAt),
   };
 }
 
 /** Superpone un cierre pendiente del outbox sobre la tarjeta base (servidor
  * o una apertura pendiente) — la tarjeta base "gana" en los campos que no
  * cambian (equipo, tipo, operador, supervisor, inicial). */
-function overlayCloseOp(base: TarjetaTurno, op: CloseCardOp): TarjetaTurno {
+function overlayCloseOp(
+  base: TarjetaTurno,
+  op: CloseCardOp,
+  ctx: ContextoTurno,
+  supervisor: string,
+  userId: string | undefined,
+): TarjetaTurno {
+  const { shiftDate, shiftType } = op.payload.input;
   return {
     ...base,
     estado: 'cerrada',
@@ -55,6 +66,9 @@ function overlayCloseOp(base: TarjetaTurno, op: CloseCardOp): TarjetaTurno {
     }),
     sinSincronizar: true,
     arrastrada: false,
+    cerradaPor: supervisor,
+    cerradaPorId: userId,
+    cerradaEnActual: shiftDate != null && shiftType != null && esActual(shiftDate, shiftType, ctx),
   };
 }
 
@@ -110,6 +124,7 @@ export interface UseShiftProjectionParams {
   tarjetasServidor: ShiftCardResponse[];
   ops: OutboxOp[];
   supervisor: string;
+  userId: string | undefined;
 }
 
 export interface UseShiftProjectionResult {
@@ -117,9 +132,17 @@ export interface UseShiftProjectionResult {
   abiertasActual: TarjetaTurno[];
   abiertasAnterior: TarjetaTurno[];
   cerradas: TarjetaTurno[];
-  /** = `abiertasActual` — las que entran en el reporte de salida. */
+  /** `abiertasActual` más los livianos que YO cerré en este turno — las que
+   * entran en el reporte de salida. */
   enCurso: TarjetaTurno[];
+  /** Livianos: van aparte, abiertos sin importar el turno (se cierran cuando
+   * se carga combustible, a veces 24 o 48 h después y por otro supervisor). */
+  livianosAbiertos: TarjetaTurno[];
+  livianosCerrados: TarjetaTurno[];
+  /** Pesados operativos y libres. */
   disponibles: Equipment[];
+  /** Livianos operativos y libres. */
+  disponiblesLivianos: Equipment[];
   enTaller: Equipment[];
   /** Texto único ya armado para el `hint` del selector de equipo — junta
    * "en taller" y "ocupado" en una sola frase. */
@@ -138,6 +161,7 @@ export function useShiftProjection({
   tarjetasServidor,
   ops,
   supervisor,
+  userId,
 }: UseShiftProjectionParams): UseShiftProjectionResult {
   const opsAbrir = useMemo(() => ops.filter((op): op is OpenCardOp => op.type === 'openCard'), [ops]);
   const opsCerrar = useMemo(() => ops.filter((op): op is CloseCardOp => op.type === 'closeCard'), [ops]);
@@ -163,7 +187,7 @@ export function useShiftProjection({
     opsCerrar.forEach((op) => {
       const base = porId.get(op.payload.cardId);
       if (!base) return;
-      porId.set(op.payload.cardId, overlayCloseOp(base, op));
+      porId.set(op.payload.cardId, overlayCloseOp(base, op, ctx, supervisor, userId));
     });
     opsEditar.forEach((op) => {
       const id = op.params.id;
@@ -171,13 +195,21 @@ export function useShiftProjection({
       if (id && base) porId.set(id, overlayEditOp(base, op, operadores));
     });
     return Array.from(porId.values());
-  }, [tarjetasServidor, opsAbrir, opsCerrar, opsEditar, ctx, equipos, operadores, supervisor]);
+  }, [tarjetasServidor, opsAbrir, opsCerrar, opsEditar, ctx, equipos, operadores, supervisor, userId]);
 
-  const abiertas = tarjetas.filter((t) => t.estado === 'curso');
-  const cerradas = tarjetas.filter((t) => t.estado === 'cerrada');
+  const pesadas = tarjetas.filter((t) => !t.liviano);
+  const abiertas = pesadas.filter((t) => t.estado === 'curso');
+  const cerradas = pesadas.filter((t) => t.estado === 'cerrada');
   const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
   const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
-  const enCurso = abiertasActual;
+  const livianosAbiertos = tarjetas.filter((t) => t.liviano && t.estado === 'curso');
+  const livianosCerrados = tarjetas.filter((t) => t.liviano && t.estado === 'cerrada');
+  // Un liviano entra en el reporte del turno en que se CIERRA, y solo en el
+  // de quien lo cerró (el servidor busca por `closedShiftId`).
+  const enCurso = [
+    ...abiertasActual,
+    ...livianosCerrados.filter((t) => t.cerradaEnActual && t.cerradaPorId != null && t.cerradaPorId === userId),
+  ];
 
   // Ids de cierre pendientes, por el id de la tarjeta que cierran — usado
   // para las dos correcciones de `disponibles` de abajo.
@@ -206,7 +238,7 @@ export function useShiftProjection({
     return ids;
   }, [tarjetasServidor, cierreCardIds]);
 
-  const disponibles = useMemo(
+  const libres = useMemo(
     () =>
       equipos.filter(
         (e) =>
@@ -216,7 +248,12 @@ export function useShiftProjection({
       ),
     [equipos, pendingClosedEquipoIds, pendingOpenEquipoIds],
   );
-  const enTaller = useMemo(() => equipos.filter((e) => e.status !== 'OPERATIONAL'), [equipos]);
+  const disponibles = useMemo(() => libres.filter((e) => e.equipmentClass !== 'LIGHT'), [libres]);
+  const disponiblesLivianos = useMemo(() => libres.filter((e) => e.equipmentClass === 'LIGHT'), [libres]);
+  const enTaller = useMemo(
+    () => equipos.filter((e) => e.status !== 'OPERATIONAL' && e.equipmentClass !== 'LIGHT'),
+    [equipos],
+  );
 
   // Equipos que YA aparecen en mis propias tarjetas abiertas (`tarjetasServidor`
   // — para SUPERVISOR es "mías", para ADMIN es "todas", ver `ShiftsService.
@@ -231,11 +268,27 @@ export function useShiftProjection({
   const ocupados = useMemo(
     () =>
       equipos.filter(
-        (e) => e.status === 'OPERATIONAL' && e.openShift != null && !equipoIdsConTarjetaPropiaAbierta.has(e.id),
+        (e) =>
+          e.equipmentClass !== 'LIGHT' &&
+          e.status === 'OPERATIONAL' &&
+          e.openShift != null &&
+          !equipoIdsConTarjetaPropiaAbierta.has(e.id),
       ),
     [equipos, equipoIdsConTarjetaPropiaAbierta],
   );
   const equipoHint = useMemo(() => construirHintEquipo(enTaller, ocupados), [enTaller, ocupados]);
 
-  return { tarjetas, abiertasActual, abiertasAnterior, cerradas, enCurso, disponibles, enTaller, equipoHint };
+  return {
+    tarjetas,
+    abiertasActual,
+    abiertasAnterior,
+    cerradas,
+    enCurso,
+    livianosAbiertos,
+    livianosCerrados,
+    disponibles,
+    disponiblesLivianos,
+    enTaller,
+    equipoHint,
+  };
 }

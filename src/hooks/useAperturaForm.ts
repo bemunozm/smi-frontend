@@ -19,6 +19,8 @@ export interface UseAperturaFormParams {
   disponibles: Equipment[];
   ctx: ContextoTurno;
   userId: string | undefined;
+  /** Camioneta: sin operador y con el kilometraje en vez del horómetro. */
+  liviano?: boolean;
 }
 
 export interface UseAperturaFormResult {
@@ -44,16 +46,22 @@ export interface UseAperturaFormResult {
  * `abrir()` SIEMPRE encola vía `enqueueOpenCard` (online
  * u offline, un único camino) — nunca llama a la API directo.
  */
-export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormParams): UseAperturaFormResult {
+export function useAperturaForm({
+  disponibles,
+  ctx,
+  userId,
+  liviano = false,
+}: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
+  const lecturaEquipo = liviano ? equipoElegido?.currentMileage : equipoElegido?.currentHourmeter;
   // Vacío conserva la lectura previa del equipo (lo esperado al precargar); un
   // texto que no es un número NO cae en silencio a ella: es un error.
   const textoHorometro = apertura.horometro.trim();
   const horometroInvalido = textoHorometro !== '' && parseDecimal(textoHorometro) == null;
   const valorInicialApertura =
-    textoHorometro === '' ? (equipoElegido?.currentHourmeter ?? null) : parseDecimal(textoHorometro);
-  const ultimaLectura = equipoElegido?.currentHourmeter ?? null;
+    textoHorometro === '' ? (lecturaEquipo ?? null) : parseDecimal(textoHorometro);
+  const ultimaLectura = lecturaEquipo ?? null;
   const bajoUltimaLectura =
     valorInicialApertura != null && ultimaLectura != null && valorInicialApertura < ultimaLectura;
 
@@ -67,13 +75,13 @@ export function useAperturaForm({ disponibles, ctx, userId }: UseAperturaFormPar
     // Sin fallback a `0`: si no hay horómetro tipeado NI último registrado
     // del equipo, no hay ningún valor que mandar — el botón ya queda
     // deshabilitado en la vista con esta misma condición (`valorInicialApertura`).
-    if (!equipoElegido || !apertura.operatorId || valorInicialApertura == null || isAbriendo) return;
+    if (!equipoElegido || (!liviano && !apertura.operatorId) || valorInicialApertura == null || isAbriendo) return;
     if (!userId) return;
     setIsAbriendo(true);
     void enqueueOpenCard(userId, {
       id: generateUuid(),
       equipoId: equipoElegido.id,
-      operatorId: apertura.operatorId,
+      ...(liviano ? {} : { operatorId: apertura.operatorId }),
       valorInicial: valorInicialApertura,
       shiftDate: toDateOnly(ctx.fecha),
       shiftType: ctx.turno,

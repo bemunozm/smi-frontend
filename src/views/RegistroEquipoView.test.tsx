@@ -105,6 +105,38 @@ const TARJETA_CERRADA = {
   observaciones: 'Sin novedades.',
 };
 
+const CAMIONETAS = [
+  { id: 'l1', internalCode: 'CM-001', type: 'Camioneta', licensePlate: 'ABCD12', currentMileage: 45120 },
+] as UseShiftRegisterResult['disponiblesLivianos'];
+
+/** Abierta por otra supervisora hace dos días: cualquiera la puede cerrar. */
+const LIVIANO_ABIERTO = {
+  id: 'l-c1',
+  equipo: 'CM-001',
+  tipo: 'Camioneta',
+  operador: 'Sin conductor',
+  inicial: 45120,
+  grupo: 'anterior' as const,
+  estado: 'curso' as const,
+  supervisor: 'Marta Díaz',
+  liviano: true,
+  abiertaEl: 'mar 22/09 08:15',
+};
+
+const abrirLivianoMock = vi.fn();
+const setAperturaLiviano = vi.fn();
+
+const APERTURA_LIVIANO: UseShiftRegisterResult['aperturaLiviano'] = {
+  apertura: { equipoId: 'l1', operatorId: '', horometro: '' },
+  setApertura: setAperturaLiviano,
+  equipoElegido: CAMIONETAS[0],
+  valorInicialApertura: 45120,
+  horometroInvalido: false,
+  bajoUltimaLectura: false,
+  abrir: abrirLivianoMock,
+  isAbriendo: false,
+};
+
 const CTX = {
   turno: 'DIURNO' as const,
   fecha: new Date(2026, 8, 24),
@@ -155,6 +187,10 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     abiertasAnterior: [],
     cerradas: [TARJETA_CERRADA],
     enCurso: [TARJETA_ABIERTA],
+    livianosAbiertos: [],
+    livianosCerrados: [],
+    disponiblesLivianos: CAMIONETAS,
+    aperturaLiviano: APERTURA_LIVIANO,
     // Operador ya elegido + horómetro válido por defecto (equivale al
     // "listo para agregar"): los tests de guardas/deshabilitado pisan estos
     // campos explícitamente, ver la sección "guardas de Agregar equipo".
@@ -683,6 +719,47 @@ describe('RegistroEquipoView', () => {
     it('una tarjeta cerrada ya confirmada no lleva la marca', () => {
       renderView('phone', { historialAbierto: true });
       expect(within(screen.getByRole('dialog')).queryByText('Sin sincronizar')).toBeNull();
+    });
+  });
+
+  describe('livianos', () => {
+    const verLivianos = () => fireEvent.click(screen.getByRole('button', { name: /Livianos/ }));
+
+    it('pesados y livianos van separados: la camioneta se abre sin operador y con el kilometraje', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+
+      // Por defecto, pesados: la lista no mezcla camionetas.
+      expect(screen.queryByText('CM-001')).toBeNull();
+
+      verLivianos();
+
+      expect(screen.getByRole('heading', { name: 'Abrir camioneta' })).toBeTruthy();
+      expect(screen.getByText('Kilometraje inicial')).toBeTruthy();
+      expect(screen.queryByLabelText('Operador')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: /Abrir camioneta/ }));
+      expect(abrirLivianoMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('lista los livianos abiertos de otro supervisor, y se pueden cerrar', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      verLivianos();
+
+      expect(screen.getByText('Marta Díaz')).toBeTruthy();
+      expect(screen.getByText(/mar 22\/09 08:15/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Cerrar con la carga/ }));
+      expect(setCerrandoId).toHaveBeenCalledWith('l-c1');
+    });
+
+    it('el cierre de un liviano pide km final, sin AdBlue, y entra en el reporte de este turno', () => {
+      renderView('desktop', { cerrandoId: 'l-c1', cerrando: LIVIANO_ABIERTO, finalNum: 45300, horasMaquina: 180 });
+
+      expect(screen.getByText('Kilometraje final')).toBeTruthy();
+      expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
+      expect(screen.getByText('180 km')).toBeTruthy();
+      expect(screen.queryByText(/AdBlue/)).toBeNull();
+      expect(screen.getByText(/Entra en tu reporte de salida del turno/)).toBeTruthy();
+      // La foto del surtidor sigue siendo obligatoria.
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
   });
 
