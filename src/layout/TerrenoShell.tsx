@@ -104,15 +104,15 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--terreno-warm)' }}>
-      {/* El marco de "teléfono sobre fondo gris" (ancho fijo + sombra + esquinas
-          redondeadas) solo tiene sentido mientras el shell es más angosto que la
-          pantalla. Desde `sm` el shell ocupa el ancho y el marco sobra. */}
+      {/* El shell ocupa todo el ancho en cualquier pantalla: el ancho del
+          contenido lo decide `CONTAINER`. Un marco de 448 px dejaba la tablet de
+          faena (~600 px CSS) con el ancho de un celular. */}
       <div
-        className="relative mx-auto flex min-h-screen w-full max-w-md flex-col shadow-[0_0_60px_rgba(13,12,10,0.08)] sm:max-w-none sm:shadow-none"
+        className="relative flex min-h-screen w-full flex-col"
         style={{ background: 'var(--terreno-shell)' }}
       >
         <header
-          className="sticky top-0 z-20 rounded-b-3xl text-white sm:rounded-none"
+          className="sticky top-0 z-20 rounded-b-3xl text-white min-[480px]:rounded-none"
           style={{ background: 'var(--terreno-head)' }}
         >
           <div className={`${CONTAINER} flex items-center gap-3 py-3.5 lg:gap-5 lg:py-3`}>

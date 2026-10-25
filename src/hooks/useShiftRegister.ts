@@ -5,7 +5,7 @@ import { useEquipment } from './useEquipment';
 import { useOperators } from './useOperators';
 import { useShiftCardsMine } from './useShiftCards';
 import { useOutboxOps } from '../offline/useOutboxOps';
-import { useAperturaForm, type AperturaState } from './useAperturaForm';
+import { useAperturaForm, type AperturaState, type UseAperturaFormResult } from './useAperturaForm';
 import { useCierreForm, type CierreState } from './useCierreForm';
 import { useEditarTarjeta, type UseEditarTarjetaResult } from './useEditarTarjeta';
 import { useExitReportState } from './useExitReportState';
@@ -75,8 +75,16 @@ export interface UseShiftRegisterResult {
   abiertasActual: TarjetaTurno[];
   abiertasAnterior: TarjetaTurno[];
   cerradas: TarjetaTurno[];
-  /** = `abiertasActual` — las que entran en el reporte de salida. */
+  /** `abiertasActual` más los livianos que cerré en este turno — las que
+   * entran en el reporte de salida. */
   enCurso: TarjetaTurno[];
+
+  /** Livianos (camionetas): lista y apertura aparte, ver `useShiftProjection`. */
+  livianosAbiertos: TarjetaTurno[];
+  livianosCerrados: TarjetaTurno[];
+  disponiblesLivianos: Equipment[];
+  /** Apertura de un liviano: sin operador y con el kilometraje inicial. */
+  aperturaLiviano: UseAperturaFormResult;
 
   apertura: AperturaState;
   setApertura: Dispatch<SetStateAction<AperturaState>>;
@@ -157,9 +165,16 @@ export function useShiftRegister(): UseShiftRegisterResult {
     tarjetasServidor,
     ops,
     supervisor,
+    userId: user?.id,
   });
   const apertura = useAperturaForm({ disponibles: proyeccion.disponibles, ctx: turno.ctx, userId: user?.id });
-  const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, userId: user?.id });
+  const aperturaLiviano = useAperturaForm({
+    disponibles: proyeccion.disponiblesLivianos,
+    ctx: turno.ctx,
+    userId: user?.id,
+    liviano: true,
+  });
+  const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx: turno.ctx, userId: user?.id });
   const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id });
   const reporte = useExitReportState({
     tarjetasServidor,
@@ -190,6 +205,10 @@ export function useShiftRegister(): UseShiftRegisterResult {
     abiertasAnterior: proyeccion.abiertasAnterior,
     cerradas: proyeccion.cerradas,
     enCurso: proyeccion.enCurso,
+    livianosAbiertos: proyeccion.livianosAbiertos,
+    livianosCerrados: proyeccion.livianosCerrados,
+    disponiblesLivianos: proyeccion.disponiblesLivianos,
+    aperturaLiviano,
     ...apertura,
     ...cierre,
     edicion,

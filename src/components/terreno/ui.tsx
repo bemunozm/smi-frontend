@@ -952,7 +952,7 @@ export function Hoja({
         aria-label={titulo}
         className="fixed inset-x-0 bottom-0 z-50 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card shadow-[0_-10px_40px_rgba(13,12,10,.2)] lg:inset-x-auto lg:top-1/2 lg:bottom-auto lg:left-1/2 lg:max-h-[86%] lg:w-[600px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl"
       >
-        <div className="mx-auto flex max-w-md flex-col gap-3.5 px-4 pt-2.5 pb-[22px] sm:max-w-[560px] lg:max-w-none lg:px-6 lg:pt-[22px] lg:pb-6">
+        <div className="mx-auto flex max-w-2xl flex-col gap-3.5 px-4 pt-2.5 pb-[22px] md:max-w-3xl lg:max-w-none lg:px-6 lg:pt-[22px] lg:pb-6">
           <div className="mx-auto mb-1 h-[5px] w-11 rounded-full bg-[#cfd4da] lg:hidden" />
           <div className="flex items-start justify-between gap-3">
             <div>

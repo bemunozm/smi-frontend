@@ -1,6 +1,7 @@
 import { toast } from '@heroui/react';
 import { useQuery } from '@tanstack/react-query';
 
+import { MaintenanceForecastAPI } from '../api/MaintenanceForecastAPI';
 import { MaintenancePlanAPI } from '../api/MaintenancePlanAPI';
 import { MAINTENANCE_PLANS_KEY } from '../lib/query-keys';
 import type { SaveMaintenancePlanInput, SetMaintenanceRecordInput } from '../types/maintenance-plan';
@@ -23,6 +24,19 @@ export function useMaintenanceStatusByEquipment(enabled = true) {
   return useQuery({
     queryKey: [...MAINTENANCE_PLANS_KEY, 'status'],
     queryFn: MaintenancePlanAPI.statusForAll,
+    select: (filas) => new Map(filas.map((f) => [f.equipmentId, f])),
+    enabled,
+  });
+}
+
+/**
+ * Fecha estimada de la próxima mantención de cada equipo, por uso promedio.
+ * Cuelga de la misma raíz que las pautas: guardar una pauta la recalcula.
+ */
+export function useMaintenanceForecastByEquipment(enabled = true) {
+  return useQuery({
+    queryKey: [...MAINTENANCE_PLANS_KEY, 'forecast'],
+    queryFn: MaintenanceForecastAPI.list,
     select: (filas) => new Map(filas.map((f) => [f.equipmentId, f])),
     enabled,
   });

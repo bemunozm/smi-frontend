@@ -2,20 +2,27 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { Boton, Card, Input } from '../components/terreno/ui';
+import { Boton, Card, Input, Segmentado } from '../components/terreno/ui';
+import { TablaPorDocumento, TarjetasPorDocumento } from '../components/vencimientos/PorDocumento';
 import {
   ChipDocumento,
   ChipMantencion,
+  MantencionEnMes,
   Leyenda,
   ListaVencimientos,
   NombreVehiculo,
 } from '../components/vencimientos/calendario';
 import { mesCorto, mesLargo, mover } from '../lib/meses';
+import { ordenarPorUrgencia, papelesVigentes } from '../lib/vencimientos';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCalendarioVencimientos } from '../hooks/useVencimientos';
 import type { CalendarEquipment } from '../types/vencimientos';
 
 /**
+ * Dos maneras de verlo: «Por documento» (por defecto) dice de cada papel la
+ * fecha, cuánto falta y su estado, con lo más urgente arriba; «Calendario 12
+ * meses» los ubica mes a mes.
+ *
  * Módulo 4 · R21 — calendario anual de los vehículos livianos, por patente:
  * qué documento vence cada mes (revisión técnica, permiso de circulación,
  * seguro…) y cuánto falta para la mantención de cada 10.000 km (o la de su
@@ -30,6 +37,7 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const [desde, setDesde] = useState<string | undefined>(undefined);
   const [busqueda, setBusqueda] = useState('');
+  const [vista, setVista] = useState<'documentos' | 'calendario'>('documentos');
   const { data, isLoading, isError } = useCalendarioVencimientos(desde);
   const base = contexto === 'taller' ? '/mantenimiento/equipos' : '/equipos';
 
@@ -43,12 +51,13 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
     );
   }, [data, busqueda]);
 
+  // Solo el papel actual de cada tipo: uno ya renovado no cuenta como vencido.
   const vencidos = (data?.equipment ?? []).reduce(
-    (n, e) => n + e.documents.filter((d) => d.status === 'VENCIDO').length,
+    (n, e) => n + papelesVigentes(e).filter((d) => d.status === 'VENCIDO').length,
     0,
   );
   const porVencer = (data?.equipment ?? []).reduce(
-    (n, e) => n + e.documents.filter((d) => d.status === 'POR_VENCER').length,
+    (n, e) => n + papelesVigentes(e).filter((d) => d.status === 'POR_VENCER').length,
     0,
   );
   const mantenciones = (data?.equipment ?? []).filter((e) => e.service?.due).length;
@@ -66,19 +75,40 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
           Vencimientos de livianos
         </h2>
         <p className="text-[15px] leading-snug text-[var(--label-color)]">
-          Calendario de 12 meses por patente: revisión técnica, permiso de circulación, seguro y la mantención de cada
-          10.000 km. Los avisos llegan con la anticipación de cada documento.
+          Cuándo vence la revisión técnica, el permiso de circulación y el seguro de cada vehículo, y cuánto falta para
+          su mantención de cada 10.000 km. Los avisos llegan con la anticipación de cada papel.
         </p>
       </div>
 
-      <dl className="m-0 grid grid-cols-3 overflow-hidden rounded-2xl border border-border bg-card">
+      <dl className="m-0 grid grid-cols-1 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {[
-          { label: 'Documentos vencidos', valor: vencidos, color: vencidos ? 'text-[var(--danger)]' : '' },
-          { label: 'Por vencer', valor: porVencer, color: porVencer ? 'text-[var(--warning-soft-foreground)]' : '' },
-          { label: 'Mantenciones por hacer', valor: mantenciones, color: mantenciones ? 'text-[#0f2a7a]' : '' },
-        ].map((c, i) => (
-          <div key={c.label} className={`flex flex-col gap-0.5 px-4 py-3 ${i > 0 ? 'border-l border-border' : ''}`}>
-            <dt className="text-[13.5px] leading-tight font-semibold text-[var(--label-color)]">{c.label}</dt>
+          {
+            label: 'Papeles vencidos',
+            ayuda: 'Hay que renovarlos ya',
+            valor: vencidos,
+            color: vencidos ? 'text-[var(--danger)]' : '',
+          },
+          {
+            label: 'Por vencer',
+            ayuda: 'Dentro de los días de aviso',
+            valor: porVencer,
+            color: porVencer ? 'text-[var(--warning-soft-foreground)]' : '',
+          },
+          {
+            label: 'Mantenciones por hacer',
+            ayuda: 'Dentro del margen de km',
+            valor: mantenciones,
+            color: mantenciones ? 'text-[#0f2a7a]' : '',
+          },
+        ].map((c) => (
+          <div
+            key={c.label}
+            className="flex items-center justify-between gap-3 px-4 py-3 sm:flex-col sm:items-start sm:gap-0.5"
+          >
+            <dt className="flex flex-col">
+              <span className="text-[14px] leading-tight font-semibold text-foreground">{c.label}</span>
+              <span className="text-[12.5px] text-[var(--label-color)]">{c.ayuda}</span>
+            </dt>
             <dd className={`tabular m-0 text-[26px] leading-tight font-bold ${c.color || 'text-foreground'}`}>
               {c.valor}
             </dd>
@@ -86,34 +116,19 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
         ))}
       </dl>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Boton
-          aria-label="12 meses antes"
-          className="min-h-[44px] px-3"
-          disabled={!inicio}
-          variante="contorno"
-          onClick={() => inicio && setDesde(mover(inicio, -12))}
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Boton>
-        <span className="min-w-[200px] text-center text-[16px] font-semibold">
-          {data ? `${mesLargo(data.months[0])} – ${mesLargo(data.months[11])}` : '…'}
-        </span>
-        <Boton
-          aria-label="12 meses después"
-          className="min-h-[44px] px-3"
-          disabled={!inicio}
-          variante="contorno"
-          onClick={() => inicio && setDesde(mover(inicio, 12))}
-        >
-          <ChevronRight className="h-5 w-5" />
-        </Boton>
-        {desde && (
-          <Boton className="min-h-[44px] px-4 text-sm" variante="contorno" onClick={() => setDesde(undefined)}>
-            Volver a hoy
-          </Boton>
-        )}
-        <div className="ml-auto w-full sm:w-64">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="sm:w-[380px]">
+          <Segmentado
+            etiqueta="Cómo ver los vencimientos"
+            valor={vista}
+            onChange={setVista}
+            opciones={[
+              { valor: 'documentos', label: 'Por documento' },
+              { valor: 'calendario', label: 'Calendario 12 meses' },
+            ]}
+          />
+        </div>
+        <div className="w-full sm:ml-auto sm:w-64">
           <Input
             aria-label="Buscar por patente o código"
             placeholder="Buscar patente o código…"
@@ -122,6 +137,37 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
           />
         </div>
       </div>
+
+      {vista === 'calendario' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Boton
+            aria-label="12 meses antes"
+            className="min-h-[44px] px-3"
+            disabled={!inicio}
+            variante="contorno"
+            onClick={() => inicio && setDesde(mover(inicio, -12))}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Boton>
+          <span className="min-w-[200px] text-center text-[16px] font-semibold">
+            {data ? `${mesLargo(data.months[0])} – ${mesLargo(data.months[11])}` : '…'}
+          </span>
+          <Boton
+            aria-label="12 meses después"
+            className="min-h-[44px] px-3"
+            disabled={!inicio}
+            variante="contorno"
+            onClick={() => inicio && setDesde(mover(inicio, 12))}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Boton>
+          {desde && (
+            <Boton className="min-h-[44px] px-4 text-sm" variante="contorno" onClick={() => setDesde(undefined)}>
+              Volver a hoy
+            </Boton>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-[15px] text-[var(--label-color)]">Cargando el calendario…</p>
@@ -133,6 +179,12 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
         <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[15px] text-[var(--label-color)]">
           {busqueda ? 'Ningún liviano coincide con la búsqueda.' : 'No hay vehículos livianos registrados.'}
         </p>
+      ) : vista === 'documentos' ? (
+        esEscritorio ? (
+          <TablaPorDocumento base={base} equipos={ordenarPorUrgencia(equipos)} />
+        ) : (
+          <TarjetasPorDocumento base={base} equipos={ordenarPorUrgencia(equipos)} />
+        )
       ) : esEscritorio ? (
         <TablaCalendario base={base} equipos={equipos} months={data.months} />
       ) : (
@@ -143,7 +195,14 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
         </div>
       )}
 
-      <Leyenda />
+      {vista === 'calendario' ? (
+        <Leyenda />
+      ) : (
+        <p className="text-[14px] text-[var(--label-color)]">
+          Arriba, lo más urgente. «Por vencer» significa que el papel ya entró en sus días de aviso (se fijan por tipo
+          de papel en «Asignar mantenciones» de cada vehículo). Toca la patente para ver o renovar sus papeles.
+        </p>
+      )}
       {contexto === 'taller' ? (
         <p className="text-[14px] text-[var(--label-color)]">
           Los documentos los carga el administrador. Las órdenes de mantención aparecen en{' '}
@@ -211,11 +270,12 @@ function TablaCalendario({ base, equipos, months }: { base: string; equipos: Cal
                       .map((d) => (
                         <ChipDocumento key={d.id} d={d} />
                       ))}
+                    <MantencionEnMes equipmentId={e.id} mes={m} />
                   </div>
                 </td>
               ))}
               <td className="px-3 py-3">
-                <ChipMantencion s={e.service} />
+                <ChipMantencion s={e.service} equipmentId={e.id} />
               </td>
             </tr>
           ))}
@@ -233,7 +293,7 @@ function TarjetaVehiculo({ base, equipo: e, months }: { base: string; equipo: Ca
         <AFicha base={base} equipo={e}>
           <NombreVehiculo equipo={e} />
         </AFicha>
-        <ChipMantencion s={e.service} />
+        <ChipMantencion s={e.service} equipmentId={e.id} />
       </div>
       <ListaVencimientos equipo={e} months={months} />
     </Card>

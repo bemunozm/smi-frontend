@@ -58,6 +58,30 @@ vi.mock('../../hooks/useVencimientos', () => ({
   useSaveLightConfig: () => ({ mutate, isPending: false }),
 }));
 
+// Fecha estimada por uso: CN-007 llegaría a los 20.000 km el lun 16-11.
+vi.mock('../../hooks/useMaintenancePlans', () => ({
+  useMaintenanceForecastByEquipment: () => ({
+    data: new Map([
+      [
+        'eq_1',
+        {
+          equipmentId: 'eq_1',
+          unit: 'km',
+          source: 'LIVIANO',
+          nextAt: 20000,
+          remaining: 5000,
+          status: 'ESTIMADA',
+          dailyUsage: 220,
+          basedOnDays: 28,
+          estimatedDate: '2026-11-16',
+          weekStart: '2026-11-10',
+          suggestedDate: '2026-11-15',
+        },
+      ],
+    ]),
+  }),
+}));
+
 const EQUIPO = { id: 'eq_1', internalCode: 'CN-007', brand: 'Toyota', model: 'Hilux' };
 
 afterEach(() => {

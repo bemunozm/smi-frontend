@@ -5,6 +5,7 @@ import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import type { TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
+import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
 import { usePhotoCaptureFlow, type UsePhotoCaptureFlowResult } from '../lib/usePhotoCaptureFlow';
 
@@ -21,6 +22,7 @@ const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBl
 
 export interface UseCierreFormParams {
   tarjetas: TarjetaTurno[];
+  ctx: ContextoTurno;
   userId: string | undefined;
 }
 
@@ -49,7 +51,7 @@ export interface UseCierreFormResult {
  * subida de la foto pasa en segundo plano en el replay, ver
  * `offline/replay.ts`).
  */
-export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCierreFormResult {
+export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): UseCierreFormResult {
   const [cierre, setCierre] = useState<CierreState>(DEFAULT_CIERRE);
 
   /** Foto del surtidor, OCR y EXIF (`usePhotoCaptureFlow` + `FotoRespaldoField`).
@@ -100,6 +102,9 @@ export function useCierreForm({ tarjetas, userId }: UseCierreFormParams): UseCie
           observaciones: cierre.observaciones.trim() || undefined,
           capturedAt: new Date().toISOString(),
           photoCapturedAt: foto.captureDate ? foto.captureDate.toISOString() : undefined,
+          // El turno de quien cierra: un liviano entra en el reporte de ESE turno.
+          shiftDate: toDateOnly(ctx.fecha),
+          shiftType: ctx.turno,
         },
         foto.file,
       );

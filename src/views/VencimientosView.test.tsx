@@ -80,6 +80,30 @@ vi.mock('../hooks/useVencimientos', () => ({
   useCalendarioVencimientos: () => ({ data: CALENDARIO, isLoading: false, isError: false }),
 }));
 
+// Fecha estimada por uso: CN-007 llegaría a los 20.000 km el lun 16-11.
+vi.mock('../hooks/useMaintenancePlans', () => ({
+  useMaintenanceForecastByEquipment: () => ({
+    data: new Map([
+      [
+        'eq_1',
+        {
+          equipmentId: 'eq_1',
+          unit: 'km',
+          source: 'LIVIANO',
+          nextAt: 20000,
+          remaining: 5000,
+          status: 'ESTIMADA',
+          dailyUsage: 220,
+          basedOnDays: 28,
+          estimatedDate: '2026-11-16',
+          weekStart: '2026-11-10',
+          suggestedDate: '2026-11-15',
+        },
+      ],
+    ]),
+  }),
+}));
+
 function renderView() {
   return render(
     <MemoryRouter>
@@ -96,29 +120,57 @@ afterEach(() => {
 describe('VencimientosView (Módulo 4)', () => {
   it('resume vencidos, por vencer y mantenciones por hacer', () => {
     renderView();
-    const resumen = screen.getByText('Documentos vencidos').closest('dl')!;
+    const resumen = screen.getByText('Papeles vencidos').closest('dl')!;
     expect(within(resumen).getAllByText('1')).toHaveLength(3);
   });
 
-  it('en escritorio: una fila por patente y el documento en la columna de su mes', () => {
+  it('por documento (escritorio): una columna por papel, con fecha, plazo y estado; lo más urgente arriba', () => {
     renderView();
+    const filas = screen.getAllByRole('row').slice(1);
+    // CN-007 tiene el seguro vencido: va primero.
+    expect(within(filas[0]).getByText('ABCD-12')).toBeTruthy();
+    const celdas = within(filas[0]).getAllByRole('cell');
+    // Vehículo, Revisión técnica, Permiso de circulación, Seguro, Mantención.
+    expect(celdas).toHaveLength(5);
+    expect(within(celdas[0]).getByText('2 papeles por revisar')).toBeTruthy();
+    expect(within(celdas[0]).getByText('Falta 1 papel')).toBeTruthy();
+    expect(within(celdas[1]).getByText('Por vencer')).toBeTruthy();
+    expect(within(celdas[1]).getByText('08-11-2026')).toBeTruthy();
+    expect(within(celdas[1]).getByText('vence en 20 días')).toBeTruthy();
+    expect(within(celdas[2]).getByText('Sin cargar')).toBeTruthy();
+    expect(within(celdas[3]).getByText('Vencido')).toBeTruthy();
+    expect(within(celdas[3]).getByText('venció hace 32 días')).toBeTruthy();
+    expect(within(celdas[4]).getByText(/20.000 km · faltan 5.000 km/)).toBeTruthy();
+    // MB-008 no tiene papeles cargados: se dice que faltan, no que está al día.
+    expect(within(filas[1]).getByText('Faltan 3 papeles')).toBeTruthy();
+  });
+
+  it('calendario 12 meses (escritorio): el documento en la columna de su mes', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Calendario 12 meses' }));
     const fila = screen.getByText('ABCD-12').closest('tr')!;
     const celdas = within(fila).getAllByRole('cell');
     // Patente, Vencidos, 12 meses, Mantención.
     expect(celdas).toHaveLength(15);
     expect(within(celdas[1]).getByText(/Seguro · 17-09-2026/)).toBeTruthy();
-    expect(within(celdas[3]).getByText(/Revisión técnica · 08/)).toBeTruthy();
-    expect(within(celdas[14]).getByText(/20\.000 km · faltan 5\.000 km/)).toBeTruthy();
+    expect(within(celdas[3]).getByText(/Revisión técnica · día 8/)).toBeTruthy();
+    expect(within(celdas[14]).getByText(/20.000 km · faltan 5.000 km/)).toBeTruthy();
   });
 
-  it('en tablet: una tarjeta por patente con los vencimientos en orden', () => {
+  it('por documento (tablet): una tarjeta por patente, un renglón por papel', () => {
     escritorio = false;
     renderView();
     expect(screen.queryByRole('table')).toBeNull();
-    // El rótulo de la fila del vencido (la leyenda también dice «Vencido»).
-    expect(screen.getAllByText('Vencido').length).toBeGreaterThan(1);
+    expect(screen.getByText('venció hace 32 días')).toBeTruthy();
+    expect(screen.getByText('vence en 20 días')).toBeTruthy();
+    expect(screen.getByText(/30.000 km · faltan 500 km/)).toBeTruthy();
+  });
+
+  it('calendario 12 meses (tablet): los vencimientos en orden', () => {
+    escritorio = false;
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Calendario 12 meses' }));
     expect(screen.getByText(/Revisión técnica · 08-11-2026/)).toBeTruthy();
-    expect(screen.getByText(/30\.000 km · faltan 500 km/)).toBeTruthy();
   });
 
   it('filtra por patente', () => {

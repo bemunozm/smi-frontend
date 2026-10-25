@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -43,6 +44,7 @@ import {
   Input,
   Label,
   ModalTerreno,
+  Segmentado,
   Selector,
   Tabla,
   Tarjeta,
@@ -76,6 +78,12 @@ import {
 const fmt = (n: number | undefined, dec = 1) =>
   n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
+/** Kilómetros: sin decimales de relleno (`45.120 km`, `45.120,5 km`). */
+const fmtKm = (n: number | undefined) =>
+  n == null ? '—' : `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} km`;
+
+type Clase = 'pesados' | 'livianos';
+
 export function RegistroEquipoView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enLinea = useOnlineStatus();
@@ -97,6 +105,10 @@ export function RegistroEquipoView() {
     abiertasAnterior,
     cerradas,
     enCurso,
+    livianosAbiertos,
+    livianosCerrados,
+    disponiblesLivianos,
+    aperturaLiviano,
     apertura,
     setApertura,
     equipoElegido,
@@ -133,6 +145,10 @@ export function RegistroEquipoView() {
     isEnviandoReporte,
     reporteUrl,
   } = useShiftRegister();
+
+  // Pesados y livianos se registran distinto (el liviano queda abierto hasta
+  // la carga de combustible y lo cierra cualquier supervisor): van separados.
+  const [clase, setClase] = useState<Clase>('pesados');
 
   // Módulo 3: con el checklist del día por validar o rechazado, el equipo no
   // se libera. Se muestra apagado y con el motivo (el backend igual lo frena).
@@ -234,6 +250,85 @@ export function RegistroEquipoView() {
               Elegí el operador para agregar el equipo.
             </p>
           )}
+        </Form>
+      )}
+    </Card>
+  );
+
+  // --- Apertura de un liviano -------------------------------------------------
+
+  const camioneta = aperturaLiviano.equipoElegido;
+  const formAperturaLiviano = (
+    <Card>
+      <CardHead
+        titulo="Abrir camioneta"
+        bajada="Queda abierta hasta la carga de combustible. La puede cerrar cualquier supervisor, en otro turno."
+      />
+      {disponiblesLivianos.length === 0 ? (
+        <Hint>Todas las camionetas operativas ya tienen una tarjeta abierta.</Hint>
+      ) : (
+        <Form>
+          <Campo label="Camioneta" hint="Solo livianos operativos y sin tarjeta abierta.">
+            <Selector
+              etiqueta="Camioneta"
+              tituloTabular
+              valor={camioneta?.id ?? ''}
+              onChange={(id) => {
+                const eq = disponiblesLivianos.find((x) => x.id === id);
+                aperturaLiviano.setApertura((a) => ({
+                  ...a,
+                  equipoId: id,
+                  horometro: formatDecimalInput(eq?.currentMileage, 0),
+                }));
+              }}
+              opciones={disponiblesLivianos.map((e) => ({
+                valor: e.id,
+                titulo: e.internalCode,
+                detalle: [e.type, e.licensePlate].filter(Boolean).join(' · '),
+                ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
+              }))}
+            />
+          </Campo>
+
+          <Campo
+            label="Kilometraje inicial"
+            unidad="km"
+            error={aperturaLiviano.horometroInvalido ? 'Escribe un número, por ejemplo 45120.' : undefined}
+            aviso={
+              aperturaLiviano.bajoUltimaLectura && camioneta?.currentMileage != null
+                ? `Es menor que el último kilometraje registrado (${fmtKm(camioneta.currentMileage)}). Revisa que esté bien; puedes abrirla igual.`
+                : undefined
+            }
+            hint={
+              camioneta?.currentMileage != null ? (
+                <>
+                  Último registrado: <b className="tabular">{fmtKm(camioneta.currentMileage)}</b>
+                </>
+              ) : (
+                'Sin kilometraje previo para esta camioneta.'
+              )
+            }
+          >
+            <Input
+              numerico
+              value={aperturaLiviano.apertura.horometro}
+              placeholder={camioneta?.currentMileage != null ? formatDecimalInput(camioneta.currentMileage, 0) : '0'}
+              onChange={(e) => aperturaLiviano.setApertura((a) => ({ ...a, horometro: e.target.value }))}
+            />
+          </Campo>
+
+          <Hint>
+            Se abre a nombre de <b>{supervisor}</b>, en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>. No
+            hace falta operador: la maneja el supervisor.
+          </Hint>
+
+          <Boton
+            ancho
+            onClick={aperturaLiviano.abrir}
+            disabled={aperturaLiviano.isAbriendo || aperturaLiviano.valorInicialApertura == null}
+          >
+            {aperturaLiviano.isAbriendo ? 'Abriendo…' : 'Abrir camioneta'} <ArrowRight className="h-[19px] w-[19px]" />
+          </Boton>
         </Form>
       )}
     </Card>
@@ -540,7 +635,9 @@ export function RegistroEquipoView() {
 
   /** «Luis Contreras · Turno DIURNO mié 24/09» — a qué turno pertenece la
    *  tarjeta que se está cerrando, que puede no ser el turno en curso. */
-  const bajadaCierre = cerrando
+  const bajadaCierre = cerrando?.liviano
+    ? `Abierta por ${cerrando.supervisor} · ${cerrando.abiertaEl ?? ''}`
+    : cerrando
     ? `${cerrando.operador} · Turno ${
         cerrando.grupo === 'actual'
           ? `${ctx.turno} ${ctx.fechaCorta}`
@@ -624,6 +721,110 @@ export function RegistroEquipoView() {
       {abiertasAnterior.length > 0 &&
         bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
     </>
+  );
+
+  // --- Livianos ----------------------------------------------------------------
+
+  const tarjetaLiviano = (t: TarjetaTurno) => {
+    const cerrada = t.estado === 'cerrada';
+    const enMiReporte = enCurso.some((x) => x.id === t.id);
+    return (
+      <Tarjeta key={t.id}>
+        <div className="flex items-start justify-between gap-2.5">
+          <div>
+            <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
+            <div className="text-[13px] text-muted-foreground">{t.tipo}</div>
+          </div>
+          <Chip tono={cerrada ? 'success' : 'info'}>{cerrada ? 'Cerrada' : 'Abierta'}</Chip>
+        </div>
+        <div className="flex items-center gap-2 text-[14px]">
+          <User className="h-[17px] w-[17px] text-muted-foreground" />
+          <span>
+            Abrió <b className="font-semibold">{t.supervisor}</b>
+            {t.abiertaEl && <span className="text-muted-foreground"> · {t.abiertaEl}</span>}
+          </span>
+        </div>
+        <Cifras
+          items={[
+            { label: 'Km inicial', valor: fmtKm(t.inicial) },
+            { label: 'Km final', valor: fmtKm(t.final) },
+            { label: 'Recorrido', valor: cerrada ? fmtKm(t.final! - t.inicial) : '—', destacado: true },
+            { label: 'Litros', valor: fmtLitros(t.litros) },
+          ]}
+        />
+        {cerrada ? (
+          <div className="flex flex-col gap-1 text-[13px] text-muted-foreground">
+            <span className="inline-flex flex-wrap items-center gap-1.5">
+              <Camera className="h-4 w-4 text-[var(--success-soft-foreground)]" />
+              Cerró <b className="text-foreground">{t.cerradaPor ?? 'otro supervisor'}</b>
+              {t.cerradaA && <> · {t.cerradaA}</>}
+            </span>
+            {enMiReporte && (
+              <span className="font-semibold text-[var(--success-soft-foreground)]">
+                Entra en tu reporte de salida de este turno.
+              </span>
+            )}
+          </div>
+        ) : (
+          <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
+            Cerrar con la carga <ArrowRight className="h-[19px] w-[19px]" />
+          </Boton>
+        )}
+        {t.sinSincronizar && (
+          <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
+            <Clock className="h-[15px] w-[15px]" />
+            Guardada en el equipo · falta sincronizar
+          </div>
+        )}
+      </Tarjeta>
+    );
+  };
+
+  const vacioLivianos = (texto: string) => (
+    <p className="m-0 rounded-2xl border border-dashed border-border bg-card/60 px-4 py-8 text-center text-sm text-muted-foreground">
+      {texto}
+    </p>
+  );
+
+  /** Livianos abiertos de CUALQUIER supervisor y turno (los cierra quien cargue
+   * combustible), y los cerrados de las últimas 48 h. */
+  const historialLivianos = (
+    <>
+      <GrupoHead
+        titulo="Camionetas abiertas"
+        detalle={livianosAbiertos.length ? plural(livianosAbiertos.length, 'tarjeta', 'tarjetas') : undefined}
+      />
+      <div className={`grid gap-3 ${esEscritorio ? 'grid-cols-2' : ''}`}>
+        {livianosAbiertos.length
+          ? livianosAbiertos.map(tarjetaLiviano)
+          : vacioLivianos('No hay camionetas abiertas.')}
+      </div>
+      {livianosCerrados.length > 0 && (
+        <>
+          <GrupoHead titulo="Cerradas · últimas 48 h" detalle={plural(livianosCerrados.length, 'tarjeta', 'tarjetas')} />
+          <div className={`grid gap-3 ${esEscritorio ? 'grid-cols-2' : ''}`}>{livianosCerrados.map(tarjetaLiviano)}</div>
+        </>
+      )}
+    </>
+  );
+
+  const selectorClase = (
+    <Segmentado<Clase>
+      etiqueta="Tipo de equipo"
+      valor={clase}
+      onChange={(c) => {
+        setClase(c);
+        setCerrandoId(null);
+      }}
+      opciones={[
+        {
+          valor: 'pesados',
+          label: 'Pesados',
+          sub: plural(abiertasActual.length + abiertasAnterior.length, 'abierta', 'abiertas'),
+        },
+        { valor: 'livianos', label: 'Livianos', sub: plural(livianosAbiertos.length, 'abierta', 'abiertas') },
+      ]}
+    />
   );
 
   // --- Historial de cerradas (ventana) --------------------------------------
@@ -757,41 +958,60 @@ export function RegistroEquipoView() {
   const formularioCierre = cerrando && (
     <>
       <div className="flex items-center justify-between rounded-2xl bg-[#f3f4f6] px-3.5 py-3">
-        <Label>Horómetro inicial</Label>
-        <b className="tabular text-[17px] font-medium">{fmt(cerrando.inicial)} h</b>
+        <Label>{cerrando.liviano ? 'Kilometraje inicial' : 'Horómetro inicial'}</Label>
+        <b className="tabular text-[17px] font-medium">
+          {cerrando.liviano ? fmtKm(cerrando.inicial) : `${fmt(cerrando.inicial)} h`}
+        </b>
       </div>
 
-      <Campo label="Horómetro final" requerido unidad="h">
+      <Campo
+        label={cerrando.liviano ? 'Kilometraje final' : 'Horómetro final'}
+        requerido
+        unidad={cerrando.liviano ? 'km' : 'h'}
+      >
         <Input numerico value={cierre.final} onChange={(e) => setCierre((c) => ({ ...c, final: e.target.value }))} />
       </Campo>
       {finalInvalido && (
         <span className="text-[13px] font-semibold text-[var(--danger)]">
-          No puede ser menor que el horómetro inicial.
+          No puede ser menor que {cerrando.liviano ? 'el kilometraje inicial' : 'el horómetro inicial'}.
         </span>
       )}
 
       <Calculado
-        label="Horas máquina"
+        label={cerrando.liviano ? 'Kilómetros recorridos' : 'Horas máquina'}
         nota={
           <span className="flex items-center gap-1.5">
             <Lock className="h-[13px] w-[13px]" />
             Calculado · no editable
           </span>
         }
-        valor={horasMaquina != null && horasMaquina >= 0 ? `${fmt(horasMaquina)} h` : '—'}
+        valor={
+          horasMaquina == null || horasMaquina < 0
+            ? '—'
+            : cerrando.liviano
+              ? fmtKm(horasMaquina)
+              : `${fmt(horasMaquina)} h`
+        }
       />
 
-      <Campo label="Combustible cargado" requerido unidad="L" hint="Cero si no cargó en el turno.">
+      <Campo
+        label="Combustible cargado"
+        requerido
+        unidad="L"
+        hint={cerrando.liviano ? 'Lo que se cargó a la camioneta.' : 'Cero si no cargó en el turno.'}
+      >
         <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
       </Campo>
 
-      <AdBlueCampos
-        adBlue={cierre.adBlue}
-        litros={cierre.adBlueLitros}
-        resultado={adBlueCierre}
-        onAdBlue={(adBlue) => setCierre((c) => ({ ...c, adBlue }))}
-        onLitros={(adBlueLitros) => setCierre((c) => ({ ...c, adBlueLitros }))}
-      />
+      {!cerrando.liviano && (
+        <AdBlueCampos
+          adBlue={cierre.adBlue}
+          litros={cierre.adBlueLitros}
+          resultado={adBlueCierre}
+          onAdBlue={(adBlue) => setCierre((c) => ({ ...c, adBlue }))}
+          onLitros={(adBlueLitros) => setCierre((c) => ({ ...c, adBlueLitros }))}
+        />
+      )}
 
       {/*
         Foto, OCR y subida vienen enteros de Flota: el mismo bloque que usan
@@ -808,13 +1028,19 @@ export function RegistroEquipoView() {
         onClear={foto.handleClearPhoto}
         title="Foto del surtidor"
         subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-        staleQuestion="¿Es la carga de este turno?"
+        staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
       />
+
+      {cerrando.liviano && (
+        <Hint>
+          Entra en tu reporte de salida del turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
+        </Hint>
+      )}
 
       <Campo label="Observaciones">
         <Textarea
           rows={3}
-          placeholder="Novedades del equipo durante el turno"
+          placeholder={cerrando.liviano ? 'Novedades de la camioneta' : 'Novedades del equipo durante el turno'}
           value={cierre.observaciones}
           onChange={(e) => setCierre((c) => ({ ...c, observaciones: e.target.value }))}
         />
@@ -891,6 +1117,7 @@ export function RegistroEquipoView() {
       <VistaSplit
         formulario={
           <>
+            {selectorClase}
             {/* En escritorio el cierre reemplaza al formulario de apertura en la
                 misma columna; en teléfono y tablet se abre como hoja inferior. */}
             {esEscritorio && cerrando ? (
@@ -917,13 +1144,15 @@ export function RegistroEquipoView() {
                 />
                 <Form>{formularioCierre}</Form>
               </Card>
+            ) : clase === 'livianos' ? (
+              formAperturaLiviano
             ) : (
               formApertura
             )}
             {esEscritorio && panelReporte}
           </>
         }
-        historial={historial}
+        historial={clase === 'livianos' ? historialLivianos : historial}
       />
 
       {!esEscritorio && barraReporte}
@@ -1004,7 +1233,9 @@ export function RegistroEquipoView() {
                   <tr>
                     <th className={TH}>Equipo</th>
                     <th className={TH}>Operador</th>
-                    <th className={`${TH} text-right`}>Horóm. inicial</th>
+                    <th className={`${TH} text-right`}>
+                      {enCurso.some((t) => t.liviano) ? 'Inicial' : 'Horóm. inicial'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1015,7 +1246,9 @@ export function RegistroEquipoView() {
                         <span className="text-[12.5px] text-muted-foreground">{t.tipo}</span>
                       </td>
                       <td className={TD}>{t.operador}</td>
-                      <td className={`${TD} tabular text-right`}>{fmt(t.inicial)}</td>
+                      <td className={`${TD} tabular text-right`}>
+                        {t.liviano ? fmtKm(t.inicial) : fmt(t.inicial)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

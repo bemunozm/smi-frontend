@@ -89,7 +89,7 @@ export function CalendarioVencimientosCard({
                 </Button>
               ) : null}
               <span className="ml-auto">
-                <ChipMantencion s={vehiculo.service} />
+                <ChipMantencion s={vehiculo.service} equipmentId={vehiculo.id} />
               </span>
             </div>
             <ListaVencimientos equipo={vehiculo} months={data.months} />

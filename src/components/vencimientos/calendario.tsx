@@ -1,7 +1,9 @@
 import { Wrench } from 'lucide-react';
 
 import { Chip, type Tono } from '../terreno/ui';
+import { useMaintenanceForecastByEquipment } from '../../hooks/useMaintenancePlans';
 import { fmtNum } from '../../lib/format';
+import { diaCorto } from '../../lib/pronostico';
 import { fecha, mesLargo } from '../../lib/meses';
 import type { CalendarDocument, CalendarEquipment, CalendarService } from '../../types/vencimientos';
 
@@ -37,14 +39,25 @@ export function ChipDocumento({ d, conFecha }: { d: CalendarDocument; conFecha?:
     <Chip className="!whitespace-normal" tono={TONO_DOC[d.status]}>
       <span>
         {d.label}
-        {conFecha ? ` · ${fecha(d.expiryDate)}` : ` · ${d.expiryDate.slice(8, 10)}`}
+        {conFecha ? ` · ${fecha(d.expiryDate)}` : ` · día ${Number(d.expiryDate.slice(8, 10))}`}
       </span>
     </Chip>
   );
 }
 
-/** La próxima mantención: no tiene fecha, se dice cuánto falta. */
-export function ChipMantencion({ s }: { s: CalendarService | null }) {
+/** Fecha estimada (por uso promedio) de la próxima mantención de un equipo. */
+function useFechaEstimada(equipmentId: string | undefined) {
+  const { data } = useMaintenanceForecastByEquipment(equipmentId != null);
+  const f = equipmentId ? data?.get(equipmentId) : undefined;
+  return f?.status === 'ESTIMADA' ? f : undefined;
+}
+
+/**
+ * La próxima mantención: cuánto falta y, si el uso de los últimos días lo
+ * permite, la fecha estimada (y el día sugerido, el de menos uso).
+ */
+export function ChipMantencion({ s, equipmentId }: { s: CalendarService | null; equipmentId?: string }) {
+  const f = useFechaEstimada(equipmentId);
   if (!s) return <span className="text-[13.5px] text-[var(--label-color)]">Sin lectura</span>;
   const faltan = s.remaining <= 0 ? 'toca ahora' : `faltan ${fmtNum(s.remaining)} ${s.unit}`;
   return (
@@ -52,7 +65,26 @@ export function ChipMantencion({ s }: { s: CalendarService | null }) {
       <Wrench className="size-3.5" aria-hidden />
       <span>
         {fmtNum(s.nextAt)} {s.unit} · {faltan}
+        {f && (
+          <>
+            {' '}
+            · ≈ {diaCorto(f.estimatedDate!)}
+            {f.suggestedDate ? ` (mejor ${diaCorto(f.suggestedDate)})` : ''}
+          </>
+        )}
       </span>
+    </Chip>
+  );
+}
+
+/** En la columna del mes en que se estima la mantención: `Mant. ≈ 30`. */
+export function MantencionEnMes({ equipmentId, mes }: { equipmentId: string; mes: string }) {
+  const f = useFechaEstimada(equipmentId);
+  if (!f || f.estimatedDate!.slice(0, 7) !== mes) return null;
+  return (
+    <Chip className="!whitespace-normal" tono="info">
+      <Wrench className="size-3.5" aria-hidden />
+      <span>Mant. ≈ {f.estimatedDate!.slice(8, 10)}</span>
     </Chip>
   );
 }
@@ -62,11 +94,13 @@ export function ChipMantencion({ s }: { s: CalendarService | null }) {
  * mes a mes, lo de los 12 meses del calendario.
  */
 export function ListaVencimientos({ equipo: e, months }: { equipo: CalendarEquipment; months: string[] }) {
+  const f = useFechaEstimada(e.id);
+  const mesMantencion = f?.estimatedDate?.slice(0, 7);
   const primero = months[0];
   const vencidos = e.documents.filter((d) => d.status === 'VENCIDO' && d.month < primero);
   const porMes = months
     .map((m) => ({ m, docs: e.documents.filter((d) => d.month === m) }))
-    .filter((x) => x.docs.length > 0);
+    .filter((x) => x.docs.length > 0 || x.m === mesMantencion);
   if (vencidos.length === 0 && porMes.length === 0) {
     return <p className="text-[14px] text-[var(--label-color)]">Sin vencimientos en estos 12 meses.</p>;
   }
@@ -86,6 +120,15 @@ export function ListaVencimientos({ equipo: e, months }: { equipo: CalendarEquip
           {docs.map((d) => (
             <ChipDocumento key={d.id} conFecha d={d} />
           ))}
+          {m === mesMantencion && f && (
+            <Chip className="!whitespace-normal" tono="info">
+              <Wrench className="size-3.5" aria-hidden />
+              <span>
+                Mantención ≈ {diaCorto(f.estimatedDate!)}
+                {f.suggestedDate ? ` · mejor ${diaCorto(f.suggestedDate)}` : ''}
+              </span>
+            </Chip>
+          )}
         </li>
       ))}
     </ul>
@@ -99,9 +142,9 @@ export function Leyenda({ conDia = true }: { conDia?: boolean }) {
       <Chip tono="warning">Por vencer (dentro del aviso)</Chip>
       <Chip tono="neutral">Vigente</Chip>
       <Chip tono="info">
-        <Wrench className="size-3.5" aria-hidden /> Mantención por hacer
+        <Wrench className="size-3.5" aria-hidden /> Mantención (≈ fecha estimada por uso)
       </Chip>
-      {conDia ? <span>En la tabla, el número junto al documento es el día del mes en que vence.</span> : null}
+      {conDia ? <span>En cada mes, «día 17» es el día en que vence ese papel.</span> : null}
     </div>
   );
 }

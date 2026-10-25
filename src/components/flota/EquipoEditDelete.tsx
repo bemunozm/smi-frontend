@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, type Control, type FieldErrors } from 'react-hook-form';
+import { Controller, useForm, useWatch, type Control, type FieldErrors } from 'react-hook-form';
 import { Camera, ImageIcon } from 'lucide-react';
 import {
   AlertDialog,
@@ -17,13 +17,12 @@ import {
 } from '@heroui/react';
 
 import { OperatorPicker, type OperatorOption } from '../operators/OperatorPicker';
+import { ResponsableSelect } from './ResponsableSelect';
 import { useBranch, useBranches } from '../../hooks/useBranches';
 import { useDeleteEquipment, useSaveEquipment } from '../../hooks/useEquipment';
-import { useUsers } from '../../hooks/useUsers';
 import { CONTROL_UNIT_OPTIONS, EQUIPMENT_CLASS_OPTIONS, EQUIPMENT_STATUS_OPTIONS } from '../../config/flota-colors';
 import { buildAssignmentDiff, SIN_ASIGNAR, SIN_SUCURSAL } from '../../lib/equipment-assignment';
 import { isAcceptedUploadType, UPLOAD_TYPE_ERROR_MESSAGE } from '../../lib/upload-limits';
-import { ROLES } from '../../types/roles';
 import {
   EquipmentFormSchema,
   toUpdateEquipmentPayload,
@@ -197,10 +196,13 @@ export function CamposEquipo({
   const opcionesSucursal =
     sucursalActual && !yaEstaEnActivas ? [...(sucursalesActivas ?? []), sucursalActual] : (sucursalesActivas ?? []);
 
-  // Picker de supervisor (rol SUPERVISOR, `useUsers`) — el de operador sale
-  // del catálogo propio (`OperatorPicker`): el operador ya no es un rol de
-  // usuario.
-  const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
+  // Un liviano no lleva operador: se asigna a un supervisor o a un mantenedor
+  // (`ResponsableSelect`). El de operador sale del catálogo propio
+  // (`OperatorPicker`): el operador ya no es un rol de usuario.
+  const liviano = useWatch({ control, name: 'equipmentClass' }) === 'LIGHT';
+  useEffect(() => {
+    if (liviano && operatorId !== SIN_ASIGNAR) onOperatorIdChange(SIN_ASIGNAR);
+  }, [liviano, operatorId, onOperatorIdChange]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -495,34 +497,16 @@ export function CamposEquipo({
       <section className="flex flex-col gap-3 border-t border-separator pt-4">
         <p className="label">Asignación</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <OperatorPicker
-            allowsUnassign
-            currentAssignee={currentOperator}
-            value={operatorId === SIN_ASIGNAR ? null : operatorId}
-            onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
-          />
+          {liviano ? null : (
+            <OperatorPicker
+              allowsUnassign
+              currentAssignee={currentOperator}
+              value={operatorId === SIN_ASIGNAR ? null : operatorId}
+              onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
+            />
+          )}
 
-          <Select fullWidth value={supervisorId} onChange={(value) => value && onSupervisorIdChange(String(value))}>
-            <Label>Supervisor a cargo</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id={SIN_ASIGNAR} textValue="Sin supervisor asignado">
-                  Sin supervisor asignado
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                {(supervisores ?? []).map((supervisor) => (
-                  <ListBox.Item key={supervisor.id} id={supervisor.id} textValue={supervisor.name}>
-                    {supervisor.name}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+          <ResponsableSelect liviano={liviano} value={supervisorId} onChange={onSupervisorIdChange} />
         </div>
       </section>
 
