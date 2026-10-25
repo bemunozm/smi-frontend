@@ -16,7 +16,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { AlertDialog, Button, Card, Dropdown, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Dropdown, Label, Spinner, Table } from '@heroui/react';
 
 import { env } from '../config/env';
 import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
@@ -24,7 +24,7 @@ import { useHorometroList } from '../hooks/useHorometro';
 import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
-import { useUsers } from '../hooks/useUsers';
+import { ResponsableSelect } from '../components/flota/ResponsableSelect';
 import { usePermissions } from '../hooks/usePermissions';
 import { CicloMantencionesCard } from '../components/mantenimiento/CicloMantenciones';
 import { CalendarioVencimientosCard } from '../components/vencimientos/CalendarioVencimientosCard';
@@ -46,7 +46,6 @@ import {
   turnoLabel,
 } from '../config/flota-colors';
 import { eventoTipoColor, eventoTipoIcon, eventoTipoLabel } from '../config/ficha-colors';
-import { ROLES } from '../types/roles';
 import { EQUIPMENT_STATUS, type EquipmentDetail, type EquipmentStatus } from '../types/equipment';
 import type { EquipmentDocument } from '../types/equipment-document';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
@@ -158,9 +157,9 @@ function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps)
  */
 function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   const assignEquipment = useAssignEquipment();
-  // El picker de operador sale del catálogo propio (`OperatorPicker`); el de
-  // supervisor sigue con `useUsers` (rol SUPERVISOR).
-  const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
+  // Un liviano no lleva operador: se asigna a un supervisor o a un mantenedor
+  // (`ResponsableSelect`). El picker de operador sale del catálogo propio.
+  const liviano = equipo.equipmentClass === 'LIGHT';
   const [operatorId, setOperatorId] = useState(equipo.operator?.id ?? SIN_ASIGNAR);
   const [supervisorId, setSupervisorId] = useState(equipo.supervisor?.id ?? SIN_ASIGNAR);
 
@@ -176,7 +175,8 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
   // asignación actual — ver `buildAssignmentDiff` (evita revalidar contra el
   // catálogo un campo que el usuario nunca tocó, p. ej. un operador ya
   // inactivo cuando solo se cambió el supervisor).
-  const assignmentDiff = buildAssignmentDiff(equipo, operatorId, supervisorId);
+  // En un liviano el operador siempre queda vacío (si quedaba uno de antes, se libera).
+  const assignmentDiff = buildAssignmentDiff(equipo, liviano ? SIN_ASIGNAR : operatorId, supervisorId);
   const huboCambio = Object.keys(assignmentDiff).length > 0;
 
   const guardar = () => {
@@ -197,35 +197,17 @@ function AsignacionForm({ equipo }: { equipo: EquipmentDetail }) {
 
   return (
     <div className="flex flex-col gap-3 border-t border-separator pt-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-        <OperatorPicker
-          allowsUnassign
-          currentAssignee={equipo.operator}
-          value={operatorId === SIN_ASIGNAR ? null : operatorId}
-          onChange={(operator) => setOperatorId(operator?.id ?? SIN_ASIGNAR)}
-        />
+      <div className={`grid w-full grid-cols-1 gap-3 ${liviano ? 'sm:max-w-sm' : 'sm:grid-cols-2'}`}>
+        {liviano ? null : (
+          <OperatorPicker
+            allowsUnassign
+            currentAssignee={equipo.operator}
+            value={operatorId === SIN_ASIGNAR ? null : operatorId}
+            onChange={(operator) => setOperatorId(operator?.id ?? SIN_ASIGNAR)}
+          />
+        )}
 
-        <Select fullWidth value={supervisorId} onChange={(value) => value && setSupervisorId(String(value))}>
-          <Label>Supervisor a cargo</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id={SIN_ASIGNAR} textValue="Sin supervisor asignado">
-                Sin supervisor asignado
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {(supervisores ?? []).map((supervisor) => (
-                <ListBox.Item key={supervisor.id} id={supervisor.id} textValue={supervisor.name}>
-                  {supervisor.name}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
+        <ResponsableSelect liviano={liviano} value={supervisorId} onChange={setSupervisorId} />
       </div>
 
       <div className="flex shrink-0 gap-2">
@@ -457,6 +439,8 @@ function DocumentsCard({
  * (lectura) y, si el usuario puede escribir la asignación, los pickers para
  * asignar/liberar debajo. */
 function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeAsignar: boolean }) {
+  // Un liviano no lleva operador: solo se muestra a cargo de quién está.
+  const liviano = equipo.equipmentClass === 'LIGHT';
   // Antes esto se decidía leyendo `equipo.inUse` (que el backend deriva de
   // `!!operator`): un equipo con supervisor asignado pero SIN operador
   // mostraba "Disponible" y el supervisor desaparecía de la ficha, aunque el
@@ -496,7 +480,7 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
 
           {tieneAsignacion ? (
             <div className="flex flex-wrap items-center gap-6">
-              {equipo.operator ? (
+              {equipo.operator && !liviano ? (
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-tertiary text-(--muted)">
                     <User className="h-3.5 w-3.5" />
@@ -516,7 +500,7 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
                   </span>
                   <div className="flex flex-col">
                     <span className="text-[10.5px] font-bold tracking-wider text-(--label-color) uppercase">
-                      Supervisor a cargo
+                      {liviano ? 'Asignado a' : 'Supervisor a cargo'}
                     </span>
                     <span className="text-sm font-semibold text-foreground">{equipo.supervisor.name}</span>
                   </div>
@@ -690,19 +674,27 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
           </span>
           <div className="flex flex-col gap-0.5">
             <span className="text-[11px] font-bold tracking-wider text-accent-soft-foreground uppercase">
-              Turno en curso · {turnoLabel(openShift.turno)}
+              {equipo.equipmentClass === 'LIGHT' ? 'En uso' : `Turno en curso · ${turnoLabel(openShift.turno)}`}
             </span>
-            <span className="text-sm font-semibold text-accent-soft-foreground">{openShift.operador}</span>
+            <span className="text-sm font-semibold text-accent-soft-foreground">
+              {equipo.equipmentClass === 'LIGHT' ? (openShift.supervisorName ?? '—') : openShift.operador}
+            </span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm text-accent-soft-foreground">
           <span>
-            Lectura inicial:{' '}
+            {equipo.equipmentClass === 'LIGHT' ? 'Km inicial' : 'Lectura inicial'}:{' '}
             <strong className="font-mono font-semibold">
               {NUMERO.format(openShift.valorInicial)} {suffix}
             </strong>
           </span>
           <span>Desde {formatFecha(openShift.fecha)}</span>
+          {equipo.equipmentClass === 'LIGHT' ? (
+            <span className="basis-full text-xs">
+              Se cierra al cargar combustible: el supervisor desde Registro de equipo o el mantenedor desde «Mi
+              camioneta».
+            </span>
+          ) : null}
         </div>
       </Card.Content>
     </Card>
@@ -818,6 +810,9 @@ export function EquipoDetalleView({
         ? `${NUMERO.format(equipo.currentMileage)} km`
         : '—';
 
+  // Un liviano se mide en km (odómetro) y lo usa un supervisor o mantenedor, sin operador.
+  const esLiviano = equipo?.equipmentClass === 'LIGHT';
+
   // Más reciente primero — mismo criterio que la bitácora consolidada.
   const historialHorometro = (horometros ?? [])
     .filter((registro) => registro.equipoId === equipo.id)
@@ -914,7 +909,10 @@ export function EquipoDetalleView({
             </Dropdown>
           ) : null}
 
-          {puedeRegistrarHorometro ? (
+          {/* En un liviano no: el km lo registran el supervisor (Registro de
+             equipo) y el mantenedor («Mi camioneta»), y la tarjeta se cierra
+             al cargar combustible con km final, litros y foto. */}
+          {puedeRegistrarHorometro && !esLiviano ? (
             <Button onPress={() => setIsShiftModalOpen(true)} size="sm" variant="secondary">
               {registrarHorometroLabel(equipo)}
             </Button>
@@ -962,9 +960,17 @@ export function EquipoDetalleView({
               : 'Sin cargas registradas'
           }
           icon={<Droplet className="h-4.25 w-4.25" />}
-          label="Combustible actual"
-          toneClass={fuelBadgeTone}
-          value={equipo.currentFuelLevel != null ? `${NUMERO.format(equipo.currentFuelLevel)}%` : '—'}
+          label={esLiviano ? 'Última carga' : 'Combustible actual'}
+          toneClass={esLiviano ? undefined : fuelBadgeTone}
+          value={
+            esLiviano
+              ? historialCombustible[0]
+                ? `${fmtLitros(historialCombustible[0].litros)} L`
+                : '—'
+              : equipo.currentFuelLevel != null
+                ? `${NUMERO.format(equipo.currentFuelLevel)}%`
+                : '—'
+          }
         />
         <KpiTile
           caption="Registros de carga"
@@ -973,9 +979,9 @@ export function EquipoDetalleView({
           value={String(equipo._count.combustibles)}
         />
         <KpiTile
-          caption="Registros de horómetro"
+          caption={esLiviano ? 'Usos con km inicial y final' : 'Registros de horómetro'}
           icon={<Clock className="h-4.25 w-4.25" />}
-          label="Lecturas horómetro"
+          label={esLiviano ? 'Registros de km' : 'Lecturas horómetro'}
           value={String(equipo._count.horometros)}
         />
         <KpiTile
@@ -1035,7 +1041,7 @@ export function EquipoDetalleView({
 
           {/* Registro de las mantenciones de la pauta hechas en cada vuelta del
              ciclo (Mantenimiento). Se oculta solo a los roles que no ven pautas. */}
-          <CicloMantencionesCard equipmentId={equipo.id} />
+          {esLiviano ? null : <CicloMantencionesCard equipmentId={equipo.id} />}
 
           {/* Combustible: nivel actual (barra, mismo umbral de color que
              `FuelGauge`) + historial de cargas. El botón abre el flujo
@@ -1049,7 +1055,7 @@ export function EquipoDetalleView({
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     {combustibleAsc ? 'Más antiguo primero' : 'Más reciente primero'}
                   </Button>
-                  {puedeRegistrarCombustible ? (
+                  {puedeRegistrarCombustible && !esLiviano ? (
                     <Button onPress={() => setIsCargaOpen(true)} size="sm" variant="secondary">
                       Registrar carga
                     </Button>
@@ -1065,27 +1071,35 @@ export function EquipoDetalleView({
                 </div>
               ) : (
                 <>
-                  <div>
-                    <div className="mb-1.5 flex items-baseline justify-between">
-                      <span className="text-[13px] font-semibold text-(--muted)">Nivel actual</span>
-                      <span className="font-mono text-[19px] font-bold text-foreground">
-                        {equipo.currentFuelLevel != null ? `${NUMERO.format(equipo.currentFuelLevel)}%` : '—'}
-                      </span>
-                    </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-surface-tertiary">
-                      {equipo.currentFuelLevel != null ? (
-                        <div
-                          className={`h-full rounded-full ${FUEL_TONE_CLASSES[fuelTone(equipo.currentFuelLevel)].bar}`}
-                          style={{ width: `${Math.max(0, Math.min(100, equipo.currentFuelLevel))}%` }}
-                        />
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-xs text-(--muted)">
-                      {ultimaLecturaConNivel
-                        ? `Registrado ${formatFecha(ultimaLecturaConNivel.fecha)} por ${ultimaLecturaConNivel.operador}`
-                        : 'Esta unidad todavía no tiene lecturas de horómetro con nivel de combustible.'}
+                  {esLiviano ? (
+                    <p className="text-sm text-(--muted)">
+                      La carga se registra al cerrar la tarjeta de la camioneta (km final, litros y foto del surtidor).
                     </p>
-                  </div>
+                  ) : (
+                    <div>
+                      <div className="mb-1.5 flex items-baseline justify-between">
+                        <span className="text-[13px] font-semibold text-(--muted)">Nivel actual</span>
+                        <span className="font-mono text-[19px] font-bold text-foreground">
+                          {equipo.currentFuelLevel != null ? `${NUMERO.format(equipo.currentFuelLevel)}%` : '—'}
+                        </span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-surface-tertiary">
+                        {equipo.currentFuelLevel != null ? (
+                          <div
+                            className={`h-full rounded-full ${FUEL_TONE_CLASSES[fuelTone(equipo.currentFuelLevel)].bar}`}
+                            style={{ width: `${Math.max(0, Math.min(100, equipo.currentFuelLevel))}%` }}
+                          />
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-xs text-(--muted)">
+                        {ultimaLecturaConNivel
+                          ? `Registrado ${formatFecha(ultimaLecturaConNivel.fecha)} por ${ultimaLecturaConNivel.operador}`
+                          : esLiviano
+                            ? 'Esta unidad todavía no tiene registros con nivel de combustible.'
+                            : 'Esta unidad todavía no tiene lecturas de horómetro con nivel de combustible.'}
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <p className="mb-2 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
@@ -1138,8 +1152,12 @@ export function EquipoDetalleView({
              de omitirse, para no perder trazabilidad del historial completo. */}
           <Card>
             <Card.Header>
-              <Card.Title>Horómetro</Card.Title>
-              <Card.Description>Turnos registrados (entrada → salida) de esta unidad.</Card.Description>
+              <Card.Title>{esLiviano ? 'Kilometraje' : 'Horómetro'}</Card.Title>
+              <Card.Description>
+                {esLiviano
+                  ? 'Usos registrados (km inicial → km final) por supervisores o mantenedores.'
+                  : 'Turnos registrados (entrada → salida) de esta unidad.'}
+              </Card.Description>
             </Card.Header>
             <Card.Content className="mt-1">
               {isHorometroPending ? (
@@ -1150,12 +1168,15 @@ export function EquipoDetalleView({
                 <Table variant="secondary">
                   {/* Misma regla que el historial de cargas: ~3 filas y scroll propio. */}
                   <Table.ScrollContainer className="max-h-48 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
-                    <Table.Content aria-label="Historial de horómetro" className="min-w-full">
+                    <Table.Content
+                      aria-label={esLiviano ? 'Historial de kilometraje' : 'Historial de horómetro'}
+                      className="min-w-full"
+                    >
                       <Table.Header>
-                        <Table.Column isRowHeader>Entrada</Table.Column>
-                        <Table.Column>Operador</Table.Column>
-                        <Table.Column>Turno</Table.Column>
-                        <Table.Column className="text-right">Uso</Table.Column>
+                        <Table.Column isRowHeader>{esLiviano ? 'Inicio' : 'Entrada'}</Table.Column>
+                        <Table.Column>{esLiviano ? 'Registró' : 'Operador'}</Table.Column>
+                        <Table.Column>{esLiviano ? 'Km inicial → final' : 'Turno'}</Table.Column>
+                        <Table.Column className="text-right">{esLiviano ? 'Recorrido' : 'Uso'}</Table.Column>
                         <Table.Column className="text-right">Duración</Table.Column>
                       </Table.Header>
                       <Table.Body>
@@ -1163,17 +1184,31 @@ export function EquipoDetalleView({
                           {(registro) => (
                             <Table.Row>
                               <Table.Cell className="text-sm text-(--muted)">{formatFecha(registro.fecha)}</Table.Cell>
-                              <Table.Cell>{registro.operador}</Table.Cell>
-                              <Table.Cell>{turnoLabel(registro.turno)}</Table.Cell>
+                              <Table.Cell>
+                                {esLiviano ? (registro.supervisorName ?? '—') : registro.operador}
+                                {esLiviano && registro.closedByName && registro.closedByName !== registro.supervisorName ? (
+                                  <span className="block text-xs text-(--muted)">cerró {registro.closedByName}</span>
+                                ) : null}
+                              </Table.Cell>
+                              <Table.Cell className={esLiviano ? 'font-mono text-sm' : undefined}>
+                                {esLiviano
+                                  ? `${NUMERO.format(registro.valorInicial)} → ${
+                                      registro.valorFinal != null ? NUMERO.format(registro.valorFinal) : '…'
+                                    }`
+                                  : turnoLabel(registro.turno)}
+                              </Table.Cell>
                               <Table.Cell className="text-right font-mono text-sm font-semibold">
                                 {registro.valorFinal != null
                                   ? `${NUMERO.format(registro.valorFinal - registro.valorInicial)} ${controlUnitSuffix(equipo.controlUnit)}`
                                   : 'En curso'}
                               </Table.Cell>
                               <Table.Cell className="text-right text-sm text-(--muted)">
+                                {/* Cerrado sin hora de salida (dato antiguo): no está «en curso». */}
                                 {registro.fechaSalida
                                   ? formatDuracion(registro.fecha, registro.fechaSalida)
-                                  : 'En curso'}
+                                  : registro.valorFinal != null
+                                    ? '—'
+                                    : 'En curso'}
                               </Table.Cell>
                             </Table.Row>
                           )}
@@ -1184,7 +1219,9 @@ export function EquipoDetalleView({
                 </Table>
               ) : (
                 <p className="text-sm text-(--muted)">
-                  Esta unidad todavía no tiene lecturas de horómetro registradas.
+                  {esLiviano
+                    ? 'Esta unidad todavía no tiene registros de kilometraje.'
+                    : 'Esta unidad todavía no tiene lecturas de horómetro registradas.'}
                 </p>
               )}
             </Card.Content>

@@ -2,7 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { ChevronRight, Droplet, Eye, FileWarning, Gauge, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import {
+  CalendarClock,
+  ChevronRight,
+  Droplet,
+  Eye,
+  FileWarning,
+  Gauge,
+  Pencil,
+  Plus,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
 import {
   Button,
   Card,
@@ -19,6 +30,9 @@ import {
 } from '@heroui/react';
 
 import { ActionTile } from '../components/ActionTile';
+import { FechaEstimada } from '../components/mantenimiento/FechaEstimada';
+import { useCalendarioVencimientos } from '../hooks/useVencimientos';
+import { porRevisar } from '../lib/vencimientos';
 import { MantencionLivianoModal } from '../components/mantenimiento/MantencionLivianoModal';
 import { PautaMantencionModal } from '../components/mantenimiento/PautaMantencionModal';
 import {
@@ -149,10 +163,12 @@ function AsignacionCell({
   equipo,
   layout,
 }: {
-  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status'>;
+  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status' | 'equipmentClass'>;
   layout: 'stacked' | 'inline';
 }) {
   const { operator, supervisor } = equipo;
+  // En un liviano, el que está a cargo (supervisor o mantenedor), no «Sup.».
+  const prefijoACargo = equipo.equipmentClass === 'LIGHT' ? 'A cargo:' : 'Sup.';
   // Fuente única con `EstadoDeUso` de `EquipoDetalleView` — ver
   // `equipoEstadoUsoLabel` (`flota-colors.ts`): antes esta rama decidía
   // "Disponible"/"Detenido" con su propio branching inline, que había
@@ -179,7 +195,7 @@ function AsignacionCell({
             </>
           ) : (
             <>
-              Sup. <strong className="font-semibold">{supervisor?.name}</strong>
+              {prefijoACargo} <strong className="font-semibold">{supervisor?.name}</strong>
             </>
           )}
           {operator && supervisor ? ` · Sup. ${supervisor.name}` : null}
@@ -471,6 +487,31 @@ function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined })
   );
 }
 
+/**
+ * Acceso a los vencimientos de los livianos (Módulo 4), junto a «Nuevo equipo».
+ * Dice cuántos papeles o mantenciones piden atención, para no tener que
+ * entrar a revisar. En tablet y celular ocupa el ancho, como un botón más.
+ */
+function BotonVencimientos({ to }: { to: string }) {
+  const { data } = useCalendarioVencimientos();
+  const pendientes = (data?.equipment ?? []).reduce((n, e) => n + porRevisar(e) + (e.service?.due ? 1 : 0), 0);
+  return (
+    <Link
+      className="inline-flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-[0_1px_2px_rgba(20,23,28,.05)] transition-colors hover:bg-default sm:w-auto"
+      to={to}
+    >
+      <CalendarClock className="size-[18px] shrink-0 text-(--accent)" aria-hidden />
+      <span>Vencimientos de livianos</span>
+      {pendientes > 0 ? (
+        <span className="rounded-full bg-[var(--danger)] px-2 py-0.5 text-xs font-bold text-white tabular-nums">
+          {pendientes} por revisar
+        </span>
+      ) : null}
+      <ChevronRight className="ml-auto size-4 shrink-0 text-(--muted) sm:hidden" aria-hidden />
+    </Link>
+  );
+}
+
 /** Contadores por estado — el mismo dato que alimenta el KPI del dashboard. */
 function ResumenFlota() {
   const { data: resumen } = useResumenFleet();
@@ -591,6 +632,7 @@ function EquipoCardMobile({
                   {formatearUso(equipo)}
                 </span>
                 <ProximaMantencion fila={proxima} />
+                <FechaEstimada equipmentId={equipo.id} enabled={proxima != null || equipo.equipmentClass === 'LIGHT'} />
               </div>
               <div className="flex flex-1 flex-col gap-0.5">
                 <span className="text-[11px] font-bold tracking-wide text-(--muted) uppercase">
@@ -689,7 +731,8 @@ function EquipoCardMobile({
                     navigate(`/equipos/${equipo.id}`);
                   }}
                 />
-                {puedeRegistrarHorometro ? (
+                {/* Un liviano no: su km va por la tarjeta del supervisor o del mantenedor. */}
+                {puedeRegistrarHorometro && equipo.equipmentClass !== 'LIGHT' ? (
                   <ActionTile
                     icon={Gauge}
                     label={registrarHorometroLabel(equipo)}
@@ -699,7 +742,7 @@ function EquipoCardMobile({
                     }}
                   />
                 ) : null}
-                {puedeRegistrarCombustible ? (
+                {puedeRegistrarCombustible && equipo.equipmentClass !== 'LIGHT' ? (
                   <ActionTile
                     icon={Droplet}
                     label="Registrar combustible"
@@ -853,12 +896,7 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
         ) : null}
         {enTaller ? (
           // Módulo 4: el calendario de vencimientos de los livianos.
-          <Link
-            className="inline-flex min-h-[48px] items-center rounded-2xl border-[1.5px] border-(--line2,#c3c9d1) bg-card px-4 text-[15px] font-semibold text-foreground hover:border-foreground"
-            to="/mantenimiento/vencimientos"
-          >
-            Vencimientos de livianos
-          </Link>
+          <BotonVencimientos to="/mantenimiento/vencimientos" />
         ) : (
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
@@ -872,22 +910,19 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
             </p>
           </div>
         )}
-        {!enTaller && puedeVerVencimientos ? (
-          // Módulo 4: el calendario de vencimientos de todos los livianos.
-          <Link
-            className="inline-flex min-h-10 items-center rounded-xl bg-default px-4 text-sm font-medium text-default-foreground hover:bg-default-hover"
-            to="/equipos/vencimientos"
-          >
-            Vencimientos de livianos
-          </Link>
-        ) : null}
-        {/* PC: botón de texto en el header. En tablet/celular la creación es
-           por el FAB flotante (ver más abajo, junto a la lista de tarjetas) —
-           calca `openCreateForm`/`.fab` de FlotaClienteTablet/Phone.dc.html. */}
-        {puedeCrear ? (
-          <Button className="hidden xl:block" onPress={() => setIsCreateOpen(true)}>
-            Nuevo equipo
-          </Button>
+        {/* Acciones juntas a la derecha: vencimientos y «Nuevo equipo». En
+           tablet/celular la creación es por el FAB flotante (ver más abajo,
+           junto a la lista de tarjetas) — calca `openCreateForm`/`.fab` de
+           FlotaClienteTablet/Phone.dc.html — y vencimientos ocupa el ancho. */}
+        {!enTaller && (puedeVerVencimientos || puedeCrear) ? (
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            {puedeVerVencimientos ? <BotonVencimientos to="/equipos/vencimientos" /> : null}
+            {puedeCrear ? (
+              <Button className="hidden min-h-11 xl:inline-flex" onPress={() => setIsCreateOpen(true)}>
+                Nuevo equipo
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -1075,6 +1110,7 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                               {USO_UNIDAD_LABEL[equipo.controlUnit]}
                             </span>
                             <ProximaMantencion fila={proximaPorEquipo?.get(equipo.id)} />
+                            <FechaEstimada equipmentId={equipo.id} enabled={puedeVerPauta} />
                           </Table.Cell>
                           <Table.Cell>
                             <FuelGauge pct={equipo.currentFuelLevel} />

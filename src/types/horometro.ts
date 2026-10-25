@@ -34,6 +34,11 @@ export interface RegistroHorometro {
    * final. `null` mientras el turno sigue abierto. */
   fotoUrlSalida: string | null;
   equipo?: { internalCode: string };
+  /** Quién abrió el registro (supervisor o mantenedor). En un liviano no hay
+   * operador: es lo que muestra la ficha. */
+  supervisorName?: string | null;
+  /** Quién la cerró, si fue otra persona (un liviano lo cierra quien carga combustible). */
+  closedByName?: string | null;
 }
 
 /** Body de `PATCH /api/horometro/:id/salida` — cierra un turno abierto (ver

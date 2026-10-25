@@ -224,10 +224,11 @@ export const EQUIPMENT_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{ value: EquipmentDo
  * este helper solo decide el STRING.
  */
 export function equipoEstadoUsoLabel(
-  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status'>,
+  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status'> & { equipmentClass?: Equipment['equipmentClass'] },
 ): string {
   if (equipo.operator) return 'En uso';
-  if (equipo.supervisor) return 'Supervisado';
+  // Un liviano no lleva operador: asignado a alguien es «en uso».
+  if (equipo.supervisor) return equipo.equipmentClass === 'LIGHT' ? 'En uso' : 'Supervisado';
   return equipo.status === 'OPERATIONAL' ? 'Disponible' : 'Detenido';
 }
 

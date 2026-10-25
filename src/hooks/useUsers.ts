@@ -14,11 +14,12 @@ const USERS_QUERY_KEY = ['users'] as const;
  * `useUsers({ role: 'SUPERVISOR' })`) cachea aparte de la lista general (el
  * picker de operador sale del catálogo propio, `useOperators`).
  */
-export function useUsers(filtros: UserFiltros = {}) {
+export function useUsers(filtros: UserFiltros = {}, enabled = true) {
   const tieneFiltros = Object.keys(filtros).length > 0;
   return useQuery({
     queryKey: tieneFiltros ? [...USERS_QUERY_KEY, filtros] : USERS_QUERY_KEY,
     queryFn: () => UserAPI.list(filtros),
+    enabled,
   });
 }
 
