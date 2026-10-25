@@ -57,6 +57,30 @@ vi.mock('../../hooks/useVencimientos', () => ({
   },
 }));
 
+// Fecha estimada por uso: CN-007 llegaría a los 20.000 km el lun 16-11.
+vi.mock('../../hooks/useMaintenancePlans', () => ({
+  useMaintenanceForecastByEquipment: () => ({
+    data: new Map([
+      [
+        'eq_1',
+        {
+          equipmentId: 'eq_1',
+          unit: 'km',
+          source: 'LIVIANO',
+          nextAt: 20000,
+          remaining: 5000,
+          status: 'ESTIMADA',
+          dailyUsage: 220,
+          basedOnDays: 28,
+          estimatedDate: '2026-11-16',
+          weekStart: '2026-11-10',
+          suggestedDate: '2026-11-15',
+        },
+      ],
+    ]),
+  }),
+}));
+
 function renderCard(equipmentClass = 'LIGHT') {
   return render(
     <MemoryRouter>
@@ -76,7 +100,9 @@ describe('CalendarioVencimientosCard (ficha del liviano)', () => {
     renderCard();
     expect(screen.getByText('Calendario de vencimientos')).toBeTruthy();
     expect(screen.getByText(/Revisión técnica · 08-11-2026/)).toBeTruthy();
-    expect(screen.getByText(/20\.000 km · faltan 5\.000 km/)).toBeTruthy();
+    expect(screen.getByText(/20\.000 km · faltan 5\.000 km · ≈ lun 16-11 \(mejor dom 15-11\)/)).toBeTruthy();
+    // La mantención aparece en su mes del calendario.
+    expect(screen.getByText(/Mantención ≈ lun 16-11 · mejor dom 15-11/)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Ver todos los livianos/ }).getAttribute('href')).toBe(
       '/equipos/vencimientos',
     );

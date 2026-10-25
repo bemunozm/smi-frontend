@@ -4,6 +4,7 @@ import { Button, Checkbox, Input, Label, ListBox, Modal, Select, Spinner } from 
 
 import { useMaintenancePlan, useSaveMaintenancePlan } from '../../hooks/useMaintenancePlans';
 import { DocumentosPauta } from './DocumentosPauta';
+import { FechaEstimada } from './FechaEstimada';
 import {
   aEntrada,
   agregarHito,
@@ -115,6 +116,7 @@ export function PautaMantencionModal({
                 ) : (
                   <>
                     {vista && <ResumenProxima vista={vista} />}
+                    {vista?.plan && <FechaEstimada equipmentId={equipo.id} variante="bloque" />}
 
                     <DocumentosPauta equipmentId={equipo.id} internalCode={equipo.internalCode} />
 

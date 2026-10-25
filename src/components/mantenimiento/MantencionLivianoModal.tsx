@@ -7,6 +7,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useLightConfig, useSaveLightConfig } from '../../hooks/useVencimientos';
 import type { EquipmentDocument } from '../../types/equipment-document';
 import { EquipmentDocumentModal } from '../flota/EquipmentDocumentModal';
+import { FechaEstimada } from './FechaEstimada';
 import { fmtNum } from '../../lib/format';
 import { aBorrador, problemaLiviano, type Borrador } from '../../lib/mantencion-liviano';
 import {
@@ -101,6 +102,7 @@ export function MantencionLivianoModal({
                   ) : (
                     <>
                       <Resumen vista={vista} />
+                      <FechaEstimada equipmentId={vista.equipment.id} variante="bloque" />
 
                       <section className="flex flex-col gap-3">
                         <div>
