@@ -486,7 +486,9 @@ function Insumos({
   );
 }
 
-/** Varias fotos por ítem: se agregan de a una (cámara) o varias (galería). */
+/** Varias fotos por ítem, de a una y SIEMPRE con la cámara (`capture`), igual
+ * que los flujos del supervisor: la foto es evidencia del momento, no un
+ * archivo de la galería. */
 function Fotos({
   fotos,
   requerida,
@@ -544,7 +546,7 @@ function Fotos({
         ref={input}
         hidden
         accept="image/*"
-        multiple
+        capture="environment"
         type="file"
         onChange={(e) => {
           const nuevas = Array.from(e.target.files ?? []);

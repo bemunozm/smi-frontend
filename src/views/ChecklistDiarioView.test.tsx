@@ -91,6 +91,22 @@ describe('ChecklistDiarioView', () => {
     expect(screen.queryByText(/por marcar$/)).toBeNull();
   });
 
+  it('«Agregar foto» abre la cámara directa (capture), como los flujos del supervisor', () => {
+    render(
+      <MemoryRouter>
+        <ChecklistDiarioView />
+      </MemoryRouter>,
+    );
+
+    // La sección de fotos del ítem aparece al marcar «Se hizo mantención».
+    const estados = screen.getByRole('group', { name: 'Estado de Aire acondicionado' });
+    fireEvent.click(within(estados).getByRole('button', { name: 'Se hizo mantención' }));
+    expect(screen.getByRole('button', { name: /Agregar foto/ })).toBeTruthy();
+
+    const input = document.querySelector('input[type="file"]');
+    expect(input?.getAttribute('capture')).toBe('environment');
+  });
+
   it('si la sesión no es de mantenedor, dice por qué no puede enviar', () => {
     puedeEnviar = false;
     render(
