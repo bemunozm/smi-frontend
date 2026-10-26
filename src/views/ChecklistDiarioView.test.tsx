@@ -70,26 +70,25 @@ describe('ChecklistDiarioView', () => {
     expect(screen.getByText('· «Aire acondicionado»: falta la foto obligatoria de la mantención.')).toBeTruthy();
     expect(screen.getByText('Fotos obligatorias:', { exact: false })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Todos «No se revisó»' }));
+    // Cada ítem se marca por separado (el marcado masivo se quitó a pedido
+    // del administrador): al marcar el que faltaba, el motivo desaparece.
+    const espejos = screen.getByRole('group', { name: 'Estado de Espejos' });
+    fireEvent.click(within(espejos).getByRole('button', { name: 'No se revisó' }));
     expect(screen.queryByText(/ítems por marcar|Falta marcar/)).toBeNull();
-    expect(screen.getByText('2 ítems · todos marcados')).toBeTruthy();
     expect(mutate).not.toHaveBeenCalled();
   });
 
-  it('«Todos Se revisó» marca el resto sin pedir fotos', () => {
+  it('el marcado masivo ya no existe: ni los botones «Todos …» ni su tarjeta', () => {
     render(
       <MemoryRouter>
         <ChecklistDiarioView />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/si es crítico/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Todos «Se revisó»' }));
-
-    expect(screen.getByText('Falta temperatura')).toBeTruthy();
-    expect(screen.queryByText(/Falta foto/)).toBeNull();
-    expect(screen.getByText('1 por completar')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Enviar al supervisor' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Todos «Se revisó»' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Todos «No se revisó»' })).toBeNull();
+    expect(screen.queryByText(/Márcalos todos de una vez/)).toBeNull();
+    expect(screen.queryByText(/por marcar$/)).toBeNull();
   });
 
   it('si la sesión no es de mantenedor, dice por qué no puede enviar', () => {

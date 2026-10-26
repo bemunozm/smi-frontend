@@ -10,6 +10,7 @@ import { useUiStore } from '../store/ui';
 import { isRole } from '../types/roles';
 import { roleChipColor } from '../config/role-colors';
 import { NotificationBell } from '../components/notifications/NotificationBell';
+import { PerfilModal } from '../components/perfil/FichaPerfil';
 import { PREP_DETAIL_LIMITATION, PrepChecklist } from '../components/sync/PrepChecklist';
 import { SyncBadge } from '../components/sync/SyncBadge';
 import { SyncOpsList } from '../components/sync/SyncOpsList';
@@ -59,13 +60,16 @@ export function Topbar() {
   const sync = useSyncState(user?.id);
   const ops = useOutboxOps(user?.id);
   const [syncAbierta, setSyncAbierta] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
   const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
 
   const role = user && isRole(user.role) ? user.role : null;
 
   const handleAction = (key: Key): void => {
     if (key === 'profile') {
-      navigate('/perfil');
+      // Popup, no navegación (pedido del administrador) — la ruta `/perfil`
+      // sigue viva para quien entre por URL directa.
+      setPerfilAbierto(true);
       return;
     }
     if (key === 'sync') {
@@ -152,6 +156,7 @@ export function Topbar() {
         </div>
       ) : null}
       {confirmationDialog}
+      <PerfilModal isOpen={perfilAbierto} onClose={() => setPerfilAbierto(false)} />
       <SyncSheet sync={sync} isOpen={syncAbierta} onClose={() => setSyncAbierta(false)}>
         <SyncOpsList ops={ops} userId={user?.id} />
         <PrepChecklist

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, CircleCheck, CircleMinus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Camera, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import {
   ENTRADA_VACIA,
@@ -162,26 +162,6 @@ export function ChecklistDiarioView() {
       [itemId]: { ...(prev[itemId] ?? ENTRADA_VACIA), ...cambio },
     }));
 
-  /**
-   * Marca de una vez los ítems que siguen sin marcar. Con «Se revisó» los
-   * críticos siguen pidiendo foto (y el A/C la temperatura): se lleva la
-   * pantalla a la primera tarjeta que quedó incompleta.
-   */
-  const marcarResto = (status: 'CHECKED' | 'NOT_CHECKED') => {
-    const next = { ...entradas };
-    for (const item of lista) {
-      if (!next[item.id]?.status) next[item.id] = { ...(next[item.id] ?? ENTRADA_VACIA), status };
-    }
-    setEntradas(next);
-    const primera = lista.find((i) => pendientesItem(i, next[i.id]).length > 0);
-    if (status === 'CHECKED' && primera) {
-      requestAnimationFrame(() =>
-        document.getElementById(`item-${primera.id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }),
-      );
-    }
-  };
-  const incompletos = lista.filter((i) => pendientesItem(i, entradas[i.id]).length > 0).length;
-
   const onEnviar = () => {
     if (motivos.length > 0) return;
     const envio = armarEnvio(lista, entradas, {
@@ -213,7 +193,6 @@ export function ChecklistDiarioView() {
   const ocupado = enviar.isPending || reenviar.isPending;
 
   const unidad = equipo?.controlUnit === 'KM' ? 'km' : 'h';
-  const sinMarcar = lista.filter((i) => !entradas[i.id]?.status).length;
 
   return (
     <VistaUnica>
@@ -296,13 +275,6 @@ export function ChecklistDiarioView() {
         </Card>
       ) : (
         <>
-          <MarcarResto
-            conTemperatura={lista.filter((i) => i.requiresTemperature).map((i) => i.name.toLowerCase())}
-            incompletos={incompletos}
-            sinMarcar={sinMarcar}
-            total={lista.length}
-            onMarcar={marcarResto}
-          />
           {lista.map((item) => (
             <ItemChecklist
               key={item.id}
@@ -358,75 +330,6 @@ export function ChecklistDiarioView() {
 
       <Enviados checklists={enviados ?? []} />
     </VistaUnica>
-  );
-}
-
-/**
- * Marcar de una vez los ítems que faltan. Va como bloque y no como enlace: el
- * mantenedor tiene que ver que existe, que sirve para las dos opciones y que
- * lo que tuvo mantención hay que cambiarlo a mano (con su foto si es crítico).
- */
-function MarcarResto({
-  conTemperatura,
-  total,
-  sinMarcar,
-  incompletos,
-  onMarcar,
-}: {
-  /** Ítems que piden temperatura (en minúscula, para la frase). */
-  conTemperatura: string[];
-  total: number;
-  sinMarcar: number;
-  incompletos: number;
-  onMarcar: (status: 'CHECKED' | 'NOT_CHECKED') => void;
-}) {
-  if (sinMarcar === 0) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 px-1">
-        <Label>{total} ítems · todos marcados</Label>
-        {incompletos > 0 && (
-          <Chip tono="danger">{incompletos === 1 ? '1 por completar' : `${incompletos} por completar`}</Chip>
-        )}
-      </div>
-    );
-  }
-  const boton =
-    'flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border-[1.5px] bg-card px-3 text-[15px] font-semibold transition-colors';
-  return (
-    <div className="rounded-3xl border border-[var(--accent-soft)] bg-[#f3f6ff] px-4 py-4">
-      <p className="text-[15.5px] font-bold">
-        Faltan <span className="tabular">{sinMarcar}</span> de <span className="tabular">{total}</span> por marcar
-      </p>
-      <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
-        Márcalos todos de una vez y después cambia los que sean distintos. Si a alguno le hiciste mantención, cámbialo a
-        «Se hizo mantención»: pide <strong className="text-foreground">qué se hizo</strong> y, si es crítico,{' '}
-        <strong className="text-foreground">su foto</strong>
-        {conTemperatura.length > 0 && (
-          <>
-            . Además, <strong className="text-foreground">temperatura en {conTemperatura.join(', ')}</strong>
-          </>
-        )}
-        .
-      </p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <button
-          className={`${boton} border-[#15803d] text-[#15803d] hover:bg-[#15803d] hover:text-white`}
-          type="button"
-          onClick={() => onMarcar('CHECKED')}
-        >
-          <CircleCheck className="h-5 w-5" aria-hidden />
-          Todos «Se revisó»
-        </button>
-        <button
-          className={`${boton} border-[#6b7280] text-[#4b5563] hover:bg-[#6b7280] hover:text-white`}
-          type="button"
-          onClick={() => onMarcar('NOT_CHECKED')}
-        >
-          <CircleMinus className="h-5 w-5" aria-hidden />
-          Todos «No se revisó»
-        </button>
-      </div>
-    </div>
   );
 }
 
