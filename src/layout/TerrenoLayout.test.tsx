@@ -145,13 +145,13 @@ describe('TerrenoLayout', () => {
     expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
   });
 
-  it('en escritorio el drawer guarda lo que no está en el header, sin repetir las secciones', () => {
+  it('en escritorio el drawer del ADMIN guarda solo «Ir al panel», sin repetir secciones ni Salir', () => {
     mockRole = 'ADMIN';
     renderLayout('desktop');
     fireEvent.click(screen.getByLabelText('Menú'));
 
     expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
     for (const seccion of SECCIONES.desktop) {
       expect(screen.getAllByRole('link', { name: seccion })).toHaveLength(1);
     }
@@ -167,16 +167,26 @@ describe('TerrenoLayout', () => {
   });
 
   /**
-   * «Salir» (y «Ir al panel») van justo debajo del contenido del drawer, no
-   * clavados al fondo con `mt-auto`: en una tablet el drawer ocupa toda la
-   * altura y cerrar sesión quedaba lejísimos del resto de las opciones.
+   * «Cerrar sesión» vive en el menú de usuario del header (avatar, igual que
+   * el administrador), NO en el drawer: en tablet quedaba clavado al fondo
+   * del cajón, lejos de todo.
    */
-  it('el pie del drawer (Salir) sigue al contenido, no se clava al fondo', () => {
+  it('«Cerrar sesión» está en el menú de usuario del header, no en el drawer', async () => {
     renderLayout('phone');
-    fireEvent.click(screen.getByLabelText('Menú'));
 
-    const salir = screen.getByRole('button', { name: 'Salir' });
-    expect(salir.parentElement?.className ?? '').not.toContain('mt-auto');
+    fireEvent.click(screen.getByLabelText('Menú'));
+    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
+    fireEvent.click(screen.getByLabelText('Cerrar'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    expect(await screen.findByRole('menuitem', { name: 'Cerrar sesión' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Ver perfil' })).toBeTruthy();
+  });
+
+  it('en escritorio el SUPERVISOR no tiene botón Menú: el drawer no tendría nada que mostrar', () => {
+    renderLayout('desktop');
+
+    expect(screen.queryByLabelText('Menú')).toBeNull();
   });
 
   it('monta el `SyncStatus` real (reemplaza a la vieja `BarraSinSenal`)', () => {
@@ -206,11 +216,16 @@ describe('TerrenoLayout', () => {
       countPendingMock.mockResolvedValue(0);
     });
 
+    // Cerrar sesión ahora vive en el menú de usuario del header (avatar).
+    async function pedirCerrarSesion() {
+      fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Cerrar sesión' }));
+    }
+
     it('sin pendientes: cierra sesión directo, sin confirmación ni aviso', async () => {
       renderLayout('desktop');
-      fireEvent.click(screen.getByLabelText('Menú'));
 
-      fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+      await pedirCerrarSesion();
 
       await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
       expect(countPendingMock).toHaveBeenCalledWith('u1');
@@ -221,9 +236,8 @@ describe('TerrenoLayout', () => {
     it('con pendientes: pide confirmación con el aviso y cierra solo al confirmar', async () => {
       countPendingMock.mockResolvedValue(2);
       renderLayout('desktop');
-      fireEvent.click(screen.getByLabelText('Menú'));
 
-      fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+      await pedirCerrarSesion();
 
       const dialogo = await screen.findByRole('alertdialog');
       expect(dialogo.textContent).toContain('Hay 2 registros sin enviar.');
@@ -238,9 +252,8 @@ describe('TerrenoLayout', () => {
       logoutMock.mockRejectedValueOnce(new Error('network'));
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       renderLayout('desktop');
-      fireEvent.click(screen.getByLabelText('Menú'));
 
-      fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+      await pedirCerrarSesion();
 
       await waitFor(() => expect(toastDangerMock).toHaveBeenCalledTimes(1));
       expect(toastDangerMock.mock.calls[0]![0]).toMatch(/No se pudo cerrar la sesión/);

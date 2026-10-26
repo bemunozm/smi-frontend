@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
+import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
+import type { Key } from '@heroui/react';
+import { LayoutDashboard, LogOut, Menu, UserRound, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { NotificationBell } from '../components/notifications/NotificationBell';
 import { useLogoutConfirmation } from '../components/sync/useLogoutConfirmation';
 import { SyncStatus } from '../components/terreno/SyncStatus';
+import { roleChipColor } from '../config/role-colors';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { ROLES } from '../types/roles';
+import { ROLES, type Role } from '../types/roles';
 import { CONTAINER } from './terreno-container';
 
 /**
@@ -35,6 +38,81 @@ function Badge({ n }: { n?: number }) {
     >
       {n > 99 ? '99+' : n}
     </span>
+  );
+}
+
+/** Mismo criterio que `Topbar#initialsFrom`: dos palabras → iniciales; si no,
+ * las dos primeras letras de lo que haya (nombre o email). */
+function inicialesDe(nombre: string | undefined, email: string | undefined): string {
+  const fuente = nombre?.trim() || email || '?';
+  const partes = fuente.split(/\s+/).filter(Boolean);
+  if (partes.length >= 2) {
+    return `${partes[0]?.[0] ?? ''}${partes[1]?.[0] ?? ''}`.toUpperCase();
+  }
+  return fuente.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Menú de usuario del header — el MISMO patrón que el Topbar de escritorio
+ * (pedido del administrador): avatar → quién está conectado, «Ver perfil» y
+ * «Cerrar sesión». Antes «Salir» vivía en el drawer y en una tablet quedaba
+ * clavado al fondo del cajón, lejos de todo.
+ */
+function MenuUsuario({
+  user,
+  role,
+  onPerfil,
+  onCerrarSesion,
+}: {
+  user: { name?: string; email?: string } | null;
+  role: Role | null;
+  onPerfil: () => void;
+  onCerrarSesion: () => void;
+}) {
+  const handleAction = (key: Key): void => {
+    if (key === 'profile') onPerfil();
+    if (key === 'logout') onCerrarSesion();
+  };
+
+  return (
+    <Dropdown>
+      <Button
+        aria-label="Menú de usuario"
+        className="h-11 w-11 shrink-0 rounded-xl text-white/90 hover:bg-white/10"
+        isIconOnly
+        variant="ghost"
+      >
+        <Avatar size="sm">
+          <Avatar.Fallback>{inicialesDe(user?.name, user?.email)}</Avatar.Fallback>
+        </Avatar>
+      </Button>
+      <Dropdown.Popover placement="bottom end">
+        <div className="flex items-center gap-3 px-3 py-3">
+          <Avatar size="md">
+            <Avatar.Fallback>{inicialesDe(user?.name, user?.email)}</Avatar.Fallback>
+          </Avatar>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="truncate text-sm font-medium text-foreground">{user?.name || user?.email}</span>
+            <span className="truncate text-xs text-muted-foreground">{user?.email}</span>
+            {role ? (
+              <Chip className="w-fit" color={roleChipColor(role)} size="sm" variant="soft">
+                {role}
+              </Chip>
+            ) : null}
+          </div>
+        </div>
+        <Dropdown.Menu onAction={handleAction}>
+          <Dropdown.Item id="profile" textValue="Ver perfil">
+            <UserRound aria-hidden size={15} />
+            <Label>Ver perfil</Label>
+          </Dropdown.Item>
+          <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
+            <LogOut aria-hidden size={15} />
+            <Label>Cerrar sesión</Label>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }
 
@@ -116,14 +194,18 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
           style={{ background: 'var(--terreno-head)' }}
         >
           <div className={`${CONTAINER} flex items-center gap-3 py-3.5 lg:gap-5 lg:py-3`}>
-            <button
-              type="button"
-              aria-label="Menú"
-              onClick={() => setMenu(true)}
-              className="-ml-2 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white/90 hover:bg-white/10"
-            >
-              <Menu className="h-[22px] w-[22px]" />
-            </button>
+            {/* Sin nada que mostrar (header con las secciones y sin «Ir al
+                panel»), el drawer quedaría vacío: el botón no se ofrece. */}
+            {(!navEnHeader || ofreceIrAlPanel) && (
+              <button
+                type="button"
+                aria-label="Menú"
+                onClick={() => setMenu(true)}
+                className="-ml-2 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white/90 hover:bg-white/10"
+              >
+                <Menu className="h-[22px] w-[22px]" />
+              </button>
+            )}
 
             <div className="flex flex-1 flex-col gap-1 leading-none lg:flex-none">
               <span className="font-display text-2xl font-bold tracking-[-0.02em]">SMI</span>
@@ -162,6 +244,12 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                 mano a /notificaciones. */}
             <NotificationBell faena />
             <StatusPill enLinea={enLinea} />
+            <MenuUsuario
+              user={user}
+              role={role}
+              onPerfil={() => navigate('/perfil')}
+              onCerrarSesion={requestLogout}
+            />
           </div>
         </header>
 
@@ -216,8 +304,9 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
           </nav>
         )}
 
-        {/* Drawer. Sigue existiendo en todos los tamaños porque guarda lo que no
-            está en las pestañas: quién está conectado, "Ir al panel" y "Salir". */}
+        {/* Drawer: las secciones en teléfono/tablet y «Ir al panel» (ADMIN).
+            Quién está conectado y «Cerrar sesión» viven en el menú de usuario
+            del header, igual que en el escritorio del administrador. */}
         {menu && (
           <>
             <button
@@ -238,13 +327,6 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                   <X className="h-5 w-5" />
                 </button>
               </div>
-
-              {user && (
-                <div className="my-2.5 rounded-xl bg-muted p-3">
-                  <div className="text-sm font-semibold text-foreground">{user.name}</div>
-                  <div className="text-[13px] text-muted-foreground">{role ?? user.email}</div>
-                </div>
-              )}
 
               {/* En teléfono el drawer repite las secciones porque es el menú
                   completo. Desde `lg` ya están en el header: repetirlas acá las
@@ -275,11 +357,8 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                 </nav>
               )}
 
-              {/* Pie del drawer pegado al contenido (no `mt-auto`): en tablet
-                  el drawer ocupa toda la altura y «Salir» quedaba clavado al
-                  fondo, lejos del resto de las opciones. */}
-              <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
-                {ofreceIrAlPanel && (
+              {ofreceIrAlPanel && (
+                <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
                   <NavLink
                     to="/"
                     onClick={() => setMenu(false)}
@@ -288,16 +367,8 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                     <LayoutDashboard className="h-[19px] w-[19px]" />
                     Ir al panel
                   </NavLink>
-                )}
-                <button
-                  type="button"
-                  onClick={requestLogout}
-                  className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-danger hover:bg-danger-soft"
-                >
-                  <LogOut className="h-[19px] w-[19px]" />
-                  Salir
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           </>
         )}

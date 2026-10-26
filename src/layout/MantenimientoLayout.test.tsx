@@ -98,12 +98,16 @@ describe('MantenimientoLayout', () => {
     expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos']);
   });
 
-  it('el drawer del MANTENEDOR no ofrece «Ir al panel»: el taller ES su panel', () => {
+  it('el drawer del MANTENEDOR no ofrece «Ir al panel» ni Salir: cerrar sesión vive en el menú de usuario', async () => {
     renderLayout('phone', ROLES.MANTENEDOR);
     fireEvent.click(screen.getByLabelText('Menú'));
 
     expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
+    fireEvent.click(screen.getByLabelText('Cerrar'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    expect(await screen.findByRole('menuitem', { name: 'Cerrar sesión' })).toBeTruthy();
   });
 
   it('el drawer del ADMIN sí mantiene «Ir al panel»', () => {
