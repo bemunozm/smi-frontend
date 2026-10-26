@@ -83,17 +83,24 @@ export default defineConfig(({ mode }) => {
           scope: '/',
           theme_color: '#1d4ed8',
           background_color: '#e9ebee',
-          // Sin `icons`: `pwaAssets` (abajo) los genera desde
-          // `public/favicon.svg` y los inyecta acá automáticamente
-          // (192/512/maskable-512 + un 64x64 extra que trae el preset).
-        },
-        pwaAssets: {
-          image: 'public/favicon.svg',
-          // Los <link>/<meta> de favicon y theme-color ya los escribimos a
-          // mano en `index.html` (íconos apple-touch-icon, apple-mobile-web-app-*,
-          // theme-color) — desactivado para no duplicarlos.
-          includeHtmlHeadLinks: false,
-          injectThemeColor: false,
+          // Íconos: los PNG del logo SMI (camión blanco + "SMI" sobre azul)
+          // viven en `public/` tal cual los entregó diseño — NO se generan en
+          // build. Antes los producía `pwaAssets` desde `favicon.svg`, pero el
+          // logo definitivo solo existe como PNG: dejar el generador activo
+          // produciría íconos derivados del favicon (otro diseño) que además
+          // colisionan por nombre con estos archivos en `dist/`. Los <link> de
+          // favicon y apple-touch-icon ya están a mano en `index.html`.
+          icons: [
+            { src: '/pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+            { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+            {
+              src: '/maskable-icon-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
         },
         // `clientsClaim: true`: el SW nuevo toma control de las pestañas YA
         // abiertas apenas termina de activarse, en vez de esperar a que se

@@ -172,7 +172,17 @@ async function edicionDeEquipo({ equipo, input, photo, quitarFoto }: UpdateEquip
   const edicion = await buildQueuedEdit<CamposDeEquipo>({
     entity: equipmentEntity(equipo.id),
     ops: ESCRITURAS_DE_CAMPOS,
-    base: pickFields(equipo, CAMPOS_DE_EQUIPO),
+    base: {
+      ...pickFields(equipo, CAMPOS_DE_EQUIPO),
+      // La entidad trae `null` cuando no hay lectura registrada, pero
+      // `CamposDeEquipo` (el body del PATCH) no admite `null` en la lectura:
+      // acá se normaliza a "clave ausente". Para el diff da lo mismo
+      // (`igual(a ?? null, b ?? null)`) y la precondición vuelve a emitir
+      // `null` explícito (`precondicion`: `valor ?? null`), así que el
+      // X-Expected de la primera lectura sigue siendo `null`.
+      currentHourmeter: equipo.currentHourmeter ?? undefined,
+      currentMileage: equipo.currentMileage ?? undefined,
+    },
     next: input,
     fields: CAMPOS_DE_EQUIPO,
   });

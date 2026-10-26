@@ -306,6 +306,40 @@ describe('useUpdateEquipment', () => {
     });
   });
 
+  it('la primera lectura de un equipo sin lectura registrada precondiciona contra null', async () => {
+    // La base de la edición viene de la ENTIDAD (`currentHourmeter: null` =
+    // sin lectura registrada) y se normaliza a "clave ausente" porque el body
+    // del PATCH no admite `null` en la lectura (ver `edicionDeEquipo`). La
+    // precondición igual tiene que viajar como `null` explícito: si
+    // desapareciera del X-Expected, el servidor no compararía el campo.
+    const sinLectura = { ...EQUIPO, currentHourmeter: null } as Equipment;
+    submitWriteMock.mockResolvedValueOnce(enviado(sinLectura));
+    const { result } = renderHook(() => useUpdateEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({
+      equipo: sinLectura,
+      input: {
+        licensePlate: null,
+        equipmentClass: 'HEAVY',
+        type: 'Excavadora',
+        brand: 'Caterpillar',
+        model: '336',
+        year: 2019,
+        controlUnit: 'HOURS',
+        status: 'OPERATIONAL',
+        homeBranchId: null,
+        currentHourmeter: 100,
+      },
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const { input } = ultimaEscritura();
+    expect(input).toMatchObject({
+      body: { currentHourmeter: 100 },
+      expected: { currentHourmeter: null },
+    });
+  });
+
   it('sin ningún cambio no encola nada', async () => {
     const { result } = renderHook(() => useUpdateEquipment(), { wrapper: wrapperNuevo() });
 
