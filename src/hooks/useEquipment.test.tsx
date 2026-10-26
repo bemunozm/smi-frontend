@@ -276,6 +276,36 @@ describe('useUpdateEquipment', () => {
     expect(toast.success).toHaveBeenCalledWith('Equipo actualizado', { description: 'EX-001' });
   });
 
+  it('editar la lectura (horómetro/km) viaja en el body con su precondición', async () => {
+    // Regresión: `CAMPOS_DE_EQUIPO` no incluía la lectura y el diff la
+    // descartaba — "cuando edito el horómetro no cambia".
+    submitWriteMock.mockResolvedValueOnce(enviado(EQUIPO));
+    const { result } = renderHook(() => useUpdateEquipment(), { wrapper: wrapperNuevo() });
+
+    result.current.mutate({
+      equipo: EQUIPO,
+      input: {
+        licensePlate: null,
+        equipmentClass: 'HEAVY',
+        type: 'Excavadora',
+        brand: 'Caterpillar',
+        model: '336',
+        year: 2019,
+        controlUnit: 'HOURS',
+        status: 'OPERATIONAL',
+        homeBranchId: null,
+        currentHourmeter: 1350,
+      },
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const { input } = ultimaEscritura();
+    expect(input).toMatchObject({
+      body: { currentHourmeter: 1350 },
+      expected: { currentHourmeter: 1200 },
+    });
+  });
+
   it('sin ningún cambio no encola nada', async () => {
     const { result } = renderHook(() => useUpdateEquipment(), { wrapper: wrapperNuevo() });
 
