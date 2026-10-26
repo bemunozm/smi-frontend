@@ -15,6 +15,7 @@ describe('EquipmentFormSchema', () => {
     controlUnit: 'HOURS' as const,
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
+    lecturaActual: '',
   };
 
   it('acepta el año vacío (es opcional)', () => {
@@ -47,6 +48,7 @@ describe('toEquipmentPayload', () => {
       controlUnit: 'HOURS',
       status: 'OPERATIONAL',
       homeBranchId: '',
+      lecturaActual: '',
     });
 
     expect(payload.internalCode).toBe('EX-001');
@@ -68,6 +70,7 @@ describe('toEquipmentPayload', () => {
       controlUnit: 'KM',
       status: 'IN_WORKSHOP',
       homeBranchId: '',
+      lecturaActual: '',
     });
 
     expect('year' in payload).toBe(false);
@@ -88,6 +91,7 @@ describe('toEquipmentPayload', () => {
       controlUnit: 'KM',
       status: 'IN_WORKSHOP',
       homeBranchId: '',
+      lecturaActual: '',
     });
 
     expect('photoKey' in payload).toBe(false);
@@ -106,6 +110,7 @@ describe('toUpdateEquipmentPayload', () => {
     controlUnit: 'HOURS' as const,
     status: 'OPERATIONAL' as const,
     homeBranchId: '',
+    lecturaActual: '',
   };
 
   it('manda `null` explícito en patente, año y sucursal cuando vienen vacíos (a diferencia de crear)', () => {

@@ -218,6 +218,24 @@ const yearField = z
   })
   .or(z.literal(''));
 
+/**
+ * La lectura actual (horómetro u odómetro según `controlUnit`) — mismo
+ * criterio que `yearField`: string en el formulario, número recién al enviar,
+ * para que "vacío" y "mal escrito" sean casos distintos. Coma decimal
+ * tolerada (teclados en español).
+ */
+const lecturaField = z
+  .string()
+  .regex(/^\d+([.,]\d+)?$/, 'Ingresa un número válido')
+  .refine(
+    (value) => {
+      const n = Number(value.replace(',', '.'));
+      return n >= 0 && n <= 1_000_000;
+    },
+    { message: 'La lectura debe estar entre 0 y 1.000.000' },
+  )
+  .or(z.literal(''));
+
 export const EquipmentFormSchema = z.object({
   internalCode: z
     .string()
@@ -233,8 +251,19 @@ export const EquipmentFormSchema = z.object({
   status: z.enum(EQUIPMENT_STATUS),
   /** `''` = sin sucursal asignada. */
   homeBranchId: z.string(),
+  /** `''` = sin lectura registrada. Alimenta `currentHourmeter` o
+   * `currentMileage` según `controlUnit` (ver `lecturaAPayload`). */
+  lecturaActual: lecturaField,
 });
 export type EquipmentFormValues = z.infer<typeof EquipmentFormSchema>;
+
+/** La lectura del formulario como clave del body según la unidad de control —
+ * vacía, no viaja (en editar eso significa "no tocar la guardada"). */
+function lecturaAPayload(values: EquipmentFormValues): Pick<CreateEquipmentInput, 'currentHourmeter' | 'currentMileage'> {
+  if (!values.lecturaActual) return {};
+  const lectura = Number(values.lecturaActual.replace(',', '.'));
+  return values.controlUnit === 'KM' ? { currentMileage: lectura } : { currentHourmeter: lectura };
+}
 
 /** Body de `POST /api/equipment`. */
 export interface CreateEquipmentInput {
@@ -248,6 +277,9 @@ export interface CreateEquipmentInput {
   controlUnit: ControlUnit;
   status: EquipmentStatus;
   homeBranchId?: string;
+  /** Lectura inicial del equipo, según `controlUnit`. */
+  currentHourmeter?: number;
+  currentMileage?: number;
 }
 
 /**
@@ -305,6 +337,7 @@ export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipment
     controlUnit: values.controlUnit,
     status: values.status,
     ...(values.homeBranchId ? { homeBranchId: values.homeBranchId } : {}),
+    ...lecturaAPayload(values),
   };
 }
 
@@ -329,5 +362,8 @@ export function toUpdateEquipmentPayload(values: EquipmentFormValues): Omit<Upda
     controlUnit: values.controlUnit,
     status: values.status,
     homeBranchId: values.homeBranchId ? values.homeBranchId : null,
+    // Vacía NO borra la lectura guardada: el backend no acepta `null` acá y
+    // ponerla en cero rompería el ciclo de mantención.
+    ...lecturaAPayload(values),
   };
 }
