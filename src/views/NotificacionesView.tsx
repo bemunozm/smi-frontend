@@ -87,26 +87,50 @@ export function NotificacionesView() {
           <ToggleButton id={ESTADO_NO_LEIDAS}>No leídas ({unreadCount})</ToggleButton>
         </ToggleButtonGroup>
 
-        <ToggleButtonGroup
-          aria-label="Filtrar por tipo"
-          selectedKeys={tiposSeleccionados}
-          selectionMode="multiple"
-          onSelectionChange={(keys) => {
-            const next = new Set<NotificacionTipo>();
-            keys.forEach((key) => {
-              if (typeof key === 'string' && (TODOS_TIPOS as string[]).includes(key)) {
-                next.add(key as NotificacionTipo);
-              }
-            });
-            setTiposSeleccionados(next);
-          }}
-        >
-          {TODOS_TIPOS.map((tipo) => (
-            <ToggleButton key={tipo} id={tipo}>
-              {notificacionTipoConfig(tipo).label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        {/* Etiquetas sueltas que bajan de línea, no una tira de botones pegados:
+           con trece tipos la tira se salía por la derecha y estiraba la página
+           en tablet y celular. Tocar una la oculta o la muestra. */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">Tipos</span>
+            {tiposSeleccionados.size < TODOS_TIPOS.length ? (
+              <button
+                className="cursor-pointer text-[13px] font-semibold text-(--accent) hover:underline"
+                type="button"
+                onClick={() => setTiposSeleccionados(new Set(TODOS_TIPOS))}
+              >
+                Mostrar todos
+              </button>
+            ) : null}
+          </div>
+          <div aria-label="Filtrar por tipo" className="flex flex-wrap gap-2" role="group">
+            {TODOS_TIPOS.map((tipo) => {
+              const activo = tiposSeleccionados.has(tipo);
+              return (
+                <button
+                  aria-pressed={activo}
+                  className={`inline-flex min-h-9 cursor-pointer items-center rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
+                    activo
+                      ? 'border-(--accent) bg-accent-soft text-accent-soft-foreground'
+                      : 'border-border bg-card text-muted-foreground'
+                  }`}
+                  key={tipo}
+                  type="button"
+                  onClick={() =>
+                    setTiposSeleccionados((actuales) => {
+                      const next = new Set(actuales);
+                      if (next.has(tipo)) next.delete(tipo);
+                      else next.add(tipo);
+                      return next;
+                    })
+                  }
+                >
+                  {notificacionTipoConfig(tipo).label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {isPending ? (
