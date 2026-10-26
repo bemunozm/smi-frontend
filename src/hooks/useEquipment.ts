@@ -91,6 +91,11 @@ const CAMPOS_DE_EQUIPO = [
   'controlUnit',
   'status',
   'homeBranchId',
+  // La lectura (según `controlUnit`): el formulario la OMITE cuando viene
+  // vacía (clave ausente = sin cambio, ver `edicionContraBase`) — editarla sí
+  // viaja, con su valor base como precondición.
+  'currentHourmeter',
+  'currentMileage',
 ] as const satisfies readonly (keyof CamposDeEquipo)[];
 
 export interface CreateEquipmentVars {
