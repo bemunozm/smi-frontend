@@ -41,17 +41,8 @@ import {
 } from '../lib/query-keys';
 import { toDateOnly } from '../lib/turno';
 import { requestPersistentStorage } from '../offline/persist-storage';
+import { isStandalonePwa } from '../pwa/standalone';
 import type { Role } from '../types/roles';
-
-/** `(display-mode: standalone)` cubre Android/desktop; `navigator.standalone`
- * es la señal equivalente (no estándar) que usa Safari/iOS — ninguna de las
- * dos alcanza sola en todos los casos, así que se combinan. */
-function isStandalonePwa(): boolean {
-  if (typeof window === 'undefined') return false;
-  const standaloneMedia = window.matchMedia?.('(display-mode: standalone)').matches ?? false;
-  const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return standaloneMedia || iosStandalone;
-}
 
 /** El Service Worker controla esta página: solo entonces las lecturas que hace la
  * precarga pasan por él y quedan en su cache. Tras la primera instalación, o si
