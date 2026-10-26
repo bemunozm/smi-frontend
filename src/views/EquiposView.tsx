@@ -234,6 +234,7 @@ const DEFAULT_FORM_VALUES: EquipmentFormValues = {
   controlUnit: 'HOURS',
   status: 'OPERATIONAL',
   homeBranchId: '',
+  lecturaActual: '',
 };
 
 interface CreateEquipoModalProps {

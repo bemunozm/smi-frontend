@@ -168,6 +168,10 @@ interface CamposProps {
    * creación) — se lo pasa tal cual a `OperatorPicker#currentAssignee` para
    * que siga viéndose aunque ya esté inactivo (ver ese componente). */
   currentOperator?: OperatorOption | null;
+  /** La lectura GUARDADA del equipo en edición (`undefined` en creación):
+   * cambiarla muestra la advertencia — la lectura alimenta el ciclo de
+   * mantención y la fecha estimada. */
+  lecturaOriginal?: string;
 }
 
 /**
@@ -186,6 +190,7 @@ export function CamposEquipo({
   supervisorId,
   onSupervisorIdChange,
   currentOperator = null,
+  lecturaOriginal,
 }: CamposProps) {
   // El selector de sucursal base solo debe ofrecer sucursales activas.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
@@ -200,6 +205,11 @@ export function CamposEquipo({
   // (`ResponsableSelect`). El de operador sale del catálogo propio
   // (`OperatorPicker`): el operador ya no es un rol de usuario.
   const liviano = useWatch({ control, name: 'equipmentClass' }) === 'LIGHT';
+  const unidadKm = useWatch({ control, name: 'controlUnit' }) === 'KM';
+  // Solo en edición (`lecturaOriginal` viene): tocar la lectura muestra la
+  // advertencia — alimenta el ciclo de mantención y la fecha estimada.
+  const lecturaActual = useWatch({ control, name: 'lecturaActual' });
+  const advertenciaLectura = lecturaOriginal !== undefined && lecturaActual !== lecturaOriginal;
   useEffect(() => {
     if (liviano && operatorId !== SIN_ASIGNAR) onOperatorIdChange(SIN_ASIGNAR);
   }, [liviano, operatorId, onOperatorIdChange]);
@@ -417,6 +427,31 @@ export function CamposEquipo({
 
           <Controller
             control={control}
+            name="lecturaActual"
+            render={({ field }) => (
+              <TextField
+                fullWidth
+                isInvalid={!!errors.lecturaActual}
+                name={field.name}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                value={field.value}
+              >
+                <Label>{unidadKm ? 'Kilometraje actual (km)' : 'Horómetro actual (h)'}</Label>
+                <Input inputMode="decimal" placeholder="0" />
+                {errors.lecturaActual ? <FieldError>{errors.lecturaActual.message}</FieldError> : null}
+                {advertenciaLectura ? (
+                  <p className="mt-1 text-xs font-medium text-warning-soft-foreground">
+                    La lectura alimenta el ciclo de mantención y la fecha estimada: cámbiala solo si estaba mal
+                    ingresada.
+                  </p>
+                ) : null}
+              </TextField>
+            )}
+          />
+
+          <Controller
+            control={control}
             name="status"
             render={({ field }) => (
               <Select
@@ -539,7 +574,14 @@ function buildEquipoFormValues(equipo: Equipment): EquipmentFormValues {
     controlUnit: equipo.controlUnit,
     status: equipo.status,
     homeBranchId: equipo.homeBranchId ?? '',
+    lecturaActual: lecturaGuardada(equipo),
   };
+}
+
+/** La lectura guardada según la unidad del equipo, como string del formulario. */
+function lecturaGuardada(equipo: Equipment): string {
+  const valor = equipo.controlUnit === 'KM' ? equipo.currentMileage : equipo.currentHourmeter;
+  return valor != null ? String(valor) : '';
 }
 
 export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalProps) {
@@ -653,6 +695,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                       currentOperator={equipo.operator}
                       errors={errors}
                       internalCodeEditable={false}
+                      lecturaOriginal={lecturaGuardada(equipo)}
                       onOperatorIdChange={setOperatorId}
                       onSupervisorIdChange={setSupervisorId}
                       operatorId={operatorId}

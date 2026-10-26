@@ -94,6 +94,33 @@ beforeEach(() => {
   saveMutateMock.mockReset();
 });
 
+describe('EditEquipoModal — lectura del equipo (horómetro/km)', () => {
+  it('muestra la lectura guardada, avisa al cambiarla y la manda en el PATCH', async () => {
+    renderModal(EQUIPO);
+
+    const lectura = screen.getByLabelText('Horómetro actual (h)') as HTMLInputElement;
+    expect(lectura.value).toBe('1200');
+    // Sin tocarla, no hay advertencia.
+    expect(screen.queryByText(/ciclo de mantención/)).toBeNull();
+
+    fireEvent.change(lectura, { target: { value: '1350' } });
+    expect(screen.getByText(/ciclo de mantención/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(saveMutateMock).toHaveBeenCalledTimes(1));
+    const [{ input }] = saveMutateMock.mock.calls[0] as [{ input: Record<string, unknown> }];
+    expect(input.currentHourmeter).toBe(1350);
+  });
+
+  it('en un equipo por km el campo es de kilometraje', () => {
+    renderModal({ ...EQUIPO, controlUnit: 'KM', currentHourmeter: null, currentMileage: 54_300 });
+
+    const lectura = screen.getByLabelText('Kilometraje actual (km)') as HTMLInputElement;
+    expect(lectura.value).toBe('54300');
+  });
+});
+
 describe('EditEquipoModal — un refetch en segundo plano no pisa una subida pendiente ni texto sin guardar', () => {
   it('rerender con una NUEVA referencia del mismo equipo (isOpen sigue true) conserva la foto recién subida y el campo editado', async () => {
     const { rerender, qc } = renderModal(EQUIPO);
