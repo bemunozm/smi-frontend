@@ -275,7 +275,10 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                 </nav>
               )}
 
-              <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
+              {/* Pie del drawer pegado al contenido (no `mt-auto`): en tablet
+                  el drawer ocupa toda la altura y «Salir» quedaba clavado al
+                  fondo, lejos del resto de las opciones. */}
+              <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
                 {ofreceIrAlPanel && (
                   <NavLink
                     to="/"

@@ -166,6 +166,19 @@ describe('TerrenoLayout', () => {
     expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
   });
 
+  /**
+   * «Salir» (y «Ir al panel») van justo debajo del contenido del drawer, no
+   * clavados al fondo con `mt-auto`: en una tablet el drawer ocupa toda la
+   * altura y cerrar sesión quedaba lejísimos del resto de las opciones.
+   */
+  it('el pie del drawer (Salir) sigue al contenido, no se clava al fondo', () => {
+    renderLayout('phone');
+    fireEvent.click(screen.getByLabelText('Menú'));
+
+    const salir = screen.getByRole('button', { name: 'Salir' });
+    expect(salir.parentElement?.className ?? '').not.toContain('mt-auto');
+  });
+
   it('monta el `SyncStatus` real (reemplaza a la vieja `BarraSinSenal`)', () => {
     renderLayout('desktop');
     expect(screen.getByTestId('sync-status-stub')).toBeTruthy();
