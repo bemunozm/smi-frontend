@@ -1,6 +1,8 @@
-import { ClipboardCheck, ClipboardList, Package, Truck } from 'lucide-react';
+import { CarFront, ClipboardCheck, ClipboardList, Package, Truck } from 'lucide-react';
 
 import { useChecklistsPorEstado } from '../hooks/useDailyChecklists';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { ROLES } from '../types/roles';
 import { usePermissions } from '../hooks/usePermissions';
 import { TerrenoShell, type ShellTab } from './TerrenoShell';
 
@@ -22,6 +24,14 @@ const TABS: ShellTab[] = [
   { to: '/mantenimiento/equipos', label: 'Equipos', corto: 'Equipos', icon: Truck },
 ];
 
+/** Solo del mantenedor: la camioneta con que se mueve en faena (km y combustible). */
+const TAB_CAMIONETA: ShellTab = {
+  to: '/mantenimiento/camioneta',
+  label: 'Mi camioneta',
+  corto: 'Camioneta',
+  icon: CarFront,
+};
+
 /**
  * Mantención (el taller) — el mismo shell de faena que Terreno
  * (`TerrenoShell`): al entrar, el chrome del administrador
@@ -36,7 +46,8 @@ export function MantenimientoLayout() {
   // cuántos rechazados esperan que el mantenedor los corrija.
   const { can } = usePermissions();
   const { data: rechazados } = useChecklistsPorEstado(RECHAZADOS, can('dailyChecklist.resubmit'));
-  const tabs = TABS.map((t) =>
+  const esMantenedor = useCurrentUser().role === ROLES.MANTENEDOR;
+  const tabs = (esMantenedor ? [...TABS, TAB_CAMIONETA] : TABS).map((t) =>
     t.to === '/mantenimiento/checklist' ? { ...t, badge: rechazados?.length ?? 0 } : t,
   );
   return <TerrenoShell etiquetaNav="Secciones de Mantención" subtitulo="Mantención de taller" tabs={tabs} />;

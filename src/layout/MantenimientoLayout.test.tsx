@@ -78,17 +78,17 @@ describe('MantenimientoLayout', () => {
     expect(screen.queryByRole('navigation', { name: 'Navegación principal' })).toBeNull();
   });
 
-  it('MANTENEDOR ve Órdenes, Checklist, Stock y Equipos en la barra inferior', () => {
+  it('MANTENEDOR ve Órdenes, Checklist, Stock, Equipos y su Camioneta en la barra inferior', () => {
     renderLayout('phone', ROLES.MANTENEDOR);
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
-    expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos']);
+    expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos', 'Camioneta']);
   });
 
-  it('ADMIN ve las mismas cuatro secciones', () => {
+  it('ADMIN ve las cuatro secciones del taller (sin «Mi camioneta», que es del mantenedor)', () => {
     renderLayout('phone', ROLES.ADMIN);
 
     const nav = screen.getByRole('navigation', { name: 'Secciones de Mantención' });

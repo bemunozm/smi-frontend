@@ -126,6 +126,8 @@ export function RegistroEquipoView() {
     finalNum,
     horasMaquina,
     finalInvalido,
+    litrosError,
+    litrosAviso,
     adBlueCierre,
     adBlueIncompletoCierre,
     edicion,
@@ -999,6 +1001,8 @@ export function RegistroEquipoView() {
         requerido
         unidad="L"
         hint={cerrando.liviano ? 'Lo que se cargó a la camioneta.' : 'Cero si no cargó en el turno.'}
+        error={litrosError ?? undefined}
+        aviso={litrosAviso ?? undefined}
       >
         <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
       </Campo>
@@ -1055,6 +1059,7 @@ export function RegistroEquipoView() {
           isCerrando ||
           finalNum == null ||
           finalInvalido ||
+          litrosError != null ||
           adBlueIncompletoCierre
         }
       >

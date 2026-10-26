@@ -60,6 +60,8 @@ export interface TarjetaTurno {
   liviano?: boolean;
   /** Cuándo se abrió, `mié 22/10 08:15` — en un liviano puede ser de hace días. */
   abiertaEl?: string;
+  /** La misma hora en ISO, para calcular cuánto lleva en uso. */
+  abiertaIso?: string;
   /** Quién la cerró y si fue en el turno que muestra la pantalla. */
   cerradaPor?: string;
   cerradaPorId?: string;
@@ -128,6 +130,7 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
     arrastrada: !liviano && grupo === 'anterior' && estado === 'curso',
     liviano,
     abiertaEl: fechaHoraCorta(card.createdAt),
+    abiertaIso: card.createdAt,
     cerradaPor: card.closedByName ?? undefined,
     cerradaPorId: card.closedById ?? undefined,
     cerradaEnActual: card.closedShift != null && esActual(card.closedShift.date, card.closedShift.type, ctx),

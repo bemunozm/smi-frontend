@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 
-import { MiCamioneta } from './MiCamioneta';
-import type { ShiftCardResponse } from '../../types/shift';
+import { MiCamionetaView } from './MiCamionetaView';
+import type { ShiftCardResponse } from '../types/shift';
 
 const { equipmentListMock, listMineMock, enqueueOpenCardMock } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
@@ -11,11 +12,11 @@ const { equipmentListMock, listMineMock, enqueueOpenCardMock } = vi.hoisted(() =
   enqueueOpenCardMock: vi.fn(),
 }));
 
-vi.mock('../../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
-vi.mock('../../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
-vi.mock('../../offline/outbox', () => ({ enqueueOpenCard: enqueueOpenCardMock, enqueueCloseCard: vi.fn() }));
-vi.mock('../../offline/useOutboxOps', () => ({ useOutboxOps: () => [] }));
-vi.mock('../../hooks/useCurrentUser', () => ({
+vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
+vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
+vi.mock('../offline/outbox', () => ({ enqueueOpenCard: enqueueOpenCardMock, enqueueCloseCard: vi.fn() }));
+vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => [] }));
+vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { id: 'mant_1', name: 'Mario Mantenedor', email: 'm@smi.local' }, role: 'MANTENEDOR' }),
 }));
 vi.mock('@heroui/react', async (original) => ({
@@ -63,9 +64,11 @@ function tarjeta(supervisorId: string): ShiftCardResponse {
 
 function renderCard() {
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MiCamioneta />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MiCamionetaView />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -74,14 +77,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('MiCamioneta (mantenedor)', () => {
+describe('MiCamionetaView (mantenedor)', () => {
   it('sin camioneta abierta: la abre con el km de la camioneta y sin operador', async () => {
     equipmentListMock.mockResolvedValue([CAMIONETA]);
     listMineMock.mockResolvedValue([]);
     enqueueOpenCardMock.mockResolvedValue(undefined);
     renderCard();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Usar camioneta/ }));
+    // En la vista propia el formulario está a la vista: no hay que abrir una ventana.
     const boton = await screen.findByRole('button', { name: /Empezar a usarla/ });
     await waitFor(() => expect(boton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(boton);
@@ -100,9 +103,15 @@ describe('MiCamioneta (mantenedor)', () => {
 
     expect(await screen.findByRole('button', { name: /Cargar combustible y cerrar/ })).toBeTruthy();
     expect(screen.getByText('CM-001')).toBeTruthy();
+    expect(screen.getByText('En uso')).toBeTruthy();
+    expect(screen.getByText('45.120 km')).toBeTruthy();
+    // Se ve qué camioneta es: abre su ficha en el taller.
+    expect(screen.getByRole('button', { name: /Ver camioneta/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Cargar combustible y cerrar/ }));
     expect(await screen.findByText('Kilometraje final')).toBeTruthy();
+    // El cierre va en la misma vista, con Cancelar para volver.
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
     expect(screen.getByText('Falta la foto del surtidor para cerrar.')).toBeTruthy();
   });
 
@@ -111,7 +120,7 @@ describe('MiCamioneta (mantenedor)', () => {
     listMineMock.mockResolvedValue([tarjeta('sup_2')]);
     renderCard();
 
-    expect(await screen.findByRole('button', { name: /Usar camioneta/ })).toBeTruthy();
+    expect(await screen.findByText('Usar una camioneta')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Cargar combustible y cerrar/ })).toBeNull();
   });
 });

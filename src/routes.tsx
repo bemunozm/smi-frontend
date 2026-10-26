@@ -19,6 +19,7 @@ import { LoginView } from './views/LoginView';
 import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
+import { MiCamionetaView } from './views/MiCamionetaView';
 import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
@@ -154,6 +155,8 @@ export const router = createBrowserRouter([
                   { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
                   { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
                   { path: '/mantenimiento/checklist', element: <ChecklistDiarioView /> },
+                  // La camioneta con que el mantenedor se mueve en faena (km y carga de combustible).
+                  { path: '/mantenimiento/camioneta', element: <MiCamionetaView /> },
                   { path: '/mantenimiento/stock', element: <WorkshopStockView /> },
                   // Historial y ficha SIN salir del taller: las mismas
                   // pantallas de Inventario, montadas acá para que la barra

@@ -38,6 +38,7 @@ function mapOpenOpToTarjeta(
     arrastrada: !liviano && grupo === 'anterior',
     liviano,
     abiertaEl: fechaHoraCorta(op.payload.capturedAt),
+    abiertaIso: op.payload.capturedAt,
   };
 }
 

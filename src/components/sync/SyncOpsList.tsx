@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Circle } from 'lucide-react';
+import { AlertTriangle, Lightbulb } from 'lucide-react';
 import { Button } from '@heroui/react';
 
 import { FORBIDDEN_MESSAGE } from '../../lib/error-messages';
@@ -7,6 +7,7 @@ import { cachedEquipoCode, cachedName } from '../../offline/cache-upserts';
 import { arrastradasAlDescartar, type OutboxOp } from '../../offline/db';
 import { discardOp, overwriteOp, retryOp } from '../../offline/outbox';
 import { isNonRetryable } from '../../offline/retryable';
+import { detalleOp, mensajeLegible, queHacer } from '../../lib/sync-detalle';
 import type { Equipment } from '../../types/equipment';
 
 /** Código del equipo desde el catálogo (el mismo que precarga "Preparar para
@@ -16,17 +17,27 @@ function codigoEquipo(equipos: Equipment[] | undefined, equipoId: string): strin
   return equipos?.find((e) => e.id === equipoId)?.internalCode ?? cachedName('equipment', equipoId);
 }
 
+/** Código del equipo de una tarjeta: de la lista ya cargada o, si la apertura
+ * también está en la cola (abierta sin señal), de esa apertura. */
+function codigoDeTarjeta(cardId: string, equipos: Equipment[] | undefined, ops: readonly OutboxOp[]): string | undefined {
+  const apertura = ops.find((o) => o.type === 'openCard' && o.id === cardId);
+  return (
+    cachedEquipoCode('shift-card', cardId) ??
+    (apertura?.type === 'openCard' ? codigoEquipo(equipos, apertura.payload.equipoId) : undefined)
+  );
+}
+
 /** `Título · CÓDIGO`, o solo el título si el equipo no está en ningún caché. */
 function conCodigo(titulo: string, codigo: string | undefined): string {
   return codigo ? `${titulo} · ${codigo}` : titulo;
 }
 
-function labelOp(op: OutboxOp, equipos: Equipment[] | undefined): string {
+function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly OutboxOp[] = []): string {
   switch (op.type) {
     case 'openCard':
       return conCodigo('Apertura de tarjeta', codigoEquipo(equipos, op.payload.equipoId));
     case 'closeCard':
-      return conCodigo('Cierre de tarjeta', cachedEquipoCode('shift-card', op.payload.cardId));
+      return conCodigo('Cierre de tarjeta', codigoDeTarjeta(op.payload.cardId, equipos, ops));
     case 'sendExitReport':
       return 'Reporte de salida';
     case 'createHallazgo': {
@@ -147,19 +158,38 @@ export function SyncOpsList({
       ) : (
         <div className="flex flex-col gap-2.5">
           <span className={ENCABEZADO}>Requieren atención</span>
+          <p className="m-0 text-[13px] text-muted-foreground">
+            Se guardaron en este equipo, pero el servidor los rechazó. El resto sigue enviándose solo.
+          </p>
           {opsAtencion.map((op) => {
             const sinReintento = isNonRetryable(op.lastError);
             const esStale = op.lastError?.code === 'STALE_UPDATE' && op.type === 'httpWrite';
             return (
-              <div key={op.id} className="flex flex-col gap-2 rounded-2xl border border-border p-3">
+              <div
+                key={op.id}
+                className="relative flex flex-col gap-2.5 overflow-hidden rounded-2xl border border-border bg-card p-3.5 pl-4.5"
+              >
+                <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-danger" />
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-semibold text-foreground">{labelOp(op, equipos)}</span>
-                  <Circle aria-hidden className="mt-1 h-2 w-2 shrink-0 fill-danger text-danger" />
+                  <div className="flex flex-col">
+                    <span className="text-[15px] font-semibold text-foreground">{labelOp(op, equipos, ops)}</span>
+                    <span className="text-[12.5px] text-muted-foreground tabular-nums">{detalleOp(op)}</span>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-danger-soft px-2 py-0.5 text-[11.5px] font-semibold text-danger-soft-foreground">
+                    Requiere atención
+                  </span>
                 </div>
-                <p className="m-0 text-[13px] text-danger">
-                  {op.lastError?.status === 403
-                    ? FORBIDDEN_MESSAGE
-                    : (op.lastError?.message ?? 'El servidor rechazó esta operación.')}
+                <div className="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2 text-[13px] text-danger-soft-foreground">
+                  <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    {op.lastError?.status === 403
+                      ? FORBIDDEN_MESSAGE
+                      : mensajeLegible(op.lastError?.message ?? 'El servidor rechazó esta operación.')}
+                  </span>
+                </div>
+                <p className="m-0 flex items-start gap-2 text-[13px] text-foreground">
+                  <Lightbulb aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span>{queHacer(op, ops)}</span>
                 </p>
                 <AvisoDependientes op={op} ops={ops} />
                 {descartando === op.id ? (
@@ -212,10 +242,13 @@ export function SyncOpsList({
           <span className={ENCABEZADO}>En cola</span>
           {opsEnCola.map((op) => (
             <div key={op.id} className="flex flex-col gap-2 rounded-2xl border border-border p-3">
-              <span className="text-sm font-semibold text-foreground">{labelOp(op, equipos)}</span>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-foreground">{labelOp(op, equipos, ops)}</span>
+                <span className="text-[12.5px] text-muted-foreground tabular-nums">{detalleOp(op)}</span>
+              </div>
               <p className="m-0 text-[12.5px] text-muted-foreground">{estadoEnCola(op)}</p>
               {op.lastError && op.status !== 'syncing' && (
-                <p className="m-0 text-[12.5px] text-warning-soft-foreground">{op.lastError.message}</p>
+                <p className="m-0 text-[12.5px] text-warning-soft-foreground">{mensajeLegible(op.lastError.message)}</p>
               )}
               {op.status !== 'syncing' &&
                 (descartando === op.id ? (

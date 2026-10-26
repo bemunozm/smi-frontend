@@ -25,6 +25,7 @@ import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
 import { ResponsableSelect } from '../components/flota/ResponsableSelect';
+import { FechaEstimada } from '../components/mantenimiento/FechaEstimada';
 import { usePermissions } from '../hooks/usePermissions';
 import { CicloMantencionesCard } from '../components/mantenimiento/CicloMantenciones';
 import { CalendarioVencimientosCard } from '../components/vencimientos/CalendarioVencimientosCard';
@@ -1000,6 +1001,9 @@ export function EquipoDetalleView({
       </div>
 
       <TurnoEnCursoBanner equipo={equipo} />
+
+      {/* Fecha estimada de la próxima mantención por uso (si el equipo tiene una). */}
+      <FechaEstimada equipmentId={equipo.id} variante="bloque" />
 
       <EstadoDeUso equipo={equipo} puedeAsignar={puedeAsignar} />
 
