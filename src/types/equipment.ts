@@ -260,7 +260,7 @@ export type EquipmentFormValues = z.infer<typeof EquipmentFormSchema>;
 /** La lectura del formulario como clave del body según la unidad de control —
  * vacía, no viaja (en editar eso significa "no tocar la guardada"). */
 function lecturaAPayload(values: EquipmentFormValues): Pick<CreateEquipmentInput, 'currentHourmeter' | 'currentMileage'> {
-  if (values.lecturaActual === '') return {};
+  if (!values.lecturaActual) return {};
   const lectura = Number(values.lecturaActual.replace(',', '.'));
   return values.controlUnit === 'KM' ? { currentMileage: lectura } : { currentHourmeter: lectura };
 }
