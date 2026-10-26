@@ -6,6 +6,7 @@ import { LayoutDashboard, LogOut, Menu, UserRound, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { NotificationBell } from '../components/notifications/NotificationBell';
+import { PerfilModal } from '../components/perfil/FichaPerfil';
 import { useLogoutConfirmation } from '../components/sync/useLogoutConfirmation';
 import { SyncStatus } from '../components/terreno/SyncStatus';
 import { roleChipColor } from '../config/role-colors';
@@ -157,6 +158,7 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
 export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps) {
   const { user, role } = useCurrentUser();
   const [menu, setMenu] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
   const enLinea = useOnlineStatus();
   const navigate = useNavigate();
   const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
@@ -247,7 +249,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
             <MenuUsuario
               user={user}
               role={role}
-              onPerfil={() => navigate('/perfil')}
+              onPerfil={() => setPerfilAbierto(true)}
               onCerrarSesion={requestLogout}
             />
           </div>
@@ -373,6 +375,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
           </>
         )}
         {confirmationDialog}
+        <PerfilModal isOpen={perfilAbierto} onClose={() => setPerfilAbierto(false)} />
       </div>
     </div>
   );

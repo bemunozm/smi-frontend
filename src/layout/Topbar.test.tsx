@@ -134,6 +134,18 @@ describe('Topbar — badge de sincronización', () => {
   });
 });
 
+describe('Topbar — ver perfil', () => {
+  it('«Ver perfil» abre el perfil en un popup, no navega', async () => {
+    renderTopbar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ver perfil' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getAllByText('ana@smi.cl').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('Topbar — cerrar sesión', () => {
   async function pedirCerrarSesion() {
     fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));

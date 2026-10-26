@@ -183,6 +183,17 @@ describe('TerrenoLayout', () => {
     expect(screen.getByRole('menuitem', { name: 'Ver perfil' })).toBeTruthy();
   });
 
+  it('«Ver perfil» abre el perfil en un popup, sin salir del shell', async () => {
+    renderLayout('phone');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ver perfil' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getAllByText('ana@smi.cl').length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getAllByText('Ana Soto').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('en escritorio el SUPERVISOR no tiene botón Menú: el drawer no tendría nada que mostrar', () => {
     renderLayout('desktop');
 
