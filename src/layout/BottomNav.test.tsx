@@ -70,4 +70,18 @@ describe('BottomNav', () => {
     const { container } = renderNav(null);
     expect(container.firstChild).toBeNull();
   });
+
+  /**
+   * Pedido del administrador: la barra inferior es SOLO de teléfono — en
+   * tablet competía con el contenido y el menú ya se abre con la hamburguesa
+   * del Topbar. jsdom no evalúa media queries, así que el contrato se fija
+   * sobre la clase que la oculta desde `sm`.
+   */
+  it('la barra vive solo en teléfono: se oculta desde `sm` (tablet y escritorio)', () => {
+    renderNav(ROLES.ADMIN);
+
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' });
+    expect(nav.className).toContain('sm:hidden');
+    expect(nav.className).not.toContain('lg:hidden');
+  });
 });

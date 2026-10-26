@@ -54,8 +54,9 @@ const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
 const SHELLS = new Set([TERRENO.to, MANTENCION.to]);
 
 /**
- * Navegación inferior para teléfono y tablet — el patrón que dibuja el diseño
- * del equipo para los dos tamaños chicos.
+ * Navegación inferior SOLO para teléfono (`sm:hidden` — pedido del
+ * administrador: en tablet competía con el contenido, y ahí el menú se abre
+ * con la hamburguesa del Topbar, igual que en escritorio angosto).
  *
  * En faena se usa con una mano y con guantes: los destinos que se visitan a
  * diario (por rol, ver `PRIMARY_BY_ROLE`) quedan al alcance del pulgar, en
@@ -88,7 +89,7 @@ export function BottomNav({ role }: { role: Role | null }) {
   return (
     <nav
       aria-label="Navegación principal"
-      className="sticky bottom-0 z-20 flex shrink-0 border-t border-border bg-card/95 backdrop-blur lg:hidden"
+      className="sticky bottom-0 z-20 flex shrink-0 border-t border-border bg-card/95 backdrop-blur sm:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {visible.map((item) => (
