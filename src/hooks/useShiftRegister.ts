@@ -109,6 +109,8 @@ export interface UseShiftRegisterResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  litrosError: string | null;
+  litrosAviso: string | null;
   adBlueCierre: ResultadoAdBlue;
   adBlueIncompletoCierre: boolean;
   isCerrando: boolean;

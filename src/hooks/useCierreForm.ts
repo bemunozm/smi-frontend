@@ -18,6 +18,11 @@ export interface CierreState {
   observaciones: string;
 }
 
+/** Tope del servidor (`CloseShiftCardDto.fuelLiters`): más es casi seguro el km u horómetro en el campo equivocado. */
+export const LITROS_MAX = 10_000;
+/** Sobre esto, en una camioneta, se pide revisar (no bloquea). */
+const LITROS_AVISO_LIVIANO = 150;
+
 const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' };
 
 export interface UseCierreFormParams {
@@ -37,6 +42,11 @@ export interface UseCierreFormResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  /** Texto que no es número o litros fuera de 0–10.000: no se puede cerrar
+   * (el servidor lo rechazaría y la tarjeta quedaría trabada en la cola). */
+  litrosError: string | null;
+  /** Muchos litros para una camioneta: se avisa, no bloquea. */
+  litrosAviso: string | null;
   /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
   adBlueCierre: ResultadoAdBlue;
   /** `true` si se marcó AdBlue y los litros todavía no sirven. */
@@ -70,6 +80,19 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
 
+  const textoLitros = cierre.litros.trim();
+  const litrosNum = parseDecimal(textoLitros);
+  const litrosError =
+    textoLitros !== '' && litrosNum == null
+      ? 'Escribe un número, por ejemplo 45,5.'
+      : litrosNum != null && (litrosNum < 0 || litrosNum > LITROS_MAX)
+        ? 'Los litros van de 0 a 10.000. Revisa que no sea el kilometraje u horómetro.'
+        : null;
+  const litrosAviso =
+    !litrosError && cerrando?.liviano && litrosNum != null && litrosNum > LITROS_AVISO_LIVIANO
+      ? `${litrosNum.toLocaleString('es-CL')} L es mucho para una camioneta. Revisa que esté bien.`
+      : null;
+
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
   const adBlueIncompletoCierre = adBlueIncompleto(cierre.adBlue, adBlueLitrosNum);
@@ -85,7 +108,8 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   };
 
   const cerrar = async () => {
-    if (!cerrando || finalNum == null || finalInvalido || adBlueIncompletoCierre || !foto.file || isCerrando) return;
+    if (!cerrando || finalNum == null || finalInvalido || litrosError || adBlueIncompletoCierre || !foto.file || isCerrando)
+      return;
     if (!userId) return;
 
     setIsCerrando(true);
@@ -117,5 +141,5 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

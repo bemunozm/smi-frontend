@@ -215,6 +215,8 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     finalNum: null,
     horasMaquina: null,
     finalInvalido: false,
+    litrosError: null,
+    litrosAviso: null,
     isCerrando: false,
     foto: {
       file: null,
