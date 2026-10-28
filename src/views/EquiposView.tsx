@@ -231,7 +231,7 @@ const DEFAULT_FORM_VALUES: EquipmentFormValues = {
   brand: '',
   model: '',
   year: '',
-  controlUnit: 'HOURS',
+  controlUnit: 'KM',
   status: 'OPERATIONAL',
   homeBranchId: '',
   lecturaActual: '',
@@ -325,6 +325,7 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
                     <CamposEquipo
+                      conAsignacion={false}
                       control={control}
                       errors={errors}
                       internalCodeEditable
