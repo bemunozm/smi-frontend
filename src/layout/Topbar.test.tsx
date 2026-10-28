@@ -16,6 +16,7 @@ vi.mock('../hooks/useCurrentUser', () => ({
 vi.mock('../offline/replay', () => ({
   useSyncState: () => mockSync,
   requestSync: vi.fn(),
+  syncNow: vi.fn(),
 }));
 vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => mockOps }));
 

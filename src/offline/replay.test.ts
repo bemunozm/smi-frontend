@@ -41,7 +41,7 @@ import {
   type SendExitReportOp,
 } from './db';
 import { countPending, retryOp } from './outbox';
-import { requestSync, resetReplayEngineForTests, setCurrentUser, useEngineStoreForTests } from './replay';
+import { requestSync, resetReplayEngineForTests, setCurrentUser, syncNow, useEngineStoreForTests } from './replay';
 import { DomainError } from '../lib/api-error';
 import { queryClient } from '../lib/query-client';
 import { EQUIPMENT_KEY, HALLAZGOS_KEY, SHIFT_CARDS_MINE_KEY, TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
@@ -1026,5 +1026,48 @@ describe('replay — invalidación al terminar', () => {
     expect(keys).toContain(JSON.stringify(HALLAZGOS_KEY));
     expect(keys).toContain(JSON.stringify(TRABAJOS_EXTRA_KEY));
     spy.mockRestore();
+  });
+});
+
+describe('replay — syncNow (disparo manual)', () => {
+  it('intenta sincronizar aunque navigator.onLine diga false — el botón manual no confía en el flag del navegador', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    openCardMock.mockResolvedValueOnce(baseCard());
+    await putOpenOp();
+
+    setCurrentUser('u1');
+    syncNow();
+    await waitFor(() => expect(useEngineStoreForTests.getState().lastSyncAt).not.toBeNull(), { timeout: 3000 });
+
+    expect(openCardMock).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get('card-1')).toBeUndefined();
+  });
+
+  it('requestSync() automático sigue respetando navigator.onLine === false: ni intenta', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await putOpenOp();
+
+    setCurrentUser('u1');
+    requestSync();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(openCardMock).not.toHaveBeenCalled();
+    expect(useEngineStoreForTests.getState().lastSyncAt).toBeNull();
+  });
+
+  it('el forzado dura UN run: el siguiente disparo automático vuelve a respetar el flag del navegador', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    openCardMock.mockResolvedValueOnce(baseCard());
+    await putOpenOp();
+    setCurrentUser('u1');
+    syncNow();
+    await waitFor(() => expect(useEngineStoreForTests.getState().lastSyncAt).not.toBeNull(), { timeout: 3000 });
+
+    await putOpenOp({ id: 'c-2', payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    requestSync();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(openCardMock).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get('c-2')).toMatchObject({ status: 'pending', attempts: 0 });
   });
 });

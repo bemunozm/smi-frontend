@@ -16,6 +16,9 @@ const { retryOpMock, discardOpMock, overwriteOpMock } = vi.hoisted(() => ({
 }));
 vi.mock('../../offline/outbox', () => ({ retryOp: retryOpMock, discardOp: discardOpMock, overwriteOp: overwriteOpMock }));
 
+const { syncNowMock } = vi.hoisted(() => ({ syncNowMock: vi.fn() }));
+vi.mock('../../offline/replay', () => ({ syncNow: syncNowMock }));
+
 const { usePrepareMock } = vi.hoisted(() => ({ usePrepareMock: vi.fn() }));
 vi.mock('../../hooks/usePrepareOffline', () => ({ usePrepareOffline: usePrepareMock }));
 
@@ -465,5 +468,33 @@ describe('SyncSheet + SyncOpsList (lo genérico, sin TerrenoLayout)', () => {
 
     expect(screen.getByText('Tu sesión expiró.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Iniciar sesión' }).getAttribute('href')).toBe('/login');
+  });
+
+  it('con pendientes, "Sincronizar ahora" dispara un intento manual', () => {
+    renderHoja(sync({ pendingCount: 2 }), [write(), write()]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sincronizar ahora' }));
+
+    expect(syncNowMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('mientras sincroniza, el botón dice "Sincronizando…" y no vuelve a disparar', () => {
+    renderHoja(sync({ pendingCount: 2, syncing: true }), [write(), write()]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sincronizando…' }));
+
+    expect(syncNowMock).not.toHaveBeenCalled();
+  });
+
+  it('sin pendientes no ofrece Sincronizar ahora: no hay nada que mandar', () => {
+    renderHoja(sync(), []);
+
+    expect(screen.queryByRole('button', { name: /Sincronizar/ })).toBeNull();
+  });
+
+  it('con la sesión vencida no ofrece Sincronizar ahora: sin sesión el envío no puede salir', () => {
+    renderHoja(sync({ pendingCount: 2, authRequired: true }), [write(), write()]);
+
+    expect(screen.queryByRole('button', { name: /Sincronizar/ })).toBeNull();
   });
 });
