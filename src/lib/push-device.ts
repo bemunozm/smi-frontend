@@ -146,12 +146,14 @@ function toSubscriptionInput(
 }
 
 /** La Push API exige la clave VAPID como bytes; el backend la entrega en
- * base64url (formato de `web-push generate-vapid-keys`). */
-function urlBase64ToUint8Array(base64Url: string): Uint8Array {
+ * base64url (formato de `web-push generate-vapid-keys`). El `ArrayBuffer`
+ * explícito tipa el resultado como `Uint8Array<ArrayBuffer>` — lo que exige
+ * `applicationServerKey` (BufferSource) desde TS 5.7. */
+function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
   const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
-  const bytes = new Uint8Array(raw.length);
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i += 1) {
     bytes[i] = raw.charCodeAt(i);
   }
