@@ -491,6 +491,13 @@ describe('RegistroEquipoView', () => {
       expect(screen.queryByText(/Sergio Torres/)).toBeNull();
     });
 
+    it('la vista previa del reporte va a nombre de SIMA SPA, igual que el PDF del backend', () => {
+      renderView('desktop', { verReporte: true });
+
+      expect(screen.getByText('SIMA SPA')).toBeTruthy();
+      expect(screen.queryByText(/Optimiza/)).toBeNull();
+    });
+
     it('"en-cola": copy honesto — nunca afirma una entrega antes de que el servidor confirme', () => {
       renderView('desktop', { reporteEstado: 'en-cola' });
 
