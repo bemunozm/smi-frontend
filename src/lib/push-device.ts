@@ -57,17 +57,28 @@ export async function enablePush(userId: string): Promise<PushDeviceStatus> {
   return 'subscribed';
 }
 
-/** Apagado explícito y persistente: borra la marca, así el próximo login NO
- * resuscribe (a diferencia del logout). */
+/**
+ * Apagado explícito y persistente: borra la marca, así el próximo login NO
+ * resuscribe (a diferencia del logout). La marca se borra PRIMERO — registra
+ * la intención del usuario, no el estado del servidor: si se borrara al
+ * final, un DELETE caído (sin señal) la dejaría viva y el próximo login
+ * resuscribiría en silencio un push apagado a propósito. El DELETE es
+ * best-effort: con el endpoint local ya muerto, una fila huérfana la limpia
+ * el backend con el primer push rechazado (404/410).
+ */
 export async function disablePush(userId: string): Promise<void> {
+  clearPushOptIn(userId);
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  if (subscription) {
-    const endpoint = subscription.endpoint;
-    await subscription.unsubscribe();
+  if (!subscription) return;
+
+  const endpoint = subscription.endpoint;
+  await subscription.unsubscribe();
+  try {
     await PushAPI.unsubscribe(endpoint);
+  } catch {
+    // Fila huérfana con endpoint muerto: la limpia el 404/410 del backend.
   }
-  clearPushOptIn(userId);
 }
 
 /**
@@ -104,9 +115,14 @@ export async function unsubscribePushOnLogout(): Promise<void> {
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) return;
 
+    // El unsubscribe LOCAL va primero: funciona sin señal y mata el endpoint,
+    // que es lo único que garantiza que una tablet compartida deje de recibir
+    // avisos del usuario que se fue (anti-meta de la spec). El DELETE al
+    // backend es la limpieza fina: si no llega (sin red), la fila huérfana
+    // apunta a un endpoint muerto y la limpia el primer 404/410.
     const endpoint = subscription.endpoint;
-    await PushAPI.unsubscribe(endpoint);
     await subscription.unsubscribe();
+    await PushAPI.unsubscribe(endpoint);
   } catch {
     // El logout sigue igual: esto es limpieza, no un requisito.
   }

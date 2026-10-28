@@ -138,6 +138,21 @@ describe('disablePush', () => {
     expect(apiUnsubscribe).toHaveBeenCalledWith(SUBSCRIPTION_JSON.endpoint);
     expect(readPushOptIn('u1')).toBe(false);
   });
+
+  it('un DELETE que falla (sin red) NO deshace el apagado: la marca se borra igual y no lanza', async () => {
+    stubSupportedBrowser();
+    const subscription = fakeSubscription();
+    getSubscription.mockResolvedValue(subscription);
+    savePushOptIn('u1');
+    apiUnsubscribe.mockRejectedValue(new Error('sin red'));
+
+    await expect(disablePush('u1')).resolves.toBeUndefined();
+
+    // La marca registra la INTENCIÓN del usuario: sin esto, el próximo login
+    // resuscribiría en silencio un push que la persona apagó a propósito.
+    expect(readPushOptIn('u1')).toBe(false);
+    expect(subscription.unsubscribe).toHaveBeenCalled();
+  });
 });
 
 describe('resubscribeIfOptedIn', () => {
@@ -190,7 +205,7 @@ describe('unsubscribePushOnLogout', () => {
     expect(readPushOptIn('u1')).toBe(true);
   });
 
-  it('absorbe errores (sin red) y sin suscripción no llama al API', async () => {
+  it('un DELETE que falla (sin red) igual desuscribe LOCALMENTE: el endpoint muere y el 404/410 limpia la fila', async () => {
     stubSupportedBrowser();
     const subscription = fakeSubscription();
     getSubscription.mockResolvedValue(subscription);
@@ -198,9 +213,17 @@ describe('unsubscribePushOnLogout', () => {
 
     await expect(unsubscribePushOnLogout()).resolves.toBeUndefined();
 
+    // Esto es lo que impide que una tablet compartida siga recibiendo avisos
+    // del usuario que se fue: el unsubscribe local funciona SIN señal.
+    expect(subscription.unsubscribe).toHaveBeenCalled();
+  });
+
+  it('sin suscripción no llama al API', async () => {
+    stubSupportedBrowser();
     getSubscription.mockResolvedValue(null);
-    apiUnsubscribe.mockClear();
+
     await unsubscribePushOnLogout();
+
     expect(apiUnsubscribe).not.toHaveBeenCalled();
   });
 });
