@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Card, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 
 import { NotificationItem } from '../components/notifications/NotificationItem';
+import { PushToggleCard } from '../components/push/PushToggleCard';
 import { useMarkAllRead, useNotificaciones } from '../hooks/useNotificaciones';
 import { notificacionTipoConfig } from '../config/notificacion-colors';
 import { NOTIF_TIPOS, type NotificacionTipo } from '../types/notificacion';
@@ -72,6 +73,8 @@ export function NotificacionesView() {
           Marcar todas como leídas
         </Button>
       </div>
+
+      <PushToggleCard />
 
       <div className="flex flex-col gap-3">
         <ToggleButtonGroup

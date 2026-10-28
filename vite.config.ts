@@ -114,6 +114,11 @@ export default defineConfig(({ mode }) => {
         // vez que esa activación ya ocurrió.
         workbox: {
           clientsClaim: true,
+          // Handlers de Web Push (`push`/`notificationclick`). Van en un
+          // script aparte en `public/` porque el SW lo genera Workbox: esto
+          // los inyecta con `importScripts` sin cambiar la estrategia
+          // `generateSW`. Tests: `src/pwa/push-sw.test.ts`.
+          importScripts: ['push-sw.js'],
           // Default de Workbox: 2 MiB. El bundle principal ya lo supera (Dexie
           // sumado a lo que ya traía la app) — sin subir esto, `vite build` FALLA
           // (Workbox se niega a precachear un archivo más grande que el límite) y
