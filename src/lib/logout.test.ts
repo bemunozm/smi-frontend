@@ -6,15 +6,20 @@ import { db } from '../offline/db';
 import { isServerSignOutPending, isSessionClosed } from './pending-signout';
 
 // `vi.hoisted` porque `vi.mock` se "hoistea" arriba de los imports.
-const { signOutMock, clearMock, cancelMock } = vi.hoisted(() => ({
+const { signOutMock, clearMock, cancelMock, unsubscribePushMock } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
   clearMock: vi.fn(),
   cancelMock: vi.fn().mockResolvedValue(undefined),
+  unsubscribePushMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./auth-client', () => ({
   signOut: (...args: unknown[]) => signOutMock(...args),
   refreshSession: vi.fn(),
+}));
+
+vi.mock('./push-device', () => ({
+  unsubscribePushOnLogout: (...args: unknown[]) => unsubscribePushMock(...args),
 }));
 
 vi.mock('./query-client', () => ({
@@ -128,6 +133,32 @@ describe('logout', () => {
     await logout(vi.fn());
 
     expect(orden.slice(0, 2)).toEqual(['cancel', 'signOut']);
+  });
+
+  it('desuscribe el push del dispositivo ANTES de cerrar la sesión en el servidor (el DELETE necesita la cookie viva)', async () => {
+    const orden: string[] = [];
+    unsubscribePushMock.mockImplementation(async () => {
+      orden.push('push');
+    });
+    signOutMock.mockImplementation(async () => {
+      orden.push('signOut');
+    });
+
+    await logout(vi.fn());
+
+    expect(unsubscribePushMock).toHaveBeenCalledTimes(1);
+    expect(orden.indexOf('push')).toBeLessThan(orden.indexOf('signOut'));
+  });
+
+  it('un unsubscribe de push que lanza no impide completar el logout', async () => {
+    unsubscribePushMock.mockRejectedValueOnce(new Error('push caído'));
+    signOutMock.mockResolvedValue(undefined);
+    const navigate = vi.fn();
+
+    await logout(navigate);
+
+    expect(clearMock).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/login', { replace: true });
   });
 
   describe('sin señal (signOut no llega al servidor)', () => {

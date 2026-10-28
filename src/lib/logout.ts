@@ -1,5 +1,6 @@
 import { clearCacheOwner } from './cache-owner';
 import { markSessionClosed } from './pending-signout';
+import { unsubscribePushOnLogout } from './push-device';
 import { clearSessionSnapshot } from './session-snapshot';
 import { signOutOrDefer } from './server-signout';
 import { purgeSessionData } from './session-data';
@@ -36,6 +37,12 @@ type NavigateFn = (to: string, options?: { replace?: boolean }) => void;
 export async function logout(navigate: NavigateFn): Promise<void> {
   // Las queries en vuelo o por reintentar saldrían con la cookie ya invalidada (401).
   await queryClient.cancelQueries();
+  // Push del dispositivo: el DELETE al backend necesita la cookie viva, por
+  // eso va ANTES de `signOutOrDefer`. Best-effort (la función ya absorbe sus
+  // errores; el catch cubre cualquier imprevisto): una tablet compartida no
+  // debe seguir recibiendo avisos del usuario que se fue. La marca de opt-in
+  // NO se borra — el re-login resuscribe solo (`PushResubscribeMount`).
+  await unsubscribePushOnLogout().catch(() => {});
   // Desde acá no hay sesión en el equipo, con o sin señal: nada vuelve a escribir el
   // snapshot mientras Better Auth todavía tenga al usuario anterior en memoria.
   markSessionClosed();

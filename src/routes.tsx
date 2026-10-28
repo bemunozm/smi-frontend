@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { GuestRoute } from './components/GuestRoute';
 import { HomeRedirect } from './components/HomeRedirect';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PushResubscribeMount } from './components/push/PushResubscribeMount';
 import { SyncEngineMount } from './components/SyncEngineMount';
 import { ROLES } from './types/roles';
 import { AppLayout } from './layout/AppLayout';
@@ -57,6 +58,13 @@ export const router = createBrowserRouter([
         // entre "Ir al panel" (`/`) y Terreno. Ver ese componente.
         element: <SyncEngineMount />,
         children: [
+          {
+            // `PushResubscribeMount` (sin UI), también a nivel de sesión:
+            // resuscribe el Web Push del dispositivo al confirmar sesión si
+            // este usuario ya lo había activado acá (la contraparte del
+            // logout, que desuscribe). Ver ese componente.
+            element: <PushResubscribeMount />,
+            children: [
           // `/inicio` reparte por rol (`HomeRedirect`) — destino de
           // `LoginView`, `GuestRoute` y el `start_url` del manifest PWA (ver
           // `config/home-path.ts`). No necesita el chrome de `AppLayout`,
@@ -224,6 +232,8 @@ export const router = createBrowserRouter([
                   { path: '/terreno/combustible', element: <CombustibleView /> },
                 ],
               },
+            ],
+          },
             ],
           },
         ],
