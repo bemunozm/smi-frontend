@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearPushOptIn, readPushOptIn, savePushOptIn } from './push-optin';
+import {
+  clearPushOptIn,
+  readPushBannerDismissed,
+  readPushOptIn,
+  savePushBannerDismissed,
+  savePushOptIn,
+} from './push-optin';
 
 describe('push-optin', () => {
   beforeEach(() => {
@@ -23,6 +29,14 @@ describe('push-optin', () => {
     expect(readPushOptIn('u1')).toBe(false);
   });
 
+  it('la marca de banner descartado es por usuario y persiste', () => {
+    expect(readPushBannerDismissed('u1')).toBe(false);
+
+    savePushBannerDismissed('u1');
+    expect(readPushBannerDismissed('u1')).toBe(true);
+    expect(readPushBannerDismissed('u2')).toBe(false);
+  });
+
   it('localStorage que lanza (modo privado): read devuelve false y save/clear no lanzan', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('bloqueado');
@@ -37,5 +51,7 @@ describe('push-optin', () => {
     expect(readPushOptIn('u1')).toBe(false);
     expect(() => savePushOptIn('u1')).not.toThrow();
     expect(() => clearPushOptIn('u1')).not.toThrow();
+    expect(readPushBannerDismissed('u1')).toBe(false);
+    expect(() => savePushBannerDismissed('u1')).not.toThrow();
   });
 });

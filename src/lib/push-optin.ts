@@ -36,3 +36,27 @@ export function clearPushOptIn(userId: string): void {
     // Igual que arriba: best-effort.
   }
 }
+
+/**
+ * Marca "este usuario descartó el banner de invitación EN ESTE dispositivo"
+ * (`PushInvitationBanner`): un «Ahora no» no debe volver a preguntar nunca en
+ * ese equipo — siempre queda el interruptor en Notificaciones. Sin marca que
+ * leer (modo privado), el banner reaparece: molesto pero inocuo.
+ */
+const BANNER_KEY_PREFIX = 'smi.push-banner-dismissed.';
+
+export function readPushBannerDismissed(userId: string): boolean {
+  try {
+    return localStorage.getItem(`${BANNER_KEY_PREFIX}${userId}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function savePushBannerDismissed(userId: string): void {
+  try {
+    localStorage.setItem(`${BANNER_KEY_PREFIX}${userId}`, '1');
+  } catch {
+    // Best-effort, como el resto del archivo.
+  }
+}

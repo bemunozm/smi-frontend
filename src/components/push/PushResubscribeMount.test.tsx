@@ -11,6 +11,10 @@ const { resubscribeMock, useCurrentUserMock } = vi.hoisted(() => ({
 
 vi.mock('../../lib/push-device', () => ({
   resubscribeIfOptedIn: (...args: unknown[]) => resubscribeMock(...args),
+  // Lo usa el `PushInvitationBanner` que este mount también renderiza; acá
+  // se apaga (false) porque el banner tiene sus propios tests.
+  isPushSupported: () => false,
+  enablePush: vi.fn(),
 }));
 
 vi.mock('../../hooks/useCurrentUser', () => ({

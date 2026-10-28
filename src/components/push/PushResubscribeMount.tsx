@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { resubscribeIfOptedIn } from '../../lib/push-device';
+import { PushInvitationBanner } from './PushInvitationBanner';
 
 /**
  * Montaje sin UI a nivel de SESIÓN (bajo `SyncEngineMount` en `routes.tsx`,
@@ -24,5 +25,12 @@ export function PushResubscribeMount() {
     void resubscribeIfOptedIn(userId);
   }, [userId]);
 
-  return <Outlet />;
+  // El banner de invitación vive acá por la misma razón que la resuscripción:
+  // un solo punto que cubre AppLayout y Terreno. Él mismo decide si mostrarse.
+  return (
+    <>
+      <PushInvitationBanner />
+      <Outlet />
+    </>
+  );
 }
