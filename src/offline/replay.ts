@@ -327,6 +327,14 @@ async function withReplayLock(run: () => Promise<void>): Promise<void> {
 let currentUserId: string | null = null;
 let syncScheduled = false;
 
+/** El próximo run fue pedido A MANO (`syncNow`): no confía en
+ * `navigator.onLine` — en terreno el navegador se queda "pegado" en offline
+ * aunque la señal ya volvió, y sin esto el intento manual no haría nada. Se
+ * consume al arrancar ese run; los disparadores automáticos siguen
+ * respetando el flag del navegador (sin red de verdad, cada run solo
+ * gastaría un intento de la primera operación). */
+let forceNextRun = false;
+
 /** Fija de qué usuario es la sesión activa — el replay SOLO procesa las
  * operaciones de este `userId` (ver `runReplay`). Cambiar de usuario (login
  * distinto) dispara un intento inmediato. */
@@ -354,13 +362,25 @@ export function requestSync(): void {
   }, 0);
 }
 
+/** Intento manual (botón "Sincronizar ahora" de la hoja de sincronización):
+ * como `requestSync()`, pero el run resultante intenta aunque
+ * `navigator.onLine` diga que no hay red — la request misma decide si hay
+ * señal (ver `forceNextRun`). Si ya había un intento agendado, ese intento
+ * hereda el forzado: es el mismo run. */
+export function syncNow(): void {
+  forceNextRun = true;
+  requestSync();
+}
+
 async function runReplayForCurrentUser(): Promise<void> {
   const userId = currentUserId;
   if (!userId) return;
+  const forced = forceNextRun;
+  forceNextRun = false;
   // Sin red en absoluto no hay nada que intentar: cada run solo gastaría un intento de
-  // la primera operación. Se espera al evento `online` (`useSyncEngine`) o al próximo
-  // disparador con señal.
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  // la primera operación. Se espera al evento `online` (`useSyncEngine`), al próximo
+  // disparador con señal, o a un intento manual (`syncNow`), que no confía en el flag.
+  if (!forced && typeof navigator !== 'undefined' && navigator.onLine === false) return;
   try {
     await withReplayLock(() => runReplay(userId));
   } catch (error) {
@@ -1059,6 +1079,7 @@ async function runReplay(userId: string): Promise<void> {
 export function resetReplayEngineForTests(): void {
   currentUserId = null;
   syncScheduled = false;
+  forceNextRun = false;
   rerunRequested = false;
   fallbackLockHeld = false;
   holdingLock = false;

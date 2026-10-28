@@ -29,6 +29,7 @@ let mockSyncState: SyncState = {
 };
 vi.mock('../../offline/replay', () => ({
   useSyncState: () => mockSyncState,
+  syncNow: vi.fn(),
 }));
 
 let mockOps: OutboxOp[] = [];

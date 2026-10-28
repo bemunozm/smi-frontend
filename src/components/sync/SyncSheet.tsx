@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Drawer } from '@heroui/react';
+import { Button, Drawer } from '@heroui/react';
 
 import { plural } from '../../lib/format';
-import type { SyncState } from '../../offline/replay';
+import { syncNow, type SyncState } from '../../offline/replay';
 
 /**
  * Hoja de "Sincronización": se abre desde la barra de Terreno y desde el badge de
@@ -20,7 +20,7 @@ export function SyncSheet({
   onClose,
   children,
 }: {
-  sync: Pick<SyncState, 'authRequired' | 'pendingCount' | 'attentionCount' | 'otherAccountCount'>;
+  sync: Pick<SyncState, 'authRequired' | 'pendingCount' | 'attentionCount' | 'otherAccountCount' | 'syncing'>;
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -76,6 +76,27 @@ export function SyncSheet({
                   .filter(Boolean)
                   .join(' · ')}
               </p>
+            )}
+
+            {/* Intento manual: en terreno el navegador puede quedarse "pegado" en
+                offline aunque la señal ya volvió, y el disparador automático más
+                cercano puede tardar 45 s — este botón pide un run YA, que además
+                ignora `navigator.onLine` (ver `offline/replay.ts#syncNow`). Sin
+                sesión no se ofrece: el envío rebotaría con 401 igual. */}
+            {sync.pendingCount > 0 && !sync.authRequired && (
+              // No `isDisabled` mientras sincroniza: un botón deshabilitado pierde
+              // el foco, y con el foco en <body> Escape deja de cerrar la hoja
+              // (mismo criterio que el botón de `PrepChecklist`).
+              <Button
+                aria-disabled={sync.syncing}
+                variant="secondary"
+                className={`min-h-12 ${sync.syncing ? 'opacity-60' : ''}`}
+                onPress={() => {
+                  if (!sync.syncing) syncNow();
+                }}
+              >
+                {sync.syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+              </Button>
             )}
 
             {sync.otherAccountCount > 0 && (
