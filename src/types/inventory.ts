@@ -12,6 +12,8 @@ import { parseDecimal } from '../lib/decimal';
  * discrepar.
  */
 export const UNITS_OF_MEASURE = ['UNIT', 'LITER', 'KILOGRAM', 'METER'] as const;
+/** En qué se mide el contenido de cada unidad (un bidón de 10 L): nunca «unidades». */
+export const CONTENT_UNITS = ['LITER', 'KILOGRAM', 'METER'] as const;
 export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
 
 /** Gobierna las pestañas de la pantalla: suministros vs. repuestos. */
@@ -48,6 +50,10 @@ export const InventoryItemSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   unit: z.enum(UNITS_OF_MEASURE),
+  /** Contenido de cada unidad (bidón de AdBlue de 10 L) — solo en ítems por
+   * unidad. `nullish`: respuestas guardadas antes de que existiera. */
+  contentPerUnit: z.number().nullish(),
+  contentUnit: z.enum(UNITS_OF_MEASURE).nullish(),
   type: z.enum(ITEM_TYPES),
   categoryId: z.string().nullable(),
   category: z.object({ id: z.string(), name: z.string() }).nullable(),
@@ -206,10 +212,13 @@ export const REASONS_BY_DIRECTION: Record<MovementDirection, MovementReason[]> =
 // --- Entradas --------------------------------------------------------------
 
 export interface CreateItemInput {
-  sku: string;
+  /** Opcional: sin él, el servidor genera uno (`SUM-0001`, `REP-0001`). */
+  sku?: string;
   name: string;
   description?: string;
   unit: UnitOfMeasure;
+  contentPerUnit?: number;
+  contentUnit?: UnitOfMeasure;
   type: ItemType;
   categoryId?: string;
   partNumber?: string;
@@ -221,8 +230,11 @@ export interface CreateItemInput {
 
 export type UpdateItemInput = Omit<
   CreateItemInput,
-  'sku' | 'initialQuantity' | 'branchId' | 'categoryId'
+  'sku' | 'initialQuantity' | 'branchId' | 'categoryId' | 'contentPerUnit' | 'contentUnit'
 > & {
+  /** `null` borra el contenido por unidad (p. ej. al pasar a litros). */
+  contentPerUnit?: number | null;
+  contentUnit?: UnitOfMeasure | null;
   /** `null` desvincula la categoría; omitirlo la deja como está. */
   categoryId?: string | null;
   isActive?: boolean;
@@ -234,6 +246,8 @@ export interface ItemFields {
   name: string;
   description: string | null;
   unit: UnitOfMeasure;
+  contentPerUnit: number | null;
+  contentUnit: UnitOfMeasure | null;
   type: ItemType;
   categoryId: string | null;
   partNumber: string | null;
@@ -284,6 +298,11 @@ export const ItemCardSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio').max(80),
   description: z.string().max(240).or(z.literal('')),
   unit: z.enum(UNITS_OF_MEASURE),
+  /** Vacío = sin contenido. Solo se usa si la unidad es «Unidades». */
+  contentPerUnit: z.string().refine((value) => value.trim() === '' || (parseDecimal(value) ?? 0) > 0, {
+    message: 'Escribe cuánto trae cada unidad, por ejemplo 10',
+  }),
+  contentUnit: z.enum(CONTENT_UNITS),
   type: z.enum(ITEM_TYPES),
   categoryId: z.string(),
   partNumber: z.string().max(60).or(z.literal('')),
@@ -293,8 +312,8 @@ export const ItemCardSchema = z.object({
 
 export type ItemCardValues = z.infer<typeof ItemCardSchema>;
 
+/** Alta: el SKU ya no se pide, lo genera el servidor. */
 export const ItemFormSchema = ItemCardSchema.extend({
-  sku: z.string().min(1, 'El SKU es obligatorio').max(20, 'Máximo 20 caracteres'),
   initialQuantity: quantityField('La existencia inicial es obligatoria'),
 });
 export type ItemFormValues = z.infer<typeof ItemFormSchema>;
@@ -334,14 +353,51 @@ function toCardPayload(values: z.infer<typeof ItemCardSchema>) {
   };
 }
 
+/** Contenido por unidad ya interpretado: `null` si no aplica (no es por
+ * unidad) o si quedó vacío. */
+export function contenidoDe(values: Pick<ItemCardValues, 'unit' | 'contentPerUnit' | 'contentUnit'>): {
+  contentPerUnit: number;
+  contentUnit: UnitOfMeasure;
+} | null {
+  if (values.unit !== 'UNIT') return null;
+  const n = parseDecimal(values.contentPerUnit);
+  return n != null && n > 0 ? { contentPerUnit: n, contentUnit: values.contentUnit } : null;
+}
+
+/** Contenido por unidad de un ítem ya guardado, o `null` si no tiene. */
+export function contenidoDeItem(
+  item: Pick<InventoryItem, 'unit' | 'contentPerUnit' | 'contentUnit'>,
+): { contentPerUnit: number; contentUnit: UnitOfMeasure } | null {
+  if (item.unit !== 'UNIT' || item.contentPerUnit == null || item.contentPerUnit <= 0) return null;
+  return { contentPerUnit: item.contentPerUnit, contentUnit: item.contentUnit ?? 'LITER' };
+}
+
+/** «120 L» (cantidad × contenido); `null` sin contenido por unidad. */
+export function totalEnContenido(
+  cantidad: number,
+  contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null,
+): string | null {
+  if (!contenido) return null;
+  const total = (cantidad * contenido.contentPerUnit).toLocaleString('es-CL', { maximumFractionDigits: 2 });
+  return `${total} ${UNIT_SYMBOLS[contenido.contentUnit]}`;
+}
+
+/** «12 u × 10 L = 120 L»; `null` si el ítem no tiene contenido por unidad. */
+export function equivalencia(cantidad: number, contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null): string | null {
+  if (!contenido) return null;
+  const fmt = (n: number) => n.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+  const simbolo = UNIT_SYMBOLS[contenido.contentUnit];
+  return `${fmt(cantidad)} u × ${fmt(contenido.contentPerUnit)} ${simbolo} = ${fmt(cantidad * contenido.contentPerUnit)} ${simbolo}`;
+}
+
 export function toCreateItemPayload(
   values: ItemFormValues,
   branchId: string,
 ): CreateItemInput {
   const initialQuantity = parseDecimal(values.initialQuantity) ?? 0;
   return {
-    sku: values.sku.trim().toUpperCase(),
     ...toCardPayload(values),
+    ...(contenidoDe(values) ?? {}),
     ...(values.categoryId ? { categoryId: values.categoryId } : {}),
     ...(initialQuantity > 0 ? { initialQuantity, branchId } : {}),
   };
@@ -350,8 +406,12 @@ export function toCreateItemPayload(
 export function toUpdateItemPayload(
   values: ItemEditFormValues,
 ): UpdateItemInput {
+  const contenido = contenidoDe(values);
   return {
     ...toCardPayload(values),
+    // Vacío o no por unidad: se borra explícito (omitirlo sería «no lo toques»).
+    contentPerUnit: contenido?.contentPerUnit ?? null,
+    contentUnit: contenido?.contentUnit ?? null,
     // Al editar, "sin categoría" viaja como `null` explícito y no omitido:
     // omitirlo significa "no lo toques", y entonces un ítem mal clasificado se
     // podría reclasificar pero nunca dejar sin categoría.
@@ -366,6 +426,8 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     name: item.name,
     description: item.description ?? '',
     unit: item.unit,
+    contentPerUnit: item.contentPerUnit != null ? String(item.contentPerUnit).replace('.', ',') : '',
+    contentUnit: item.contentUnit && item.contentUnit !== 'UNIT' ? item.contentUnit : 'LITER',
     type: item.type,
     categoryId: item.categoryId ?? '',
     partNumber: item.partNumber ?? '',

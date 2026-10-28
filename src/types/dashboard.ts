@@ -166,7 +166,14 @@ export const ResumenDiaSchema = z.object({
   }),
   produccion: z.object({ internos: z.number(), minaCaleta: z.number(), mineras: z.number() }),
   adBlue: z
-    .object({ itemId: z.string(), nombre: z.string(), stock: z.number(), unidad: z.string() })
+    .object({
+      itemId: z.string(),
+      nombre: z.string(),
+      stock: z.number(),
+      unidad: z.string(),
+      /** El saldo en litros si el ítem se cuenta en bidones; ausente en respuestas viejas. */
+      stockLitros: z.number().nullish(),
+    })
     .nullable(),
   operacionPorEquipo: z.array(
     z.object({

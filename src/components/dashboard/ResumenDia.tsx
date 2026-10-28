@@ -130,7 +130,10 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
         unit={adBlue ? unidadAdBlue : undefined}
       >
         {adBlue ? (
-          <span>{adBlue.nombre}</span>
+          <>
+            <span>{adBlue.nombre}</span>
+            {adBlue.stockLitros != null ? <span>= {NUM_CL_1.format(adBlue.stockLitros)} L</span> : null}
+          </>
         ) : (
           <>
             <span>
