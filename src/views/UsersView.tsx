@@ -18,6 +18,7 @@ import {
 } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCreateUser, useDeleteUser, useUpdateUser, useUsers } from '../hooks/useUsers';
 import { ROLE_OPTIONS, roleChipColor } from '../config/role-colors';
 import {
@@ -498,6 +499,8 @@ function UserActionsMenu({ user, isSelf }: { user: User; isSelf: boolean }) {
 export function UsersView() {
   const { user: currentUser } = useCurrentUser();
   const { data: users, isPending, isError, error } = useUsers();
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   return (
     <div className="flex flex-col gap-4">
@@ -536,7 +539,31 @@ export function UsersView() {
         </div>
       ) : null}
 
-      {!isPending && !isError && users && users.length > 0 ? (
+      {!isPending && !isError && users && users.length > 0 && !esEscritorio ? (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {users.map((user) => (
+            <li className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4" key={user.id}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-[15px] font-semibold text-foreground">{user.name}</span>
+                  <span className="text-sm break-all text-muted-foreground">{user.email}</span>
+                </div>
+                <UserActionsMenu isSelf={user.id === currentUser?.id} user={user} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip color={roleChipColor(user.role)} size="sm" variant="soft">
+                  {user.role}
+                </Chip>
+                <Chip color={user.emailVerified ? 'success' : 'default'} size="sm" variant="soft">
+                  {user.emailVerified ? 'Verificado' : 'Sin verificar'}
+                </Chip>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {!isPending && !isError && users && users.length > 0 && esEscritorio ? (
         // `variant="secondary"`: un solo contenedor (header como card, filas
         // con separador simple) — el default `primary` anida una superficie
         // gris con las filas como una card blanca adentro, lo que se leía

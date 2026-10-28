@@ -57,7 +57,7 @@ const LISTA: Hallazgo[] = [
     estado: 'EN_PROCESO',
     registradoPor: 'Pedro Pérez',
   }),
-  // Sin `registradoPor`: registro legacy o cuenta borrada — la fila muestra raya.
+  // Sin `registradoPor`: registro anterior al campo o cuenta borrada — «Sin registro».
   hallazgo({ id: 'h3', descripcion: 'Frenos reparados', estado: 'CERRADO', registradoPor: null }),
 ];
 
@@ -179,12 +179,12 @@ describe('HallazgosAdminView', () => {
     expect(within(dialog).getByText('Ruido anormal en motor')).toBeTruthy();
   });
 
-  it('el detalle sin nombre de quien registró muestra raya, y sin foto lo dice', () => {
+  it('el detalle sin nombre de quien registró dice «Sin registro», y sin foto lo dice', () => {
     renderView();
     fireEvent.click(screen.getByTestId('hallazgo-fila-h3'));
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('—')).toBeTruthy();
+    expect(within(dialog).getByText('Sin registro')).toBeTruthy();
     expect(within(dialog).getByText('Sin foto adjunta.')).toBeTruthy();
   });
 

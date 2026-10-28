@@ -2,6 +2,7 @@ import { Card, Chip, Spinner, Table } from '@heroui/react';
 import { Download } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useShiftReports } from '../hooks/useShiftReports';
 import { turnoLabel } from '../config/flota-colors';
 import { fromDateOnly } from '../lib/turno';
@@ -44,6 +45,48 @@ function EstadoCorreo({ reporte }: { reporte: ShiftReportListItem }) {
 }
 
 /**
+ * Un reporte en tablet y celular: la tabla de siete columnas obligaba a
+ * desplazarse hacia los lados; acá todo cabe en el ancho y el PDF es un botón.
+ */
+function TarjetaReporte({ reporte }: { reporte: ShiftReportListItem }) {
+  return (
+    <li
+      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
+      data-testid={`reporte-fila-${reporte.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="text-[15px] font-semibold text-foreground">
+            {formatDia(reporte.shiftDate)} · <span>{turnoLabel(reporte.shiftType)}</span>
+          </span>
+          <span className="text-sm text-muted-foreground">{reporte.supervisor ?? '—'}</span>
+        </div>
+        <EstadoCorreo reporte={reporte} />
+      </div>
+      <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+        <div className="flex flex-col">
+          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Equipos</dt>
+          <dd className="m-0 font-mono font-semibold text-foreground">{reporte.cardCount}</dd>
+        </div>
+        <div className="flex flex-col">
+          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Enviado</dt>
+          <dd className="m-0 text-foreground">{formatEnviado(reporte.createdAt)}</dd>
+        </div>
+      </dl>
+      <a
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-(--accent) hover:bg-default"
+        href={ShiftReportAPI.fileUrl(reporte.id)}
+        rel="noreferrer"
+        target="_blank"
+      >
+        <Download aria-hidden size={16} />
+        Descargar PDF
+      </a>
+    </li>
+  );
+}
+
+/**
  * Vista «Reportes» del ADMINISTRADOR (`/reportes`, ruta solo ADMIN): el
  * registro de los reportes de salida de turno que envían los supervisores
  * desde Terreno — qué equipos se usaron en el día, con qué operadores y qué
@@ -54,6 +97,8 @@ function EstadoCorreo({ reporte }: { reporte: ShiftReportListItem }) {
 export function ReportesView() {
   const { data, isPending, isError, error } = useShiftReports();
   const reportes = data ?? [];
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   return (
     <div className="flex flex-col gap-6">
@@ -100,7 +145,15 @@ export function ReportesView() {
             </p>
           ) : null}
 
-          {!isPending && !isError && reportes.length > 0 ? (
+          {!isPending && !isError && reportes.length > 0 && !esEscritorio ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {reportes.map((reporte) => (
+                <TarjetaReporte key={reporte.id} reporte={reporte} />
+              ))}
+            </ul>
+          ) : null}
+
+          {!isPending && !isError && reportes.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Reportes de salida de turno" className="min-w-full">

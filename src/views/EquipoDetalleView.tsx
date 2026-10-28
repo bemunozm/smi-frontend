@@ -21,6 +21,7 @@ import { AlertDialog, Button, Card, Dropdown, Label, Spinner, Table } from '@her
 import { env } from '../config/env';
 import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
@@ -737,6 +738,9 @@ export function EquipoDetalleView({
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
   const { can, canAny } = usePermissions();
+  // El historial en tablas solo en escritorio; en tablet y celular, tarjetas.
+  // Arriba de los `return` tempranos: un hook no puede llamarse a veces sí y a veces no.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enTaller = contexto === 'taller';
   const base = enTaller ? '/mantenimiento/equipos' : '/equipos';
   /** Quien navega hasta acá puede declarar su origen (el dashboard pasa
@@ -1168,6 +1172,45 @@ export function EquipoDetalleView({
                 <div className="flex justify-center py-6">
                   <Spinner color="accent" size="sm" />
                 </div>
+              ) : historialHorometro.length > 0 && !esEscritorio ? (
+                <ul
+                  aria-label={esLiviano ? 'Historial de kilometraje' : 'Historial de horómetro'}
+                  className="m-0 flex max-h-80 list-none flex-col gap-2 overflow-y-auto p-0"
+                >
+                  {historialHorometro.map((registro) => (
+                    <li className="flex flex-col gap-1 rounded-xl border border-border px-3.5 py-2.5" key={registro.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-sm text-(--muted)">{formatFecha(registro.fecha)}</span>
+                        <span className="font-mono text-sm font-semibold text-foreground">
+                          {registro.valorFinal != null
+                            ? `${NUMERO.format(registro.valorFinal - registro.valorInicial)} ${controlUnitSuffix(equipo.controlUnit)}`
+                            : 'En curso'}
+                        </span>
+                      </div>
+                      <span className="text-sm text-foreground">
+                        {esLiviano ? (registro.supervisorName ?? '—') : registro.operador}
+                        {esLiviano && registro.closedByName && registro.closedByName !== registro.supervisorName
+                          ? ` · cerró ${registro.closedByName}`
+                          : ''}
+                      </span>
+                      <span className="text-xs text-(--muted)">
+                        {esLiviano
+                          ? `Km ${NUMERO.format(registro.valorInicial)} → ${
+                              registro.valorFinal != null ? NUMERO.format(registro.valorFinal) : '…'
+                            }`
+                          : `Turno ${turnoLabel(registro.turno).toLowerCase()}`}
+                        {' · '}
+                        <span>
+                          {registro.fechaSalida
+                            ? formatDuracion(registro.fecha, registro.fechaSalida)
+                            : registro.valorFinal != null
+                              ? 'sin hora de salida'
+                              : 'en curso'}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               ) : historialHorometro.length > 0 ? (
                 <Table variant="secondary">
                   {/* Misma regla que el historial de cargas: ~3 filas y scroll propio. */}

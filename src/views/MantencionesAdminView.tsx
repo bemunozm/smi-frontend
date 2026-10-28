@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Card, Chip, Modal, Spinner, Table } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useIntervenciones } from '../hooks/useIntervenciones';
 import { useItems } from '../hooks/useInventory';
 import { useOrdenes } from '../hooks/useOrdenes';
@@ -233,6 +234,8 @@ export function MantencionesAdminView() {
   const { data, isPending, isError, error } = useOrdenes();
   const { data: equipos } = useEquipment();
   const [params, setParams] = useSearchParams();
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   // `equipoId` de la OT es soft-ref: puede traer el id del equipo o su código.
   const codigoDe = (equipoRef: string) =>
@@ -375,7 +378,53 @@ export function MantencionesAdminView() {
             </p>
           ) : null}
 
-          {!isPending && !isError && lista.length > 0 ? (
+          {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {lista.map((orden) => (
+                <li
+                  className="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 hover:bg-default"
+                  data-testid={`mantencion-fila-${orden.id}`}
+                  key={orden.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setFiltro('id', orden.id, '')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setFiltro('id', orden.id, '');
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      {formatFecha(fechaDeMantencion(orden))} ·{' '}
+                      <span className="font-mono whitespace-nowrap text-foreground">{codigoDe(orden.equipoId)}</span>
+                    </span>
+                    <Chip color={TIPO_COLOR[orden.tipo] ?? 'default'} size="sm" variant="soft">
+                      {TIPO_LABEL[orden.tipo] ?? orden.tipo}
+                    </Chip>
+                  </div>
+                  <p className="m-0 text-[15px] font-semibold break-words text-foreground">{orden.titulo}</p>
+                  <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                    <div className="flex min-w-0 flex-col">
+                      <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                        Mantenedor
+                      </dt>
+                      <dd className="m-0 break-words text-foreground">{mantenedoresDe(orden).join(', ') || '—'}</dd>
+                    </div>
+                    <div className="flex flex-col">
+                      <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Tareas</dt>
+                      <dd className="m-0 font-mono font-semibold text-foreground">
+                        {orden.tareas.filter((t) => t.hecha).length}/{orden.tareas.length}
+                      </dd>
+                    </div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Mantenciones realizadas" className="min-w-full">

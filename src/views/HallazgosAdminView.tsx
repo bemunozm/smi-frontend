@@ -17,6 +17,7 @@ import {
 } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useActualizarHallazgo, useCrearHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
 import {
   criticidadChipColor,
@@ -132,7 +133,7 @@ function DetalleHallazgoModal({
                   <Dato label="Fecha" value={formatSoloFecha(hallazgo.fecha)} />
                   <Dato label="Hora" value={formatHora(hallazgo.fecha)} />
                   <Dato label="Equipo" value={hallazgo.equipo?.internalCode ?? '—'} />
-                  <Dato label="Registrado por" value={hallazgo.registradoPor ?? '—'} />
+                  <Dato label="Registrado por" value={hallazgo.registradoPor ?? 'Sin registro'} />
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -445,6 +446,9 @@ export function HallazgosAdminView() {
   // llega acá con el id y el popup se abre solo (mismo patrón que /mantenciones).
   const detalleId = params.get('id');
   const detalle = detalleId ? (porId.get(detalleId) ?? null) : null;
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+
   const abrirDetalle = (id: string) => {
     const siguientes = new URLSearchParams(params);
     siguientes.set('id', id);
@@ -526,7 +530,51 @@ export function HallazgosAdminView() {
             </p>
           ) : null}
 
-          {!isPending && !isError && lista.length > 0 ? (
+          {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {lista.map((h) => (
+                <li key={h.id}>
+                  <button
+                    data-testid={`hallazgo-fila-${h.id}`}
+                    className="flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left hover:bg-default"
+                    type="button"
+                    onClick={() => abrirDetalle(h.id)}
+                  >
+                    <div className="flex w-full flex-wrap items-start justify-between gap-2">
+                      <span className="text-[15px] font-semibold text-foreground">
+                        {formatFecha(h.fecha)} · <span className="font-mono">{h.equipo?.internalCode ?? '—'}</span>
+                      </span>
+                      <span className="flex flex-wrap gap-1.5">
+                        <Chip color={criticidadChipColor(h.prioridad as Criticidad)} size="sm" variant="soft">
+                          {PRIORIDAD_LABEL[h.prioridad] ?? h.prioridad}
+                        </Chip>
+                        <Chip color={hallazgoEstadoChipColor(h.estado as HallazgoEstado)} size="sm" variant="secondary">
+                          {hallazgoEstadoLabel(h.estado as HallazgoEstado)}
+                        </Chip>
+                      </span>
+                    </div>
+                    <p className="m-0 text-sm text-foreground">{h.descripcion}</p>
+                    <dl className="m-0 grid w-full grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Registrado por
+                          </dt>
+                          <dd className="m-0 text-foreground">{h.registradoPor ?? 'Sin registro'}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Foto
+                          </dt>
+                          <dd className="m-0 text-foreground">{h.fotoUrl ? 'Sí' : '—'}</dd>
+                        </div>
+                    </dl>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Hallazgos" className="min-w-full">
@@ -567,7 +615,7 @@ export function HallazgosAdminView() {
                             {hallazgoEstadoLabel(h.estado as HallazgoEstado)}
                           </Chip>
                         </Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">{h.registradoPor ?? '—'}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{h.registradoPor ?? 'Sin registro'}</Table.Cell>
                         <Table.Cell className="text-sm text-muted-foreground">{h.fotoUrl ? 'Sí' : '—'}</Table.Cell>
                       </Table.Row>
                     ))}
