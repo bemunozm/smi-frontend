@@ -17,6 +17,7 @@ import {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useItems } from '../hooks/useInventory';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
 import { useTrabajosExtraList } from '../hooks/useTrabajosExtra';
 import { turnoLabel } from '../config/flota-colors';
@@ -1291,6 +1292,8 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
 function InsumosBajoStockSection() {
   const { rows, isPending, isError, error } = useLowStockRows();
   const navigate = useNavigate();
+  // En tablet y celular, tarjetas: la tabla de cinco columnas se salía del ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   return (
     <Card className="flex flex-col gap-3">
@@ -1323,7 +1326,44 @@ function InsumosBajoStockSection() {
         </p>
       ) : null}
 
-      {!isPending && !isError && rows.length > 0 ? (
+      {!isPending && !isError && rows.length > 0 && !esEscritorio ? (
+        <ul aria-label="Ítems bajo stock mínimo" className="m-0 flex list-none flex-col gap-2.5 p-0">
+          {rows.map(({ item, stock }) => (
+            <li
+              className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3.5"
+              key={`${item.id}-${stock.branchId}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-sm font-semibold text-foreground">{item.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    <span className="font-mono">{item.sku}</span> · {stock.branch.name}
+                  </span>
+                </div>
+                <Chip color={stock.quantity === 0 ? 'danger' : 'warning'} size="sm" variant="soft">
+                  {stock.quantity === 0 ? 'Sin stock' : 'Bajo mínimo'}
+                </Chip>
+              </div>
+              <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2 text-sm">
+                <div className="flex flex-col">
+                  <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Existencia</dt>
+                  <dd className="m-0 font-mono font-semibold text-foreground">
+                    {stock.quantity} {UNIT_SYMBOLS[item.unit]}
+                  </dd>
+                </div>
+                <div className="flex flex-col">
+                  <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Mínimo</dt>
+                  <dd className="m-0 font-mono text-foreground">
+                    {stock.minimumQuantity} {UNIT_SYMBOLS[item.unit]}
+                  </dd>
+                </div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {!isPending && !isError && rows.length > 0 && esEscritorio ? (
         <Table variant="secondary">
           <Table.ScrollContainer>
             <Table.Content aria-label="Ítems bajo stock mínimo" className="min-w-full">

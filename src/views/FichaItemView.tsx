@@ -29,6 +29,8 @@ import {
   MOVEMENT_REASON_LABELS,
   UNIT_LABELS,
   UNIT_SYMBOLS,
+  contenidoDeItem,
+  totalEnContenido,
   totalQuantity,
   type InventoryItem,
   type ItemStock,
@@ -133,6 +135,11 @@ function StockByBranch({ item }: { item: InventoryItem }) {
                 <p className="font-mono text-lg font-bold text-foreground">
                   {NUMBER.format(stock.quantity)} {symbol}
                 </p>
+                {totalEnContenido(stock.quantity, contenidoDeItem(item)) ? (
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    = {totalEnContenido(stock.quantity, contenidoDeItem(item))}
+                  </p>
+                ) : null}
               </div>
               <div>
                 <p className="text-[9.5px] font-bold tracking-[0.06em] text-muted-foreground uppercase">
@@ -175,6 +182,11 @@ function StockByBranch({ item }: { item: InventoryItem }) {
                 </Table.Cell>
                 <Table.Cell className="font-mono text-sm font-semibold text-foreground">
                   {NUMBER.format(stock.quantity)} {symbol}
+                  {totalEnContenido(stock.quantity, contenidoDeItem(item)) ? (
+                    <span className="block font-sans text-xs font-normal text-muted-foreground">
+                      = {totalEnContenido(stock.quantity, contenidoDeItem(item))}
+                    </span>
+                  ) : null}
                 </Table.Cell>
                 <Table.Cell className="font-mono text-sm text-muted-foreground">
                   {stock.minimumQuantity > 0
@@ -433,6 +445,9 @@ export function FichaItemView({
             ) : null}
             {item.category?.name ?? 'Sin categoría'} ·{' '}
             {UNIT_LABELS[item.unit]}
+            {contenidoDeItem(item)
+              ? ` (${NUMBER.format(contenidoDeItem(item)!.contentPerUnit)} ${UNIT_SYMBOLS[contenidoDeItem(item)!.contentUnit]} c/u)`
+              : ''}
             {item.defaultSupplier ? ` · ${item.defaultSupplier}` : ''}
           </p>
           {item.description ? (

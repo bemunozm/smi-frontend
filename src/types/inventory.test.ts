@@ -4,6 +4,8 @@ import {
   ItemListResponseSchema,
   isBelowMinimumAt,
   quantityAt,
+  contenidoDe,
+  equivalencia,
   toCreateItemPayload,
   toItemEditValues,
   toUpdateItemPayload,
@@ -95,10 +97,11 @@ describe('toCreateItemPayload', () => {
     // obligaría a elegir bodega para dar de alta un ítem que llega después.
     const payload = toCreateItemPayload(
       {
-        sku: 'fil-001',
         name: '  Filtro  ',
         description: '',
         unit: 'UNIT',
+        contentPerUnit: '',
+        contentUnit: 'LITER',
         type: 'PART',
         categoryId: '',
         partNumber: '',
@@ -108,8 +111,8 @@ describe('toCreateItemPayload', () => {
       },
       'b1',
     );
+    // Sin SKU: lo genera el servidor.
     expect(payload).toEqual({
-      sku: 'FIL-001',
       name: 'Filtro',
       unit: 'UNIT',
       type: 'PART',
@@ -120,10 +123,11 @@ describe('toCreateItemPayload', () => {
   it('manda cantidad y bodega cuando hay existencia inicial', () => {
     const payload = toCreateItemPayload(
       {
-        sku: 'fil-001',
         name: 'Filtro',
         description: 'Serie C',
         unit: 'UNIT',
+        contentPerUnit: '',
+        contentUnit: 'LITER',
         type: 'PART',
         categoryId: 'c1',
         partNumber: '1R-0750',
@@ -145,6 +149,43 @@ describe('toCreateItemPayload', () => {
   });
 });
 
+describe('contenido por unidad', () => {
+  const base = {
+    name: 'AdBlue',
+    description: '',
+    type: 'SUPPLY' as const,
+    categoryId: '',
+    partNumber: '',
+    defaultSupplier: '',
+    isCritical: false,
+  };
+
+  it('en unidades con 10 L c/u: viaja el contenido y la existencia se lee en litros', () => {
+    const values = { ...base, unit: 'UNIT' as const, contentPerUnit: '10', contentUnit: 'LITER' as const, initialQuantity: '12' };
+    expect(toCreateItemPayload(values, 'b1')).toMatchObject({
+      unit: 'UNIT',
+      contentPerUnit: 10,
+      contentUnit: 'LITER',
+      initialQuantity: 12,
+    });
+    expect(equivalencia(12, contenidoDe(values))).toBe('12 u × 10 L = 120 L');
+  });
+
+  it('en litros no viaja contenido: 120 son 120 L', () => {
+    const values = { ...base, unit: 'LITER' as const, contentPerUnit: '10', contentUnit: 'LITER' as const, initialQuantity: '120' };
+    const payload = toCreateItemPayload(values, 'b1');
+    expect(payload).not.toHaveProperty('contentPerUnit');
+    expect(payload).toMatchObject({ unit: 'LITER', initialQuantity: 120 });
+    expect(contenidoDe(values)).toBeNull();
+  });
+
+  it('al editar, pasar a litros borra el contenido (null explícito)', () => {
+    expect(
+      toUpdateItemPayload({ ...base, unit: 'LITER', contentPerUnit: '10', contentUnit: 'LITER', isActive: true }),
+    ).toMatchObject({ contentPerUnit: null, contentUnit: null });
+  });
+});
+
 describe('toUpdateItemPayload', () => {
   it('manda categoryId en null cuando se quitó la categoría', () => {
     // Omitirlo significa "no lo toques" para el backend: si el formulario
@@ -154,6 +195,8 @@ describe('toUpdateItemPayload', () => {
       name: 'Filtro',
       description: '',
       unit: 'UNIT',
+      contentPerUnit: '',
+      contentUnit: 'LITER',
       type: 'PART',
       categoryId: '',
       partNumber: '',

@@ -65,7 +65,7 @@ export function useCreateItem() {
     endpoint: 'item.create',
     build: (input, id) => ({ params: {}, body: { ...input, id } }),
     onSent: (item, input) => {
-      toast.success('Ítem creado', { description: item ? `${item.sku} · ${item.name}` : `${input.sku} · ${input.name}` });
+      toast.success('Ítem creado', { description: item ? `${item.sku} · ${item.name}` : input.name });
     },
     errorFallback: 'No se pudo crear el ítem.',
   });
@@ -75,6 +75,8 @@ const CAMPOS_DE_ITEM = [
   'name',
   'description',
   'unit',
+  'contentPerUnit',
+  'contentUnit',
   'type',
   'categoryId',
   'partNumber',
@@ -96,7 +98,11 @@ async function edicionDeItem({ item, input }: UpdateItemVars) {
   const edicion = await buildQueuedEdit<ItemFields>({
     entity: itemEntity(item.id),
     ops: ['item.update'],
-    base: pickFields(item, CAMPOS_DE_ITEM),
+    // El contenido por unidad puede venir sin el campo (respuesta anterior): nulo.
+    base: pickFields(
+      { ...item, contentPerUnit: item.contentPerUnit ?? null, contentUnit: item.contentUnit ?? null },
+      CAMPOS_DE_ITEM,
+    ),
     next: input,
     fields: CAMPOS_DE_ITEM,
   });

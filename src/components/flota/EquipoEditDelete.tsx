@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, useWatch, type Control, type FieldErrors } from 'react-hook-form';
+import { Controller, useController, useForm, useWatch, type Control, type FieldErrors } from 'react-hook-form';
 import { Camera, ImageIcon } from 'lucide-react';
 import {
   AlertDialog,
@@ -172,6 +172,9 @@ interface CamposProps {
    * cambiarla muestra la advertencia — la lectura alimenta el ciclo de
    * mantención y la fecha estimada. */
   lecturaOriginal?: string;
+  /** Muestra la sección «Asignación». Ni al crear ni al editar va: el equipo
+   * se asigna en terreno y desde la ficha («Estado de uso»). */
+  conAsignacion?: boolean;
 }
 
 /**
@@ -191,7 +194,12 @@ export function CamposEquipo({
   onSupervisorIdChange,
   currentOperator = null,
   lecturaOriginal,
+  conAsignacion = true,
 }: CamposProps) {
+  // Al elegir la clase, la unidad de control la acompaña: un liviano va por
+  // kilometraje y un pesado por horómetro. Queda editable (hay camiones
+  // pesados que se controlan por km).
+  const { field: unidadControl } = useController({ control, name: 'controlUnit' });
   // El selector de sucursal base solo debe ofrecer sucursales activas.
   const { data: sucursalesActivas } = useBranches({ isActive: true });
   // Solo se pide si estamos editando (ver `currentHomeBranchId`); `useBranch`
@@ -288,7 +296,9 @@ export function CamposEquipo({
                 name={field.name}
                 value={field.value}
                 onChange={(value) => {
-                  if (value) field.onChange(value as EquipmentClass);
+                  if (!value) return;
+                  field.onChange(value as EquipmentClass);
+                  unidadControl.onChange(value === 'LIGHT' ? 'KM' : 'HOURS');
                 }}
               >
                 <Label>Clase</Label>
@@ -529,21 +539,23 @@ export function CamposEquipo({
          `AsignacionForm` en `EquipoDetalleView.tsx` para separar la sección
          de asignación del resto — acá cumple el mismo rol de jerarquía entre
          secciones que ya usaba antes de este rediseño. */}
-      <section className="flex flex-col gap-3 border-t border-separator pt-4">
-        <p className="label">Asignación</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {liviano ? null : (
-            <OperatorPicker
-              allowsUnassign
-              currentAssignee={currentOperator}
-              value={operatorId === SIN_ASIGNAR ? null : operatorId}
-              onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
-            />
-          )}
+      {conAsignacion ? (
+        <section className="flex flex-col gap-3 border-t border-separator pt-4">
+          <p className="label">Asignación</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {liviano ? null : (
+              <OperatorPicker
+                allowsUnassign
+                currentAssignee={currentOperator}
+                value={operatorId === SIN_ASIGNAR ? null : operatorId}
+                onChange={(operator) => onOperatorIdChange(operator?.id ?? SIN_ASIGNAR)}
+              />
+            )}
 
-          <ResponsableSelect liviano={liviano} value={supervisorId} onChange={onSupervisorIdChange} />
-        </div>
-      </section>
+            <ResponsableSelect liviano={liviano} value={supervisorId} onChange={onSupervisorIdChange} />
+          </div>
+        </section>
+      ) : null}
 
     </div>
   );
@@ -689,7 +701,10 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                     noValidate
                     onSubmit={(e) => void handleSubmit(onSubmit)(e)}
                   >
+                    {/* Tampoco al editar: la asignación se hace en terreno
+                       (y en la ficha, «Estado de uso»). */}
                     <CamposEquipo
+                      conAsignacion={false}
                       control={control}
                       currentHomeBranchId={equipo.homeBranchId}
                       currentOperator={equipo.operator}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Card, Checkbox, Chip, Input, Label, ListBox, Modal, Select, Spinner, Table, TextArea, TextField } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOperators } from '../hooks/useOperators';
 import { useCrearTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
 import { turnoLabel } from '../config/flota-colors';
@@ -84,7 +85,7 @@ function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordina
                   />
                   <Dato label="Horas máquina" value={`${NUM_CL_1.format(trabajo.totalHoras)} h`} />
                   <Dato label="Actividades" value={actividadesDe(trabajo)} />
-                  <Dato label="Registrado por" value={trabajo.registradoPor ?? '—'} />
+                  <Dato label="Registrado por" value={trabajo.registradoPor ?? 'Sin registro'} />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
@@ -330,6 +331,9 @@ export function TrabajosExtraAdminView() {
     return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
   }, [trabajos]);
 
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+
   const lista = useMemo(
     () =>
       trabajos.filter((t) => {
@@ -450,7 +454,58 @@ export function TrabajosExtraAdminView() {
             </p>
           ) : null}
 
-          {!isPending && !isError && lista.length > 0 ? (
+          {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {lista.map((t) => (
+                <li key={t.id}>
+                  <button
+                    data-testid={`trabajo-fila-${t.id}`}
+                    className="flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left hover:bg-default"
+                    type="button"
+                    onClick={() => setDetalle(t)}
+                  >
+                    <div className="flex w-full items-start justify-between gap-2">
+                      <span className="text-[15px] font-semibold text-foreground">
+                        {formatFecha(t.fecha)} · <span className="font-mono">{t.equipo?.internalCode ?? '—'}</span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
+                        {NUM_CL_1.format(t.totalHoras)} h
+                      </span>
+                    </div>
+                    <p className="m-0 text-sm text-foreground">{actividadesDe(t)}</p>
+                    <dl className="m-0 grid w-full grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Operador
+                          </dt>
+                          <dd className="m-0 text-foreground">{t.operador}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Turno
+                          </dt>
+                          <dd className="m-0 text-foreground">{turnoLabel(t.turno)}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Faena
+                          </dt>
+                          <dd className="m-0 text-foreground">{t.faena}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Registrado por
+                          </dt>
+                          <dd className="m-0 text-foreground">{t.registradoPor ?? 'Sin registro'}</dd>
+                        </div>
+                    </dl>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content aria-label="Trabajos extraordinarios" className="min-w-full">
@@ -484,7 +539,7 @@ export function TrabajosExtraAdminView() {
                         <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.faena}</Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? '—'}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? 'Sin registro'}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
                         <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
                           {NUM_CL_1.format(t.totalHoras)} h

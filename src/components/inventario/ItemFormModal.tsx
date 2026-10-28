@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, type Control } from 'react-hook-form';
+import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
 import {
   Button,
   FieldError,
@@ -16,16 +16,19 @@ import {
 
 import { useCategories } from '../../hooks/useCategories';
 import { useCreateItem, useSaveItemWithMinimums } from '../../hooks/useInventory';
-import { formatDecimalInput } from '../../lib/decimal';
+import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
 import {
+  CONTENT_UNITS,
   ITEM_TYPES,
   ITEM_TYPE_LABELS,
   ItemEditFormSchema,
   ItemFormSchema,
   UNITS_OF_MEASURE,
   UNIT_LABELS,
+  contenidoDe,
+  equivalencia,
   stockAt,
   toCreateItemPayload,
   toItemEditValues,
@@ -42,10 +45,11 @@ import { SectionLabel } from './shared';
 const NO_CATEGORY = '__none__';
 
 const EMPTY_ITEM: ItemFormValues = {
-  sku: '',
   name: '',
   description: '',
   unit: 'UNIT',
+  contentPerUnit: '',
+  contentUnit: 'LITER',
   type: 'SUPPLY',
   categoryId: '',
   partNumber: '',
@@ -57,7 +61,8 @@ const EMPTY_ITEM: ItemFormValues = {
 /**
  * Los campos que comparten el alta y la edición. Se escriben una sola vez
  * porque son los mismos datos: lo único que cambia entre los dos formularios es
- * lo que los rodea (SKU y existencia inicial al crear; baja lógica al editar).
+ * lo que los rodea (existencia inicial al crear; baja lógica al editar). El SKU
+ * ya no se pide: lo genera el servidor (`SUM-0001`, `REP-0001`).
  *
  * El `control` viene tipado con el esquema del formulario completo, que es más
  * ancho que `ItemCardValues`. `Control` es invariante en su parámetro, así que
@@ -72,8 +77,10 @@ function ItemCardFields({
 }: {
   control: Control<ItemCardValues>;
   categories: ItemCategory[];
-  errors: { name?: { message?: string } };
+  errors: { name?: { message?: string }; contentPerUnit?: { message?: string } };
 }) {
+  // El contenido por unidad solo tiene sentido si el ítem se cuenta en unidades.
+  const porUnidad = useWatch({ control, name: 'unit' }) === 'UNIT';
   return (
     <>
       <Controller
@@ -166,6 +173,61 @@ function ItemCardFields({
           )}
         />
       </div>
+
+      {porUnidad ? (
+        // Mismo grid de dos columnas que el resto: cada campo con su etiqueta,
+        // así el número y la medida quedan a la misma altura.
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Controller
+            control={control}
+            name="contentPerUnit"
+            render={({ field }) => (
+              <TextField
+                fullWidth
+                isInvalid={!!errors.contentPerUnit}
+                name={field.name}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                value={field.value}
+              >
+                <Label>Contenido por unidad (opcional)</Label>
+                <Input inputMode="decimal" placeholder="Ej.: 10 (bidón de 10 L)" />
+                {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
+              </TextField>
+            )}
+          />
+          <Controller
+            control={control}
+            name="contentUnit"
+            render={({ field }) => (
+              <Select
+                fullWidth
+                name={field.name}
+                onChange={(value) => {
+                  if (value) field.onChange(value);
+                }}
+                value={field.value}
+              >
+                <Label>Se mide en</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {CONTENT_UNITS.map((unit) => (
+                      <ListBox.Item id={unit} key={unit} textValue={UNIT_LABELS[unit]}>
+                        {UNIT_LABELS[unit]}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            )}
+          />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Controller
@@ -284,6 +346,21 @@ export function NewItemModal({
     defaultValues: { ...EMPTY_ITEM, type: defaultType },
   });
 
+  // La existencia se escribe en la unidad del ítem; con contenido por unidad se
+  // dice cuánto es en total («12 u × 10 L = 120 L»).
+  const [unidad, contenidoPorUnidad, unidadContenido, existencia] = useWatch({
+    control,
+    name: ['unit', 'contentPerUnit', 'contentUnit', 'initialQuantity'],
+  });
+  const existenciaNum = parseDecimal(existencia);
+  const totalEquivalente =
+    existenciaNum != null && existenciaNum > 0
+      ? equivalencia(
+          existenciaNum,
+          contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
+        )
+      : null;
+
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
@@ -313,27 +390,6 @@ export function NewItemModal({
                     noValidate
                     onSubmit={(event) => void handleSubmit(onSubmit)(event)}
                   >
-                    <Controller
-                      control={control}
-                      name="sku"
-                      render={({ field }) => (
-                        <TextField
-                          fullWidth
-                          isInvalid={!!errors.sku}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          onChange={field.onChange}
-                          value={field.value}
-                        >
-                          <Label>SKU</Label>
-                          <Input autoFocus placeholder="FIL-001" />
-                          {errors.sku ? (
-                            <FieldError>{errors.sku.message}</FieldError>
-                          ) : null}
-                        </TextField>
-                      )}
-                    />
-
                     <ItemCardFields
                       categories={categories ?? []}
                       control={control as unknown as Control<ItemCardValues>}
@@ -352,8 +408,15 @@ export function NewItemModal({
                           onChange={field.onChange}
                           value={field.value}
                         >
-                          <Label>Existencia inicial en {branchName}</Label>
+                          <Label>
+                            Existencia inicial en {branchName} ({UNIT_LABELS[unidad].toLowerCase()})
+                          </Label>
                           <Input inputMode="decimal" placeholder="0" />
+                          {totalEquivalente ? (
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                              {totalEquivalente}
+                            </span>
+                          ) : null}
                           {errors.initialQuantity ? (
                             <FieldError>
                               {errors.initialQuantity.message}
@@ -364,9 +427,10 @@ export function NewItemModal({
                     />
 
                     <p className="text-xs text-muted-foreground">
-                      La existencia inicial queda registrada como una entrada por
-                      compra en {branchName}: el kardex parte explicando de dónde
-                      salió el saldo. El mínimo se fija después, desde las
+                      Se escribe en la unidad del ítem: con «Litros», 120 son
+                      120 L; con «Unidades» y 10 L por unidad, 12 son 120 L. Queda
+                      registrada como una entrada por compra en {branchName}. El
+                      SKU se genera solo y el mínimo se fija después, desde las
                       acciones del ítem.
                     </p>
                   </form>
