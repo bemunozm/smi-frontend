@@ -6,6 +6,7 @@ import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { INTERVENCIONES_KEY } from '../lib/query-keys';
 import { generateUuid } from '../lib/uuid';
+import type { EquipmentStatus } from '../types/equipment';
 import type { CreateIntervencionInput, OrdenTrabajo } from '../types/mantenimiento';
 import { useQueuedCreate, writeQueued } from './useQueuedMutation';
 
@@ -53,12 +54,16 @@ export function useFinishTask() {
       orden,
       intervencion,
       foto,
+      equipmentStatus,
     }: {
       orden: OrdenTrabajo;
       intervencion: CreateIntervencionInput;
       /** Foto de lo realizado/ocupado: viaja como archivo del write y el
        * replay la sube e inyecta su `fotoKey` (patrón combustible). */
       foto?: File | null;
+      /** Cómo queda la unidad (Operativo/Inoperativo) — va en el MISMO PATCH
+       * del cierre y el backend la aplica en esa transacción. */
+      equipmentStatus?: EquipmentStatus;
     }) => {
       const registered = await writeQueued('intervencion.create', {
         params: { ordenId: orden.id },
@@ -67,7 +72,7 @@ export function useFinishTask() {
       });
       const completed = await writeQueued('orden.update', {
         params: { id: orden.id },
-        body: { estado: 'COMPLETADA' },
+        body: { estado: 'COMPLETADA', ...(equipmentStatus ? { equipmentStatus } : {}) },
         // Si la intervención queda rechazada en la hoja de sync (p. ej. 409
         // por stock insuficiente), el PATCH queda retenido detrás de ella y
         // un descarte lo arrastra — nunca una orden COMPLETADA sin su cierre.

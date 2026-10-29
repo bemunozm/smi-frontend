@@ -25,6 +25,7 @@ import {
   type SetMaintenanceRecordInput,
 } from '../../types/maintenance-plan';
 import { LightConfigViewSchema, type LightConfig, type LightConfigView } from '../../types/vencimientos';
+import type { EquipmentStatus } from '../../types/equipment';
 import {
   DailyChecklistDetailSchema,
   type DailyChecklistDetail,
@@ -56,7 +57,13 @@ import {
 
 export interface MantenimientoEndpointMap {
   'orden.create': { params: NoParams; body: WithId<CreateOrdenInput>; result: OrdenTrabajo };
-  'orden.update': { params: { id: string }; body: Partial<OrdenFields>; result: OrdenTrabajo };
+  /** `equipmentStatus` (solo junto a `estado: COMPLETADA`): cómo queda la
+   * unidad al cerrar — el backend la actualiza en Flota en la misma transacción. */
+  'orden.update': {
+    params: { id: string };
+    body: Partial<OrdenFields> & { equipmentStatus?: EquipmentStatus };
+    result: OrdenTrabajo;
+  };
   /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición).
    * El checklist preventivo agrega notas y foto (la cola la sube y la inyecta
    * como `fotoKey`). */
@@ -142,7 +149,8 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     failMessage: 'No se pudo actualizar la orden de trabajo.',
     parse: parseWith(OrdenTrabajoSchema),
     // 'hallazgos': completar cierra el hallazgo ligado; cancelar lo reabre.
-    invalidate: ['ordenes', 'hallazgos'],
+    // 'equipment': el cierre puede dejar la unidad Operativa/Inoperativa.
+    invalidate: ['ordenes', 'hallazgos', 'equipment'],
     label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
