@@ -98,23 +98,26 @@ describe('MantenimientoLayout', () => {
     expect(labels).toEqual(['Órdenes', 'Checklist', 'Stock', 'Equipos']);
   });
 
-  it('el drawer del MANTENEDOR no ofrece «Ir al panel» ni Salir: cerrar sesión vive en el menú de usuario', async () => {
+  it('no hay botón Menú: las secciones están solo en la barra inferior', () => {
     renderLayout('phone', ROLES.MANTENEDOR);
-    fireEvent.click(screen.getByLabelText('Menú'));
 
-    expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
-    fireEvent.click(screen.getByLabelText('Cerrar'));
+    expect(screen.queryByLabelText('Menú')).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'Stock' })).toHaveLength(1);
+  });
+
+  it('el menú de usuario del MANTENEDOR no ofrece «Ir al panel»', async () => {
+    renderLayout('phone', ROLES.MANTENEDOR);
 
     fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
     expect(await screen.findByRole('menuitem', { name: 'Cerrar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Ir al panel' })).toBeNull();
   });
 
-  it('el drawer del ADMIN sí mantiene «Ir al panel»', () => {
+  it('el ADMIN encuentra «Ir al panel» en el menú de usuario', async () => {
     renderLayout('phone', ROLES.ADMIN);
-    fireEvent.click(screen.getByLabelText('Menú'));
 
-    expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    expect(await screen.findByRole('menuitem', { name: 'Ir al panel' })).toBeTruthy();
   });
 
   /**

@@ -74,7 +74,7 @@ export const router = createBrowserRouter([
             element: <AppLayout />,
             children: [
               // `/` NO reparte por rol a propósito (ver `config/home-path.ts`
-              // y el drawer de Terreno, que linkea acá con "Ir al panel") —
+              // y el menú de usuario de Terreno, que linkea acá con "Ir al panel") —
               // sigue detrás de su propio `allowedRoles`, igual que
               // Equipos/Inventario.
               {

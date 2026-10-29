@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
 import type { Key } from '@heroui/react';
-import { LayoutDashboard, LogOut, Menu, UserRound, X } from 'lucide-react';
+import { LayoutDashboard, LogOut, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { NotificationBell } from '../components/notifications/NotificationBell';
@@ -17,7 +17,7 @@ import { ROLES, type Role } from '../types/roles';
 import { CONTAINER } from './terreno-container';
 
 /**
- * Un destino del módulo. La etiqueta larga va en el header y en el drawer; la
+ * Un destino del módulo. La etiqueta larga va en el header (escritorio); la
  * corta, en la barra inferior, donde cada pestaña tiene un cuarto de pantalla.
  */
 export interface ShellTab {
@@ -56,22 +56,26 @@ function inicialesDe(nombre: string | undefined, email: string | undefined): str
 /**
  * Menú de usuario del header — el MISMO patrón que el Topbar de escritorio
  * (pedido del administrador): avatar → quién está conectado, «Ver perfil» y
- * «Cerrar sesión». Antes «Salir» vivía en el drawer y en una tablet quedaba
- * clavado al fondo del cajón, lejos de todo.
+ * «Cerrar sesión». Al ADMIN además le ofrece «Ir al panel» (su dashboard): ya
+ * no hay drawer, las secciones están en la barra inferior o en el header.
  */
 function MenuUsuario({
   user,
   role,
   onPerfil,
+  onIrAlPanel,
   onCerrarSesion,
 }: {
   user: { name?: string; email?: string } | null;
   role: Role | null;
   onPerfil: () => void;
+  /** Solo ADMIN; sin él, la opción no aparece. */
+  onIrAlPanel?: () => void;
   onCerrarSesion: () => void;
 }) {
   const handleAction = (key: Key): void => {
     if (key === 'profile') onPerfil();
+    if (key === 'panel') onIrAlPanel?.();
     if (key === 'logout') onCerrarSesion();
   };
 
@@ -107,6 +111,12 @@ function MenuUsuario({
             <UserRound aria-hidden size={15} />
             <Label>Ver perfil</Label>
           </Dropdown.Item>
+          {onIrAlPanel ? (
+            <Dropdown.Item id="panel" textValue="Ir al panel">
+              <LayoutDashboard aria-hidden size={15} />
+              <Label>Ir al panel</Label>
+            </Dropdown.Item>
+          ) : null}
           <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
             <LogOut aria-hidden size={15} />
             <Label>Cerrar sesión</Label>
@@ -146,8 +156,8 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
 
 /**
  * Shell de módulo de trabajo en faena: header SMI + campana de notificaciones
- * + estado de sync + contenido + navegación de secciones + drawer (usuario,
- * "Ir al panel", "Salir").
+ * + estado de sync + contenido + navegación de secciones + menú de usuario
+ * (perfil, "Ir al panel" del ADMIN y cerrar sesión).
  * Reemplaza por completo al chrome de escritorio (`AppLayout`): al entrar al
  * módulo no aparece el sidebar/topbar/barra del administrador.
  *
@@ -157,7 +167,6 @@ function StatusPill({ enLinea }: { enLinea: boolean }) {
  */
 export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps) {
   const { user, role } = useCurrentUser();
-  const [menu, setMenu] = useState(false);
   const [perfilAbierto, setPerfilAbierto] = useState(false);
   const enLinea = useOnlineStatus();
   const navigate = useNavigate();
@@ -192,23 +201,10 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
         style={{ background: 'var(--terreno-shell)' }}
       >
         <header
-          className="sticky top-0 z-20 rounded-b-3xl text-white min-[480px]:rounded-none"
+          className="sticky top-0 z-20 text-white"
           style={{ background: 'var(--terreno-head)' }}
         >
           <div className={`${CONTAINER} flex items-center gap-3 py-3.5 lg:gap-5 lg:py-3`}>
-            {/* Sin nada que mostrar (header con las secciones y sin «Ir al
-                panel»), el drawer quedaría vacío: el botón no se ofrece. */}
-            {(!navEnHeader || ofreceIrAlPanel) && (
-              <button
-                type="button"
-                aria-label="Menú"
-                onClick={() => setMenu(true)}
-                className="-ml-2 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white/90 hover:bg-white/10"
-              >
-                <Menu className="h-[22px] w-[22px]" />
-              </button>
-            )}
-
             <div className="flex flex-1 flex-col gap-1 leading-none lg:flex-none">
               <span className="font-display text-2xl font-bold tracking-[-0.02em]">SMI</span>
               <span className="text-[10.5px] font-semibold tracking-[0.14em] text-white/60 uppercase">
@@ -250,6 +246,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
               user={user}
               role={role}
               onPerfil={() => setPerfilAbierto(true)}
+              onIrAlPanel={ofreceIrAlPanel ? () => void navigate('/') : undefined}
               onCerrarSesion={requestLogout}
             />
           </div>
@@ -306,74 +303,6 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
           </nav>
         )}
 
-        {/* Drawer: las secciones en teléfono/tablet y «Ir al panel» (ADMIN).
-            Quién está conectado y «Cerrar sesión» viven en el menú de usuario
-            del header, igual que en el escritorio del administrador. */}
-        {menu && (
-          <>
-            <button
-              type="button"
-              aria-label="Cerrar menú"
-              onClick={() => setMenu(false)}
-              className="absolute inset-0 z-30 bg-[#0d0c0a]/45"
-            />
-            <div className="absolute inset-y-0 left-0 z-40 flex w-70 flex-col gap-1.5 bg-card p-[22px_18px] shadow-[10px_0_40px_rgba(13,12,10,0.2)]">
-              <div className="flex items-center justify-between">
-                <span className="font-display text-[22px] font-bold tracking-tight">SMI</span>
-                <button
-                  type="button"
-                  onClick={() => setMenu(false)}
-                  aria-label="Cerrar"
-                  className="grid h-11 w-11 place-items-center rounded-xl bg-muted"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* En teléfono el drawer repite las secciones porque es el menú
-                  completo. Desde `lg` ya están en el header: repetirlas acá las
-                  dejaría dos veces en el DOM. */}
-              {!navEnHeader && (
-                <nav className="flex flex-col gap-1">
-                  {tabs.map((t) => {
-                    const Icon = t.icon;
-                    return (
-                      <NavLink
-                        key={t.to}
-                        to={t.to}
-                        onClick={() => setMenu(false)}
-                        className={({ isActive }) =>
-                          `flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium ${
-                            isActive
-                              ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-soft-foreground)]'
-                              : 'hover:bg-muted'
-                          }`
-                        }
-                      >
-                        <Icon className="h-[19px] w-[19px]" />
-                        {t.label}
-                        <Badge n={t.badge} />
-                      </NavLink>
-                    );
-                  })}
-                </nav>
-              )}
-
-              {ofreceIrAlPanel && (
-                <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
-                  <NavLink
-                    to="/"
-                    onClick={() => setMenu(false)}
-                    className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium hover:bg-muted"
-                  >
-                    <LayoutDashboard className="h-[19px] w-[19px]" />
-                    Ir al panel
-                  </NavLink>
-                </div>
-              )}
-            </div>
-          </>
-        )}
         {confirmationDialog}
         <PerfilModal isOpen={perfilAbierto} onClose={() => setPerfilAbierto(false)} />
       </div>

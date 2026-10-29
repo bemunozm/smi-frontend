@@ -7,7 +7,7 @@ const POR_VALIDAR = ['SUBMITTED'] as const;
 
 /**
  * Los cuatro destinos del módulo, en el orden de la maqueta. La etiqueta larga
- * va en el header y en el drawer; la corta, en la barra inferior, donde cada
+ * va en el header (escritorio); la corta, en la barra inferior, donde cada
  * pestaña tiene un cuarto de pantalla.
  *
  * Combustible y Horómetro ya no están: la especificación del 21/09 las fusiona
@@ -26,7 +26,7 @@ const tabs: ShellTab[] = [
 
 /**
  * Operación en Terreno — el shell parametrizado (`TerrenoShell`) con las
- * pestañas del módulo. Toda la mecánica (header, sync, barra, drawer) vive en
+ * pestañas del módulo. Toda la mecánica (header, sync, barra, menú de usuario) vive en
  * el shell, compartida con `MantenimientoLayout`.
  */
 export function TerrenoLayout() {

@@ -38,7 +38,7 @@ const TAB_CAMIONETA: ShellTab = {
  * (sidebar/topbar/barra inferior de `AppLayout`) desaparece y queda solo la
  * navegación del módulo. El taller se usa en tablet, con guantes — mismo
  * lenguaje y mecánica que la operación en terreno; se vuelve al panel por el
- * drawer («Ir al panel»).
+ * menú de usuario («Ir al panel», solo ADMIN).
  */
 export function MantenimientoLayout() {
   // La campana del shell trae todas las notificaciones (hallazgos nuevos,

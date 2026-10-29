@@ -138,45 +138,38 @@ describe('TerrenoLayout', () => {
     }
   });
 
-  it('el SUPERVISOR no ve «Ir al panel»: el dashboard es solo ADMIN y Terreno ya es su home', () => {
+  it('el SUPERVISOR no ve «Ir al panel»: el dashboard es solo ADMIN y Terreno ya es su home', async () => {
     renderLayout('phone');
-    fireEvent.click(screen.getByLabelText('Menú'));
 
-    expect(screen.queryByRole('link', { name: 'Ir al panel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+    expect(await screen.findByRole('menuitem', { name: 'Cerrar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Ir al panel' })).toBeNull();
   });
 
-  it('en escritorio el drawer del ADMIN guarda solo «Ir al panel», sin repetir secciones ni Salir', () => {
+  it('el ADMIN tiene «Ir al panel» en el menú de usuario, en escritorio y en teléfono', async () => {
     mockRole = 'ADMIN';
-    renderLayout('desktop');
-    fireEvent.click(screen.getByLabelText('Menú'));
-
-    expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
-    for (const seccion of SECCIONES.desktop) {
-      expect(screen.getAllByRole('link', { name: seccion })).toHaveLength(1);
+    for (const size of ['desktop', 'phone'] as const) {
+      renderLayout(size);
+      fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
+      expect(await screen.findByRole('menuitem', { name: 'Ir al panel' })).toBeTruthy();
+      cleanup();
     }
   });
 
-  it('en teléfono el drawer sí repite las secciones, porque es el menú completo', () => {
+  it('en teléfono no hay botón Menú: las secciones van una sola vez, en la barra inferior', () => {
     mockRole = 'ADMIN';
     renderLayout('phone');
-    fireEvent.click(screen.getByLabelText('Menú'));
 
-    expect(screen.getAllByRole('link', { name: 'Hallazgos' })).toHaveLength(2);
-    expect(screen.getByRole('link', { name: 'Ir al panel' })).toBeTruthy();
+    expect(screen.queryByLabelText('Menú')).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'Hallazgos' })).toHaveLength(1);
   });
 
   /**
    * «Cerrar sesión» vive en el menú de usuario del header (avatar, igual que
-   * el administrador), NO en el drawer: en tablet quedaba clavado al fondo
-   * del cajón, lejos de todo.
+   * el administrador).
    */
-  it('«Cerrar sesión» está en el menú de usuario del header, no en el drawer', async () => {
+  it('«Cerrar sesión» está en el menú de usuario del header', async () => {
     renderLayout('phone');
-
-    fireEvent.click(screen.getByLabelText('Menú'));
-    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
-    fireEvent.click(screen.getByLabelText('Cerrar'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }));
     expect(await screen.findByRole('menuitem', { name: 'Cerrar sesión' })).toBeTruthy();
@@ -194,7 +187,7 @@ describe('TerrenoLayout', () => {
     expect(within(dialog).getAllByText('Ana Soto').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('en escritorio el SUPERVISOR no tiene botón Menú: el drawer no tendría nada que mostrar', () => {
+  it('en escritorio tampoco hay botón Menú', () => {
     renderLayout('desktop');
 
     expect(screen.queryByLabelText('Menú')).toBeNull();
