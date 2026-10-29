@@ -69,6 +69,9 @@ const EMPTY_ITEM: ItemFormValues = {
  * el cast es inevitable; es seguro porque los nombres de campo que toca este
  * componente existen en ambos esquemas — `ItemFormSchema` y
  * `ItemEditFormSchema` extienden `ItemCardSchema`.
+ *
+ * El Nº de parte NO está acá: al crear es ruido (se puede completar después),
+ * así que solo lo pide la edición — ver `EditItemModal`.
  */
 function ItemCardFields({
   control,
@@ -81,6 +84,9 @@ function ItemCardFields({
 }) {
   // El contenido por unidad solo tiene sentido si el ítem se cuenta en unidades.
   const porUnidad = useWatch({ control, name: 'unit' }) === 'UNIT';
+  // «Medido en» solo acompaña a un contenido escrito: un select de unidad de
+  // medida suelto, sin cantidad, no significa nada y confunde.
+  const conContenido = (useWatch({ control, name: 'contentPerUnit' }) ?? '').trim() !== '';
   return (
     <>
       <Controller
@@ -150,7 +156,7 @@ function ItemCardFields({
               }}
               value={field.value}
             >
-              <Label>Unidad</Label>
+              <Label>Se cuenta en</Label>
               <Select.Trigger>
                 <Select.Value />
                 <Select.Indicator />
@@ -190,104 +196,87 @@ function ItemCardFields({
                 onChange={field.onChange}
                 value={field.value}
               >
-                <Label>Contenido por unidad (opcional)</Label>
+                <Label>Cada unidad contiene (opcional)</Label>
                 <Input inputMode="decimal" placeholder="Ej.: 10 (bidón de 10 L)" />
                 {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
               </TextField>
             )}
           />
-          <Controller
-            control={control}
-            name="contentUnit"
-            render={({ field }) => (
-              <Select
-                fullWidth
-                name={field.name}
-                onChange={(value) => {
-                  if (value) field.onChange(value);
-                }}
-                value={field.value}
-              >
-                <Label>Se mide en</Label>
-                <Select.Trigger>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {CONTENT_UNITS.map((unit) => (
-                      <ListBox.Item id={unit} key={unit} textValue={UNIT_LABELS[unit]}>
-                        {UNIT_LABELS[unit]}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-            )}
-          />
+          {conContenido ? (
+            <Controller
+              control={control}
+              name="contentUnit"
+              render={({ field }) => (
+                <Select
+                  fullWidth
+                  name={field.name}
+                  onChange={(value) => {
+                    if (value) field.onChange(value);
+                  }}
+                  value={field.value}
+                >
+                  <Label>Medido en</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {CONTENT_UNITS.map((unit) => (
+                        <ListBox.Item id={unit} key={unit} textValue={UNIT_LABELS[unit]}>
+                          {UNIT_LABELS[unit]}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              )}
+            />
+          ) : null}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Controller
-          control={control}
-          name="categoryId"
-          render={({ field }) => (
-            <Select
-              fullWidth
-              name={field.name}
-              onChange={(value) => {
-                field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
-              }}
-              // El `Select` no maneja `''` como selección: se usa un centinela
-              // y se traduce a "sin categoría" al guardar.
-              value={field.value || NO_CATEGORY}
-            >
-              <Label>Categoría</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  <ListBox.Item id={NO_CATEGORY} textValue="Sin categoría">
-                    Sin categoría
+      <Controller
+        control={control}
+        name="categoryId"
+        render={({ field }) => (
+          <Select
+            fullWidth
+            name={field.name}
+            onChange={(value) => {
+              field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
+            }}
+            // El `Select` no maneja `''` como selección: se usa un centinela
+            // y se traduce a "sin categoría" al guardar.
+            value={field.value || NO_CATEGORY}
+          >
+            <Label>Categoría</Label>
+            <Select.Trigger>
+              <Select.Value />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                <ListBox.Item id={NO_CATEGORY} textValue="Sin categoría">
+                  Sin categoría
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                {categories.map((category) => (
+                  <ListBox.Item
+                    id={category.id}
+                    key={category.id}
+                    textValue={category.name}
+                  >
+                    {category.name}
                     <ListBox.ItemIndicator />
                   </ListBox.Item>
-                  {categories.map((category) => (
-                    <ListBox.Item
-                      id={category.id}
-                      key={category.id}
-                      textValue={category.name}
-                    >
-                      {category.name}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          )}
-        />
-
-        <Controller
-          control={control}
-          name="partNumber"
-          render={({ field }) => (
-            <TextField
-              fullWidth
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              value={field.value}
-            >
-              <Label>Nº de parte (opcional)</Label>
-              <Input placeholder="1R-0750" />
-            </TextField>
-          )}
-        />
-      </div>
+                ))}
+              </ListBox>
+            </Select.Popover>
+          </Select>
+        )}
+      />
 
       <Controller
         control={control}
@@ -552,6 +541,23 @@ export function EditItemModal({
                       categories={categories ?? []}
                       control={control as unknown as Control<ItemCardValues>}
                       errors={errors}
+                    />
+
+                    <Controller
+                      control={control}
+                      name="partNumber"
+                      render={({ field }) => (
+                        <TextField
+                          fullWidth
+                          name={field.name}
+                          onBlur={field.onBlur}
+                          onChange={field.onChange}
+                          value={field.value}
+                        >
+                          <Label>Nº de parte (opcional)</Label>
+                          <Input placeholder="1R-0750" />
+                        </TextField>
+                      )}
                     />
 
                     <SectionLabel>Stock mínimo por sucursal</SectionLabel>
