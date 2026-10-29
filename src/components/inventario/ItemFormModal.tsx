@@ -360,6 +360,9 @@ export function NewItemModal({
           contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
         )
       : null;
+  // Sin bodega activa la existencia inicial no tiene dónde entrar: se avisa en
+  // vez de dejar que el servidor responda con un error técnico.
+  const sinBodega = !branchId && existenciaNum != null && existenciaNum > 0;
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -409,7 +412,8 @@ export function NewItemModal({
                           value={field.value}
                         >
                           <Label>
-                            Existencia inicial en {branchName} ({UNIT_LABELS[unidad].toLowerCase()})
+                            Existencia inicial{branchName ? ` en ${branchName}` : ''} (
+                            {UNIT_LABELS[unidad].toLowerCase()})
                           </Label>
                           <Input inputMode="decimal" placeholder="0" />
                           {totalEquivalente ? (
@@ -426,12 +430,21 @@ export function NewItemModal({
                       )}
                     />
 
+                    {sinBodega ? (
+                      <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
+                        No hay ninguna bodega activa donde dejar la existencia.
+                        Crea el ítem con existencia 0 o pide que se active una
+                        bodega.
+                      </p>
+                    ) : null}
+
                     <p className="text-xs text-muted-foreground">
                       Se escribe en la unidad del ítem: con «Litros», 120 son
                       120 L; con «Unidades» y 10 L por unidad, 12 son 120 L. Queda
-                      registrada como una entrada por compra en {branchName}. El
-                      SKU se genera solo y el mínimo se fija después, desde las
-                      acciones del ítem.
+                      registrada como una entrada por compra
+                      {branchName ? ` en ${branchName}` : ''}. El SKU se genera
+                      solo y el mínimo se fija después, desde las acciones del
+                      ítem.
                     </p>
                   </form>
                 </Modal.Body>
@@ -441,6 +454,7 @@ export function NewItemModal({
                   </Button>
                   <Button
                     form="new-item-form"
+                    isDisabled={sinBodega}
                     isPending={createItem.isPending}
                     type="submit"
                   >

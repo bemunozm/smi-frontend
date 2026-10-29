@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isValidRut, normalizeRut } from './rut';
+import { formatRutInput, isValidRut, normalizeRut } from './rut';
 
 // Mismos casos verificados que `smi-backend/src/operators/rut.spec.ts` — este
 // archivo es un espejo byte-a-byte de esa validación (ver `lib/rut.ts`), así
@@ -51,5 +51,31 @@ describe('normalizeRut', () => {
   it('devuelve null si el RUT no es válido (a diferencia del backend, que lanza)', () => {
     expect(normalizeRut('12345678-9')).toBeNull();
     expect(normalizeRut('')).toBeNull();
+  });
+});
+
+describe('formatRutInput (mientras se escribe)', () => {
+  it('pone el guion y los puntos solos: se escriben solo los números', () => {
+    expect(formatRutInput('1')).toBe('1');
+    expect(formatRutInput('12')).toBe('1-2');
+    expect(formatRutInput('1234')).toBe('123-4');
+    expect(formatRutInput('12345')).toBe('1.234-5');
+    expect(formatRutInput('123456789')).toBe('12.345.678-9');
+  });
+
+  it('la K solo vale al final, en mayúscula', () => {
+    expect(formatRutInput('2222222k')).toBe('2.222.222-K');
+    expect(formatRutInput('12k34')).toBe('123-4');
+  });
+
+  it('reescribe lo pegado con otro formato y corta en 9 caracteres', () => {
+    expect(formatRutInput('12.345.678-9')).toBe('12.345.678-9');
+    expect(formatRutInput('12345678-5')).toBe('12.345.678-5');
+    expect(formatRutInput('1234567890')).toBe('12.345.678-9');
+  });
+
+  it('lo formateado sigue siendo válido para la validación y el backend', () => {
+    expect(isValidRut(formatRutInput('111111111'))).toBe(true);
+    expect(normalizeRut(formatRutInput('111111111'))).toBe('11111111-1');
   });
 });
