@@ -284,7 +284,7 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
 
               <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
                 <Label>Observaciones (opcional)</Label>
-                <TextArea rows={2} />
+                <TextArea placeholder=" " rows={2} />
               </TextField>
             </div>
           </Modal.Body>

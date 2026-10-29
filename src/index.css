@@ -268,6 +268,130 @@
   .description {
     color: var(--color-muted-foreground);
   }
+
+  /* ------------------------------------------------------------------
+     Labels flotantes (patrón GLOBAL de formularios)
+
+     El label vive DENTRO del recuadro: en reposo ocupa el centro (hace
+     de placeholder) y, al enfocar o cuando el campo tiene valor, sube a
+     la franja superior del MISMO recuadro con el look de label del
+     design system (uppercase, chico). El ejemplo real (placeholder)
+     recién aparece con el campo enfocado, para no chocar con el label.
+
+     Alcance: todo .textfield / .select / .combo-box que traiga <Label>.
+     Los campos SIN label (búsquedas, filtros de toolbar) no cambian.
+     Los Select flotan SIEMPRE (su trigger siempre muestra un valor).
+
+     Mecánica: esos wrappers son flex-col con el .label primero; acá se
+     saca del flujo (absolute, anclado al tope del wrapper = a la caja)
+     y el estado flotado se resuelve solo con CSS: :focus-within, o
+     :has(.input:not(:placeholder-shown)) cuando hay valor.
+
+     Degradación: un <Input> SIN `placeholder` nunca "muestra
+     placeholder", así que su label queda flotado fijo (estilo filled) —
+     se ve bien, solo pierde el estado de reposo. Para habilitar el
+     reposo basta `placeholder=" "`.
+
+     Opt-out: la clase `label-outside` en el componente (TextField/
+     Select/ComboBox) conserva el label clásico afuera del recuadro.
+     La usa DecimalField cuando lleva `labelAddon` (un chip no puede
+     flotar dentro del campo). */
+  .textfield:not(.label-outside):has(.label),
+  .select:not(.label-outside):has(.label),
+  .combo-box:not(.label-outside):has(.label) {
+    position: relative;
+  }
+
+  /* Caja 52px (4 más que el ritmo de 48px: el label flotado necesita su
+     franja superior). Igual se ahorra la fila externa de label. El
+     textarea conserva su alto por `rows` y solo gana la franja. */
+  .textfield:not(.label-outside):has(.label) .input,
+  .combo-box:not(.label-outside):has(.label) .input {
+    height: 52px;
+    padding-top: 22px;
+    padding-bottom: 6px;
+  }
+  .select:not(.label-outside):has(.label) .select__trigger {
+    min-height: 52px;
+    padding-top: 22px;
+    padding-bottom: 6px;
+  }
+  .textfield:not(.label-outside):has(.label) .textarea {
+    padding-top: 24px;
+    padding-bottom: 8px;
+  }
+
+  /* Reposo: el label hace de placeholder (14px, sin uppercase). El color
+     sale de --_label-color para que el estado inválido (más abajo) lo
+     pise sin pelear especificidad. */
+  .textfield:not(.label-outside) .label,
+  .select:not(.label-outside) .label,
+  .combo-box:not(.label-outside) .label {
+    position: absolute;
+    top: 15px;
+    left: 13px; /* px-3 del input + 1px de borde */
+    z-index: 1;
+    margin: 0;
+    max-width: calc(100% - 40px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--_label-color, var(--field-placeholder));
+    transition:
+      top 150ms var(--ease-smooth, ease),
+      font-size 150ms var(--ease-smooth, ease),
+      color 150ms var(--ease-smooth, ease);
+  }
+
+  /* El textarea no centra su contenido: el reposo acompaña a la primera
+     línea de texto (que arranca bajo la franja del label). */
+  .textfield:not(.label-outside):has(.textarea) .label {
+    top: 22px;
+  }
+
+  /* Flotado: sube dentro del recuadro y retoma el look de label del
+     design system, en chico (10px). */
+  .textfield:not(.label-outside):focus-within .label,
+  .textfield:not(.label-outside):has(.input:not(:placeholder-shown)) .label,
+  .textfield:not(.label-outside):has(.textarea:not(:placeholder-shown)) .label,
+  .combo-box:not(.label-outside):focus-within .label,
+  .combo-box:not(.label-outside):has(.input:not(:placeholder-shown)) .label,
+  .select:not(.label-outside) .label {
+    top: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--_label-color, var(--label-color));
+  }
+
+  /* El ejemplo (placeholder) aparece recién al enfocar: en reposo su
+     lugar lo ocupa el label. */
+  .textfield:not(.label-outside):has(.label) .input::placeholder,
+  .textfield:not(.label-outside):has(.label) .textarea::placeholder,
+  .combo-box:not(.label-outside):has(.label) .input::placeholder {
+    color: transparent;
+    transition: color 150ms var(--ease-smooth, ease);
+  }
+  .textfield:not(.label-outside):has(.label) .input:focus::placeholder,
+  .textfield:not(.label-outside):has(.label) .textarea:focus::placeholder,
+  .combo-box:not(.label-outside):has(.label) .input:focus::placeholder {
+    color: var(--field-placeholder);
+  }
+
+  /* Inválido: label rojo en cualquier estado (vía la custom property,
+     que hereda hacia el .label sin importar qué regla gane). */
+  .textfield[data-invalid='true'],
+  .textfield[aria-invalid='true'],
+  .select[data-invalid='true'],
+  .combo-box[data-invalid='true'] {
+    --_label-color: var(--danger);
+  }
 }
 
 /* ==========================================================================
@@ -303,5 +427,114 @@
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ==========================================================================
+   Labels flotantes del kit de Terreno — mismo patrón global de formularios
+   del bloque de arriba, portado a los componentes propios del kit
+   (`Campo`/`Input`/`Selector`/`SelectorBuscable`/`Textarea` de
+   components/terreno/ui.tsx). `Campo` pone `campo-flotante` cuando trae
+   label; `.campo-caja` es la caja (la constante INPUT de ui.tsx).
+
+   Igual que arriba: reposo = el label hace de placeholder dentro de la
+   caja; flota al enfocar o con valor; el placeholder real (y el
+   «Seleccioná…» del Selector) aparece recién con foco. El chip
+   «Obligatorio» acompaña al label en los dos estados.
+   ========================================================================== */
+@layer components {
+  /* La caja hace lugar a la franja del label. Los hijos centrados (chevrons
+     de Selector/SelectorBuscable) se centran respecto del área de contenido
+     ya corrida, así que acompañan al texto sin reglas extra. */
+  .campo-flotante .campo-caja {
+    padding-top: 18px;
+    padding-bottom: 4px;
+  }
+  .campo-flotante textarea.campo-caja {
+    padding-top: 26px;
+    padding-bottom: 10px;
+  }
+
+  /* Reposo: hace de placeholder (15px, sin uppercase). El color vive en
+     --_campo-label para que el estado con error lo pise sin pelear
+     especificidad con las variantes :has de abajo. */
+  .campo-flotante__label {
+    position: absolute;
+    top: 15px;
+    left: 15px; /* px-3.5 de la caja + 1.5px de borde */
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100% - 48px);
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--_campo-label, var(--color-muted-foreground));
+    transition:
+      top 150ms ease,
+      font-size 150ms ease,
+      color 150ms ease;
+  }
+  .campo-flotante__texto {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* El textarea no centra su contenido: el reposo acompaña a la primera
+     línea (que arranca bajo la franja del label). */
+  .campo-flotante:has(textarea) .campo-flotante__label {
+    top: 26px;
+  }
+
+  /* Flotado: foco, valor escrito, u opción elegida en el Selector (la
+     `.campo-valor` pierde data-placeholder al haber selección). Retoma el
+     look de label del kit (uppercase bold tracking amplio), en chico. */
+  .campo-flotante:focus-within .campo-flotante__label,
+  .campo-flotante:has(input:not(:placeholder-shown)) .campo-flotante__label,
+  .campo-flotante:has(textarea:not(:placeholder-shown)) .campo-flotante__label,
+  .campo-flotante:has(.campo-valor:not([data-placeholder])) .campo-flotante__label {
+    top: 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--_campo-label, var(--label-color));
+  }
+
+  /* Con error (texto rojo abajo), el label acompaña en rojo. */
+  .campo-flotante[data-invalido='true'] {
+    --_campo-label: var(--danger);
+  }
+
+  /* El placeholder real aparece recién al enfocar: en reposo su lugar lo
+     ocupa el label. Se esconde con OPACITY y no con color: el color de
+     estos placeholders viene de utilities de Tailwind
+     (placeholder:text-muted-foreground en SelectorBuscable, el span
+     text-muted-foreground del Selector), y la capa utilities le gana a
+     esta capa components sin importar la especificidad — una regla de
+     color acá no pega nunca. La opacidad no la toca ninguna utility. */
+  .campo-flotante input::placeholder,
+  .campo-flotante textarea::placeholder {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .campo-flotante input:focus::placeholder,
+  .campo-flotante textarea:focus::placeholder {
+    opacity: 1;
+  }
+  /* …y el «Seleccioná…» del Selector se comporta igual que un placeholder. */
+  .campo-flotante:not(:focus-within) .campo-valor[data-placeholder] span {
+    opacity: 0;
+  }
+
+  /* El sufijo de unidad (`h`, `L`, `km`) baja junto con el texto, que ya no
+     está centrado en la caja sino bajo la franja del label. */
+  .campo-flotante .campo-unidad {
+    top: calc(50% + 7px);
   }
 }

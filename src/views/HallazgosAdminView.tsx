@@ -392,7 +392,7 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
                 value={descripcion}
               >
                 <Label>Descripción</Label>
-                <TextArea rows={3} />
+                <TextArea placeholder="Qué se encontró y dónde…" rows={3} />
               </TextField>
             </div>
           </Modal.Body>

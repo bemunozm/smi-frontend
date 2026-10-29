@@ -281,7 +281,7 @@ export function Hint({ children }: { children: ReactNode }) {
 }
 
 const INPUT =
-  'h-[52px] w-full rounded-2xl border-[1.5px] border-[var(--line2,#c3c9d1)] bg-card px-3.5 text-base text-foreground focus:border-[var(--accent)] focus:outline-3 focus:outline-[rgba(29,78,216,.18)]';
+  'campo-caja h-[52px] w-full rounded-2xl border-[1.5px] border-[var(--line2,#c3c9d1)] bg-card px-3.5 text-base text-foreground focus:border-[var(--accent)] focus:outline-3 focus:outline-[rgba(29,78,216,.18)]';
 
 /**
  * Campo con su etiqueta y, si hace falta, una ayuda debajo.
@@ -327,12 +327,28 @@ export function Campo({
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      {label && (
-        <label htmlFor={children.props.id ?? idCampo}>
-          <Label requerido={requerido}>{label}</Label>
-        </label>
-      )}
-      {unidad ? (
+      {label ? (
+        // Label flotante: vive DENTRO de la caja (`campo-flotante` en
+        // index.css — mismo patrón global de formularios del lado admin).
+        // El <label> sigue asociado al control por htmlFor; con
+        // pointer-events:none el toque pasa derecho a la caja.
+        <span className="campo-flotante relative block" data-invalido={error ? 'true' : undefined}>
+          <label className="campo-flotante__label" htmlFor={children.props.id ?? idCampo}>
+            <span className="campo-flotante__texto">{label}</span>
+            {requerido && (
+              <em className="shrink-0 rounded-md bg-[var(--danger-soft)] px-1.5 py-px text-[10.5px] font-normal tracking-[0.06em] text-[var(--danger)] not-italic">
+                Obligatorio
+              </em>
+            )}
+          </label>
+          {control}
+          {unidad && (
+            <span className="campo-unidad tabular pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-muted-foreground">
+              {unidad}
+            </span>
+          )}
+        </span>
+      ) : unidad ? (
         <span className="relative block">
           {control}
           <span className="tabular pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-muted-foreground">
@@ -380,6 +396,9 @@ export function Input({
     <input
       {...props}
       inputMode={modo}
+      // El " " habilita el estado de reposo del label flotante (ver
+      // `campo-flotante` en index.css): sin placeholder quedaría flotado fijo.
+      placeholder={props.placeholder ?? ' '}
       className={`${INPUT} ${esNumero ? 'tabular pr-11 text-[17px]' : ''} ${className}`}
     />
   );
@@ -491,7 +510,7 @@ export function Selector({
       <AriaButton
         className={`${INPUT} flex cursor-pointer items-center gap-2 pr-3 text-left outline-none data-[focus-visible]:border-[var(--accent)] data-[focus-visible]:outline-3 data-[focus-visible]:outline-[rgba(29,78,216,.18)] group-data-[open]:border-[var(--accent)]`}
       >
-        <SelectValue className="min-w-0 flex-1 truncate">
+        <SelectValue className="campo-valor min-w-0 flex-1 truncate">
           {() =>
             elegida ? (
               <>
@@ -650,7 +669,13 @@ export function SelectorBuscable({
 }
 
 export function Textarea({ className = '', ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${INPUT} h-auto min-h-[84px] resize-y py-3 leading-snug ${className}`} />;
+  return (
+    <textarea
+      {...props}
+      placeholder={props.placeholder ?? ' '}
+      className={`${INPUT} h-auto min-h-[84px] resize-y py-3 leading-snug ${className}`}
+    />
+  );
 }
 
 /* ---------- Botones ---------- */
