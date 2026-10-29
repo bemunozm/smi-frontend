@@ -72,8 +72,12 @@ export function DecimalField({
     onChange(numero);
   };
 
+  // Con `labelAddon` el label queda afuera (clásico): el chip que lo acompaña
+  // no puede flotar dentro del recuadro — ver `label-outside` en index.css.
+  const clases = labelAddon ? `label-outside ${className ?? ''}`.trim() : className;
+
   return (
-    <TextField className={className} fullWidth isDisabled={isDisabled} isInvalid={isInvalid} onChange={escribir} value={texto}>
+    <TextField className={clases} fullWidth isDisabled={isDisabled} isInvalid={isInvalid} onChange={escribir} value={texto}>
       {labelAddon ? (
         <div className="flex flex-wrap items-center gap-2">
           <Label>{label}</Label>
@@ -86,7 +90,9 @@ export function DecimalField({
         inputMode={entero ? 'numeric' : 'decimal'}
         onBlur={onBlur}
         onFocus={(event) => event.currentTarget.select()}
-        placeholder={placeholder}
+        // El " " habilita el estado de reposo del label flotante (ver
+        // index.css): sin atributo placeholder quedaría flotado fijo.
+        placeholder={placeholder ?? ' '}
       />
       {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
       {[warning, entero ? null : avisoDeAgrupacion(texto)].map((aviso, i) =>
