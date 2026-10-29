@@ -1212,7 +1212,7 @@ export function RegistroEquipoView() {
           <div className="overflow-hidden rounded-2xl border border-border">
             <div className="flex items-center justify-between gap-2.5 px-3.5 py-3 text-white" style={{ background: 'var(--terreno-head)' }}>
               <div>
-                <b className="block text-sm">Transportes Optimiza SPA</b>
+                <b className="block text-sm">SIMA SPA</b>
                 <span className="text-[11.5px] tracking-[0.1em] text-white/65 uppercase">
                   Reporte de salida de turno
                 </span>
@@ -1265,7 +1265,7 @@ export function RegistroEquipoView() {
             <Mail className="h-[18px] w-[18px] shrink-0 text-foreground" />
             <span>
               <b className="text-foreground">Destinatarios:</b> la administración (aviso en el sistema y correo con
-              el PDF adjunto). Nunca a los clientes finales de Optimiza.
+              el PDF adjunto). Nunca a los clientes finales de SIMA.
             </span>
           </div>
 
