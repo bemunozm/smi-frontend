@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { EQUIPMENT_STATUS } from './equipment';
+
 /**
  * Schemas Zod del dominio Mantenimiento — espejo del contrato real de
  * `smi-backend` (endpoints `/api/mantenimiento/*`, en construcción en
@@ -152,6 +154,10 @@ export const UpdateOrdenSchema = z.object({
   asignadoAId: z.string().nullable().optional(),
   prioridad: z.enum(PRIORIDAD_OT).optional(),
   titulo: z.string().optional(),
+  /** Cómo queda la unidad al cerrar ("Finalizar tarea"): el backend la
+   * actualiza en Flota en la misma transacción. Solo junto a `estado:
+   * COMPLETADA` — fuera de ese cruce responde 400. */
+  equipmentStatus: z.enum(EQUIPMENT_STATUS).optional(),
 });
 export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 

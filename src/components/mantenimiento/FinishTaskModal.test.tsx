@@ -130,10 +130,16 @@ function submitForm() {
   fireEvent.submit(form);
 }
 
+/** La declaración obligatoria de cómo queda la unidad al cerrar. */
+function elegirComoQueda(opcion: 'Operativo' | 'Inoperativo' = 'Operativo') {
+  fireEvent.click(screen.getByRole('button', { name: opcion }));
+}
+
 describe('FinishTaskModal', () => {
   it('un horómetro no tocado NO se envía (no inventa una lectura 0 del medidor)', async () => {
     openModal();
     fillDetalle();
+    elegirComoQueda();
     submitForm();
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
@@ -164,6 +170,7 @@ describe('FinishTaskModal', () => {
   it('el payload del cierre lleva la bodega de faena aunque no sea la primera de la lista', async () => {
     openModal();
     fillDetalle();
+    elegirComoQueda();
     submitForm();
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
@@ -214,6 +221,7 @@ describe('FinishTaskModal', () => {
     expect(screen.queryByRole('option', { name: /AC-1540/ })).toBeNull();
     fireEvent.click(opcion);
 
+    elegirComoQueda();
     submitForm();
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
     const { intervencion } = mutateMock.mock.calls[0][0] as {
@@ -260,5 +268,53 @@ describe('FinishTaskModal', () => {
 
     await waitFor(() => expect(screen.getByText('El insumo es obligatorio')).toBeTruthy());
     expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('cómo queda el equipo parte SIN elección: guardar sin declararlo muestra error y no cierra', async () => {
+    openModal();
+    fillDetalle();
+    // Ninguna de las dos opciones viene marcada.
+    expect(screen.getByRole('button', { name: 'Operativo' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Inoperativo' }).getAttribute('aria-pressed')).toBe('false');
+    submitForm();
+
+    await waitFor(() => expect(screen.getByText('Indica cómo queda el equipo.')).toBeTruthy());
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+
+  it('con Inoperativo elegido, el cierre viaja con OUT_OF_SERVICE (sacar piezas deja la unidad abajo)', async () => {
+    openModal();
+    fillDetalle();
+    elegirComoQueda('Inoperativo');
+    submitForm();
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    const call = mutateMock.mock.calls[0][0] as { equipmentStatus?: string };
+    expect(call.equipmentStatus).toBe('OUT_OF_SERVICE');
+  });
+
+  it('con Operativo elegido, el cierre viaja con OPERATIONAL', async () => {
+    openModal();
+    fillDetalle();
+    elegirComoQueda('Operativo');
+    submitForm();
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    const call = mutateMock.mock.calls[0][0] as { equipmentStatus?: string };
+    expect(call.equipmentStatus).toBe('OPERATIONAL');
+  });
+
+  it('equipo de la OT sin unidad en Flota: no se pide estado y el cierre no lo manda', async () => {
+    // `equipoId` es texto libre: sin match en Flota no hay unidad que actualizar.
+    render(<FinishTaskModal equipment={[]} orden={ORDEN} />);
+    fireEvent.click(screen.getByRole('button', { name: /Finalizar tarea/ }));
+    fillDetalle();
+
+    expect(screen.queryByText('¿Cómo queda el equipo?')).toBeNull();
+    submitForm();
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+    const call = mutateMock.mock.calls[0][0] as { equipmentStatus?: string };
+    expect(call.equipmentStatus).toBeUndefined();
   });
 });

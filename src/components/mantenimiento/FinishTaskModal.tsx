@@ -15,6 +15,7 @@ import {
   Input,
   Label,
   ModalTerreno,
+  Segmentado,
   SelectorBuscable,
   Textarea,
 } from '../terreno/ui';
@@ -26,7 +27,8 @@ import {
   type CreateIntervencionInput,
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
-import { equipmentLabel, type EquipmentRef } from './workshop';
+import type { EquipmentStatus } from '../../types/equipment';
+import { equipmentLabel, findEquipment, type EquipmentRef } from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 /**
@@ -47,6 +49,13 @@ export function FinishTaskModal({
   const [abierto, setAbierto] = useState(false);
   // Misma captura de foto que los hallazgos de Terreno (EXIF, sin OCR).
   const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
+  // Cómo queda la unidad al cerrar. Parte SIN elección y es OBLIGATORIA: acá
+  // se hacen operaciones para sacar piezas que dejan el equipo inoperativo, y
+  // ese dato no puede quedar marcado "operativo" por un default descuidado.
+  // Solo aplica si el `equipoId` libre de la OT resuelve a una unidad de Flota.
+  const unidad = findEquipment(orden.equipoId, equipment);
+  const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
+  const [errorEquipoFinal, setErrorEquipoFinal] = useState<string | null>(null);
 
   const {
     control,
@@ -80,12 +89,23 @@ export function FinishTaskModal({
   const cerrar = () => setAbierto(false);
 
   const onSubmit = (values: CreateIntervencionInput): void => {
+    if (unidad && !equipoFinal) {
+      setErrorEquipoFinal('Indica cómo queda el equipo.');
+      return;
+    }
     finishTask.mutate(
-      { orden, intervencion: values, foto: foto.file },
+      {
+        orden,
+        intervencion: values,
+        foto: foto.file,
+        ...(unidad && equipoFinal ? { equipmentStatus: equipoFinal } : {}),
+      },
       {
         onSuccess: () => {
           reset();
           foto.handleClearPhoto();
+          setEquipoFinal('');
+          setErrorEquipoFinal(null);
           cerrar();
         },
       },
@@ -266,6 +286,26 @@ export function FinishTaskModal({
                 </Campo>
               )}
             />
+
+            {unidad && (
+              <div className="flex flex-col gap-1.5">
+                <Label requerido>¿Cómo queda el equipo?</Label>
+                <Campo error={errorEquipoFinal}>
+                  <Segmentado<EquipmentStatus | ''>
+                    etiqueta="¿Cómo queda el equipo?"
+                    opciones={[
+                      { valor: 'OPERATIONAL', label: 'Operativo', colorActivo: '#15803d' },
+                      { valor: 'OUT_OF_SERVICE', label: 'Inoperativo', colorActivo: '#b91c1c' },
+                    ]}
+                    valor={equipoFinal}
+                    onChange={(valor) => {
+                      setEquipoFinal(valor);
+                      setErrorEquipoFinal(null);
+                    }}
+                  />
+                </Campo>
+              </div>
+            )}
           </Form>
 
           <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
