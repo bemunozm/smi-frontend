@@ -26,6 +26,7 @@ import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { ActionTile } from '../components/ActionTile';
 import { usePermissions } from '../hooks/usePermissions';
 import { RECURSOS_DE_OPERADORES } from '../lib/pending-resources';
+import { formatRutInput } from '../lib/rut';
 import {
   useCreateOperator,
   useDeleteOperator,
@@ -123,11 +124,12 @@ function CreateOperatorModal() {
                             isInvalid={!!errors.rut}
                             name={field.name}
                             onBlur={field.onBlur}
-                            onChange={field.onChange}
+                            onChange={(valor) => field.onChange(formatRutInput(valor))}
                             value={field.value}
                           >
                             <Label>RUT (opcional)</Label>
-                            <Input placeholder="12.345.678-9" />
+                            <Input autoCapitalize="characters" placeholder="12.345.678-9" />
+                            <span className="text-xs text-muted-foreground">El guion y los puntos se ponen solos. Si termina en K, escríbela al final.</span>
                             {errors.rut ? <FieldError>{errors.rut.message}</FieldError> : null}
                           </TextField>
                         )}
@@ -173,7 +175,8 @@ function EditOperatorModal({ operator, isOpen, onOpenChange }: OperatorModalProp
     formState: { errors },
   } = useForm<OperatorFormValues>({
     resolver: zodResolver(OperatorFormSchema),
-    values: { name: operator.name, rut: operator.rut ?? '', isActive: operator.isActive },
+    // Se muestra con el mismo formato que al escribirlo (12.345.678-9).
+    values: { name: operator.name, rut: formatRutInput(operator.rut ?? ''), isActive: operator.isActive },
   });
 
   return (
@@ -231,11 +234,12 @@ function EditOperatorModal({ operator, isOpen, onOpenChange }: OperatorModalProp
                           isInvalid={!!errors.rut}
                           name={field.name}
                           onBlur={field.onBlur}
-                          onChange={field.onChange}
+                          onChange={(valor) => field.onChange(formatRutInput(valor))}
                           value={field.value}
                         >
                           <Label>RUT (opcional)</Label>
-                          <Input placeholder="12.345.678-9" />
+                          <Input autoCapitalize="characters" placeholder="12.345.678-9" />
+                          <span className="text-xs text-muted-foreground">El guion y los puntos se ponen solos. Si termina en K, escríbela al final.</span>
                           {errors.rut ? <FieldError>{errors.rut.message}</FieldError> : null}
                         </TextField>
                       )}

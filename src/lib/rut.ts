@@ -55,3 +55,19 @@ export function normalizeRut(raw: string): string | null {
   const value = clean(raw);
   return `${value.slice(0, -1)}-${value.slice(-1)}`;
 }
+
+/**
+ * Formato mientras se escribe: `123456789` → `12.345.678-9`. Pone solo el
+ * guion antes del último carácter y los puntos de miles, así en el celular se
+ * escriben solo los números (y la K al final, si corresponde). La K solo vale
+ * como dígito verificador: en otra posición se descarta. Máximo 9 caracteres.
+ */
+export function formatRutInput(raw: string): string {
+  const limpio = raw.toUpperCase().replace(/[^0-9K]/g, '');
+  // La K solo puede ir al final (es el dígito verificador).
+  const sinK = limpio.slice(0, -1).replace(/K/g, '') + limpio.slice(-1);
+  const valor = sinK.slice(0, 9);
+  if (valor.length < 2) return valor;
+  const cuerpo = valor.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${cuerpo}-${valor.slice(-1)}`;
+}
