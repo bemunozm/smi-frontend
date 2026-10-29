@@ -304,17 +304,20 @@ describe('FinishTaskModal', () => {
     expect(call.equipmentStatus).toBe('OPERATIONAL');
   });
 
-  it('equipo de la OT sin unidad en Flota: no se pide estado y el cierre no lo manda', async () => {
-    // `equipoId` es texto libre: sin match en Flota no hay unidad que actualizar.
+  it('aunque el equipo de la OT no resuelva en Flota, la declaración aparece, se exige y viaja', async () => {
+    // `equipoId` es texto libre y la lista de Flota puede no haber cargado:
+    // quien resuelve la unidad es el BACKEND (por id o código interno). La
+    // declaración no puede desaparecer en silencio del formulario.
     render(<FinishTaskModal equipment={[]} orden={ORDEN} />);
     fireEvent.click(screen.getByRole('button', { name: /Finalizar tarea/ }));
     fillDetalle();
 
-    expect(screen.queryByText('¿Cómo queda el equipo?')).toBeNull();
+    expect(screen.getByText('¿Cómo queda el equipo?')).toBeTruthy();
+    elegirComoQueda('Inoperativo');
     submitForm();
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
     const call = mutateMock.mock.calls[0][0] as { equipmentStatus?: string };
-    expect(call.equipmentStatus).toBeUndefined();
+    expect(call.equipmentStatus).toBe('OUT_OF_SERVICE');
   });
 });

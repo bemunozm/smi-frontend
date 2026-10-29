@@ -28,7 +28,7 @@ import {
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
 import type { EquipmentStatus } from '../../types/equipment';
-import { equipmentLabel, findEquipment, type EquipmentRef } from './workshop';
+import { equipmentLabel, type EquipmentRef } from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 /**
@@ -52,8 +52,9 @@ export function FinishTaskModal({
   // Cómo queda la unidad al cerrar. Parte SIN elección y es OBLIGATORIA: acá
   // se hacen operaciones para sacar piezas que dejan el equipo inoperativo, y
   // ese dato no puede quedar marcado "operativo" por un default descuidado.
-  // Solo aplica si el `equipoId` libre de la OT resuelve a una unidad de Flota.
-  const unidad = findEquipment(orden.equipoId, equipment);
+  // Se muestra SIEMPRE: el `equipoId` libre lo resuelve el BACKEND (por id o
+  // código interno) al aplicarlo — la lista local de Flota puede no haber
+  // cargado y la declaración no puede desaparecer en silencio.
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
   const [errorEquipoFinal, setErrorEquipoFinal] = useState<string | null>(null);
 
@@ -89,7 +90,7 @@ export function FinishTaskModal({
   const cerrar = () => setAbierto(false);
 
   const onSubmit = (values: CreateIntervencionInput): void => {
-    if (unidad && !equipoFinal) {
+    if (!equipoFinal) {
       setErrorEquipoFinal('Indica cómo queda el equipo.');
       return;
     }
@@ -98,7 +99,7 @@ export function FinishTaskModal({
         orden,
         intervencion: values,
         foto: foto.file,
-        ...(unidad && equipoFinal ? { equipmentStatus: equipoFinal } : {}),
+        equipmentStatus: equipoFinal,
       },
       {
         onSuccess: () => {
@@ -287,25 +288,23 @@ export function FinishTaskModal({
               )}
             />
 
-            {unidad && (
-              <div className="flex flex-col gap-1.5">
-                <Label requerido>¿Cómo queda el equipo?</Label>
-                <Campo error={errorEquipoFinal}>
-                  <Segmentado<EquipmentStatus | ''>
-                    etiqueta="¿Cómo queda el equipo?"
-                    opciones={[
-                      { valor: 'OPERATIONAL', label: 'Operativo', colorActivo: '#15803d' },
-                      { valor: 'OUT_OF_SERVICE', label: 'Inoperativo', colorActivo: '#b91c1c' },
-                    ]}
-                    valor={equipoFinal}
-                    onChange={(valor) => {
-                      setEquipoFinal(valor);
-                      setErrorEquipoFinal(null);
-                    }}
-                  />
-                </Campo>
-              </div>
-            )}
+            <div className="flex flex-col gap-1.5">
+              <Label requerido>¿Cómo queda el equipo?</Label>
+              <Campo error={errorEquipoFinal}>
+                <Segmentado<EquipmentStatus | ''>
+                  etiqueta="¿Cómo queda el equipo?"
+                  opciones={[
+                    { valor: 'OPERATIONAL', label: 'Operativo', colorActivo: '#15803d' },
+                    { valor: 'OUT_OF_SERVICE', label: 'Inoperativo', colorActivo: '#b91c1c' },
+                  ]}
+                  valor={equipoFinal}
+                  onChange={(valor) => {
+                    setEquipoFinal(valor);
+                    setErrorEquipoFinal(null);
+                  }}
+                />
+              </Campo>
+            </div>
           </Form>
 
           <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
