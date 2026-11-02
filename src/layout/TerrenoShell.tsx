@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
 import type { Key } from '@heroui/react';
-import { LayoutDashboard, LogOut, UserRound } from 'lucide-react';
+import { Download, LayoutDashboard, LogOut, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { NotificationBell } from '../components/notifications/NotificationBell';
@@ -13,6 +13,7 @@ import { roleChipColor } from '../config/role-colors';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useInstalarApp } from '../pwa/install-prompt';
 import { ROLES, type Role } from '../types/roles';
 import { CONTAINER } from './terreno-container';
 
@@ -64,6 +65,7 @@ function MenuUsuario({
   role,
   onPerfil,
   onIrAlPanel,
+  onInstalar,
   onCerrarSesion,
 }: {
   user: { name?: string; email?: string } | null;
@@ -71,11 +73,14 @@ function MenuUsuario({
   onPerfil: () => void;
   /** Solo ADMIN; sin él, la opción no aparece. */
   onIrAlPanel?: () => void;
+  /** Solo si la app aún no está instalada y se puede instalar. */
+  onInstalar?: () => void;
   onCerrarSesion: () => void;
 }) {
   const handleAction = (key: Key): void => {
     if (key === 'profile') onPerfil();
     if (key === 'panel') onIrAlPanel?.();
+    if (key === 'install') onInstalar?.();
     if (key === 'logout') onCerrarSesion();
   };
 
@@ -115,6 +120,12 @@ function MenuUsuario({
             <Dropdown.Item id="panel" textValue="Ir al panel">
               <LayoutDashboard aria-hidden size={15} />
               <Label>Ir al panel</Label>
+            </Dropdown.Item>
+          ) : null}
+          {onInstalar ? (
+            <Dropdown.Item id="install" textValue="Instalar app">
+              <Download aria-hidden size={15} />
+              <Label>Instalar app</Label>
             </Dropdown.Item>
           ) : null}
           <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
@@ -171,6 +182,13 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
   const enLinea = useOnlineStatus();
   const navigate = useNavigate();
   const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
+  const instalarApp = useInstalarApp();
+  // Con diálogo del sistema se abre directo; en iPhone/iPad vuelve el aviso
+  // con los pasos (ver `pwa/install-prompt.ts`).
+  const abrirInstalar = (): void => {
+    if (instalarApp.modo === 'nativo') void instalarApp.instalar();
+    else instalarApp.reabrir();
+  };
 
   /**
    * Los destinos viven en UN solo lugar según el tamaño: barra inferior en
@@ -247,6 +265,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
               role={role}
               onPerfil={() => setPerfilAbierto(true)}
               onIrAlPanel={ofreceIrAlPanel ? () => void navigate('/') : undefined}
+              onInstalar={instalarApp.modo ? abrirInstalar : undefined}
               onCerrarSesion={requestLogout}
             />
           </div>
