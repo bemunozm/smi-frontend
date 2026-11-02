@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   contextoTurno,
+  esTurnoPasado,
   fechaCorta,
   fechaDeTurno,
   fromDateOnly,
@@ -194,5 +195,36 @@ describe('puedeAdelantarTurno', () => {
   it('fuera de ambas ventanas (media tarde, madrugada) es false', () => {
     expect(puedeAdelantarTurno(local(2026, 9, 24, 14, 0))).toBe(false);
     expect(puedeAdelantarTurno(local(2026, 9, 24, 2, 0))).toBe(false);
+  });
+});
+
+describe('esTurnoPasado', () => {
+  it('ayer (ambos turnos) es pasado', () => {
+    const reloj = contextoTurno(local(2026, 11, 2, 12, 0)); // DIURNO del 02-11
+    expect(esTurnoPasado(local(2026, 11, 1, 0, 0), 'DIURNO', reloj)).toBe(true);
+    expect(esTurnoPasado(local(2026, 11, 1, 0, 0), 'NOCTURNO', reloj)).toBe(true);
+  });
+
+  it('el DIURNO de hoy es pasado cuando el reloj va en el NOCTURNO (21:00)', () => {
+    const reloj = contextoTurno(local(2026, 11, 2, 21, 0)); // NOCTURNO del 02-11
+    expect(esTurnoPasado(local(2026, 11, 2, 0, 0), 'DIURNO', reloj)).toBe(true);
+  });
+
+  it('el turno vigente NO es pasado', () => {
+    const diurno = contextoTurno(local(2026, 11, 2, 12, 0));
+    expect(esTurnoPasado(local(2026, 11, 2, 0, 0), 'DIURNO', diurno)).toBe(false);
+    const nocturno = contextoTurno(local(2026, 11, 2, 21, 0));
+    expect(esTurnoPasado(local(2026, 11, 2, 0, 0), 'NOCTURNO', nocturno)).toBe(false);
+  });
+
+  it('mañana no es pasado', () => {
+    const reloj = contextoTurno(local(2026, 11, 2, 12, 0));
+    expect(esTurnoPasado(local(2026, 11, 3, 0, 0), 'DIURNO', reloj)).toBe(false);
+  });
+
+  it('de madrugada (reloj en el NOCTURNO de ayer): el DIURNO de ayer es pasado, su NOCTURNO no', () => {
+    const reloj = contextoTurno(local(2026, 11, 2, 2, 0)); // NOCTURNO del 01-11
+    expect(esTurnoPasado(local(2026, 11, 1, 0, 0), 'DIURNO', reloj)).toBe(true);
+    expect(esTurnoPasado(local(2026, 11, 1, 0, 0), 'NOCTURNO', reloj)).toBe(false);
   });
 });
