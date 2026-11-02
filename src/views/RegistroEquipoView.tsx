@@ -201,7 +201,9 @@ export function RegistroEquipoView() {
                 setApertura((a) => ({
                   ...a,
                   equipoId: id,
-                  horometro: formatDecimalInput(eq?.currentHourmeter, 1),
+                  // En modo pasado NO se precarga la lectura actual: para un
+                  // turno viejo siempre estaría mal (ver `sinPrefill`).
+                  horometro: modoPasado ? '' : formatDecimalInput(eq?.currentHourmeter, 1),
                 }));
               }}
               opciones={disponibles.map((e) => ({
@@ -209,6 +211,9 @@ export function RegistroEquipoView() {
                 titulo: e.internalCode,
                 detalle: e.type,
                 ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
+                // Elegible solo porque el día elegido es pasado (el backend
+                // relaja la misma regla); el aviso evita la sorpresa.
+                ...(esDiaPasado && e.status !== 'OPERATIONAL' ? { aviso: 'No operativo hoy' } : {}),
               }))}
             />
           </Campo>

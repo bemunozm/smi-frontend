@@ -626,6 +626,22 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Las camionetas no se cargan para días pasados.')).toBeTruthy();
     });
 
+    it('en modo pasado, elegir un equipo NO precarga el horómetro actual', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      fireEvent.click(screen.getByLabelText('Equipo'));
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /PE-009/ }));
+
+      const updater = setApertura.mock.calls.at(-1)![0] as (a: {
+        equipoId: string;
+        operatorId: string;
+        horometro: string;
+      }) => { horometro: string };
+      expect(updater({ equipoId: '', operatorId: '', horometro: '4218,7' })).toMatchObject({
+        horometro: '',
+      });
+    });
+
     it('el diálogo avisa qué tiene ya registrado el turno elegido', () => {
       resumenTurnoPasado = [
         {
