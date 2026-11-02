@@ -4,6 +4,7 @@ import { useAhora } from './useAhora';
 import { clearTurnoOverride, readTurnoOverride, saveTurnoOverride } from '../lib/shift-turno-override';
 import {
   contextoTurno,
+  esTurnoPasado,
   etiquetaTurno,
   fechaCorta,
   puedeAdelantarTurno,
@@ -18,13 +19,18 @@ export interface UseTurnoSelectorResult {
   ctx: ContextoTurno;
   anterior: { turno: Turno; fecha: Date };
   /** `'siguiente'` cuando el supervisor se adelantó un turno respecto del
-   * reloj (ver `lib/shift-turno-override.ts`). */
-  turnoSeleccion: 'reloj' | 'siguiente';
+   * reloj (ver `lib/shift-turno-override.ts`); `'pasado'` mientras registra
+   * un turno que ya terminó (carga histórica, estado SOLO en memoria). */
+  turnoSeleccion: 'reloj' | 'siguiente' | 'pasado';
   /** El turno al que se adelantaría `avanzarTurno()` — para el label del
    * botón. */
   siguienteTurno: Turno;
   avanzarTurno: () => void;
   volverTurnoActual: () => void;
+  /** Entra al modo "registrar un turno pasado" con el par elegido. Un par
+   * que no es estrictamente anterior al turno vigente se ignora (no-op):
+   * el vigente se registra en el modo normal. */
+  elegirTurnoPasado: (fecha: Date, turno: Turno) => void;
   /** Si el botón de adelantar turno debe mostrarse — solo dentro de la
    * ventana previa al cambio (`lib/turno.ts#puedeAdelantarTurno`) o
    * mientras el override ya está activo (para poder volver). Fuera de eso
@@ -59,6 +65,11 @@ export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorRe
   // hook después de que se adelantó el turno en Registro, y no deben pintar un
   // instante el turno del reloj antes de corregirse.
   const [overrideActivo, setOverrideActivo] = useState(() => overrideVigente(userId, clockCtx));
+  // Modo "registrar un turno pasado" — SOLO en memoria, nunca localStorage:
+  // recargar la página o salir de la vista vuelve al turno del reloj. Es la
+  // protección principal contra dejar el modo pegado y cargar las tarjetas
+  // de mañana en una fecha vieja.
+  const [pasado, setPasado] = useState<{ fecha: Date; turno: Turno } | null>(null);
   useEffect(() => {
     if (!userId) return;
     const vigente = overrideVigente(userId, clockCtx);
@@ -70,19 +81,28 @@ export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorRe
   // Memoizado: sin esto, `ctx` sería un objeto NUEVO en cada render mientras
   // `overrideActivo` es true, y arrastraría a re-computar de más los
   // `useMemo` que dependen de `ctx` en `useShiftProjection`/`useExitReportState`.
-  const ctx: ContextoTurno = useMemo(
-    () =>
-      overrideActivo
-        ? {
-            turno: siguiente.turno,
-            fecha: siguiente.fecha,
-            etiqueta: etiquetaTurno(siguiente.turno),
-            fechaCorta: fechaCorta(siguiente.fecha),
-            fechaHora: clockCtx.fechaHora,
-          }
-        : clockCtx,
-    [overrideActivo, siguiente, clockCtx],
-  );
+  const ctx: ContextoTurno = useMemo(() => {
+    // El modo pasado manda sobre el adelanto guardado: mientras dura la
+    // carga histórica, el ctx es el turno elegido.
+    if (pasado) {
+      return {
+        turno: pasado.turno,
+        fecha: pasado.fecha,
+        etiqueta: etiquetaTurno(pasado.turno),
+        fechaCorta: fechaCorta(pasado.fecha),
+        fechaHora: clockCtx.fechaHora,
+      };
+    }
+    return overrideActivo
+      ? {
+          turno: siguiente.turno,
+          fecha: siguiente.fecha,
+          etiqueta: etiquetaTurno(siguiente.turno),
+          fechaCorta: fechaCorta(siguiente.fecha),
+          fechaHora: clockCtx.fechaHora,
+        }
+      : clockCtx;
+  }, [pasado, overrideActivo, siguiente, clockCtx]);
 
   // Botón "adelantar turno": solo dentro de la ventana previa al cambio, o
   // si el override ya está activo (para poder volver) — un toque accidental
@@ -98,6 +118,11 @@ export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorRe
   const volverTurnoActual = () => {
     if (userId) clearTurnoOverride(userId);
     setOverrideActivo(false);
+    setPasado(null);
+  };
+  const elegirTurnoPasado = (fecha: Date, turno: Turno) => {
+    if (!esTurnoPasado(fecha, turno, clockCtx)) return;
+    setPasado({ fecha, turno });
   };
 
   const anterior = useMemo(() => turnoAnterior(ctx.turno, ctx.fecha), [ctx]);
@@ -105,10 +130,11 @@ export function useTurnoSelector(userId: string | undefined): UseTurnoSelectorRe
   return {
     ctx,
     anterior,
-    turnoSeleccion: overrideActivo ? 'siguiente' : 'reloj',
+    turnoSeleccion: pasado ? 'pasado' : overrideActivo ? 'siguiente' : 'reloj',
     siguienteTurno: siguiente.turno,
     avanzarTurno,
     volverTurnoActual,
+    elegirTurnoPasado,
     mostrarSelectorTurno,
   };
 }

@@ -14,7 +14,7 @@ import { useTurnoSelector } from './useTurnoSelector';
 import type { EstadoReporte, TarjetaTurno } from './shift-register-helpers';
 import type { OutboxLastError } from '../offline/db';
 import type { ResultadoAdBlue } from '../lib/adblue';
-import type { ContextoTurno, Turno } from '../lib/turno';
+import { toDateOnly, type ContextoTurno, type Turno } from '../lib/turno';
 import type { UsePhotoCaptureFlowResult } from '../lib/usePhotoCaptureFlow';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
@@ -48,13 +48,20 @@ export interface UseShiftRegisterResult {
   ctx: ContextoTurno;
   anterior: { turno: Turno; fecha: Date };
   /** `'siguiente'` cuando el supervisor se adelantó un turno respecto del
-   * reloj (ver `lib/shift-turno-override.ts`). */
-  turnoSeleccion: 'reloj' | 'siguiente';
+   * reloj (ver `lib/shift-turno-override.ts`); `'pasado'` mientras registra
+   * un turno que ya terminó (carga histórica). */
+  turnoSeleccion: 'reloj' | 'siguiente' | 'pasado';
   /** El turno al que se adelantaría `avanzarTurno()` — para el label del
    * botón. */
   siguienteTurno: Turno;
   avanzarTurno: () => void;
   volverTurnoActual: () => void;
+  /** Entra al modo "registrar un turno pasado" — ver `useTurnoSelector`. */
+  elegirTurnoPasado: (fecha: Date, turno: Turno) => void;
+  /** El ctx elegido cae en un día de negocio ANTERIOR a hoy — misma
+   * condición que relaja "equipo no operativo" en el backend. En el DIURNO
+   * de hoy ya pasado es `false` y rigen las reglas normales. */
+  esDiaPasado: boolean;
   /** Si el botón de adelantar turno debe mostrarse — solo dentro de la
    * ventana previa al cambio (`lib/turno.ts#puedeAdelantarTurno`) o
    * mientras el override ya está activo (para poder volver). Fuera de eso
@@ -160,6 +167,11 @@ export function useShiftRegister(): UseShiftRegisterResult {
   const veTodo = role === ROLES.ADMIN;
 
   const turno = useTurnoSelector(user?.id);
+  const modoPasado = turno.turnoSeleccion === 'pasado';
+  // Día de negocio estrictamente anterior a hoy — la misma condición del
+  // backend (`isPastBusinessDay`): el DIURNO de hoy elegido a las 21:00 es
+  // "pasado" como turno, pero NO relaja las reglas de equipo no operativo.
+  const esDiaPasado = modoPasado && toDateOnly(turno.ctx.fecha) < toDateOnly(new Date());
   const proyeccion = useShiftProjection({
     ctx: turno.ctx,
     equipos,
@@ -168,8 +180,14 @@ export function useShiftRegister(): UseShiftRegisterResult {
     ops,
     supervisor,
     userId: user?.id,
+    incluirNoOperativos: esDiaPasado,
   });
-  const apertura = useAperturaForm({ disponibles: proyeccion.disponibles, ctx: turno.ctx, userId: user?.id });
+  const apertura = useAperturaForm({
+    disponibles: proyeccion.disponibles,
+    ctx: turno.ctx,
+    userId: user?.id,
+    sinPrefill: modoPasado,
+  });
   const aperturaLiviano = useAperturaForm({
     disponibles: proyeccion.disponiblesLivianos,
     ctx: turno.ctx,
@@ -197,6 +215,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
 
   return {
     ...turno,
+    esDiaPasado,
     supervisor,
     veTodo,
     disponibles: proyeccion.disponibles,
