@@ -1164,7 +1164,7 @@ export function RegistroEquipoView() {
       {modoPasado && (
         <section
           role="status"
-          className="mb-4 flex flex-col gap-2 rounded-2xl border-[1.5px] border-[#e2b64b] bg-[#fdf3d7] px-4 py-3 text-[#5c470f]"
+          className="mb-4 flex flex-col gap-2 rounded-2xl border-[1.5px] border-[var(--warning)] bg-[var(--warning-soft)] px-4 py-3 text-[var(--warning-soft-foreground)]"
         >
           <div className="text-[15px] font-bold">
             Registrando turno pasado: {ctx.turno} · {ctx.fechaCorta}
@@ -1182,7 +1182,7 @@ export function RegistroEquipoView() {
           <button
             type="button"
             onClick={volverTurnoActual}
-            className="inline-flex min-h-[40px] w-fit cursor-pointer items-center rounded-xl bg-[#5c470f] px-3.5 text-[13.5px] font-semibold text-white"
+            className="inline-flex min-h-[40px] w-fit cursor-pointer items-center rounded-xl bg-[var(--warning)] px-3.5 text-[13.5px] font-semibold text-[var(--warning-foreground)]"
           >
             Volver al turno actual
           </button>

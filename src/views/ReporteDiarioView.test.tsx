@@ -333,6 +333,22 @@ describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () =
     });
   });
 
+  it('si el envío falla (p. ej. 409 del backend), el formulario conserva lo elegido', () => {
+    // MUTATE no invoca `onSuccess` (así se ve un fallo desde la vista: el
+    // mensaje del backend lo muestra el hook como toast — mockeado acá).
+    render(<ReporteDiarioView />);
+
+    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
+      target: { value: '2026-09-20' },
+    });
+    fireEvent.click(screen.getByText('Enviar reporte diario'));
+
+    expect(MUTATE).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText('Fecha del reporte') as HTMLInputElement).value).toBe(
+      '2026-09-20',
+    );
+  });
+
   it('si el turno elegido ya está en el historial, el envío queda deshabilitado', () => {
     // REPORTES_MOCK trae el DIURNO del 2026-09-22 ya reportado.
     render(<ReporteDiarioView />);
