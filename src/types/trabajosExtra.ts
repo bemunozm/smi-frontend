@@ -41,6 +41,11 @@ export const trabajoExtraFormSchema = z
     otraActividad: z.string().optional(),
     descripcion: z.string().min(3, 'Describí la tarea'),
     observaciones: z.string().optional(),
+    /** `YYYY-MM-DD` del trabajo — por defecto hoy; una fecha pasada es la
+     * carga histórica. Solo viaja al backend cuando difiere de hoy (ver
+     * `useRegistrarTrabajoExtra`): así los registros del día conservan la
+     * hora real de captura. */
+    fecha: z.string().optional(),
   })
   .refine((d) => Number(d.horometroFinal) >= Number(d.horometroInicial), {
     message: 'El horómetro final debe ser ≥ inicial',
@@ -61,7 +66,7 @@ export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
 /** Body de `POST /api/trabajos-extra` y payload del outbox: el formulario
  * validado + `id` (clave de idempotencia, uuid v4 del cliente) + `capturedAt`
- * (hora del dispositivo). */
+ * (hora del dispositivo). `fecha` solo viaja cuando difiere de hoy. */
 export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
   id: string;
   capturedAt: string;

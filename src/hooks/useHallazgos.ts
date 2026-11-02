@@ -17,6 +17,7 @@ import { HALLAZGOS_KEY } from '../lib/query-keys';
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
+import { toDateOnly } from '../lib/turno';
 import { enqueueCreateHallazgo } from '../offline/outbox';
 import type { EditHallazgoBody, Hallazgo, HallazgoForm } from '../types/hallazgos';
 
@@ -55,6 +56,11 @@ export function useRegistrarHallazgo(): UseRegistrarHallazgoResult {
           descripcion: values.descripcion,
           prioridad: values.prioridad,
           capturedAt: new Date().toISOString(),
+          // Solo cuando difiere de hoy (carga histórica): el registro del
+          // día conserva la hora real de captura en el backend.
+          ...(values.fecha && values.fecha !== toDateOnly(new Date())
+            ? { fecha: values.fecha }
+            : {}),
         },
         foto ?? undefined,
       );
