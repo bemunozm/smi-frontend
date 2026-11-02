@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, Minus, Pencil, Plus, Thermometer, Trash2, Wrench, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import {
   ENTRADA_VACIA,
@@ -26,7 +27,6 @@ import {
   ChipContexto,
   Input,
   Label,
-  Segmentado,
   Selector,
   Textarea,
   VistaHead,
@@ -46,8 +46,6 @@ import { usePermissions } from '../hooks/usePermissions';
 import { fmtNum } from '../lib/format';
 import { fechaCorta, fromDateOnly, toDateOnly } from '../lib/turno';
 import {
-  ENTRY_STATUSES,
-  entryStatusLabel,
   pideFoto,
   type ChecklistItem,
   type DailyChecklistSummary,
@@ -61,6 +59,20 @@ const COLOR_ESTADO: Record<EntryStatus, string> = {
   CHECKED: '#15803d',
   NOT_CHECKED: '#6b7280',
 };
+
+/**
+ * Los tres estados con texto corto e ícono: «Se hizo mantención» partía el
+ * botón en dos líneas en el celular. El supervisor sigue viendo el texto largo
+ * (`entryStatusLabel`) al validar.
+ */
+const ESTADOS: { valor: EntryStatus; label: string; icon: LucideIcon }[] = [
+  { valor: 'MAINTAINED', label: 'Mantención', icon: Wrench },
+  { valor: 'CHECKED', label: 'Revisado', icon: Check },
+  { valor: 'NOT_CHECKED', label: 'No revisado', icon: Minus },
+];
+
+/** Lo que dura el abrir/cerrar de una fila (la clase `duration-200`). */
+const ANIMACION_MS = 200;
 
 /**
  * Checklist diario del mantenedor (Módulo 2 · R23 + R24). Elige el equipo,
@@ -161,6 +173,44 @@ export function ChecklistDiarioView() {
       ...prev,
       [itemId]: { ...(prev[itemId] ?? ENTRADA_VACIA), ...cambio },
     }));
+
+  // Acordeón: una fila abierta a la vez. Sin tocar nada, la primera.
+  const [abierto, setAbierto] = useState<string | null | undefined>(undefined);
+  const abiertoId = abierto === undefined ? (lista[0]?.id ?? null) : abierto;
+  const marcados = lista.filter((i) => entradas[i.id]?.status).length;
+
+  /** Abre una fila y, cuando terminó de abrirse, la deja a la vista. */
+  const abrir = (id: string | null) => {
+    setAbierto(id);
+    if (id) {
+      window.setTimeout(
+        () => document.getElementById(`item-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }),
+        ANIMACION_MS + 30,
+      );
+    }
+  };
+
+  /** El siguiente ítem sin marcar o incompleto después de `desde` (y si no, desde el principio). */
+  const siguientePendiente = (desde: string | null, estado: Record<string, EntradaForm> = entradas) => {
+    const i = desde ? lista.findIndex((it) => it.id === desde) : -1;
+    const orden = [...lista.slice(i + 1), ...lista.slice(0, Math.max(i, 0))];
+    const falta = (it: ChecklistItem) => !estado[it.id]?.status || pendientesItem(it, estado[it.id]).length > 0;
+    return orden.find(falta)?.id ?? null;
+  };
+
+  /**
+   * Al marcar un estado que no pide nada más («Revisado» sin temperatura, «No
+   * revisado»), la fila se cierra y se abre la siguiente pendiente: un toque
+   * por ítem. Si pide algo (qué se hizo, foto, temperatura), queda abierta.
+   */
+  const marcar = (item: ChecklistItem, status: EntryStatus) => {
+    const nueva = { ...(entradas[item.id] ?? ENTRADA_VACIA), status };
+    cambiar(item.id, { status });
+    if (pendientesItem(item, nueva).length === 0) {
+      abrir(siguientePendiente(item.id, { ...entradas, [item.id]: nueva }));
+    }
+  };
+  const proximo = siguientePendiente(null);
 
   const onEnviar = () => {
     if (motivos.length > 0) return;
@@ -274,22 +324,60 @@ export function ChecklistDiarioView() {
           <p className="text-sm text-muted-foreground">Cargando la planilla…</p>
         </Card>
       ) : (
-        <>
-          {lista.map((item) => (
-            <ItemChecklist
-              key={item.id}
-              entrada={entradas[item.id] ?? ENTRADA_VACIA}
-              item={item}
-              opcionesInsumo={opcionesInsumo}
-              onChange={(cambio) => cambiar(item.id, cambio)}
-            />
-          ))}
-        </>
+        <Card className="!px-0 !py-0 overflow-hidden">
+          <div className="px-4 pt-[18px] pb-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-[17px] leading-tight font-bold tracking-[-0.01em]">Ítems</h2>
+              <span className="tabular text-[15px] font-bold" aria-label={`${marcados} de ${lista.length} marcados`}>
+                {marcados}
+                <span className="font-medium text-muted-foreground">/{lista.length}</span>
+              </span>
+            </div>
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[#eef0f2]">
+              <div
+                className="h-full rounded-full bg-[#15803d] transition-[width] duration-300"
+                style={{ width: lista.length ? `${(marcados / lista.length) * 100}%` : '0%' }}
+              />
+            </div>
+            <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Camera aria-hidden className="h-3.5 w-3.5 text-[var(--danger)]" /> Crítico: foto si se hace mantención
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Thermometer aria-hidden className="h-3.5 w-3.5 text-[#0369a1]" /> Pide temperatura
+              </span>
+            </p>
+          </div>
+          <ul className="divide-y divide-border border-t border-border">
+            {lista.map((item) => (
+              <FilaChecklist
+                key={item.id}
+                abierta={abiertoId === item.id}
+                entrada={entradas[item.id] ?? ENTRADA_VACIA}
+                item={item}
+                opcionesInsumo={opcionesInsumo}
+                onAbrir={() => abrir(abiertoId === item.id ? null : item.id)}
+                onChange={(cambio) => cambiar(item.id, cambio)}
+                onMarcar={(status) => marcar(item, status)}
+              />
+            ))}
+          </ul>
+        </Card>
       )}
 
       {/* Barra de envío: las fotos obligatorias y por qué todavía no se puede. */}
       <div className="sticky bottom-3 z-10">
         <Card className="flex flex-col gap-3">
+          {lista.length > 0 && proximo && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[14px] font-semibold">
+                <span className="tabular">{marcados}</span> de <span className="tabular">{lista.length}</span> marcados
+              </span>
+              <Boton className="min-h-[40px] px-3.5 text-[13.5px]" variante="contorno" onClick={() => abrir(proximo)}>
+                Ir al pendiente
+              </Boton>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             {fotos.obligatorias === 0 ? (
               <span className="text-[14px] text-muted-foreground">
@@ -333,91 +421,179 @@ export function ChecklistDiarioView() {
   );
 }
 
-function ItemChecklist({
+/** Ícono del estado en la fila cerrada: se ve cómo quedó sin abrirla. */
+function IconoEstado({ estado, falta }: { estado: EntryStatus | null; falta: boolean }) {
+  if (!estado) {
+    return <span aria-hidden className="h-7 w-7 shrink-0 rounded-full border-2 border-dashed border-[#c4c9d0]" />;
+  }
+  const Icon = ESTADOS.find((e) => e.valor === estado)?.icon ?? Check;
+  return (
+    <span
+      aria-hidden
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white"
+      style={{ background: falta ? 'var(--danger)' : COLOR_ESTADO[estado] }}
+    >
+      <Icon className="h-4 w-4" strokeWidth={2.6} />
+    </span>
+  );
+}
+
+/**
+ * Un ítem de la planilla como fila de acordeón: cerrada muestra el nombre y
+ * cómo quedó; al tocarla se abre hacia abajo con los estados y, según el
+ * estado, qué se hizo, insumos, temperatura, nota y fotos.
+ *
+ * El panel queda montado aunque esté cerrado (oculto e `inert`) para que
+ * abrir y cerrar se animen igual (filas de grid `0fr` ↔ `1fr`).
+ */
+function FilaChecklist({
   item,
   entrada,
+  abierta,
   opcionesInsumo,
+  onAbrir,
+  onMarcar,
   onChange,
 }: {
   item: ChecklistItem;
   entrada: EntradaForm;
+  abierta: boolean;
   opcionesInsumo: OpcionSelector[];
+  onAbrir: () => void;
+  onMarcar: (status: EntryStatus) => void;
   onChange: (cambio: Partial<EntradaForm>) => void;
 }) {
   const declarada = entrada.status === 'MAINTAINED' || entrada.status === 'CHECKED';
   const faltan = pendientesItem(item, entrada);
+  const estado = ESTADOS.find((e) => e.valor === entrada.status);
+  const panel = `panel-${item.id}`;
   return (
-    <Card className={faltan.length ? 'ring-2 ring-[var(--danger)]' : ''}>
-      <div id={`item-${item.id}`} className="mb-3 flex scroll-mt-24 flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-[16.5px] leading-tight font-bold">{item.name}</h2>
-        {item.requiresPhoto && <Chip tono="danger">Crítico · foto si hay mantención</Chip>}
-        {item.requiresTemperature && <Chip tono="info">Temperatura</Chip>}
-      </div>
-      {faltan.length > 0 && (
-        <p className="mb-3 text-[13px] font-semibold text-[var(--danger)]" role="status">
-          {faltan.join(' · ')}
-        </p>
-      )}
-      <Segmentado<EntryStatus | ''>
-        etiqueta={`Estado de ${item.name}`}
-        opciones={ENTRY_STATUSES.map((s) => ({
-          valor: s,
-          label: entryStatusLabel[s],
-          colorActivo: COLOR_ESTADO[s],
-        }))}
-        valor={entrada.status ?? ''}
-        onChange={(status) => onChange({ status: status || null })}
-      />
+    <li id={`item-${item.id}`} className="scroll-mt-28">
+      <button
+        type="button"
+        aria-controls={panel}
+        aria-expanded={abierta}
+        onClick={onAbrir}
+        className={`flex min-h-[62px] w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors ${
+          abierta ? 'bg-[#f5f6f8]' : 'active:bg-[#f5f6f8]'
+        }`}
+      >
+        <IconoEstado estado={entrada.status} falta={faltan.length > 0} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 text-[15.5px] leading-tight font-semibold">
+            {item.name}
+            {item.requiresPhoto && (
+              <Camera aria-label="crítico, foto si hay mantención" className="h-4 w-4 shrink-0 text-[var(--danger)]" role="img" />
+            )}
+            {item.requiresTemperature && (
+              <Thermometer aria-label="pide temperatura" className="h-4 w-4 shrink-0 text-[#0369a1]" role="img" />
+            )}
+          </span>
+          {faltan.length > 0 ? (
+            <span className="text-[12.5px] font-semibold text-[var(--danger)]">{faltan.join(' · ')}</span>
+          ) : estado ? (
+            <span className="text-[12.5px] font-semibold" style={{ color: COLOR_ESTADO[estado.valor] }}>
+              {estado.label}
+            </span>
+          ) : (
+            <span className="text-[12.5px] text-muted-foreground">Sin marcar</span>
+          )}
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 ${abierta ? 'rotate-180' : ''}`}
+        />
+      </button>
 
-      {declarada && (
-        <div className="mt-3.5 flex flex-col gap-3.5">
-          {entrada.status === 'MAINTAINED' && (
-            <Campo label="¿Qué se hizo?" requerido>
-              <Textarea
-                placeholder="Describe la mantención realizada…"
-                value={entrada.description}
-                onChange={(e) => onChange({ description: e.target.value })}
-              />
-            </Campo>
-          )}
-          {item.requiresTemperature && (
-            <Campo
-              error={noEsNumero(entrada.temperature) ? 'No es un número válido.' : undefined}
-              hint="La que marca la salida del aire."
-              label="Temperatura"
-              requerido
-              unidad="°C"
+      <div
+        id={panel}
+        aria-hidden={!abierta}
+        inert={!abierta}
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          abierta ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div
+            className={`bg-[#f5f6f8] px-4 pt-1 pb-4 transition-opacity duration-200 ${abierta ? 'opacity-100' : 'opacity-0'}`}
+          >
+            <div
+              role="group"
+              aria-label={`Estado de ${item.name}`}
+              className="grid grid-cols-3 gap-1.5 rounded-2xl bg-[#e6e9ed] p-1"
             >
-              <Input
-                numerico
-                value={entrada.temperature}
-                onChange={(e) => onChange({ temperature: soloNumero(e.target.value, { negativo: true }) })}
-              />
-            </Campo>
-          )}
-          {entrada.status === 'MAINTAINED' && (
-            <Insumos
-              opciones={opcionesInsumo}
-              supplies={entrada.supplies}
-              onChange={(supplies) => onChange({ supplies })}
-            />
-          )}
-          <Campo label="Nota">
-            <Textarea
-              className="min-h-[64px]"
-              placeholder="Opcional"
-              value={entrada.note}
-              onChange={(e) => onChange({ note: e.target.value })}
-            />
-          </Campo>
-          <Fotos
-            fotos={entrada.photos}
-            requerida={pideFoto(item, entrada.status)}
-            onChange={(photos) => onChange({ photos })}
-          />
+              {ESTADOS.map((e) => {
+                const activo = entrada.status === e.valor;
+                const Icon = e.icon;
+                return (
+                  <button
+                    key={e.valor}
+                    type="button"
+                    aria-pressed={activo}
+                    onClick={() => onMarcar(e.valor)}
+                    className={`flex min-h-[56px] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl text-[13.5px] leading-none font-semibold transition-colors ${
+                      activo ? 'text-white shadow-[0_1px_3px_rgba(20,23,28,.18)]' : 'bg-white/60 text-[#3a414b]'
+                    }`}
+                    style={activo ? { background: COLOR_ESTADO[e.valor] } : undefined}
+                  >
+                    <Icon aria-hidden className="h-[18px] w-[18px]" strokeWidth={2.4} />
+                    {e.label}
+                  </button>
+                );
+              })}
+            </div>
+            {declarada && (
+              <div className="mt-3.5 flex flex-col gap-3.5">
+                {entrada.status === 'MAINTAINED' && (
+                  <Campo label="¿Qué se hizo?" requerido>
+                    <Textarea
+                      placeholder="Describe la mantención realizada…"
+                      value={entrada.description}
+                      onChange={(e) => onChange({ description: e.target.value })}
+                    />
+                  </Campo>
+                )}
+                {item.requiresTemperature && (
+                  <Campo
+                    error={noEsNumero(entrada.temperature) ? 'No es un número válido.' : undefined}
+                    hint="La que marca la salida del aire."
+                    label="Temperatura"
+                    requerido
+                    unidad="°C"
+                  >
+                    <Input
+                      numerico
+                      value={entrada.temperature}
+                      onChange={(e) => onChange({ temperature: soloNumero(e.target.value, { negativo: true }) })}
+                    />
+                  </Campo>
+                )}
+                {entrada.status === 'MAINTAINED' && (
+                  <Insumos
+                    opciones={opcionesInsumo}
+                    supplies={entrada.supplies}
+                    onChange={(supplies) => onChange({ supplies })}
+                  />
+                )}
+                <Campo label="Nota">
+                  <Textarea
+                    className="min-h-[64px]"
+                    placeholder="Opcional"
+                    value={entrada.note}
+                    onChange={(e) => onChange({ note: e.target.value })}
+                  />
+                </Campo>
+                <Fotos
+                  fotos={entrada.photos}
+                  requerida={pideFoto(item, entrada.status)}
+                  onChange={(photos) => onChange({ photos })}
+                />
+              </div>
+            )}
+          </div>
         </div>
-      )}
-    </Card>
+      </div>
+    </li>
   );
 }
 

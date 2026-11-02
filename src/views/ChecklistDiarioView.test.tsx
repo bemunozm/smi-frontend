@@ -41,6 +41,9 @@ vi.mock('../components/mantenimiento/insumos-faena', () => ({
   useInsumosFaena: () => ({ faenaBranch: { id: 'faena' }, opcionesInsumo: [] }),
 }));
 
+/** La fila del acordeón de un ítem (el botón que la abre y la cierra). */
+const fila = (nombre: string) => screen.getByRole('button', { name: new RegExp(`^${nombre}`) });
+
 afterEach(() => {
   puedeEnviar = true;
   cleanup();
@@ -55,25 +58,28 @@ describe('ChecklistDiarioView', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Aire acondicionado' })).toBeTruthy();
-    expect(screen.getByText('Crítico · foto si hay mantención')).toBeTruthy();
+    expect(fila('Aire acondicionado')).toBeTruthy();
+    expect(screen.getByText('Crítico: foto si se hace mantención')).toBeTruthy();
+    expect(screen.getByLabelText('0 de 2 marcados')).toBeTruthy();
     const enviar = screen.getByRole('button', { name: 'Enviar al supervisor' }) as HTMLButtonElement;
     expect(enviar.disabled).toBe(true);
     expect(screen.getByText('· Elige el equipo.')).toBeTruthy();
 
-    // «Se revisó» en un crítico no pide foto; «Se hizo mantención» sí.
+    // La primera fila parte abierta. «Revisado» en un crítico no pide foto;
+    // «Mantención» sí.
     const estados = screen.getByRole('group', { name: 'Estado de Aire acondicionado' });
-    fireEvent.click(within(estados).getByRole('button', { name: 'Se revisó' }));
+    fireEvent.click(within(estados).getByRole('button', { name: 'Revisado' }));
     expect(screen.getByLabelText(/Temperatura/)).toBeTruthy();
     expect(screen.queryByText(/falta la foto obligatoria/)).toBeNull();
-    fireEvent.click(within(estados).getByRole('button', { name: 'Se hizo mantención' }));
+    fireEvent.click(within(estados).getByRole('button', { name: 'Mantención' }));
     expect(screen.getByText('· «Aire acondicionado»: falta la foto obligatoria de la mantención.')).toBeTruthy();
     expect(screen.getByText('Fotos obligatorias:', { exact: false })).toBeTruthy();
 
     // Cada ítem se marca por separado (el marcado masivo se quitó a pedido
     // del administrador): al marcar el que faltaba, el motivo desaparece.
+    fireEvent.click(fila('Espejos'));
     const espejos = screen.getByRole('group', { name: 'Estado de Espejos' });
-    fireEvent.click(within(espejos).getByRole('button', { name: 'No se revisó' }));
+    fireEvent.click(within(espejos).getByRole('button', { name: 'No revisado' }));
     expect(screen.queryByText(/ítems por marcar|Falta marcar/)).toBeNull();
     expect(mutate).not.toHaveBeenCalled();
   });
@@ -98,13 +104,56 @@ describe('ChecklistDiarioView', () => {
       </MemoryRouter>,
     );
 
-    // La sección de fotos del ítem aparece al marcar «Se hizo mantención».
+    // La sección de fotos del ítem aparece al marcar «Mantención».
     const estados = screen.getByRole('group', { name: 'Estado de Aire acondicionado' });
-    fireEvent.click(within(estados).getByRole('button', { name: 'Se hizo mantención' }));
+    fireEvent.click(within(estados).getByRole('button', { name: 'Mantención' }));
     expect(screen.getByRole('button', { name: /Agregar foto/ })).toBeTruthy();
 
     const input = document.querySelector('input[type="file"]');
     expect(input?.getAttribute('capture')).toBe('environment');
+  });
+
+  it('es una sola lista en acordeón: una fila abierta a la vez, las cerradas fuera del árbol accesible', () => {
+    render(
+      <MemoryRouter>
+        <ChecklistDiarioView />
+      </MemoryRouter>,
+    );
+
+    expect(fila('Aire acondicionado').getAttribute('aria-expanded')).toBe('true');
+    expect(fila('Espejos').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('group', { name: 'Estado de Espejos' })).toBeNull();
+
+    fireEvent.click(fila('Espejos'));
+    expect(fila('Espejos').getAttribute('aria-expanded')).toBe('true');
+    expect(fila('Aire acondicionado').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('al marcar un estado que no pide nada más, se cierra y abre la siguiente pendiente', () => {
+    render(
+      <MemoryRouter>
+        <ChecklistDiarioView />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(fila('Espejos'));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Estado de Espejos' })).getByRole('button', { name: 'Revisado' }),
+    );
+
+    // Espejos quedó listo; el aire acondicionado sigue sin marcar y se abre.
+    expect(fila('Espejos').getAttribute('aria-expanded')).toBe('false');
+    expect(fila('Espejos').textContent).toContain('Revisado');
+    expect(fila('Aire acondicionado').getAttribute('aria-expanded')).toBe('true');
+
+    // «Revisado» en el aire pide temperatura: no avanza, queda abierto.
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Estado de Aire acondicionado' })).getByRole('button', {
+        name: 'Revisado',
+      }),
+    );
+    expect(fila('Aire acondicionado').getAttribute('aria-expanded')).toBe('true');
+    expect(fila('Aire acondicionado').textContent).toContain('Falta temperatura');
   });
 
   it('si la sesión no es de mantenedor, dice por qué no puede enviar', () => {
