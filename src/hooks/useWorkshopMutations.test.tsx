@@ -92,6 +92,27 @@ describe('useFinishTask', () => {
     });
   });
 
+  it('el estado declarado del equipo viaja en el MISMO PATCH del cierre (equipmentStatus)', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }, 'op-intervencion'));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
+
+    const { result } = renderHook(() => useFinishTask(), { wrapper });
+    result.current.mutate({
+      orden: ORDEN,
+      intervencion: INTERVENCION_INPUT,
+      equipmentStatus: 'OUT_OF_SERVICE',
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [, second] = submitWriteMock.mock.calls;
+    expect(second[0]).toBe('orden.update');
+    expect(second[1]).toEqual({
+      params: { id: 'ot-1' },
+      body: { estado: 'COMPLETADA', equipmentStatus: 'OUT_OF_SERVICE' },
+      dependsOn: ['op-intervencion'],
+    });
+  });
+
   it('la foto del cierre viaja como archivo del write de la intervención (el replay inyecta fotoKey)', async () => {
     submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }));
     submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }));

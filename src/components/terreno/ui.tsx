@@ -723,8 +723,26 @@ export function Segmentado<T extends string>({
   opciones: { valor: T; label: string; sub?: string; colorActivo?: string }[];
   etiqueta: string;
 }) {
+  // Índice de la opción activa: -1 (nada elegido, p. ej. una declaración
+  // obligatoria sin preselección) simplemente no dibuja la píldora.
+  const indiceActivo = opciones.findIndex((o) => o.valor === valor);
+  const n = opciones.length;
   return (
-    <div role="group" aria-label={etiqueta} className="grid auto-cols-fr grid-flow-col gap-1.5 rounded-2xl bg-[#eef0f2] p-1">
+    <div role="group" aria-label={etiqueta} className="relative grid auto-cols-fr grid-flow-col gap-1.5 rounded-2xl bg-[#eef0f2] p-1">
+      {/* UNA píldora que se desliza y cambia de color entre opciones: el
+          cambio de elección se lee como movimiento, no como un parpadeo de
+          fondos. 8px = padding horizontal (p-1); 6px = gap-1.5. */}
+      {indiceActivo >= 0 && (
+        <span
+          aria-hidden
+          className="absolute top-1 bottom-1 left-1 rounded-xl shadow-[0_1px_3px_rgba(20,23,28,.14)] transition-[transform,background-color] duration-200 ease-out motion-reduce:transition-none"
+          style={{
+            width: `calc((100% - 8px - ${(n - 1) * 6}px) / ${n})`,
+            transform: `translateX(calc(${indiceActivo * 100}% + ${indiceActivo * 6}px))`,
+            background: opciones[indiceActivo].colorActivo ?? '#fff',
+          }}
+        />
+      )}
       {opciones.map((o) => {
         const activo = o.valor === valor;
         return (
@@ -733,14 +751,14 @@ export function Segmentado<T extends string>({
             type="button"
             aria-pressed={activo}
             onClick={() => onChange(o.valor)}
-            className={`flex min-h-[46px] cursor-pointer flex-col items-center justify-center rounded-xl text-[14.5px] leading-tight font-semibold ${
-              activo ? 'text-foreground shadow-[0_1px_3px_rgba(20,23,28,.14)]' : 'text-[#3a414b]'
+            className={`relative z-[1] flex min-h-[46px] cursor-pointer flex-col items-center justify-center rounded-xl text-[14.5px] leading-tight font-semibold transition-colors duration-200 motion-reduce:transition-none ${
+              activo ? 'text-foreground' : 'text-[#3a414b]'
             }`}
-            style={activo ? { background: o.colorActivo ?? '#fff', color: o.colorActivo ? '#fff' : undefined } : undefined}
+            style={activo && o.colorActivo ? { color: '#fff' } : undefined}
           >
             {o.label}
             {o.sub && (
-              <small className={`tabular text-[11.5px] font-medium ${activo && o.colorActivo ? 'text-white/70' : 'text-muted-foreground'}`}>
+              <small className={`tabular text-[11.5px] font-medium transition-colors duration-200 motion-reduce:transition-none ${activo && o.colorActivo ? 'text-white/70' : 'text-muted-foreground'}`}>
                 {o.sub}
               </small>
             )}
