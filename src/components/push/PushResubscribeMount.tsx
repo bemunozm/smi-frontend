@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { resubscribeIfOptedIn } from '../../lib/push-device';
+import { useInstalarApp } from '../../pwa/install-prompt';
+import { InstallAppBanner } from '../pwa/InstallAppBanner';
 import { PushInvitationBanner } from './PushInvitationBanner';
 
 /**
@@ -19,6 +21,7 @@ import { PushInvitationBanner } from './PushInvitationBanner';
 export function PushResubscribeMount() {
   const { user, isAuthenticated, isOfflineSnapshot } = useCurrentUser();
   const userId = isAuthenticated && !isOfflineSnapshot ? (user?.id ?? null) : null;
+  const { invitar: invitarInstalar } = useInstalarApp();
 
   useEffect(() => {
     if (!userId) return;
@@ -27,9 +30,11 @@ export function PushResubscribeMount() {
 
   // El banner de invitación vive acá por la misma razón que la resuscripción:
   // un solo punto que cubre AppLayout y Terreno. Él mismo decide si mostrarse.
+  // Primero se invita a instalar (en iPhone el push solo funciona instalada);
+  // el de notificaciones espera a que ese aviso se resuelva, nunca los dos.
   return (
     <>
-      <PushInvitationBanner />
+      {invitarInstalar ? <InstallAppBanner /> : <PushInvitationBanner />}
       <Outlet />
     </>
   );

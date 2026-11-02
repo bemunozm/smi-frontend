@@ -4,6 +4,7 @@ import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
 import type { Key } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useInstalarApp } from '../pwa/install-prompt';
 import { useSyncState } from '../offline/replay';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useUiStore } from '../store/ui';
@@ -62,6 +63,7 @@ export function Topbar() {
   const [syncAbierta, setSyncAbierta] = useState(false);
   const [perfilAbierto, setPerfilAbierto] = useState(false);
   const { requestLogout, confirmationDialog } = useLogoutConfirmation(user?.id, navigate);
+  const instalarApp = useInstalarApp();
 
   const role = user && isRole(user.role) ? user.role : null;
 
@@ -74,6 +76,13 @@ export function Topbar() {
     }
     if (key === 'sync') {
       setSyncAbierta(true);
+      return;
+    }
+    if (key === 'install') {
+      // Con diálogo del sistema se abre directo; en iPhone/iPad vuelve el
+      // aviso con los pasos (ver `pwa/install-prompt.ts`).
+      if (instalarApp.modo === 'nativo') void instalarApp.instalar();
+      else instalarApp.reabrir();
       return;
     }
     if (key === 'logout') {
@@ -146,6 +155,11 @@ export function Topbar() {
                 <Dropdown.Item id="sync" textValue="Sincronización y uso sin señal">
                   <Label>Sincronización y uso sin señal</Label>
                 </Dropdown.Item>
+                {instalarApp.modo ? (
+                  <Dropdown.Item id="install" textValue="Instalar app">
+                    <Label>Instalar app</Label>
+                  </Dropdown.Item>
+                ) : null}
                 <Dropdown.Item id="logout" textValue="Cerrar sesión" variant="danger">
                   <SignOutIcon />
                   <Label>Cerrar sesión</Label>
