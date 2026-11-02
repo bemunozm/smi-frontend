@@ -16,6 +16,11 @@ import { isStandalonePwa } from './standalone';
  * El «Ahora no» es por DISPOSITIVO (no por usuario, a diferencia del push):
  * instalar es del equipo, no de la sesión — la tablet compartida no debe
  * preguntarle a cada turno.
+ *
+ * Instalar también se recuerda por dispositivo: si Chrome no logra crear la
+ * app de verdad (queda un acceso directo con el ícono de Chrome encima), sigue
+ * avisando que es instalable y el aviso volvería en cada visita desde el
+ * navegador. Con la marca no se invita solo; el menú «Instalar app» queda.
  */
 
 interface BeforeInstallPromptEvent extends Event {
@@ -30,21 +35,42 @@ interface Estado {
   evento: BeforeInstallPromptEvent | null;
   instalada: boolean;
   descartado: boolean;
+  /** Ya se instaló alguna vez en este dispositivo (persistido). */
+  yaInstalada: boolean;
   /** Reabierta desde el menú de usuario: se muestra aunque se haya descartado. */
   reabierta: boolean;
 }
 
 const DISMISSED_KEY = 'smi.pwa-install-dismissed';
+const INSTALLED_KEY = 'smi.pwa-installed';
 
-function leerDescartado(): boolean {
+function leerMarca(key: string): boolean {
   try {
-    return localStorage.getItem(DISMISSED_KEY) === '1';
+    return localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
 
-let estado: Estado = { evento: null, instalada: false, descartado: leerDescartado(), reabierta: false };
+function guardarMarca(key: string): void {
+  try {
+    localStorage.setItem(key, '1');
+  } catch {
+    // Sin storage el aviso vuelve a aparecer: molesto pero inocuo.
+  }
+}
+
+function estadoInicial(): Estado {
+  return {
+    evento: null,
+    instalada: false,
+    descartado: leerMarca(DISMISSED_KEY),
+    yaInstalada: leerMarca(INSTALLED_KEY),
+    reabierta: false,
+  };
+}
+
+let estado: Estado = estadoInicial();
 const oyentes = new Set<() => void>();
 
 function actualizar(cambio: Partial<Estado>): void {
@@ -72,13 +98,20 @@ let capturando = false;
 export function capturarInvitacionInstalar(): void {
   if (capturando || typeof window === 'undefined') return;
   capturando = true;
+  // Abierta como app: está instalada en este equipo (la pestaña de Chrome
+  // comparte el localStorage y deja de invitar).
+  if (isStandalonePwa()) {
+    guardarMarca(INSTALLED_KEY);
+    actualizar({ yaInstalada: true });
+  }
   window.addEventListener('beforeinstallprompt', (event) => {
     // Sin esto Chrome muestra su propia mini-barra además de la nuestra.
     event.preventDefault();
     actualizar({ evento: event as BeforeInstallPromptEvent });
   });
   window.addEventListener('appinstalled', () => {
-    actualizar({ evento: null, instalada: true, reabierta: false });
+    guardarMarca(INSTALLED_KEY);
+    actualizar({ evento: null, instalada: true, yaInstalada: true, reabierta: false });
   });
 }
 
@@ -90,7 +123,7 @@ function modoActual(e: Estado): ModoInstalar | null {
 
 /** Solo tests: vuelve al estado inicial (el estado vive a nivel de módulo). */
 export function reiniciarInvitacionInstalar(): void {
-  estado = { evento: null, instalada: false, descartado: leerDescartado(), reabierta: false };
+  estado = estadoInicial();
   oyentes.forEach((oyente) => oyente());
 }
 
@@ -105,15 +138,14 @@ export function useInstalarApp() {
     actualizar({ evento: null });
     await evento.prompt();
     const { outcome } = await evento.userChoice;
-    if (outcome === 'accepted') actualizar({ instalada: true, reabierta: false });
+    if (outcome === 'accepted') {
+      guardarMarca(INSTALLED_KEY);
+      actualizar({ instalada: true, yaInstalada: true, reabierta: false });
+    }
   };
 
   const descartar = (): void => {
-    try {
-      localStorage.setItem(DISMISSED_KEY, '1');
-    } catch {
-      // Sin storage el aviso vuelve a aparecer: molesto pero inocuo.
-    }
+    guardarMarca(DISMISSED_KEY);
     actualizar({ descartado: true, reabierta: false });
   };
 
@@ -121,7 +153,7 @@ export function useInstalarApp() {
     /** null: ya instalada o el navegador no ofrece instalar. */
     modo,
     /** Si corresponde mostrar el aviso ahora. */
-    invitar: modo !== null && (!actual.descartado || actual.reabierta),
+    invitar: modo !== null && ((!actual.descartado && !actual.yaInstalada) || actual.reabierta),
     instalar,
     descartar,
     reabrir: () => actualizar({ reabierta: true }),
