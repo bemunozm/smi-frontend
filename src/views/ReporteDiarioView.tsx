@@ -266,7 +266,14 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
     fecha: toDateOnly(reloj.fecha),
     turno: reloj.turno,
   }));
-  const ctx = elegirTurno ? contextoDeTurno(elegido.turno, fromDateOnly(elegido.fecha)) : reloj;
+  // En AMBOS modos el reporte es del par elegido (que parte en el turno del
+  // reloj): en Terreno esto habilita la carga histórica del supervisor (hasta
+  // 30 días, la ventana del backend), igual que en el panel.
+  const ctx = contextoDeTurno(elegido.turno, fromDateOnly(elegido.fecha));
+  /** Terreno con un turno distinto del vigente: se avisa bajo el selector. */
+  const esOtroTurno =
+    !elegirTurno &&
+    (elegido.fecha !== toDateOnly(reloj.fecha) || elegido.turno !== reloj.turno);
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
@@ -389,7 +396,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
   const crear = useCreateReporteDiario();
-  /** El turno vigente ya tiene reporte en el historial de la semana. */
+  /** El turno ELEGIDO ya tiene reporte en el historial cargado. */
   const yaReportado = (reportes ?? []).some(
     (r) => r.fecha.slice(0, 10) === hasta && r.turno === ctx.turno,
   );
@@ -433,47 +440,65 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
         setTraspasos(TRASPASOS_VACIO);
         setEmpresas({});
         setProd(PROD_VACIO);
+        // En Terreno la selección vuelve al turno vigente (el siguiente
+        // reporte casi siempre es el de hoy); en el panel se conserva, para
+        // cargar varios días seguidos sin re-elegir.
+        if (!elegirTurno) {
+          setElegido({ fecha: toDateOnly(reloj.fecha), turno: reloj.turno });
+        }
       },
     });
   };
 
   const formulario = (
     <>
-      {elegirTurno && (
-        <Card>
-          <CardHead
-            titulo="Turno a cargar"
-            bajada="Elige el día y el turno del reporte. El historial muestra la semana hasta ese día."
-          />
-          <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2">
-            <Campo label="Fecha">
-              <Input
-                type="date"
-                max={toDateOnly(reloj.fecha)}
-                value={elegido.fecha}
-                onChange={(e) => {
-                  const fecha = e.target.value;
-                  if (fecha) setElegido((p) => ({ ...p, fecha }));
-                }}
-              />
-            </Campo>
-            <div className="flex flex-col gap-1.5">
-              <Label>Turno</Label>
-              <div className="flex flex-wrap gap-2">
-                {(['DIURNO', 'NOCTURNO'] as const).map((turno) => (
-                  <ChipSeleccion
-                    key={turno}
-                    activo={elegido.turno === turno}
-                    onToggle={() => setElegido((p) => ({ ...p, turno }))}
-                  >
-                    {turno === 'DIURNO' ? 'Diurno' : 'Nocturno'}
-                  </ChipSeleccion>
-                ))}
-              </div>
+      <Card>
+        <CardHead
+          titulo={elegirTurno ? 'Turno a cargar' : '¿De qué turno es este reporte?'}
+          bajada={
+            elegirTurno
+              ? 'Elige el día y el turno del reporte. El historial muestra la semana hasta ese día.'
+              : 'Por defecto, el turno vigente. Cámbialo para cargar un día pasado.'
+          }
+        />
+        <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2">
+          <Campo label="Fecha del reporte">
+            <Input
+              type="date"
+              aria-label="Fecha del reporte"
+              min={toDateOnly(
+                new Date(reloj.fecha.getFullYear(), reloj.fecha.getMonth(), reloj.fecha.getDate() - 30),
+              )}
+              max={toDateOnly(reloj.fecha)}
+              value={elegido.fecha}
+              onChange={(e) => {
+                const fecha = e.target.value;
+                if (fecha) setElegido((p) => ({ ...p, fecha }));
+              }}
+            />
+          </Campo>
+          <div className="flex flex-col gap-1.5">
+            <Label>Turno del reporte</Label>
+            <div className="flex flex-wrap gap-2">
+              {(['DIURNO', 'NOCTURNO'] as const).map((turno) => (
+                <ChipSeleccion
+                  key={turno}
+                  activo={elegido.turno === turno}
+                  onToggle={() => setElegido((p) => ({ ...p, turno }))}
+                >
+                  {turno === 'DIURNO' ? 'Diurno' : 'Nocturno'}
+                </ChipSeleccion>
+              ))}
             </div>
           </div>
-        </Card>
-      )}
+        </div>
+        {esOtroTurno && (
+          <Hint>
+            Estás llenando el reporte del <b>{ctx.turno}</b> del{' '}
+            <b>{ctx.fecha.toLocaleDateString('es-CL')}</b>, no el del turno vigente.
+          </Hint>
+        )}
+      </Card>
 
       {/*
        * La cabecera abre el reporte en vez de cerrarlo: es el contexto que dice
@@ -676,7 +701,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
           <span className="block text-center font-semibold">
             {elegirTurno
               ? `El turno ${ctx.turno} de ese día ya tiene reporte: ábrelo en el historial para corregirlo`
-              : `El turno ${ctx.turno} de hoy ya fue reportado`}
+              : `El turno ${ctx.turno} del ${ctx.fecha.toLocaleDateString('es-CL')} ya fue reportado`}
           </span>
         </Hint>
       )}

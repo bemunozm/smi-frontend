@@ -293,6 +293,60 @@ describe('ReporteDiarioView · cabecera de la ficha', () => {
   });
 });
 
+/**
+ * Carga histórica (marcha blanca y días olvidados): el formulario deja elegir
+ * fecha y turno; por defecto van los del reloj, y el 409 de un turno ya
+ * reportado se anticipa deshabilitando el envío cuando el historial ya lo
+ * trae.
+ */
+describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () => {
+  beforeEach(() => {
+    MUTATE.mockClear();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0)); // DIURNO del 23-09
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('por defecto envía la fecha y el turno del reloj', () => {
+    render(<ReporteDiarioView />);
+
+    fireEvent.click(screen.getByText('Enviar reporte diario'));
+
+    expect(MUTATE.mock.calls[0][0]).toMatchObject({
+      fecha: '2026-09-23',
+      turno: 'DIURNO',
+    });
+  });
+
+  it('con fecha y turno elegidos, el payload los lleva', () => {
+    render(<ReporteDiarioView />);
+
+    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
+      target: { value: '2026-09-20' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Nocturno' }));
+    fireEvent.click(screen.getByText('Enviar reporte diario'));
+
+    expect(MUTATE.mock.calls[0][0]).toMatchObject({
+      fecha: '2026-09-20',
+      turno: 'NOCTURNO',
+    });
+  });
+
+  it('si el turno elegido ya está en el historial, el envío queda deshabilitado', () => {
+    // REPORTES_MOCK trae el DIURNO del 2026-09-22 ya reportado.
+    render(<ReporteDiarioView />);
+
+    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
+      target: { value: '2026-09-22' },
+    });
+
+    const boton = screen.getByText('Enviar reporte diario').closest('button');
+    expect(boton?.disabled).toBe(true);
+    expect(screen.getByText(/ya fue reportado/)).toBeTruthy();
+  });
+});
+
 describe('ReporteDiarioView · historial en ventana', () => {
   /**
    * El historial son los reportes que devuelve el servidor, del turno más
@@ -518,7 +572,7 @@ describe('ReporteDiarioView · turno ya reportado', () => {
     vi.setSystemTime(new Date(2026, 8, 22, 14, 0)); // DIURNO del 22/09 = r-dia
     render(<ReporteDiarioView />);
 
-    expect(screen.getByText('El turno DIURNO de hoy ya fue reportado')).toBeTruthy();
+    expect(screen.getByText('El turno DIURNO del 22-09-2026 ya fue reportado')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
