@@ -20,7 +20,9 @@ import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
+import { PastShiftDialog } from '../components/terreno/PastShiftDialog';
 import { useDailyChecklists } from '../hooks/useDailyChecklists';
+import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatDecimalInput } from '../lib/decimal';
@@ -146,11 +148,27 @@ export function RegistroEquipoView() {
     enviarReporte,
     isEnviandoReporte,
     reporteUrl,
+    elegirTurnoPasado,
+    esDiaPasado,
   } = useShiftRegister();
 
   // Pesados y livianos se registran distinto (el liviano queda abierto hasta
   // la carga de combustible y lo cierra cualquier supervisor): van separados.
   const [clase, setClase] = useState<Clase>('pesados');
+
+  // --- Modo "registrar un turno pasado" (carga histórica) --------------------
+  const modoPasado = turnoSeleccion === 'pasado';
+  const [dialogoPasado, setDialogoPasado] = useState(false);
+  // En modo pasado los livianos no participan (su tarjeta queda abierta por
+  // días y bloquearía la tarjeta real de la camioneta): se fuerza "pesados".
+  const claseVista: Clase = modoPasado ? 'pesados' : clase;
+  /** Lo que el turno pasado elegido YA tiene registrado — para el aviso del
+   * banner (el diálogo hace su propia consulta mientras se elige). */
+  const { data: turnosPasados } = usePastShiftSummary(
+    modoPasado ? { fecha: ctx.fecha, turno: ctx.turno } : null,
+  );
+  const tarjetasYaRegistradas = (turnosPasados ?? []).flatMap((t) => t.cards);
+  const reporteYaEnviado = (turnosPasados ?? []).some((t) => t.exitReports.length > 0);
 
   // Módulo 3: con el checklist del día por validar o rechazado, el equipo no
   // se libera. Se muestra apagado y con el motivo (el backend igual lo frena).
@@ -210,7 +228,9 @@ export function RegistroEquipoView() {
             error={horometroInvalido ? 'Escribí un número, por ejemplo 2120,5.' : undefined}
             aviso={
               bajoUltimaLectura && equipoElegido?.currentHourmeter != null
-                ? `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisá que esté bien; podés agregarlo igual.`
+                ? modoPasado
+                  ? `Es menor que la lectura actual (${fmt(equipoElegido.currentHourmeter)} h): esperado al cargar un día pasado.`
+                  : `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisá que esté bien; podés agregarlo igual.`
                 : undefined
             }
             hint={
@@ -226,7 +246,13 @@ export function RegistroEquipoView() {
             <Input
               numerico
               value={apertura.horometro}
-              placeholder={equipoElegido?.currentHourmeter != null ? formatDecimalInput(equipoElegido.currentHourmeter, 1) : '0'}
+              placeholder={
+                modoPasado
+                  ? ' '
+                  : equipoElegido?.currentHourmeter != null
+                    ? formatDecimalInput(equipoElegido.currentHourmeter, 1)
+                    : '0'
+              }
               onChange={(e) => setApertura((a) => ({ ...a, horometro: e.target.value }))}
             />
           </Campo>
@@ -238,6 +264,7 @@ export function RegistroEquipoView() {
           <Hint>
             Se agrega al turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>, a nombre de{' '}
             <b>{supervisor}</b>.
+            {modoPasado && <> Escribe la lectura que el equipo tenía ese día: acá no se propone la actual.</>}
           </Hint>
 
           <Boton
@@ -1092,8 +1119,9 @@ export function RegistroEquipoView() {
                 esperar a las 08:00. Solo visible cerca del cambio de turno
                 (o con el override ya activo, para poder volver) — fuera de
                 esa ventana un toque accidental cargaría tarjetas en el
-                turno equivocado (`mostrarSelectorTurno`). */}
-            {mostrarSelectorTurno && (
+                turno equivocado (`mostrarSelectorTurno`). En modo pasado se
+                esconde: el banner de abajo ya ofrece volver. */}
+            {mostrarSelectorTurno && !modoPasado && (
               <button
                 type="button"
                 onClick={turnoSeleccion === 'siguiente' ? volverTurnoActual : avanzarTurno}
@@ -1101,6 +1129,18 @@ export function RegistroEquipoView() {
                 style={{ background: 'rgba(255,255,255,.22)' }}
               >
                 {turnoSeleccion === 'siguiente' ? 'Volver al turno del reloj' : `Adelantar a ${siguienteTurno}`}
+              </button>
+            )}
+            {/* Carga histórica: siempre visible (no depende de la ventana de
+                adelanto) — abre el diálogo de fecha + turno pasado. */}
+            {!modoPasado && (
+              <button
+                type="button"
+                onClick={() => setDialogoPasado(true)}
+                className="inline-flex min-h-[32px] cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold"
+                style={{ background: 'rgba(255,255,255,.22)' }}
+              >
+                Registrar turno pasado
               </button>
             )}
             <span
@@ -1113,6 +1153,37 @@ export function RegistroEquipoView() {
         }
       />
 
+      {/* Banner del modo pasado: persistente y a la vista mientras dura la
+          carga histórica — la protección visible contra dejar el modo pegado
+          y cargar las tarjetas de hoy en una fecha vieja. */}
+      {modoPasado && (
+        <section
+          role="status"
+          className="mb-4 flex flex-col gap-2 rounded-2xl border-[1.5px] border-[#e2b64b] bg-[#fdf3d7] px-4 py-3 text-[#5c470f]"
+        >
+          <div className="text-[15px] font-bold">
+            Registrando turno pasado: {ctx.turno} · {ctx.fechaCorta}
+          </div>
+          <p className="m-0 text-[13.5px] font-medium">
+            Los datos quedarán fechados en ese día.
+            {tarjetasYaRegistradas.length > 0 && (
+              <>
+                {' '}
+                Este turno ya tiene {plural(tarjetasYaRegistradas.length, 'equipo registrado', 'equipos registrados')}
+                {reporteYaEnviado && ' y su reporte de salida ya fue enviado'}.
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={volverTurnoActual}
+            className="inline-flex min-h-[40px] w-fit cursor-pointer items-center rounded-xl bg-[#5c470f] px-3.5 text-[13.5px] font-semibold text-white"
+          >
+            Volver al turno actual
+          </button>
+        </section>
+      )}
+
       {/* El chip "Sin modo offline" de la maqueta se retira acá: el modo
           offline ya existe y su estado real se ve en el `SyncStatus` del
           layout de Terreno — repetirlo acá sería redundante o, peor, quedar
@@ -1122,7 +1193,11 @@ export function RegistroEquipoView() {
       <VistaSplit
         formulario={
           <>
-            {selectorClase}
+            {modoPasado ? (
+              <Hint>Las camionetas no se cargan para días pasados.</Hint>
+            ) : (
+              selectorClase
+            )}
             {/* En escritorio el cierre reemplaza al formulario de apertura en la
                 misma columna; en teléfono y tablet se abre como hoja inferior. */}
             {esEscritorio && cerrando ? (
@@ -1149,7 +1224,7 @@ export function RegistroEquipoView() {
                 />
                 <Form>{formularioCierre}</Form>
               </Card>
-            ) : clase === 'livianos' ? (
+            ) : claseVista === 'livianos' ? (
               formAperturaLiviano
             ) : (
               formApertura
@@ -1157,7 +1232,7 @@ export function RegistroEquipoView() {
             {esEscritorio && panelReporte}
           </>
         }
-        historial={clase === 'livianos' ? historialLivianos : historial}
+        historial={claseVista === 'livianos' ? historialLivianos : historial}
       />
 
       {!esEscritorio && barraReporte}
@@ -1201,6 +1276,12 @@ export function RegistroEquipoView() {
       >
         <EditorTarjeta edicion={edicion} operadores={opcionesOperadorEdicion} />
       </ModalTerreno>
+
+      <PastShiftDialog
+        abierto={dialogoPasado}
+        onAbiertoChange={setDialogoPasado}
+        onConfirmar={elegirTurnoPasado}
+      />
 
       {verReporte && (
         <Hoja

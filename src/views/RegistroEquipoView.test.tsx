@@ -25,7 +25,15 @@ const setHistorialAbierto = vi.fn();
 const setDetalleCerrada = vi.fn();
 const abrirEdicionMock = vi.fn();
 const enviarReporteMock = vi.fn();
+const elegirTurnoPasadoMock = vi.fn();
 const reporteUrlMock = vi.fn((id: string) => `/api/shift-reports/${id}/file`);
+
+// Resumen del turno pasado elegido (`usePastShiftSummary`) — cada test lo
+// pisa cuando necesita simular un turno ya registrado.
+let resumenTurnoPasado: unknown[] = [];
+vi.mock('../hooks/usePastShiftSummary', () => ({
+  usePastShiftSummary: (sel: unknown) => ({ data: sel ? resumenTurnoPasado : undefined }),
+}));
 
 // `lineaEstadoCorreo` es una función pura (sin dependencias del hook) que la
 // vista importa del MISMO módulo — se reimplementa acá en vez de
@@ -176,6 +184,8 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     siguienteTurno: 'NOCTURNO',
     avanzarTurno: avanzarTurnoMock,
     volverTurnoActual: volverTurnoActualMock,
+    elegirTurnoPasado: elegirTurnoPasadoMock,
+    esDiaPasado: false,
     mostrarSelectorTurno: true,
     supervisor: 'Ana Soto',
     veTodo: false,
@@ -254,6 +264,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   checklistsDelDia = [];
+  resumenTurnoPasado = [];
 });
 
 describe('RegistroEquipoView', () => {
@@ -572,6 +583,80 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.queryByRole('button', { name: /Adelantar a/ })).toBeNull();
       expect(screen.queryByRole('button', { name: /Volver al turno del reloj/ })).toBeNull();
+    });
+  });
+
+  describe('modo "registrar un turno pasado"', () => {
+    const CTX_PASADO = {
+      turno: 'NOCTURNO' as const,
+      fecha: new Date(2026, 8, 20),
+      etiqueta: 'NOCTURNO · 20–08',
+      fechaCorta: 'dom 20-09',
+      fechaHora: '24/09/2026 08:35',
+    };
+
+    it('el botón abre el diálogo y confirmar entra al modo con el par elegido', () => {
+      renderView();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar turno pasado' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar este turno' }));
+
+      expect(elegirTurnoPasadoMock).toHaveBeenCalledTimes(1);
+      const [fecha, turno] = elegirTurnoPasadoMock.mock.calls[0] as [Date, string];
+      // El diálogo propone AYER y DIURNO por defecto.
+      const ayer = new Date(Date.now() - 86_400_000);
+      expect(fecha.getDate()).toBe(ayer.getDate());
+      expect(turno).toBe('DIURNO');
+    });
+
+    it('en modo pasado muestra el banner con el turno elegido y permite volver', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      expect(screen.getByText(/Registrando turno pasado/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Adelantar a/ })).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Volver al turno actual' }));
+      expect(volverTurnoActualMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('en modo pasado no se ofrece la sección de livianos', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      expect(screen.queryByRole('group', { name: 'Tipo de equipo' })).toBeNull();
+      expect(screen.getByText('Las camionetas no se cargan para días pasados.')).toBeTruthy();
+    });
+
+    it('el diálogo avisa qué tiene ya registrado el turno elegido', () => {
+      resumenTurnoPasado = [
+        {
+          id: 'sh1',
+          date: '2026-09-20',
+          type: 'DIURNO',
+          supervisorId: 'u1',
+          cards: [
+            {
+              id: 'c9',
+              equipoId: 'e9',
+              equipo: { internalCode: 'BD-002', type: 'Bulldozer', controlUnit: 'HOURS' },
+              operatorId: null,
+              operatorName: 'Pedro Soto',
+              valorInicial: 100,
+              valorFinal: 110,
+              horasMaquina: 10,
+              fecha: '2026-09-20T15:00:00.000Z',
+              fechaSalida: '2026-09-20T15:00:00.000Z',
+            },
+          ],
+          exitReports: [{ id: 'r1', requestedAt: '2026-09-20T20:05:00.000Z', cardCount: 1 }],
+        },
+      ];
+      renderView();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar turno pasado' }));
+
+      expect(screen.getByText(/ya tiene tarjetas registradas/)).toBeTruthy();
+      expect(screen.getByText(/BD-002/)).toBeTruthy();
+      expect(screen.getByText(/Reporte de salida ya enviado/)).toBeTruthy();
     });
   });
 
