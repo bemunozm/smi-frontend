@@ -6,9 +6,12 @@ import { EntradaCambiosListResponseSchema, type EntradaCambios } from '../types/
 import {
   ShiftCardListResponseSchema,
   ShiftCardWrapperSchema,
+  ShiftSummaryListResponseSchema,
   type CloseShiftCardInput,
   type OpenShiftCardInput,
   type ShiftCardResponse,
+  type ShiftSummary,
+  type ShiftType,
 } from '../types/shift';
 
 /**
@@ -76,9 +79,24 @@ async function listChanges(id: string): Promise<EntradaCambios[]> {
   }
 }
 
+/**
+ * Turnos de una fecha y tipo (`GET /api/shifts?date&type` — la "lista viva"
+ * compartida con el Módulo B). SUPERVISOR ve los suyos; ADMIN todos. Lo usa
+ * el modo "registrar un turno pasado" para avisar qué tiene ya ese turno.
+ */
+async function listShiftsByDate(date: string, type: ShiftType): Promise<ShiftSummary[]> {
+  try {
+    const response = await axiosInstance.get('/api/shifts', { params: { date, type } });
+    return ShiftSummaryListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo consultar el turno elegido.');
+  }
+}
+
 export const ShiftCardAPI = {
   listChanges,
   openCard,
   closeCard,
   listMine,
+  listShiftsByDate,
 };
