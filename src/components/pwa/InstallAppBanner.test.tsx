@@ -97,6 +97,41 @@ describe('InstallAppBanner', () => {
     expect(screen.getByRole('region', { name: 'Instalar la app' })).toBeTruthy();
   });
 
+  it('después de instalar no vuelve a invitar desde el navegador (aunque Chrome siga ofreciendo)', async () => {
+    render(<InstallAppBanner />);
+    const evento = avisarInstalable('accepted');
+    fireEvent.click(screen.getByRole('button', { name: 'Instalar' }));
+    await act(async () => {
+      await evento.userChoice;
+    });
+    expect(localStorage.getItem('smi.pwa-installed')).toBe('1');
+
+    // Próxima visita en una pestaña: Chrome dejó un acceso directo y vuelve a
+    // avisar que es instalable. El aviso no sale; el menú sí puede reabrirlo.
+    cleanup();
+    reiniciarInvitacionInstalar();
+    render(
+      <>
+        <InstallAppBanner />
+        <Reabrir />
+      </>,
+    );
+    avisarInstalable();
+    expect(screen.queryByRole('region', { name: 'Instalar la app' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Instalar app' }));
+    expect(screen.getByRole('region', { name: 'Instalar la app' })).toBeTruthy();
+  });
+
+  it('el evento appinstalled también deja la marca', () => {
+    render(<InstallAppBanner />);
+    avisarInstalable();
+    act(() => {
+      window.dispatchEvent(new Event('appinstalled'));
+    });
+    expect(screen.queryByRole('region', { name: 'Instalar la app' })).toBeNull();
+    expect(localStorage.getItem('smi.pwa-installed')).toBe('1');
+  });
+
   it('en iPhone explica los pasos (no hay diálogo del sistema)', () => {
     simularUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1');
     render(<InstallAppBanner />);
