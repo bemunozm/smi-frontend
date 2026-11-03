@@ -23,6 +23,7 @@ export function homePathFor(role: Role | null): string {
     case ROLES.MANTENEDOR:
       return '/mantenimiento/ordenes';
     case ROLES.ADMIN:
+    case ROLES.SECRETARIA:
       return '/';
     default:
       return '/';

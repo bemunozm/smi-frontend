@@ -10,6 +10,9 @@ export const ROLES = {
   ADMIN: 'ADMIN',
   SUPERVISOR: 'SUPERVISOR',
   MANTENEDOR: 'MANTENEDOR',
+  /** Oficina: dashboard, y crear/corregir hallazgos, trabajos extra y
+   * reportes diarios (ver `lib/permissions.ts`). */
+  SECRETARIA: 'SECRETARIA',
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];

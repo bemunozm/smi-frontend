@@ -4,10 +4,12 @@ import { Button, Card, Checkbox, Chip, Input, Label, ListBox, Modal, Select, Spi
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOperators } from '../hooks/useOperators';
-import { useCrearTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { usePermissions } from '../hooks/usePermissions';
+import { useCrearTrabajoExtra, useEditarTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
+import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { ACTIVIDADES, actividadLabel, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
@@ -53,7 +55,16 @@ function Dato({ label, value }: { label: string; value: string }) {
 /** Popup de detalle de UN trabajo: todo lo que la tabla trunca (horómetros,
  * descripción, observaciones), solo lectura — los trabajos se corrigen desde
  * Terreno, con historial. */
-function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordinario | null; onClose: () => void }) {
+/** Popup de detalle; «Editar» al pie solo si llega `onEditar` (quien puede corregir). */
+function DetalleTrabajoModal({
+  trabajo,
+  onClose,
+  onEditar,
+}: {
+  trabajo: TrabajoExtraordinario | null;
+  onClose: () => void;
+  onEditar?: () => void;
+}) {
   return (
     <Modal.Backdrop
       isDismissable
@@ -104,6 +115,11 @@ function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordina
               </div>
             ) : null}
           </Modal.Body>
+          {onEditar ? (
+            <Modal.Footer>
+              <Button onPress={onEditar}>Editar</Button>
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
@@ -113,25 +129,34 @@ function DetalleTrabajoModal({ trabajo, onClose }: { trabajo: TrabajoExtraordina
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
- * Alta directa del administrador: el mismo formulario que Terreno (operador
- * del catálogo, horómetros, actividades múltiples), validado con
- * `trabajoExtraFormSchema`. El POST es online, con id idempotente del cliente
- * (`useCrearTrabajoExtra`).
+ * Alta directa desde el panel, o corrección de uno ya registrado (`trabajo`):
+ * el mismo formulario que Terreno (operador del catálogo, horómetros,
+ * actividades múltiples), validado con `trabajoExtraFormSchema`. El alta es un
+ * POST online con id idempotente del cliente (`useCrearTrabajoExtra`); la
+ * corrección va por la cola con solo lo que cambió (`useEditarTrabajoExtra`),
+ * igual que en Terreno, y queda en el historial de cambios.
+ *
+ * La fecha se elige solo en el alta (parte en ahora; se cambia para cargar uno
+ * olvidado): la corrección no la toca, igual que en Terreno.
  */
-function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
+function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinario; onClose: () => void }) {
   const { data: equipos } = useEquipment();
   const { data: operadores } = useOperators();
   const crear = useCrearTrabajoExtra();
-  const [equipoId, setEquipoId] = useState('');
-  const [operatorId, setOperatorId] = useState('');
-  const [turno, setTurno] = useState('DIURNO');
-  const [faena, setFaena] = useState('');
-  const [horometroInicial, setHorometroInicial] = useState('');
-  const [horometroFinal, setHorometroFinal] = useState('');
-  const [actividades, setActividades] = useState<string[]>([]);
-  const [otraActividad, setOtraActividad] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [observaciones, setObservaciones] = useState('');
+  const { guardar, isGuardando } = useEditarTrabajoExtra();
+  const [equipoId, setEquipoId] = useState(trabajo?.equipoId ?? '');
+  const [operatorId, setOperatorId] = useState(trabajo?.operatorId ?? '');
+  const [turno, setTurno] = useState(trabajo?.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO');
+  const [faena, setFaena] = useState(trabajo?.faena ?? '');
+  const [horometroInicial, setHorometroInicial] = useState(trabajo ? String(trabajo.horometroInicial) : '');
+  const [horometroFinal, setHorometroFinal] = useState(trabajo ? String(trabajo.horometroFinal) : '');
+  const [actividades, setActividades] = useState<string[]>(trabajo?.actividades ?? []);
+  const [otraActividad, setOtraActividad] = useState(trabajo?.otraActividad ?? '');
+  const [descripcion, setDescripcion] = useState(trabajo?.descripcion ?? '');
+  const [observaciones, setObservaciones] = useState(trabajo?.observaciones ?? '');
+  const [fecha, setFecha] = useState(() => toDateTimeLocal(new Date()));
+  const fechaIso = trabajo ? null : fechaRegistroIso(fecha);
+  const fechaValida = trabajo != null || fechaIso !== null;
 
   const alternarActividad = (valor: string, marcada: boolean) => {
     setActividades((previas) => (marcada ? [...previas, valor] : previas.filter((a) => a !== valor)));
@@ -156,8 +181,16 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
 
   const registrar = () => {
     if (!parsed.success) return;
-    crear.mutate(parsed.data, { onSuccess: onClose });
+    if (trabajo) {
+      void guardar(trabajo, parsed.data).then((ok) => {
+        if (ok) onClose();
+      });
+      return;
+    }
+    if (!fechaIso) return;
+    crear.mutate({ ...parsed.data, fecha: fechaIso }, { onSuccess: onClose });
   };
+  const pendiente = trabajo ? isGuardando : crear.isPending;
 
   return (
     <Modal.Backdrop
@@ -172,7 +205,7 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              Nueva actividad
+              {trabajo ? `Editar actividad · ${trabajo.equipo?.internalCode ?? '—'}` : 'Nueva actividad'}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -235,6 +268,13 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
                 </Select>
               </div>
 
+              {trabajo ? null : (
+                <TextField fullWidth isInvalid={fechaIso === null} name="fecha" onChange={setFecha} value={fecha}>
+                  <Label>Fecha y hora del trabajo</Label>
+                  <Input max={toDateTimeLocal(new Date())} type="datetime-local" />
+                </TextField>
+              )}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <TextField fullWidth name="faena" onChange={setFaena} value={faena}>
                   <Label>Faena</Label>
@@ -292,8 +332,10 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
             <Button onPress={onClose} variant="tertiary">
               Cancelar
             </Button>
-            <Button isDisabled={!parsed.success} isPending={crear.isPending} onPress={registrar}>
-              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar trabajo')}
+            <Button isDisabled={!parsed.success || !fechaValida} isPending={pendiente} onPress={registrar}>
+              {({ isPending }) =>
+                isPending ? <Spinner color="current" size="sm" /> : trabajo ? 'Guardar cambios' : 'Registrar trabajo'
+              }
             </Button>
           </Modal.Footer>
         </Modal.Dialog>
@@ -307,8 +349,9 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
  * ruta solo ADMIN): todos los registros de Terreno con filtros por equipo,
  * turno y rango de fechas, el total de horas máquina de lo filtrado y el
  * detalle de cada trabajo en popup. Es el destino de «Ver todo» de la KPI
- * card «HM Trabajos extraordinarios» del dashboard. Solo lectura: las
- * correcciones siguen saliendo de Terreno, con su historial de cambios.
+ * card «HM Trabajos extraordinarios» del dashboard. Quien puede corregir
+ * (`trabajoExtra.edit`: ADMIN, SECRETARIA) tiene «Editar» en el detalle; el
+ * cambio queda en el mismo historial que las correcciones de Terreno.
  */
 export function TrabajosExtraAdminView() {
   const { data, isPending, isError, error } = useTrabajosExtraList();
@@ -318,6 +361,8 @@ export function TrabajosExtraAdminView() {
   const [hasta, setHasta] = useState('');
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
   const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
+  const puedeEditar = usePermissions().can('trabajoExtra.edit');
 
   const trabajos = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
@@ -554,9 +599,22 @@ export function TrabajosExtraAdminView() {
         </Card.Content>
       </Card>
 
-      <DetalleTrabajoModal trabajo={detalle} onClose={() => setDetalle(null)} />
+      <DetalleTrabajoModal
+        trabajo={detalle}
+        onClose={() => setDetalle(null)}
+        onEditar={
+          puedeEditar
+            ? () => {
+                setEditando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
+      />
 
-      {creando ? <CrearTrabajoExtraModal onClose={() => setCreando(false)} /> : null}
+      {editando ? <TrabajoExtraModal trabajo={editando} onClose={() => setEditando(null)} /> : null}
+
+      {creando ? <TrabajoExtraModal onClose={() => setCreando(false)} /> : null}
     </div>
   );
 }

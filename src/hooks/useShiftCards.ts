@@ -9,7 +9,9 @@ import { SHIFT_CARDS_MINE_KEY, shiftCardCambiosKey } from '../lib/query-keys';
  * offline (Workbox `smi-api`, ver `vite.config.ts`) para el arranque en
  * frío sin señal.
  */
-export function useShiftCardsMine(opciones: { refetchInterval?: number; refetchOnWindowFocus?: boolean } = {}) {
+export function useShiftCardsMine(
+  opciones: { refetchInterval?: number; refetchOnWindowFocus?: boolean; enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: SHIFT_CARDS_MINE_KEY,
     queryFn: ShiftCardAPI.listMine,

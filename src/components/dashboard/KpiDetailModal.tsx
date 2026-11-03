@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Modal } from '@heroui/react';
 
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../flota/modal-styles';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canOpenPath } from '../../lib/permissions';
 
 interface KpiDetailModalProps {
   /** Espeja el label de la card que lo abre. */
@@ -23,6 +25,9 @@ interface KpiDetailModalProps {
  */
 export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, children }: KpiDetailModalProps) {
   const navigate = useNavigate();
+  const { role } = usePermissions();
+  // Sin acceso a la vista completa, el popup queda sin pie.
+  const destino = verTodoTo && canOpenPath(role, verTodoTo) ? verTodoTo : undefined;
   return (
     <Modal.Backdrop isDismissable isOpen={isOpen} onOpenChange={onOpenChange}>
       <Modal.Container>
@@ -33,12 +38,12 @@ export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, childre
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">{title}</Modal.Heading>
           </Modal.Header>
           <Modal.Body>{children}</Modal.Body>
-          {verTodoTo ? (
+          {destino ? (
             <Modal.Footer>
               <Button
                 onPress={() => {
                   onOpenChange(false);
-                  void navigate(verTodoTo);
+                  void navigate(destino);
                 }}
                 variant="secondary"
               >

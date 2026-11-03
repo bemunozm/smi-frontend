@@ -160,8 +160,15 @@ export function fromDateOnly(dateOnly: string): Date {
 }
 
 export function contextoTurno(ahora: Date): ContextoTurno {
-  const turno = turnoDe(ahora);
-  const fecha = fechaDeTurno(ahora);
+  return contextoDeTurno(turnoDe(ahora), fechaDeTurno(ahora), ahora);
+}
+
+/**
+ * El contexto de un turno elegido a mano (el reporte diario que se carga desde
+ * el panel para un turno que ya pasó), en vez del que dice el reloj.
+ * `fechaHora` sigue siendo la del reloj: es lo que firma el registro.
+ */
+export function contextoDeTurno(turno: Turno, fecha: Date, ahora: Date = new Date()): ContextoTurno {
   return {
     turno,
     fecha,

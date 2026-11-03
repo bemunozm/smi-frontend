@@ -33,9 +33,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Dashboard',
     to: '/',
-    // Solo ADMIN: el dashboard consulta `/api/dashboard/*` (403 para el resto).
-    // SUPERVISOR/MANTENEDOR tienen su propio home (ver `config/home-path.ts`).
-    roles: [ROLES.ADMIN],
+    // ADMIN y SECRETARIA: el dashboard consulta `/api/dashboard/*` (403 para
+    // el resto). SUPERVISOR/MANTENEDOR tienen su propio home (ver
+    // `config/home-path.ts`).
+    roles: [ROLES.ADMIN, ROLES.SECRETARIA],
     seccion: 'Administración',
   },
   {
@@ -54,12 +55,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Reportes de salida de turno (equipos usados en el día, por supervisor).
   { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN], seccion: 'Reportes' },
   // Reportes diarios de producción de los supervisores.
-  { label: 'Informe de producción diaria', to: '/reportes-diarios', roles: [ROLES.ADMIN], seccion: 'Reportes' },
+  { label: 'Informe de producción diaria', to: '/reportes-diarios', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Gestión de hallazgos (corregir/eliminar/crear).
-  { label: 'Hallazgos', to: '/hallazgos', roles: [ROLES.ADMIN], seccion: 'Reportes' },
+  { label: 'Hallazgos', to: '/hallazgos', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Trabajos extraordinarios con filtros (renombrado «Report» a pedido del
   // administrador — las rutas y el dominio conservan el nombre viejo).
-  { label: 'Report', to: '/trabajos-extra', roles: [ROLES.ADMIN], seccion: 'Reportes' },
+  { label: 'Report', to: '/trabajos-extra', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Registro de mantenciones completadas del taller.
   { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------

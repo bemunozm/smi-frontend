@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -22,7 +23,7 @@ import {
   vueltasDeSeccion,
   type ReporteAnterior,
 } from '../lib/reporte-diario';
-import { toDateOnly } from '../lib/turno';
+import { contextoDeTurno, fromDateOnly, toDateOnly, type Turno } from '../lib/turno';
 import { SECCIONES, type CreateReporteDiarioInput, type EditReporteDiarioBody } from '../types/reporte-diario';
 import {
   AvisoEdicion,
@@ -181,6 +182,16 @@ const fechaCompleta = (f: Date) => `${diaMes(f)}/${f.getFullYear()}`;
  * «CANTIDAD DE CAMIONES» justo debajo. Es el mismo tratamiento que ya usan
  * los ítems de Traspasos en esta pantalla.
  */
+/** Vuelta a la lista del panel (solo con `elegirTurno`, que vive en el router del panel). */
+function VolverAReportes() {
+  const navigate = useNavigate();
+  return (
+    <Boton variante="contorno" ancho onClick={() => void navigate('/reportes-diarios')}>
+      <ArrowLeft className="h-[19px] w-[19px]" /> Volver al informe de producción
+    </Boton>
+  );
+}
+
 function TituloSeccion({ children }: { children: ReactNode }) {
   return <b className="text-[15px] leading-tight">{children}</b>;
 }
@@ -197,7 +208,17 @@ function TituloSeccion({ children }: { children: ReactNode }) {
  * (`lib/turno`): de madrugada la fecha es la del día en que arrancó el
  * nocturno, no la del reloj. El supervisor es el usuario de la sesión.
  */
-function CabeceraFicha({ turno, fecha, supervisor }: { turno: string; fecha: string; supervisor: string }) {
+function CabeceraFicha({
+  turno,
+  fecha,
+  supervisor,
+  nota = 'Los tres los completa el sistema al abrir el reporte.',
+}: {
+  turno: string;
+  fecha: string;
+  supervisor: string;
+  nota?: string;
+}) {
   /** El `true` marca lo que va en cifra tabular. */
   const datos: [string, string, boolean][] = [
     ['Turno', turno, false],
@@ -225,16 +246,27 @@ function CabeceraFicha({ turno, fecha, supervisor }: { turno: string; fecha: str
             </div>
           ))}
         </dl>
-        <Hint>Los tres los completa el sistema al abrir el reporte.</Hint>
+        <Hint>{nota}</Hint>
       </div>
     </Card>
   );
 }
 
-export function ReporteDiarioView() {
+/**
+ * `elegirTurno` (panel, `/reportes-diarios/cargar`): fecha y turno los elige
+ * quien carga en vez de salir del reloj — para completar el reporte que un
+ * supervisor olvidó, o corregir uno de un turno que ya quedó atrás del
+ * historial de la semana. Firma el usuario de la sesión, como siempre.
+ */
+export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boolean } = {}) {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
-  const ctx = useTurnoActual();
+  const reloj = useTurnoActual();
+  const [elegido, setElegido] = useState<{ fecha: string; turno: Turno }>(() => ({
+    fecha: toDateOnly(reloj.fecha),
+    turno: reloj.turno,
+  }));
+  const ctx = elegirTurno ? contextoDeTurno(elegido.turno, fromDateOnly(elegido.fecha)) : reloj;
   const { user } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
 
@@ -244,7 +276,9 @@ export function ReporteDiarioView() {
   const { data: empresasCatalogo, isSuccess: empresasListas } = useEmpresasExternas();
   /** Editar necesita ambos catálogos: con uno vacío el borrador borraría bloques. */
   const catalogosListos = plantasListas && empresasListas;
-  const { data: tarjetas } = useShiftCardsMine();
+  // Con turno elegido no aplica: son los operadores en turno AHORA, y
+  // SECRETARIA no tiene tarjetas (el endpoint le responde 403).
+  const { data: tarjetas } = useShiftCardsMine({ enabled: !elegirTurno });
   const plantas = useMemo(() => plantasCatalogo ?? [], [plantasCatalogo]);
   const empresasExternas = useMemo(() => empresasCatalogo ?? [], [empresasCatalogo]);
   /** Tarjetas abiertas (sin salida registrada): quién opera qué equipo ahora. */
@@ -405,6 +439,42 @@ export function ReporteDiarioView() {
 
   const formulario = (
     <>
+      {elegirTurno && (
+        <Card>
+          <CardHead
+            titulo="Turno a cargar"
+            bajada="Elige el día y el turno del reporte. El historial muestra la semana hasta ese día."
+          />
+          <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2">
+            <Campo label="Fecha">
+              <Input
+                type="date"
+                max={toDateOnly(reloj.fecha)}
+                value={elegido.fecha}
+                onChange={(e) => {
+                  const fecha = e.target.value;
+                  if (fecha) setElegido((p) => ({ ...p, fecha }));
+                }}
+              />
+            </Campo>
+            <div className="flex flex-col gap-1.5">
+              <Label>Turno</Label>
+              <div className="flex flex-wrap gap-2">
+                {(['DIURNO', 'NOCTURNO'] as const).map((turno) => (
+                  <ChipSeleccion
+                    key={turno}
+                    activo={elegido.turno === turno}
+                    onToggle={() => setElegido((p) => ({ ...p, turno }))}
+                  >
+                    {turno === 'DIURNO' ? 'Diurno' : 'Nocturno'}
+                  </ChipSeleccion>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/*
        * La cabecera abre el reporte en vez de cerrarlo: es el contexto que dice
        * en qué turno se está cargando, y al final de la pantalla llegaba cuando
@@ -414,6 +484,7 @@ export function ReporteDiarioView() {
         turno={ctx.etiqueta}
         fecha={ctx.fecha.toLocaleDateString('es-CL')}
         supervisor={supervisor}
+        {...(elegirTurno ? { nota: 'Turno y fecha son los elegidos arriba; firma quien carga el reporte.' } : {})}
       />
 
       <Card>
@@ -603,7 +674,9 @@ export function ReporteDiarioView() {
       {yaReportado && (
         <Hint>
           <span className="block text-center font-semibold">
-            El turno {ctx.turno} de hoy ya fue reportado
+            {elegirTurno
+              ? `El turno ${ctx.turno} de ese día ya tiene reporte: ábrelo en el historial para corregirlo`
+              : `El turno ${ctx.turno} de hoy ya fue reportado`}
           </span>
         </Hint>
       )}
@@ -902,12 +975,13 @@ export function ReporteDiarioView() {
   return (
     <>
       <VistaHead
-        titulo="Reporte diario del supervisor"
+        titulo={elegirTurno ? 'Cargar reporte diario' : 'Reporte diario del supervisor'}
         /* Faena y turno viven en la cabecera de la ficha: repetirlos acá los
            mostraba dos veces en la misma pantalla. */
       />
 
       <VistaUnica>
+        {elegirTurno && <VolverAReportes />}
         <Boton
           variante="contorno"
           ancho

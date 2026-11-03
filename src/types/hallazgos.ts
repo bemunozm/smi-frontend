@@ -34,6 +34,8 @@ export interface CreateHallazgoInput {
 /** Body real de `POST /api/hallazgos`. */
 export interface CreateHallazgoBody extends CreateHallazgoInput {
   fotoKey?: string;
+  /** Fecha elegida en el panel (un hallazgo olvidado): gana sobre `capturedAt`. */
+  fecha?: string;
 }
 
 export interface Hallazgo {

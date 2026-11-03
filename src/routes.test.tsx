@@ -16,8 +16,17 @@ function findGuardOf(routes: Rt[], path: string, guard?: Rt): Rt | undefined {
 }
 
 describe('routes', () => {
-  it('`/` (dashboard) exige rol ADMIN exclusivamente', () => {
+  it('`/` (dashboard) es de ADMIN y SECRETARIA', () => {
     const guard = findGuardOf(router.routes as unknown as Rt[], '/');
-    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN]);
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
+  });
+
+  it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
+    for (const path of ['/hallazgos', '/trabajos-extra', '/reportes-diarios', '/reportes-diarios/cargar']) {
+      const guard = findGuardOf(router.routes as unknown as Rt[], path);
+      expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
+    }
+    const usuarios = findGuardOf(router.routes as unknown as Rt[], '/usuarios');
+    expect(usuarios?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN]);
   });
 });

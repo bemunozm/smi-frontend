@@ -65,6 +65,8 @@ export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
   id: string;
   capturedAt: string;
+  /** Fecha elegida en el panel (un trabajo olvidado): gana sobre `capturedAt`. */
+  fecha?: string;
 }
 
 export interface TrabajoExtraordinario {

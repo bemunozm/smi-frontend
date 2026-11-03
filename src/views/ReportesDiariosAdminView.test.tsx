@@ -3,7 +3,23 @@ import { render, cleanup, screen, fireEvent, within } from '@testing-library/rea
 
 import type { ReporteDiario } from '../types/reporte-diario';
 
-const { listHook } = vi.hoisted(() => ({ listHook: vi.fn() }));
+const { listHook, navigateMock } = vi.hoisted(() => ({ listHook: vi.fn(), navigateMock: vi.fn() }));
+const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
+
+vi.mock('react-router-dom', async (original) => ({
+  ...(await original<typeof import('react-router-dom')>()),
+  useNavigate: () => navigateMock,
+}));
+
+vi.mock('../hooks/usePermissions', async () => {
+  const { canWrite } = await import('../lib/permissions');
+  return {
+    usePermissions: () => ({
+      role: rol.value,
+      can: (action: Parameters<typeof canWrite>[1]) => canWrite(rol.value, action),
+    }),
+  };
+});
 
 vi.mock('../hooks/useReporteDiario', () => ({
   useReportesDiarios: () => listHook(),
@@ -50,6 +66,7 @@ const LISTA: ReporteDiario[] = [
 const ok = (data: ReporteDiario[]) => ({ data, isPending: false, isError: false, error: null });
 
 beforeEach(() => {
+  rol.value = 'ADMIN';
   listHook.mockReturnValue(ok(LISTA));
 });
 
@@ -105,6 +122,19 @@ describe('ReportesDiariosAdminView', () => {
     expect(within(dialog).getByText('Transportes Andes')).toBeTruthy();
     expect(within(dialog).getByText('Jefe de turno')).toBeTruthy();
     expect(within(dialog).getByText('C. Soto')).toBeTruthy();
+  });
+
+  it('«Cargar o corregir reporte» lleva al formulario con fecha y turno a elección', () => {
+    rol.value = 'SECRETARIA';
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar o corregir reporte' }));
+    expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios/cargar');
+  });
+
+  it('sin permiso de carga no ofrece el botón', () => {
+    rol.value = 'MANTENEDOR';
+    render(<ReportesDiariosAdminView />);
+    expect(screen.queryByRole('button', { name: 'Cargar o corregir reporte' })).toBeNull();
   });
 
   it('muestra el error del listado', () => {

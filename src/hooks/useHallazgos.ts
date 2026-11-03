@@ -126,7 +126,7 @@ export function useEditarHallazgo(): UseEditarHallazgoResult {
 export function useCrearHallazgo() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (form: Pick<HallazgoForm, 'equipoId' | 'descripcion' | 'prioridad'>) =>
+    mutationFn: (form: Pick<HallazgoForm, 'equipoId' | 'descripcion' | 'prioridad'> & { fecha?: string }) =>
       createHallazgo({ ...form, id: generateUuid(), capturedAt: new Date().toISOString() }),
     onSuccess: () => {
       toast.success('Hallazgo registrado');

@@ -1,14 +1,30 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, within, waitFor } from '@testing-library/react';
 
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
-const { listHook, crearMock } = vi.hoisted(() => ({ listHook: vi.fn(), crearMock: vi.fn() }));
+const { listHook, crearMock, guardarMock } = vi.hoisted(() => ({
+  listHook: vi.fn(),
+  crearMock: vi.fn(),
+  guardarMock: vi.fn(),
+}));
+const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
 vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => listHook(),
   useCrearTrabajoExtra: () => ({ mutate: crearMock, isPending: false }),
+  useEditarTrabajoExtra: () => ({ guardar: guardarMock, isGuardando: false }),
 }));
+
+vi.mock('../hooks/usePermissions', async () => {
+  const { canWrite } = await import('../lib/permissions');
+  return {
+    usePermissions: () => ({
+      role: rol.value,
+      can: (action: Parameters<typeof canWrite>[1]) => canWrite(rol.value, action),
+    }),
+  };
+});
 
 vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({ data: [{ id: 'e1', internalCode: 'CG-002' }, { id: 'e2', internalCode: 'EX-001' }] }),
@@ -58,7 +74,9 @@ const LISTA: TrabajoExtraordinario[] = [
 const ok = (data: TrabajoExtraordinario[]) => ({ data, isPending: false, isError: false, error: null });
 
 beforeEach(() => {
+  rol.value = 'ADMIN';
   listHook.mockReturnValue(ok(LISTA));
+  guardarMock.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -121,6 +139,32 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(dialog).getByText('2,5 h')).toBeTruthy();
   });
 
+  it('«Editar» abre el formulario con los datos del trabajo y guarda la corrección', async () => {
+    rol.value = 'SECRETARIA';
+    const original = trabajo({ id: 't9', operatorId: 'op_1', operador: 'Juan Rojas' });
+    listHook.mockReturnValue(ok([original]));
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-t9'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
+
+    const editor = screen.getByRole('dialog');
+    expect(within(editor).getByText('Editar actividad · CG-002')).toBeTruthy();
+    expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
+    fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
+    fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() =>
+      expect(guardarMock).toHaveBeenCalledWith(original, expect.objectContaining({ horometroFinal: 104, faena: 'Mina Caleta' })),
+    );
+    expect(crearMock).not.toHaveBeenCalled();
+  });
+
+  it('sin permiso de corrección el detalle no ofrece «Editar»', () => {
+    rol.value = 'MANTENEDOR';
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-t1'));
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Editar' })).toBeNull();
+  });
+
   it('muestra el error del listado', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
     render(<TrabajosExtraAdminView />);
@@ -150,10 +194,14 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Regulación y carga' }));
     fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha y hora del trabajo'), {
+      target: { value: '2026-10-05T21:15' },
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
 
     expect(crearMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        fecha: new Date('2026-10-05T21:15').toISOString(),
         equipoId: 'e2',
         operatorId: 'op_1',
         faena: 'Rajo Norte',

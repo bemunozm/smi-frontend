@@ -12,6 +12,17 @@ const { listHook, actualizarMock, eliminarMock, crearMock, actualizarPending, el
   actualizarPending: { value: false },
   eliminarPending: { value: false },
 }));
+const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' } }));
+
+vi.mock('../hooks/usePermissions', async () => {
+  const { canWrite } = await import('../lib/permissions');
+  return {
+    usePermissions: () => ({
+      role: rol.value,
+      can: (action: Parameters<typeof canWrite>[1]) => canWrite(rol.value, action),
+    }),
+  };
+});
 
 vi.mock('../hooks/useHallazgos', () => ({
   useHallazgosList: () => listHook(),
@@ -143,6 +154,19 @@ describe('HallazgosAdminView', () => {
     );
   });
 
+  it('SECRETARIA corrige (estado incluido) pero no elimina', () => {
+    rol.value = 'SECRETARIA';
+    renderView();
+    fireEvent.click(screen.getByTestId('hallazgo-fila-h1'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByRole('button', { name: 'Eliminar' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Editar' }));
+
+    const editor = screen.getByRole('dialog');
+    expect(within(editor).getByText('Prioridad')).toBeTruthy();
+    expect(within(editor).getByText('Estado')).toBeTruthy();
+  });
+
   it('muestra el error del listado', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
     renderView();
@@ -202,11 +226,34 @@ describe('HallazgosAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Descripción'), {
       target: { value: 'Neumático delantero cortado' },
     });
+    // Un hallazgo olvidado: se carga con la fecha en que ocurrió.
+    fireEvent.change(within(dialog).getByLabelText('Fecha y hora del hallazgo'), {
+      target: { value: '2026-10-20T09:30' },
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar hallazgo' }));
 
     expect(crearMock).toHaveBeenCalledWith(
-      { equipoId: 'e2', descripcion: 'Neumático delantero cortado', prioridad: 'MEDIA' },
+      {
+        equipoId: 'e2',
+        descripcion: 'Neumático delantero cortado',
+        prioridad: 'MEDIA',
+        fecha: new Date('2026-10-20T09:30').toISOString(),
+      },
       expect.anything(),
     );
+  });
+
+  it('una fecha futura no deja registrar el hallazgo', async () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Fuga en manguera' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha y hora del hallazgo'), {
+      target: { value: '2099-01-01T08:00' },
+    });
+    const registrar = within(dialog).getByRole('button', { name: 'Registrar hallazgo' });
+    expect(registrar.hasAttribute('disabled') || registrar.getAttribute('aria-disabled') === 'true').toBe(true);
   });
 });

@@ -78,7 +78,7 @@ export const router = createBrowserRouter([
               // sigue detrás de su propio `allowedRoles`, igual que
               // Equipos/Inventario.
               {
-                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SECRETARIA]} />,
                 children: [{ path: '/', element: <DashboardView /> }],
               },
               { path: '/perfil', element: <ProfileView /> },
@@ -126,18 +126,30 @@ export const router = createBrowserRouter([
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
                 children: [{ path: '/operadores', element: <OperadoresView /> }],
               },
+              // Lo que la SECRETARIA completa o corrige cuando un supervisor se
+              // olvida (pedido del cliente). Lo que no puede —eliminar, cambiar
+              // el estado de un hallazgo— lo ocultan las vistas y lo rechaza el
+              // backend.
               {
-                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SECRETARIA]} />,
                 children: [
                   // Gestión de hallazgos del administrador (ver/corregir/eliminar);
                   // Terreno conserva su propia vista en /terreno/hallazgos.
                   { path: '/hallazgos', element: <HallazgosAdminView /> },
-                  // Trabajos extraordinarios del administrador (solo lectura,
-                  // con filtros); Terreno conserva /terreno/trabajos-extra.
+                  // Trabajos extraordinarios (filtros, alta y corrección);
+                  // Terreno conserva /terreno/trabajos-extra.
                   { path: '/trabajos-extra', element: <TrabajosExtraAdminView /> },
-                  // Reportes diarios de los supervisores (solo lectura, con
-                  // filtros); Terreno conserva /terreno/reporte-diario.
+                  // Reportes diarios de los supervisores, con filtros;
+                  // Terreno conserva /terreno/reporte-diario.
                   { path: '/reportes-diarios', element: <ReportesDiariosAdminView /> },
+                  // El formulario de Terreno con fecha y turno a elección: para
+                  // cargar o corregir el reporte de un turno que ya pasó.
+                  { path: '/reportes-diarios/cargar', element: <ReporteDiarioView elegirTurno /> },
+                ],
+              },
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                children: [
                   // Registro de mantenciones completadas del taller (solo
                   // lectura, con filtros y detalle); destino del aviso
                   // «Orden de trabajo completada» del administrador.

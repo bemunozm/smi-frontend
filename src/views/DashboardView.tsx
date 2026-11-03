@@ -16,6 +16,8 @@ import {
 } from 'recharts';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePermissions } from '../hooks/usePermissions';
+import { canOpenPath } from '../lib/permissions';
 import { useItems } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
@@ -1292,6 +1294,7 @@ function VueltasBlock({ rango }: { rango: RangoDashboard }) {
 function InsumosBajoStockSection() {
   const { rows, isPending, isError, error } = useLowStockRows();
   const navigate = useNavigate();
+  const aInventario = canOpenPath(usePermissions().role, '/inventario');
   // En tablet y celular, tarjetas: la tabla de cinco columnas se salía del ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
@@ -1303,9 +1306,11 @@ function InsumosBajoStockSection() {
           <div className="flex items-center gap-2">
             {/* Mismo destino que el «Ver todo» del KPI: el inventario con el
                filtro de atención preseleccionado. */}
-            <Button onPress={() => void navigate('/inventario?filtro=bajo-minimo')} size="sm" variant="secondary">
-              Ver inventario →
-            </Button>
+            {aInventario ? (
+              <Button onPress={() => void navigate('/inventario?filtro=bajo-minimo')} size="sm" variant="secondary">
+                Ver inventario →
+              </Button>
+            ) : null}
             <RealDataChip />
           </div>
         </div>

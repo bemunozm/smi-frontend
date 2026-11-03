@@ -56,7 +56,7 @@ function mensajeErrorTrabajoExtra(
 export function useCrearTrabajoExtra() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (values: TrabajoExtraForm) =>
+    mutationFn: (values: TrabajoExtraForm & { fecha?: string }) =>
       createTrabajoExtra({ ...values, id: generateUuid(), capturedAt: new Date().toISOString() }),
     onSuccess: () => {
       toast.success('Trabajo extraordinario registrado');
