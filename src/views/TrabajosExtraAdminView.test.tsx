@@ -185,7 +185,7 @@ describe('TrabajosExtraAdminView', () => {
     );
   });
 
-  it('«Exportar Excel» exige elegir el rango de fechas y exporta lo del rango', async () => {
+  it('«Exportar Excel» pide el período en UN calendario de rango y sin rango no descarga', () => {
     // jsdom no implementa los object URL con los que se descarga el archivo.
     const createObjectURL = vi.fn(() => 'blob:report');
     URL.createObjectURL = createObjectURL as never;
@@ -195,22 +195,20 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
 
     const dialog = screen.getByRole('dialog');
-    // Sin ambas fechas no hay descarga: el botón está deshabilitado.
-    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('Elegí ambas fechas');
+    // UN solo selector de rango (mismo patrón que Movimientos), no dos campos.
+    expect(within(dialog).getByText('Período')).toBeTruthy();
+    expect(within(dialog).queryByText('Desde')).toBeNull();
+    expect(within(dialog).queryByText('Hasta')).toBeNull();
+    // El popover del calendario tiene su ancla (regresión de Movimientos).
+    expect(dialog.querySelector('[data-slot="date-range-picker-trigger"]')).not.toBeNull();
+
+    // Sin período elegido no hay descarga: el botón queda deshabilitado.
+    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('Elegí el período');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
     expect(createObjectURL).not.toHaveBeenCalled();
-
-    // t3 es del 10-oct; t1 del 14-oct; t2 del 16-oct (hora local de los mocks):
-    // el rango 13..15 deja solo t1.
-    fireEvent.change(within(dialog).getByLabelText('Desde'), { target: { value: '2026-10-13' } });
-    fireEvent.change(within(dialog).getByLabelText('Hasta'), { target: { value: '2026-10-15' } });
-    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('1 trabajo');
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
-    // El primer `import('exceljs')` tarda (vitest transforma el bundle CJS
-    // completo): el timeout por defecto de `waitFor` (1 s) no alcanza.
-    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1), { timeout: 20_000 });
-  }, 30_000);
+    // El armado y contenido del archivo se prueba en `lib/report-excel.test.ts`,
+    // releyendo el Excel generado.
+  });
 
   it('sin foto del report, «Registrar trabajo» queda deshabilitado', async () => {
     render(<TrabajosExtraAdminView />);
