@@ -8,6 +8,7 @@ import {
   pendingStatusFor,
   type CloseCardOp,
   type CreateHallazgoOp,
+  type CreateTrabajoExtraOp,
   type HttpWriteOp,
   type OutboxLastError,
   type OutboxOp,
@@ -742,6 +743,20 @@ function processCreateHallazgo(op: CreateHallazgoOp): Promise<ProcessOutcome> {
   );
 }
 
+function processCreateTrabajoExtra(op: CreateTrabajoExtraOp): Promise<ProcessOutcome> {
+  return processPhotoOp(
+    op,
+    'Falta la foto guardada del report — descartá este trabajo y volvé a registrarlo.',
+    async (current, tmpKey) => {
+      const trabajo = await createTrabajoExtra(
+        { ...current.payload, ...(tmpKey ? { fotoKey: tmpKey } : {}) },
+        replayConfig(JSON_TIMEOUT_MS),
+      );
+      afterServerAccepted('el trabajo extra', () => applyTrabajoExtraToCache(trabajo));
+    },
+  );
+}
+
 /** Qué se debe refrescar al terminar el run: lo que cambió cada operación enviada. */
 const pendingRefresh = new Set<QueryKeyName>();
 
@@ -911,15 +926,13 @@ async function processOp(userId: string, candidate: OutboxOp): Promise<ProcessOu
 
   if (op.type === 'closeCard') return finishLegacy(await processCloseCard(op));
   if (op.type === 'createHallazgo') return finishLegacy(await processCreateHallazgo(op));
+  if (op.type === 'createTrabajoExtra') return finishLegacy(await processCreateTrabajoExtra(op));
   if (op.type === 'httpWrite') return processHttpWrite(op);
 
   try {
     if (op.type === 'openCard') {
       const card = await ShiftCardAPI.openCard(op.payload, replayConfig(JSON_TIMEOUT_MS));
       afterServerAccepted('la apertura de la tarjeta', () => applyCardToCache(card));
-    } else if (op.type === 'createTrabajoExtra') {
-      const trabajo = await createTrabajoExtra(op.payload, replayConfig(JSON_TIMEOUT_MS));
-      afterServerAccepted('el trabajo extra', () => applyTrabajoExtraToCache(trabajo));
     } else if (op.type === 'sendExitReport') {
       const report = await ShiftReportAPI.sendExitReport(op.payload, replayConfig(JSON_TIMEOUT_MS));
       afterServerAccepted('el reporte de salida', () => applyReportToCache(op.payload.cardIds, report));

@@ -6,11 +6,16 @@ import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil } from 'luci
 import {
   trabajoExtraFormSchema,
   ACTIVIDADES,
+  DESTINOS,
   actividadLabel,
+  destinoLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
 import { useTurnoActual } from '../hooks/useTurnoActual';
+import { usePlantas } from '../hooks/useReporteDiario';
+import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
+import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables, numeroReport } from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
@@ -142,7 +147,17 @@ export function TrabajosExtraView() {
     actividades: [],
     otraActividad: '',
     fecha: toDateOnly(new Date()),
+    reportNumero: '',
+    planta: '',
   });
+
+  // Catálogo de plantas del reporte diario (precargado para offline): dónde
+  // se hizo una limpieza de silos.
+  const { data: plantas = [] } = usePlantas();
+
+  // La foto del report es OBLIGATORIA: viaja como blob junto a la operación
+  // y se sube en el replay — igual que la foto de un hallazgo.
+  const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
 
   /**
    * Equipos **en terreno**: los que tienen un turno en curso, con el operador
@@ -204,12 +219,19 @@ export function TrabajosExtraView() {
         operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
+        plantas={plantas}
+        foto={foto}
         textoBoton="Registrar trabajo"
         pendiente={isGuardando}
         onGuardar={async (values) => {
-          // Siempre por el outbox (con o sin señal): el formulario vuelve a
-          // blanco solo si el trabajo quedó guardado en el equipo.
-          if (await registrar(values)) setFormKey((k) => k + 1);
+          // El formulario ya garantizó la foto (es obligatoria). Siempre por
+          // el outbox (con o sin señal): el formulario vuelve a blanco solo
+          // si el trabajo quedó guardado en el equipo.
+          if (!foto.file) return;
+          if (await registrar(values, foto.file)) {
+            foto.resetPhoto();
+            setFormKey((k) => k + 1);
+          }
         }}
       />
     </Card>
@@ -327,11 +349,15 @@ export function TrabajosExtraView() {
           otraActividad: detalle.otraActividad ?? '',
           descripcion: detalle.descripcion,
           observaciones: detalle.observaciones ?? '',
+          reportNumero: detalle.reportNumero ?? '',
+          destino: (detalle.destino ?? undefined) as TrabajoExtraFormInput['destino'],
+          planta: detalle.planta ?? '',
         }}
         equipos={equipos}
         operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
+        plantas={plantas}
         textoBoton="Guardar cambios"
         pendiente={isActualizando}
         onGuardar={async (payload) => {
@@ -390,6 +416,15 @@ export function TrabajosExtraView() {
             ['Faena', detalle.faena],
             ['Equipo', codigo(detalle)],
             ['Operador', detalle.operador],
+            ['Report N°', detalle.reportNumero || '—'],
+            [
+              'Dónde se hizo',
+              detalle.destino
+                ? detalle.destino === 'PLANTA'
+                  ? detalle.planta || destinoLabel.PLANTA
+                  : (destinoLabel[detalle.destino] ?? detalle.destino)
+                : '—',
+            ],
           ]}
         />
       </div>
@@ -418,6 +453,20 @@ export function TrabajosExtraView() {
           </p>
         </div>
       ))}
+
+      {detalle.fotoUrl && (
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Foto del report" />
+          <a
+            className="text-sm font-medium text-(--accent) hover:underline"
+            href={detalle.fotoUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Ver foto del report
+          </a>
+        </div>
+      )}
 
       <HistorialCambios entradas={cambios.data ?? []} cargando={cambios.isLoading} />
     </div>
@@ -486,6 +535,8 @@ function FormularioTrabajo({
   operadores,
   enTurno,
   opcionesEquipo,
+  plantas,
+  foto,
   textoBoton,
   pendiente,
   onGuardar,
@@ -498,6 +549,11 @@ function FormularioTrabajo({
   /** Equipos con turno abierto → operador que lo lleva. */
   enTurno: Map<string, OperadorEnTurno>;
   opcionesEquipo: OpcionSelector[];
+  /** Catálogo de plantas (reporte diario): dónde se hizo una limpieza de silos. */
+  plantas: { id: string; nombre: string }[];
+  /** Captura de la foto del report — OBLIGATORIA al registrar; ausente al
+   * editar (la foto no se cambia desde la edición). */
+  foto?: ReturnType<typeof usePhotoCaptureFlow>;
   textoBoton: string;
   pendiente: boolean;
   onGuardar: (values: TrabajoExtraForm) => void | Promise<void>;
@@ -513,10 +569,13 @@ function FormularioTrabajo({
     resolver: zodResolver(trabajoExtraFormSchema),
     defaultValues: inicial,
   });
+  /** La foto no vive en el schema (es un `File`): se exige a mano al enviar. */
+  const [fotoFaltante, setFotoFaltante] = useState(false);
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
   const faena = watch('faena') || 'Patillo';
   const actividades = watch('actividades') ?? [];
+  const destino = watch('destino') ?? '';
   const ini = Number(watch('horometroInicial'));
   const fin = Number(watch('horometroFinal'));
   // Con inicial y final iguales el trabajo igual se cobra (el mínimo): por
@@ -529,7 +588,19 @@ function FormularioTrabajo({
   const codigoElegido = equipos.find((e) => e.id === equipoId)?.internalCode;
 
   return (
-    <form onSubmit={handleSubmit(onGuardar)}>
+    <form
+      onSubmit={handleSubmit((values) => {
+        // La foto del report es obligatoria al registrar (al editar no se
+        // toca). Se chequea acá y no en el schema: un `File` no viaja en el
+        // formulario validado.
+        if (foto && !foto.file) {
+          setFotoFaltante(true);
+          return;
+        }
+        setFotoFaltante(false);
+        return onGuardar(values);
+      })}
+    >
       <Form>
         <div className="grid grid-cols-2 gap-3">
           <Campo
@@ -591,6 +662,37 @@ function FormularioTrabajo({
           )}
           max={toDateOnly(new Date())}
         />
+
+        {/* El folio del report en papel: con él se cruza este registro contra
+            la planilla del cliente (y el Excel que exporta el admin). */}
+        <Campo label="N° del report" hint={errors.reportNumero?.message}>
+          <Input inputMode="numeric" placeholder="Ej: 4509" {...register('reportNumero')} />
+        </Campo>
+
+        {/* Dónde se hizo: solo una limpieza de silos puede ser en planta —
+            la regla la avisa el schema (`.refine`) al intentar guardar. */}
+        <div className="flex flex-col gap-1.5">
+          <Label>Dónde se hizo</Label>
+          <Segmentado
+            etiqueta="Dónde se hizo"
+            valor={destino}
+            onChange={(v) => setValue('destino', v as TrabajoExtraForm['destino'], { shouldValidate: true })}
+            opciones={DESTINOS.map((d) => ({ valor: d.value as string, label: d.label }))}
+          />
+          {errors.destino?.message && <Hint>{errors.destino.message}</Hint>}
+        </div>
+
+        {destino === 'PLANTA' && (
+          <Campo label="¿En qué planta?" requerido hint={errors.planta?.message}>
+            <Selector
+              etiqueta="Planta"
+              placeholder="Elegí la planta"
+              valor={watch('planta') ?? ''}
+              onChange={(nombre) => setValue('planta', nombre, { shouldValidate: true })}
+              opciones={plantas.map((p) => ({ valor: p.nombre, titulo: p.nombre }))}
+            />
+          </Campo>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
@@ -664,6 +766,27 @@ function FormularioTrabajo({
         <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">
           <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
         </Campo>
+
+        {foto && (
+          <>
+            <FotoRespaldoField
+              file={foto.file}
+              isReadingPhoto={foto.isReadingPhoto}
+              captureDate={foto.captureDate}
+              onSelect={(file) => {
+                setFotoFaltante(false);
+                void foto.handleSelectPhoto(file);
+              }}
+              onClear={foto.handleClearPhoto}
+              requerida
+              guia="Encuadrá el report completo, legible y con el folio a la vista: es el respaldo del cobro."
+              title="Foto del report"
+              subtitle="Obligatoria: el trabajo se cobra contra el report en papel."
+              staleQuestion="¿Es la foto del report de este trabajo?"
+            />
+            {fotoFaltante && <Hint>La foto del report es obligatoria: sacala antes de registrar.</Hint>}
+          </>
+        )}
 
         <Boton ancho type="submit" disabled={pendiente}>
           {pendiente ? 'Guardando…' : textoBoton}

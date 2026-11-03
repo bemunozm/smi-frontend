@@ -6,12 +6,13 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOperators } from '../hooks/useOperators';
 import { usePermissions } from '../hooks/usePermissions';
 import { useCrearTrabajoExtra, useEditarTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import { numeroReport } from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
-import { ACTIVIDADES, actividadLabel, trabajoExtraFormSchema } from '../types/trabajosExtra';
+import { ACTIVIDADES, DESTINOS, actividadLabel, destinoLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
@@ -97,8 +98,29 @@ function DetalleTrabajoModal({
                   />
                   <Dato label="Horas máquina" value={`${NUM_CL_1.format(trabajo.totalHoras)} h`} />
                   <Dato label="Actividades" value={actividadesDe(trabajo)} />
+                  <Dato label="Report N°" value={trabajo.reportNumero || '—'} />
+                  <Dato
+                    label="Dónde se hizo"
+                    value={
+                      trabajo.destino
+                        ? trabajo.destino === 'PLANTA'
+                          ? trabajo.planta || destinoLabel.PLANTA
+                          : (destinoLabel[trabajo.destino] ?? trabajo.destino)
+                        : '—'
+                    }
+                  />
                   <Dato label="Registrado por" value={trabajo.registradoPor ?? 'Sin registro'} />
                 </div>
+                {trabajo.fotoUrl ? (
+                  <a
+                    className="text-sm font-medium text-(--accent) hover:underline"
+                    href={trabajo.fotoUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Ver foto del report
+                  </a>
+                ) : null}
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
                     Descripción
@@ -143,6 +165,7 @@ const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 te
 function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinario; onClose: () => void }) {
   const { data: equipos } = useEquipment();
   const { data: operadores } = useOperators();
+  const { data: plantas } = usePlantas();
   const crear = useCrearTrabajoExtra();
   const { guardar, isGuardando } = useEditarTrabajoExtra();
   const [equipoId, setEquipoId] = useState(trabajo?.equipoId ?? '');
@@ -155,6 +178,13 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const [otraActividad, setOtraActividad] = useState(trabajo?.otraActividad ?? '');
   const [descripcion, setDescripcion] = useState(trabajo?.descripcion ?? '');
   const [observaciones, setObservaciones] = useState(trabajo?.observaciones ?? '');
+  const [reportNumero, setReportNumero] = useState(trabajo?.reportNumero ?? '');
+  const [destino, setDestino] = useState(trabajo?.destino ?? '');
+  const [planta, setPlanta] = useState(trabajo?.planta ?? '');
+  // Foto del report — obligatoria al CREAR, igual que en Terreno; acá se
+  // sube online antes del POST (`useCrearTrabajoExtra`). Al editar se
+  // conserva la existente.
+  const [foto, setFoto] = useState<File | null>(null);
   const [fecha, setFecha] = useState(() => toDateTimeLocal(new Date()));
   const fechaIso = trabajo ? null : fechaRegistroIso(fecha);
   const fechaValida = trabajo != null || fechaIso !== null;
@@ -167,7 +197,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   // campos son de texto — vacío queda NaN, que el schema trata como requerido.
   const aNumero = (texto: string) => (texto.trim() === '' ? Number.NaN : Number(texto));
 
-  const parsed = trabajoExtraFormSchema.safeParse({
+  const entrada = {
     equipoId,
     operatorId,
     faena,
@@ -178,7 +208,18 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     otraActividad: otraActividad.trim() || undefined,
     descripcion,
     observaciones: observaciones.trim() || undefined,
-  });
+    planta: planta || undefined,
+  };
+  // Al CREAR, folio y destino son obligatorios. Al EDITAR un trabajo legacy
+  // (anterior a esos campos) se pueden dejar vacíos: se omiten del parse y el
+  // diff de la edición no los toca (`edicionContraBase` ignora `undefined`).
+  const parsed = trabajo
+    ? trabajoExtraEdicionSchema.safeParse({
+        ...entrada,
+        ...(reportNumero.trim() ? { reportNumero: reportNumero.trim() } : {}),
+        ...(destino ? { destino } : {}),
+      })
+    : trabajoExtraFormSchema.safeParse({ ...entrada, reportNumero, destino });
 
   const registrar = () => {
     if (!parsed.success) return;
@@ -188,8 +229,8 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
       });
       return;
     }
-    if (!fechaIso) return;
-    crear.mutate({ ...parsed.data, fecha: fechaIso }, { onSuccess: onClose });
+    if (!fechaIso || !foto) return;
+    crear.mutate({ values: { ...parsed.data, fecha: fechaIso }, foto }, { onSuccess: onClose });
   };
   const pendiente = trabajo ? isGuardando : crear.isPending;
 
@@ -293,6 +334,68 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 </TextField>
               </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
+                  <Label>N° del report</Label>
+                  <Input inputMode="numeric" placeholder="Ej: 4509" />
+                </TextField>
+
+                <Select
+                  fullWidth
+                  placeholder="Elegir destino"
+                  value={destino}
+                  onChange={(value) => value && setDestino(String(value))}
+                >
+                  <Label>Dónde se hizo</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {DESTINOS.map((d) => (
+                        <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
+                          {d.label}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                {destino === 'PLANTA' ? (
+                  <Select
+                    fullWidth
+                    placeholder="Elegir planta"
+                    value={planta}
+                    onChange={(value) => value && setPlanta(String(value))}
+                  >
+                    <Label>¿En qué planta?</Label>
+                    <Select.Trigger>
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox>
+                        {(plantas ?? []).map((p) => (
+                          <ListBox.Item id={p.nombre} key={p.id} textValue={p.nombre}>
+                            {p.nombre}
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                ) : null}
+              </div>
+              {/* La regla del cliente, visible apenas se contradice: solo una
+                  limpieza de silos puede hacerse en planta. */}
+              {destino === 'PLANTA' && !actividades.includes('LIMPIEZA_SILOS') ? (
+                <p className="text-sm text-danger-soft-foreground">
+                  Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado.
+                </p>
+              ) : null}
+
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-foreground">Actividades</span>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -329,13 +432,37 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 <Label>Observaciones (opcional)</Label>
                 <TextArea placeholder=" " rows={2} />
               </TextField>
+
+              {/* Foto del report en papel — obligatoria: el trabajo se cobra
+                  contra el report. */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-foreground">Foto del report (obligatoria)</span>
+                <input
+                  accept="image/*"
+                  aria-label="Foto del report"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-default file:px-3 file:py-1 file:text-sm"
+                  onChange={(event) => setFoto(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+                {foto ? (
+                  <span className="text-xs text-muted-foreground">{foto.name}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Encuadrá el report completo, con el folio legible.
+                  </span>
+                )}
+              </div>
             </div>
           </Modal.Body>
           <Modal.Footer>
             <Button onPress={onClose} variant="tertiary">
               Cancelar
             </Button>
-            <Button isDisabled={!parsed.success || !fechaValida} isPending={pendiente} onPress={registrar}>
+            <Button
+              isDisabled={!parsed.success || !fechaValida || (!trabajo && foto == null)}
+              isPending={pendiente}
+              onPress={registrar}
+            >
               {({ isPending }) =>
                 isPending ? <Spinner color="current" size="sm" /> : trabajo ? 'Guardar cambios' : 'Registrar trabajo'
               }
@@ -397,6 +524,73 @@ export function TrabajosExtraAdminView() {
 
   const totalHoras = lista.reduce((acc, t) => acc + t.totalHoras, 0);
 
+  /**
+   * Exporta LO QUE EL FILTRO MUESTRA a un Excel con las columnas de la
+   * planilla del cliente (Item, Fecha, Empresa, Equipo, Supervisor, Operador,
+   * Report N°, Planta, Actividad, horómetros y total). `exceljs` entra por
+   * import dinámico: solo se descarga al tocar «Exportar Excel».
+   */
+  const exportarExcel = async () => {
+    const { Workbook } = await import('exceljs');
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Report');
+    ws.columns = [
+      { header: 'Item', key: 'item', width: 9 },
+      { header: 'Fecha', key: 'fecha', width: 12 },
+      { header: 'Empresa', key: 'empresa', width: 12 },
+      { header: 'Equipo', key: 'equipo', width: 10 },
+      { header: 'Supervisor', key: 'supervisor', width: 20 },
+      { header: 'Operador', key: 'operador', width: 20 },
+      { header: 'Report N°', key: 'report', width: 10 },
+      { header: 'Planta', key: 'planta', width: 14 },
+      { header: 'Actividad', key: 'actividad', width: 36 },
+      { header: 'Horom_Ini', key: 'horomIni', width: 10 },
+      { header: 'Horom_Fin', key: 'horomFin', width: 10 },
+      { header: 'Total_Horas', key: 'total', width: 11 },
+      { header: 'Descripción', key: 'descripcion', width: 40 },
+      { header: 'Observaciones', key: 'observaciones', width: 40 },
+    ];
+    ws.getRow(1).font = { bold: true };
+
+    for (const t of lista) {
+      ws.addRow({
+        item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
+        // `dd-mm-yyyy`, como en la planilla del cliente.
+        fecha: diaLocal(t.fecha).split('-').reverse().join('-'),
+        empresa: t.faena,
+        equipo: t.equipo?.internalCode ?? t.equipoId,
+        supervisor: t.registradoPor ?? '',
+        report: t.reportNumero ?? '',
+        operador: t.operador,
+        planta: t.destino
+          ? t.destino === 'PLANTA'
+            ? (t.planta ?? destinoLabel.PLANTA)
+            : (destinoLabel[t.destino] ?? t.destino)
+          : '',
+        actividad: actividadesDe(t),
+        horomIni: t.horometroInicial,
+        horomFin: t.horometroFinal,
+        total: t.totalHoras,
+        descripcion: t.descripcion,
+        observaciones: t.observaciones ?? '',
+      });
+    }
+
+    const hoy = diaLocal(new Date().toISOString());
+    const nombre =
+      desde || hasta ? `Report_${desde || 'inicio'}_a_${hasta || hoy}.xlsx` : `Report_${hoy}.xlsx`;
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombre;
+    enlace.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -416,6 +610,9 @@ export function TrabajosExtraAdminView() {
             {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
             {lista.length === 1 ? 'trabajo' : 'trabajos'}
           </Chip>
+          <Button isDisabled={lista.length === 0} onPress={() => void exportarExcel()} variant="secondary">
+            Exportar Excel
+          </Button>
           <Button onPress={() => setCreando(true)}>Nueva actividad</Button>
         </div>
       </div>
@@ -564,7 +761,8 @@ export function TrabajosExtraAdminView() {
                     <Table.Column>Equipo</Table.Column>
                     <Table.Column>Operador</Table.Column>
                     <Table.Column>Turno</Table.Column>
-                    <Table.Column>Faena</Table.Column>
+                    <Table.Column>Report N°</Table.Column>
+                    <Table.Column>Dónde</Table.Column>
                     <Table.Column>Registrado por</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
                     <Table.Column className="text-right">HM</Table.Column>
@@ -591,7 +789,14 @@ export function TrabajosExtraAdminView() {
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">{t.faena}</Table.Cell>
+                        <Table.Cell className="font-mono text-sm whitespace-nowrap">{t.reportNumero ?? '—'}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">
+                          {t.destino
+                            ? t.destino === 'PLANTA'
+                              ? (t.planta ?? destinoLabel.PLANTA)
+                              : (destinoLabel[t.destino] ?? t.destino)
+                            : '—'}
+                        </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? 'Sin registro'}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
                         <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
