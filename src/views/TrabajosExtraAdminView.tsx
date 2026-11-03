@@ -493,6 +493,12 @@ export function TrabajosExtraAdminView() {
   const [creando, setCreando] = useState(false);
   const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
   const puedeEditar = usePermissions().can('trabajoExtra.edit');
+  // «Exportar Excel» pide el rango de fechas en un diálogo propio (pedido del
+  // cliente): el rango es obligatorio, no hereda en silencio el del filtro —
+  // aunque sí se propone como punto de partida al abrirlo.
+  const [exportando, setExportando] = useState(false);
+  const [exportDesde, setExportDesde] = useState('');
+  const [exportHasta, setExportHasta] = useState('');
 
   const trabajos = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
@@ -524,14 +530,36 @@ export function TrabajosExtraAdminView() {
 
   const totalHoras = lista.reduce((acc, t) => acc + t.totalHoras, 0);
 
+  /** Los trabajos del rango elegido en el diálogo de exportación — TODOS los
+   * equipos y turnos: el Excel es la planilla del período, no hereda en
+   * silencio los filtros de la tabla. */
+  const enRangoExport = useMemo(() => {
+    if (!exportDesde || !exportHasta || exportDesde > exportHasta) return [];
+    return trabajos.filter((t) => {
+      const dia = diaLocal(t.fecha);
+      return dia >= exportDesde && dia <= exportHasta;
+    });
+  }, [trabajos, exportDesde, exportHasta]);
+
+  /** Propone el rango del filtro (si lo hay) al abrir el diálogo — igual se
+   * puede cambiar: elegirlo es obligatorio, heredarlo no. */
+  const abrirExportar = () => {
+    setExportDesde(desde);
+    setExportHasta(hasta);
+    setExportando(true);
+  };
+
   /**
-   * Exporta LO QUE EL FILTRO MUESTRA a un Excel con las columnas de la
-   * planilla del cliente (Item, Fecha, Empresa, Equipo, Supervisor, Operador,
-   * Report N°, Planta, Actividad, horómetros y total). `exceljs` entra por
-   * import dinámico: solo se descarga al tocar «Exportar Excel».
+   * Exporta el rango elegido a un Excel con las columnas de la planilla del
+   * cliente (Item, Fecha, Empresa, Equipo, Supervisor, Operador, Report N°,
+   * Planta, Actividad, horómetros y total). `exceljs` entra por import
+   * dinámico: solo se descarga al tocar «Exportar».
    */
   const exportarExcel = async () => {
-    const { Workbook } = await import('exceljs');
+    // Interop CJS/ESM: en Node (vitest) el módulo llega solo como `default`;
+    // en el build del navegador (Vite) trae el export con nombre.
+    const excel = await import('exceljs');
+    const Workbook = excel.Workbook ?? excel.default.Workbook;
     const wb = new Workbook();
     const ws = wb.addWorksheet('Report');
     ws.columns = [
@@ -552,7 +580,7 @@ export function TrabajosExtraAdminView() {
     ];
     ws.getRow(1).font = { bold: true };
 
-    for (const t of lista) {
+    for (const t of enRangoExport) {
       ws.addRow({
         item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
         // `dd-mm-yyyy`, como en la planilla del cliente.
@@ -576,9 +604,7 @@ export function TrabajosExtraAdminView() {
       });
     }
 
-    const hoy = diaLocal(new Date().toISOString());
-    const nombre =
-      desde || hasta ? `Report_${desde || 'inicio'}_a_${hasta || hoy}.xlsx` : `Report_${hoy}.xlsx`;
+    const nombre = `Report_${exportDesde}_a_${exportHasta}.xlsx`;
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -589,6 +615,7 @@ export function TrabajosExtraAdminView() {
     enlace.download = nombre;
     enlace.click();
     URL.revokeObjectURL(url);
+    setExportando(false);
   };
 
   return (
@@ -610,7 +637,7 @@ export function TrabajosExtraAdminView() {
             {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
             {lista.length === 1 ? 'trabajo' : 'trabajos'}
           </Chip>
-          <Button isDisabled={lista.length === 0} onPress={() => void exportarExcel()} variant="secondary">
+          <Button isDisabled={trabajos.length === 0} onPress={abrirExportar} variant="secondary">
             Exportar Excel
           </Button>
           <Button onPress={() => setCreando(true)}>Nueva actividad</Button>
@@ -824,6 +851,68 @@ export function TrabajosExtraAdminView() {
             : undefined
         }
       />
+      {/* Diálogo de exportación: elegir de qué fecha hasta qué fecha es
+          OBLIGATORIO (pedido del cliente) — el Excel es la planilla del
+          período, con todos los trabajos del rango sin importar los filtros
+          de la tabla. Se monta solo al abrir: un backdrop montado cerrado
+          deja `aria-hidden` sobre la vista y rompe los otros modales. */}
+      {exportando && (
+      <Modal.Backdrop
+        isDismissable
+        isOpen={exportando}
+        onOpenChange={(open) => {
+          if (!open) setExportando(false);
+        }}
+      >
+        <Modal.Container>
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+                Exportar a Excel
+              </Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">
+                  Elegí de qué fecha hasta qué fecha exportar. Salen todos los trabajos del rango, sin
+                  importar los filtros de la tabla.
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <TextField fullWidth name="exportDesde" onChange={setExportDesde} value={exportDesde}>
+                    <Label>Desde</Label>
+                    <Input max={exportHasta || undefined} type="date" />
+                  </TextField>
+                  <TextField fullWidth name="exportHasta" onChange={setExportHasta} value={exportHasta}>
+                    <Label>Hasta</Label>
+                    <Input min={exportDesde || undefined} type="date" />
+                  </TextField>
+                </div>
+                <p className="text-sm text-muted-foreground" data-testid="export-conteo">
+                  {!exportDesde || !exportHasta
+                    ? 'Elegí ambas fechas para exportar.'
+                    : exportDesde > exportHasta
+                      ? 'El rango está invertido: «Desde» no puede ser después de «Hasta».'
+                      : enRangoExport.length === 0
+                        ? 'No hay trabajos en ese rango.'
+                        : `Se van a exportar ${NUM_CL.format(enRangoExport.length)} ${
+                            enRangoExport.length === 1 ? 'trabajo' : 'trabajos'
+                          }.`}
+                </p>
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button onPress={() => setExportando(false)} variant="tertiary">
+                Cancelar
+              </Button>
+              <Button isDisabled={enRangoExport.length === 0} onPress={() => void exportarExcel()}>
+                Exportar
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+      )}
 
       {editando ? <TrabajoExtraModal trabajo={editando} onClose={() => setEditando(null)} /> : null}
 
