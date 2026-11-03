@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
@@ -184,6 +184,33 @@ describe('TrabajosExtraAdminView', () => {
       expect.anything(),
     );
   });
+
+  it('«Exportar Excel» exige elegir el rango de fechas y exporta lo del rango', async () => {
+    // jsdom no implementa los object URL con los que se descarga el archivo.
+    const createObjectURL = vi.fn(() => 'blob:report');
+    URL.createObjectURL = createObjectURL as never;
+    URL.revokeObjectURL = vi.fn() as never;
+
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+
+    const dialog = screen.getByRole('dialog');
+    // Sin ambas fechas no hay descarga: el botón está deshabilitado.
+    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('Elegí ambas fechas');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
+    expect(createObjectURL).not.toHaveBeenCalled();
+
+    // t3 es del 10-oct; t1 del 14-oct; t2 del 16-oct (hora local de los mocks):
+    // el rango 13..15 deja solo t1.
+    fireEvent.change(within(dialog).getByLabelText('Desde'), { target: { value: '2026-10-13' } });
+    fireEvent.change(within(dialog).getByLabelText('Hasta'), { target: { value: '2026-10-15' } });
+    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('1 trabajo');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
+    // El primer `import('exceljs')` tarda (vitest transforma el bundle CJS
+    // completo): el timeout por defecto de `waitFor` (1 s) no alcanza.
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1), { timeout: 20_000 });
+  }, 30_000);
 
   it('sin foto del report, «Registrar trabajo» queda deshabilitado', async () => {
     render(<TrabajosExtraAdminView />);
