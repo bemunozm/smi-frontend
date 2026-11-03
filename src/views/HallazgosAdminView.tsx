@@ -18,6 +18,9 @@ import {
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { usePermissions } from '../hooks/usePermissions';
+import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
+import { canDeleteHallazgo } from '../lib/permissions';
 import { useActualizarHallazgo, useCrearHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
 import {
   criticidadChipColor,
@@ -90,7 +93,7 @@ function ChipsHallazgo({ hallazgo }: { hallazgo: Hallazgo }) {
 }
 
 /** Popup de detalle: la info completa del hallazgo (foto incluida) con las
- * acciones del administrador al pie — editar o eliminar. */
+ * acciones al pie — editar, y eliminar solo si llega `onEliminar` (ADMIN). */
 function DetalleHallazgoModal({
   hallazgo,
   onClose,
@@ -100,7 +103,7 @@ function DetalleHallazgoModal({
   hallazgo: Hallazgo | null;
   onClose: () => void;
   onEditar: () => void;
-  onEliminar: () => void;
+  onEliminar?: () => void;
 }) {
   return (
     <Modal.Backdrop
@@ -169,9 +172,11 @@ function DetalleHallazgoModal({
             ) : null}
           </Modal.Body>
           <Modal.Footer>
-            <Button onPress={onEliminar} variant="danger">
-              Eliminar
-            </Button>
+            {onEliminar ? (
+              <Button onPress={onEliminar} variant="danger">
+                Eliminar
+              </Button>
+            ) : null}
             <Button onPress={onEditar}>Editar</Button>
           </Modal.Footer>
         </Modal.Dialog>
@@ -181,10 +186,11 @@ function DetalleHallazgoModal({
 }
 
 /**
- * Alta directa del administrador: equipo, prioridad y descripción — la foto no
- * va acá (se adjunta desde Terreno, donde se saca). El POST es online, con id
- * idempotente del cliente (`useCrearHallazgo`); el hallazgo nace ABIERTO y
- * dispara el mismo aviso al taller que uno reportado en terreno.
+ * Alta directa desde el panel: equipo, prioridad, descripción y fecha — la
+ * foto no va acá (se adjunta desde Terreno, donde se saca). La fecha parte en
+ * ahora y se cambia para cargar un hallazgo que se olvidó. El POST es online,
+ * con id idempotente del cliente (`useCrearHallazgo`); el hallazgo nace
+ * ABIERTO y dispara el mismo aviso al taller que uno reportado en terreno.
  */
 function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
   const { data: equipos } = useEquipment();
@@ -192,12 +198,20 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
   const [equipoId, setEquipoId] = useState('');
   const [prioridad, setPrioridad] = useState<string>('MEDIA');
   const [descripcion, setDescripcion] = useState('');
+  const [fecha, setFecha] = useState(() => toDateTimeLocal(new Date()));
+  const fechaIso = fechaRegistroIso(fecha);
 
-  const valido = equipoId.length > 0 && descripcion.trim().length >= 3;
+  const valido = equipoId.length > 0 && descripcion.trim().length >= 3 && fechaIso !== null;
 
   const registrar = () => {
+    if (!fechaIso) return;
     crear.mutate(
-      { equipoId, descripcion: descripcion.trim(), prioridad: prioridad as (typeof PRIORIDADES)[number] },
+      {
+        equipoId,
+        descripcion: descripcion.trim(),
+        prioridad: prioridad as (typeof PRIORIDADES)[number],
+        fecha: fechaIso,
+      },
       { onSuccess: onClose },
     );
   };
@@ -261,6 +275,11 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
               <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
                 <Label>Descripción</Label>
                 <TextArea placeholder="Qué se encontró y dónde…" rows={3} />
+              </TextField>
+
+              <TextField fullWidth isInvalid={fechaIso === null} name="fecha" onChange={setFecha} value={fecha}>
+                <Label>Fecha y hora del hallazgo</Label>
+                <Input max={toDateTimeLocal(new Date())} type="datetime-local" />
               </TextField>
 
               <p className="text-xs text-muted-foreground">
@@ -420,6 +439,7 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
 export function HallazgosAdminView() {
   const { data: hallazgos, isPending, isError, error } = useHallazgosList();
   const eliminar = useEliminarHallazgo();
+  const puedeEliminar = canDeleteHallazgo(usePermissions().role);
   const [params, setParams] = useSearchParams();
   const [busqueda, setBusqueda] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('TODOS');
@@ -634,10 +654,14 @@ export function HallazgosAdminView() {
           if (detalle) setEditando(detalle);
           cerrarDetalle();
         }}
-        onEliminar={() => {
-          if (detalle) setEliminando(detalle);
-          cerrarDetalle();
-        }}
+        onEliminar={
+          puedeEliminar
+            ? () => {
+                if (detalle) setEliminando(detalle);
+                cerrarDetalle();
+              }
+            : undefined
+        }
       />
 
       {editando ? <EditarHallazgoModal hallazgo={editando} onClose={() => setEditando(null)} /> : null}

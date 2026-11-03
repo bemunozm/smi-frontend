@@ -29,9 +29,14 @@ describe('NAV_ITEMS', () => {
     expect(labelsDe('Usuarios')).toEqual(['Operadores', 'Usuarios', 'Notificaciones']);
   });
 
-  it('el Dashboard (`/`) es solo ADMIN: el resto consumiría 403 de /api/dashboard/*', () => {
+  it('el Dashboard (`/`) es de ADMIN y SECRETARIA: el resto consumiría 403 de /api/dashboard/*', () => {
     const dashboard = NAV_ITEMS.find((item) => item.to === '/');
-    expect(dashboard?.roles).toEqual([ROLES.ADMIN]);
+    expect(dashboard?.roles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
+  });
+
+  it('SECRETARIA ve solo el dashboard, sus tres reportes y notificaciones', () => {
+    const suyos = NAV_ITEMS.filter((item) => item.roles.includes(ROLES.SECRETARIA)).map((item) => item.to);
+    expect(suyos).toEqual(['/', '/reportes-diarios', '/hallazgos', '/trabajos-extra', '/notificaciones']);
   });
 
   it('Terreno y Mantenimiento no van en el menú: son los home de sus roles', () => {

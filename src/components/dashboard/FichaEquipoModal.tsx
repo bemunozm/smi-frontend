@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, Modal } from '@heroui/react';
 
+import { usePermissions } from '../../hooks/usePermissions';
+import { canOpenPath } from '../../lib/permissions';
 import { EquipoDetalleView } from '../../views/EquipoDetalleView';
 
 /**
@@ -20,6 +22,7 @@ const FICHA_DIALOG_CLASS =
  */
 export function FichaEquipoModal({ equipoId, onClose }: { equipoId: string | null; onClose: () => void }) {
   const navigate = useNavigate();
+  const { role } = usePermissions();
   return (
     <Modal.Backdrop
       isDismissable
@@ -37,17 +40,19 @@ export function FichaEquipoModal({ equipoId, onClose }: { equipoId: string | nul
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>{equipoId ? <EquipoDetalleView enModal equipoId={equipoId} /> : null}</Modal.Body>
-          <Modal.Footer>
-            <Button
-              onPress={() => {
-                onClose();
-                if (equipoId) void navigate(`/equipos/${equipoId}`, { state: { from: '/' } });
-              }}
-              variant="secondary"
-            >
-              Abrir en página completa →
-            </Button>
-          </Modal.Footer>
+          {canOpenPath(role, '/equipos') ? (
+            <Modal.Footer>
+              <Button
+                onPress={() => {
+                  onClose();
+                  if (equipoId) void navigate(`/equipos/${equipoId}`, { state: { from: '/' } });
+                }}
+                variant="secondary"
+              >
+                Abrir en página completa →
+              </Button>
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
 
+import { usePermissions } from '../hooks/usePermissions';
 import { useReportesDiarios } from '../hooks/useReporteDiario';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL } from '../lib/dashboard-format';
@@ -176,17 +178,19 @@ function DetalleReporteModal({ reporte, onClose }: { reporte: ReporteDiario | nu
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
- * Vista de reportes diarios del ADMINISTRADOR (`/reportes-diarios`, ruta solo
- * ADMIN): todos los reportes que los supervisores envían desde Terreno, con
- * filtros por día y por supervisor; cada fila abre el detalle completo en un
- * popup. Solo lectura — las correcciones siguen saliendo de Terreno, con su
- * historial de cambios.
+ * Vista de reportes diarios del panel (`/reportes-diarios`, ADMIN y
+ * SECRETARIA): todos los reportes que los supervisores envían desde Terreno,
+ * con filtros por día y por supervisor; cada fila abre el detalle completo en
+ * un popup. «Cargar o corregir» lleva al formulario de Terreno con fecha y
+ * turno a elección (`/reportes-diarios/cargar`), con su historial de cambios.
  */
 export function ReportesDiariosAdminView() {
   const { data, isPending, isError, error } = useReportesDiarios();
   const [dia, setDia] = useState('');
   const [supervisorFiltro, setSupervisorFiltro] = useState('TODOS');
   const [detalle, setDetalle] = useState<ReporteDiario | null>(null);
+  const navigate = useNavigate();
+  const puedeCargar = usePermissions().can('reporteDiario.create');
 
   // El backend ya entrega fecha desc, turno asc — se respeta tal cual.
   const reportes = data ?? [];
@@ -223,9 +227,14 @@ export function ReportesDiariosAdminView() {
             Los reportes de producción que envían los supervisores desde terreno. Abre uno para ver su detalle.
           </p>
         </div>
-        <Chip color="accent" data-testid="total-reportes" size="md" variant="soft">
-          {NUM_CL.format(lista.length)} {lista.length === 1 ? 'reporte' : 'reportes'}
-        </Chip>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip color="accent" data-testid="total-reportes" size="md" variant="soft">
+            {NUM_CL.format(lista.length)} {lista.length === 1 ? 'reporte' : 'reportes'}
+          </Chip>
+          {puedeCargar ? (
+            <Button onPress={() => void navigate('/reportes-diarios/cargar')}>Cargar o corregir reporte</Button>
+          ) : null}
+        </div>
       </div>
 
       <Card>

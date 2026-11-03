@@ -1,7 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import {
   ClipboardCheck,
+  ClipboardList,
   Ellipsis,
+  Hammer,
+  TriangleAlert,
   LayoutDashboard,
   Package,
   Truck,
@@ -26,6 +29,9 @@ const MANTENCION: PrimaryItem = { to: '/mantenimiento', label: 'Mantención', ic
 // El ícono calca el de "Registro de equipo" en `TerrenoLayout` — `/terreno`
 // redirige ahí, así que en la práctica es el mismo destino.
 const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: ClipboardCheck };
+const HALLAZGOS: PrimaryItem = { to: '/hallazgos', label: 'Hallazgos', icon: TriangleAlert };
+const TRABAJOS_EXTRA: PrimaryItem = { to: '/trabajos-extra', label: 'Trabajos', icon: Hammer };
+const REPORTES_DIARIOS: PrimaryItem = { to: '/reportes-diarios', label: 'Reportes', icon: ClipboardList };
 
 /**
  * Ítems primarios de la barra inferior, POR ROL: un único set fijo
@@ -48,6 +54,8 @@ const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.SUPERVISOR]: [TERRENO, EQUIPOS, INVENTARIO],
   [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
   [ROLES.MANTENEDOR]: [MANTENCION, EQUIPOS, INVENTARIO],
+  // Sus cuatro pantallas; Notificaciones queda en «Más».
+  [ROLES.SECRETARIA]: [INICIO, HALLAZGOS, TRABAJOS_EXTRA, REPORTES_DIARIOS],
 };
 
 /** Destinos que viven fuera del menú: se muestran sin pasar por `allowed`. */

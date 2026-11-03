@@ -4,6 +4,8 @@ import { Card, Chip, Spinner, Table } from '@heroui/react';
 
 import { RESUMEN_CARD_BG } from '../../config/dashboard-colors';
 import { useDashboardResumenDia } from '../../hooks/useDashboard';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canOpenPath } from '../../lib/permissions';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
@@ -151,6 +153,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
 
 function TablaOperacion({ data }: { data: ResumenDiaData }) {
   const navigate = useNavigate();
+  const aFicha = canOpenPath(usePermissions().role, '/equipos');
   const filas = data.operacionPorEquipo;
   const tot = filas.reduce(
     (a, f) => ({
@@ -191,7 +194,7 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
                         data-testid={`op-${f.internalCode}`}
                         id={f.internalCode}
                         key={f.internalCode}
-                        {...filaAEquipo(f.equipmentId, navigate)}
+                        {...filaAEquipo(aFicha ? f.equipmentId : undefined, navigate)}
                       >
                         <Table.Cell className="font-mono text-sm">{f.internalCode}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{n(f.dia.hm)}</Table.Cell>
@@ -224,6 +227,7 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
 
 function TablaLecturas({ data }: { data: ResumenDiaData }) {
   const navigate = useNavigate();
+  const aFicha = canOpenPath(usePermissions().role, '/equipos');
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
       <h3 className="text-base font-semibold text-foreground">Lecturas de horómetro</h3>
@@ -244,7 +248,7 @@ function TablaLecturas({ data }: { data: ResumenDiaData }) {
                 <Table.Body>
                   {data.lecturas.map((l) => {
                     return (
-                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id} {...filaAEquipo(l.equipmentId, navigate)}>
+                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id} {...filaAEquipo(aFicha ? l.equipmentId : undefined, navigate)}>
                         <Table.Cell className="font-mono text-sm">{l.internalCode}</Table.Cell>
                         <Table.Cell className="text-sm">{l.turno}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{NUM_CL_1.format(l.inicial)}</Table.Cell>

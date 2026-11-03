@@ -66,6 +66,9 @@ const RUTAS_POR_ROL: Readonly<Record<Role, readonly string[]>> = {
   [ROLES.ADMIN]: ['/', '/equipos', '/inventario', '/operadores', '/mantenimiento', '/terreno', '/notificaciones'],
   [ROLES.SUPERVISOR]: ['/equipos', '/inventario', '/operadores', '/terreno', '/notificaciones'],
   [ROLES.MANTENEDOR]: ['/equipos', '/inventario', '/mantenimiento', '/notificaciones'],
+  // Sus vistas de hallazgos, trabajos extra y reportes son de escritorio y en
+  // línea, como las del administrador: no tienen lista que precargar.
+  [ROLES.SECRETARIA]: ['/', '/notificaciones'],
 };
 
 /** Sin rol reconocido (la barra de Terreno antes de resolver la sesión) se prepara

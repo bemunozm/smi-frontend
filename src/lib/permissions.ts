@@ -1,7 +1,7 @@
 import type { EndpointKey } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
 
 /**
  * Quién puede hacer cada escritura: espejo de los `@Roles` del backend
@@ -68,10 +68,12 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'operator.delete': [ADMIN],
   // Terreno
   'shiftCard.edit': [ADMIN, SUPERVISOR],
-  'hallazgo.edit': [ADMIN, SUPERVISOR],
-  'trabajoExtra.edit': [ADMIN, SUPERVISOR],
-  'reporteDiario.create': [ADMIN, SUPERVISOR],
-  'reporteDiario.edit': [ADMIN, SUPERVISOR],
+  // SECRETARIA completa y corrige lo que un supervisor olvidó (pedido del
+  // cliente, 03/11).
+  'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  'trabajoExtra.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  'reporteDiario.create': [ADMIN, SUPERVISOR, SECRETARIA],
+  'reporteDiario.edit': [ADMIN, SUPERVISOR, SECRETARIA],
 };
 
 /** `true` si `role` puede hacer la escritura `action`. Sin rol (sesión sin
@@ -93,6 +95,25 @@ export function canWriteAny(role: Role | null | undefined, actions: readonly End
  */
 export function canCloseShiftCardFromFleet(role: Role | null | undefined): boolean {
   return role === ADMIN;
+}
+
+/** Eliminar un hallazgo: `DELETE /api/hallazgos/:id` es solo ADMIN. */
+export function canDeleteHallazgo(role: Role | null | undefined): boolean {
+  return role === ADMIN;
+}
+
+/**
+ * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
+ * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un
+ * equipo) para no llevarla a una pantalla que la rebota a `/forbidden`.
+ * Para el resto de los roles el dashboard no cambia.
+ */
+const RUTAS_SECRETARIA = ['/', '/hallazgos', '/trabajos-extra', '/reportes-diarios', '/notificaciones', '/perfil'];
+
+export function canOpenPath(role: Role | null | undefined, path: string): boolean {
+  if (role !== SECRETARIA) return true;
+  const base = path.split('?')[0];
+  return RUTAS_SECRETARIA.some((ruta) => base === ruta || (ruta !== '/' && base.startsWith(`${ruta}/`)));
 }
 
 /** Los cuatro modos del formulario de movimiento de un ítem. */
