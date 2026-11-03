@@ -218,10 +218,10 @@ export function ReportesDiariosAdminView() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Reportes diarios
+            SMI · Informe de producción diaria
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Reportes diarios
+            Informe de producción diaria
           </h1>
           <p className="text-sm text-muted-foreground">
             Los reportes de producción que envían los supervisores desde terreno. Abre uno para ver su detalle.

@@ -148,7 +148,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
     const editor = screen.getByRole('dialog');
-    expect(within(editor).getByText('Editar trabajo · CG-002')).toBeTruthy();
+    expect(within(editor).getByText('Editar actividad · CG-002')).toBeTruthy();
     expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
     fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
@@ -180,9 +180,9 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
   });
 
-  it('«Nuevo trabajo extra» registra con operador del catálogo, horómetros y actividades', async () => {
+  it('«Nueva actividad» registra con operador del catálogo, horómetros y actividades', async () => {
     render(<TrabajosExtraAdminView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nuevo trabajo extra' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
 
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));

@@ -30,8 +30,8 @@ const MANTENCION: PrimaryItem = { to: '/mantenimiento', label: 'Mantención', ic
 // redirige ahí, así que en la práctica es el mismo destino.
 const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: ClipboardCheck };
 const HALLAZGOS: PrimaryItem = { to: '/hallazgos', label: 'Hallazgos', icon: TriangleAlert };
-const TRABAJOS_EXTRA: PrimaryItem = { to: '/trabajos-extra', label: 'Trabajos', icon: Hammer };
-const REPORTES_DIARIOS: PrimaryItem = { to: '/reportes-diarios', label: 'Reportes', icon: ClipboardList };
+const TRABAJOS_EXTRA: PrimaryItem = { to: '/trabajos-extra', label: 'Report', icon: Hammer };
+const REPORTES_DIARIOS: PrimaryItem = { to: '/reportes-diarios', label: 'Producción', icon: ClipboardList };
 
 /**
  * Ítems primarios de la barra inferior, POR ROL: un único set fijo

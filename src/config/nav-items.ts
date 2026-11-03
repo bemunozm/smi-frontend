@@ -52,13 +52,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     seccion: 'Administración',
   },
   // --- Reportes (vistas del administrador, no las de Terreno) ---------------
-  { label: 'Reportes', to: '/reportes', roles: [ROLES.ADMIN], seccion: 'Reportes' },
-  // Reportes diarios de los supervisores.
-  { label: 'Reportes diarios', to: '/reportes-diarios', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Reportes de salida de turno (equipos usados en el día, por supervisor).
+  { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN], seccion: 'Reportes' },
+  // Reportes diarios de producción de los supervisores.
+  { label: 'Informe de producción diaria', to: '/reportes-diarios', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Gestión de hallazgos (corregir/eliminar/crear).
   { label: 'Hallazgos', to: '/hallazgos', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
-  // Trabajos extraordinarios con filtros.
-  { label: 'Trabajos extra', to: '/trabajos-extra', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Trabajos extraordinarios con filtros (renombrado «Report» a pedido del
+  // administrador — las rutas y el dominio conservan el nombre viejo).
+  { label: 'Report', to: '/trabajos-extra', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Registro de mantenciones completadas del taller.
   { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------

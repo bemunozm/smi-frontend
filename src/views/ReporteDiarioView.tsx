@@ -187,7 +187,7 @@ function VolverAReportes() {
   const navigate = useNavigate();
   return (
     <Boton variante="contorno" ancho onClick={() => void navigate('/reportes-diarios')}>
-      <ArrowLeft className="h-[19px] w-[19px]" /> Volver a reportes diarios
+      <ArrowLeft className="h-[19px] w-[19px]" /> Volver al informe de producción
     </Boton>
   );
 }

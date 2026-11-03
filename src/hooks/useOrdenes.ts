@@ -1,14 +1,21 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { OrdenesAPI } from '../api/MantenimientoAPI';
 import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
-import { ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
+import { EQUIPMENT_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
 import { buildQueuedEdit } from '../lib/queued-edit';
 import { generateUuid } from '../lib/uuid';
 import { ordenEntity } from '../offline/db';
-import type { CreateOrdenInput, EstadoOT, OrdenFields, OrdenTrabajo, UpdateOrdenInput } from '../types/mantenimiento';
+import type {
+  CreateMantencionHistoricaInput,
+  CreateOrdenInput,
+  EstadoOT,
+  OrdenFields,
+  OrdenTrabajo,
+  UpdateOrdenInput,
+} from '../types/mantenimiento';
 import { useQueuedCreate, useQueuedMutation, writeQueued } from './useQueuedMutation';
 
 /** Lista de OT, opcionalmente filtrada por `estado` (mismo query param que el backend). */
@@ -33,6 +40,28 @@ export function useCrearOrden() {
       toast.success('Orden de trabajo creada', { description: orden?.titulo ?? input.titulo });
     },
     errorFallback: 'No se pudo crear la orden de trabajo.',
+  });
+}
+
+/**
+ * Mantención hecha ANTES de usar la app, registrada desde la ficha del equipo
+ * (solo ADMIN). Mutación directa, sin cola offline: es carga de datos desde
+ * el escritorio del administrador, no un flujo de terreno. Invalida `ordenes`
+ * (el registro «Mantenciones» la lista) y `equipment` (la ficha muestra
+ * `ultimaMantencion`).
+ */
+export function useRegistrarMantencionHistorica() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMantencionHistoricaInput) => OrdenesAPI.createHistorica(input),
+    onSuccess: (orden) => {
+      toast.success('Mantención anterior registrada', { description: orden.titulo });
+      void queryClient.invalidateQueries({ queryKey: ORDENES_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la mantención anterior.'));
+    },
   });
 }
 
