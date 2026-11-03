@@ -237,6 +237,31 @@ describe('TrabajosExtraAdminView', () => {
     );
   });
 
+  it('«Exportar Excel» pide el período en UN calendario de rango y sin rango no descarga', () => {
+    // jsdom no implementa los object URL con los que se descarga el archivo.
+    const createObjectURL = vi.fn(() => 'blob:report');
+    URL.createObjectURL = createObjectURL as never;
+    URL.revokeObjectURL = vi.fn() as never;
+
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+
+    const dialog = screen.getByRole('dialog');
+    // UN solo selector de rango (mismo patrón que Movimientos), no dos campos.
+    expect(within(dialog).getByText('Período')).toBeTruthy();
+    expect(within(dialog).queryByText('Desde')).toBeNull();
+    expect(within(dialog).queryByText('Hasta')).toBeNull();
+    // El popover del calendario tiene su ancla (regresión de Movimientos).
+    expect(dialog.querySelector('[data-slot="date-range-picker-trigger"]')).not.toBeNull();
+
+    // Sin período elegido no hay descarga: el botón queda deshabilitado.
+    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('Elegí el período');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
+    expect(createObjectURL).not.toHaveBeenCalled();
+    // El armado y contenido del archivo se prueba en `lib/report-excel.test.ts`,
+    // releyendo el Excel generado.
+  });
+
   it('sin foto del report, «Registrar trabajo» queda deshabilitado', async () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));

@@ -1,5 +1,24 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Checkbox, Chip, Input, Label, ListBox, Modal, Select, Spinner, Table, TextArea, TextField } from '@heroui/react';
+import {
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  DateField,
+  DateRangePicker,
+  Input,
+  Label,
+  ListBox,
+  Modal,
+  RangeCalendar,
+  Select,
+  Spinner,
+  Table,
+  TextArea,
+  TextField,
+} from '@heroui/react';
+import { Group } from 'react-aria-components/Group';
+import type { DateValue } from 'react-aria-components/Calendar';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -12,6 +31,7 @@ import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-st
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import { numeroReport } from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
+import { construirExcelReport } from '../lib/report-excel';
 import { ACTIVIDADES, DESTINOS, actividadLabel, destinoLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
@@ -494,11 +514,13 @@ export function TrabajosExtraAdminView() {
   const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
   const puedeEditar = usePermissions().can('trabajoExtra.edit');
   // «Exportar Excel» pide el rango de fechas en un diálogo propio (pedido del
-  // cliente): el rango es obligatorio, no hereda en silencio el del filtro —
-  // aunque sí se propone como punto de partida al abrirlo.
+  // cliente): el rango es obligatorio y se elige en UN solo calendario de
+  // rango — mismo selector que el período de Movimientos de inventario.
   const [exportando, setExportando] = useState(false);
-  const [exportDesde, setExportDesde] = useState('');
-  const [exportHasta, setExportHasta] = useState('');
+  const [exportRange, setExportRange] = useState<{ start: DateValue; end: DateValue } | null>(null);
+  // `DateValue.toString()` es `YYYY-MM-DD`: comparable contra `diaLocal`.
+  const exportDesde = exportRange?.start.toString() ?? '';
+  const exportHasta = exportRange?.end.toString() ?? '';
 
   const trabajos = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
@@ -534,167 +556,21 @@ export function TrabajosExtraAdminView() {
    * equipos y turnos: el Excel es la planilla del período, no hereda en
    * silencio los filtros de la tabla. */
   const enRangoExport = useMemo(() => {
-    if (!exportDesde || !exportHasta || exportDesde > exportHasta) return [];
+    if (!exportDesde || !exportHasta) return [];
     return trabajos.filter((t) => {
       const dia = diaLocal(t.fecha);
       return dia >= exportDesde && dia <= exportHasta;
     });
   }, [trabajos, exportDesde, exportHasta]);
 
-  /** Propone el rango del filtro (si lo hay) al abrir el diálogo — igual se
-   * puede cambiar: elegirlo es obligatorio, heredarlo no. */
-  const abrirExportar = () => {
-    setExportDesde(desde);
-    setExportHasta(hasta);
-    setExportando(true);
-  };
-
   /**
-   * Exporta el rango elegido a un Excel con las columnas de la planilla del
-   * cliente (Item, Fecha, Empresa, Equipo, Supervisor, Operador, Report N°,
-   * Planta, Actividad, horómetros y total), con formato: título con el rango,
-   * encabezado en el azul del shell de SMI, cebra en las filas, filtros y
-   * fila de total. `exceljs` entra por import dinámico: solo se descarga al
-   * tocar «Exportar».
+   * Exporta el rango elegido: el armado del archivo (columnas de la planilla
+   * del cliente + su formato) vive en `lib/report-excel.ts`, probado
+   * releyendo el archivo generado.
    */
   const exportarExcel = async () => {
-    // Interop CJS/ESM: en Node (vitest) el módulo llega solo como `default`;
-    // en el build del navegador (Vite) trae el export con nombre.
-    const excel = await import('exceljs');
-    const Workbook = excel.Workbook ?? excel.default.Workbook;
-    const wb = new Workbook();
-    // Encabezado congelado (título + subtítulo + vacío + encabezado): al
-    // hacer scroll, las columnas siguen a la vista.
-    const ws = wb.addWorksheet('Report', { views: [{ state: 'frozen', ySplit: 4 }] });
-
-    // Paleta: el azul oscuro del shell de SMI para el encabezado, gris suave
-    // para la cebra, bordes apenas visibles — legible también impreso en B/N.
-    const AZUL_SMI = 'FF1E293B';
-    const GRIS_CEBRA = 'FFF1F5F9';
-    const GRIS_TEXTO = 'FF6B7280';
-    const BORDE = { style: 'thin' as const, color: { argb: 'FFD9DEE5' } };
-    const N_COLUMNAS = 14;
-
-    ws.columns = [
-      { key: 'item', width: 9 },
-      { key: 'fecha', width: 12 },
-      { key: 'empresa', width: 12 },
-      { key: 'equipo', width: 10 },
-      { key: 'supervisor', width: 20 },
-      { key: 'operador', width: 20 },
-      { key: 'report', width: 10 },
-      { key: 'planta', width: 14 },
-      { key: 'actividad', width: 36 },
-      { key: 'horomIni', width: 10 },
-      { key: 'horomFin', width: 10 },
-      { key: 'total', width: 11 },
-      { key: 'descripcion', width: 40 },
-      { key: 'observaciones', width: 40 },
-    ];
-
-    // `dd-mm-yyyy`, como en la planilla del cliente.
-    const legible = (dia: string) => dia.split('-').reverse().join('-');
-
-    // --- Título y subtítulo ------------------------------------------------
-    const titulo = ws.addRow(['Report · Trabajos extraordinarios']);
-    ws.mergeCells(1, 1, 1, N_COLUMNAS);
-    titulo.height = 24;
-    titulo.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF111827' } };
-    titulo.getCell(1).alignment = { vertical: 'middle' };
-
-    const subtitulo = ws.addRow([
-      `Del ${legible(exportDesde)} al ${legible(exportHasta)} · ${enRangoExport.length} ${
-        enRangoExport.length === 1 ? 'trabajo' : 'trabajos'
-      } · exportado el ${legible(diaLocal(new Date().toISOString()))}`,
-    ]);
-    ws.mergeCells(2, 1, 2, N_COLUMNAS);
-    subtitulo.getCell(1).font = { size: 10, color: { argb: GRIS_TEXTO } };
-
-    ws.addRow([]);
-
-    // --- Encabezado --------------------------------------------------------
-    const encabezado = ws.addRow([
-      'Item',
-      'Fecha',
-      'Empresa',
-      'Equipo',
-      'Supervisor',
-      'Operador',
-      'Report N°',
-      'Planta',
-      'Actividad',
-      'Horom_Ini',
-      'Horom_Fin',
-      'Total_Horas',
-      'Descripción',
-      'Observaciones',
-    ]);
-    encabezado.height = 20;
-    encabezado.eachCell((celda) => {
-      celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_SMI } };
-      celda.font = { bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
-      celda.alignment = { vertical: 'middle', horizontal: 'center' };
-      celda.border = { top: BORDE, bottom: BORDE, left: BORDE, right: BORDE };
-    });
-    // Filtros sobre el encabezado, como la tabla del cliente.
-    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: N_COLUMNAS } };
-
-    // --- Filas -------------------------------------------------------------
-    enRangoExport.forEach((t, indice) => {
-      const fila = ws.addRow({
-        item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
-        fecha: legible(diaLocal(t.fecha)),
-        empresa: t.faena,
-        equipo: t.equipo?.internalCode ?? t.equipoId,
-        supervisor: t.registradoPor ?? '',
-        report: t.reportNumero ?? '',
-        operador: t.operador,
-        planta: t.destino
-          ? t.destino === 'PLANTA'
-            ? (t.planta ?? destinoLabel.PLANTA)
-            : (destinoLabel[t.destino] ?? t.destino)
-          : '',
-        actividad: actividadesDe(t),
-        horomIni: t.horometroInicial,
-        horomFin: t.horometroFinal,
-        total: t.totalHoras,
-        descripcion: t.descripcion,
-        observaciones: t.observaciones ?? '',
-      });
-      fila.eachCell({ includeEmpty: true }, (celda) => {
-        celda.border = { bottom: BORDE, left: BORDE, right: BORDE };
-        if (indice % 2 === 1) {
-          celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CEBRA } };
-        }
-      });
-      fila.getCell('item').alignment = { horizontal: 'center' };
-      fila.getCell('fecha').alignment = { horizontal: 'center' };
-      fila.getCell('report').alignment = { horizontal: 'center' };
-      fila.getCell('horomIni').numFmt = '#,##0.##';
-      fila.getCell('horomFin').numFmt = '#,##0.##';
-      fila.getCell('total').numFmt = '#,##0.00';
-      fila.getCell('total').font = { bold: true };
-      // Textos largos: que crezcan hacia abajo, no hacia el costado.
-      fila.getCell('descripcion').alignment = { wrapText: true, vertical: 'top' };
-      fila.getCell('observaciones').alignment = { wrapText: true, vertical: 'top' };
-    });
-
-    // --- Total del período ---------------------------------------------------
-    const totalPeriodo = enRangoExport.reduce((acc, t) => acc + t.totalHoras, 0);
-    const filaTotal = ws.addRow({ actividad: 'Total horas del período', total: totalPeriodo });
-    filaTotal.getCell('actividad').font = { bold: true };
-    filaTotal.getCell('actividad').alignment = { horizontal: 'right' };
-    filaTotal.getCell('total').numFmt = '#,##0.00';
-    filaTotal.getCell('total').font = { bold: true };
-    filaTotal.eachCell({ includeEmpty: true }, (celda) => {
-      celda.border = { top: { style: 'double' as const, color: { argb: 'FF111827' } } };
-    });
-
+    const blob = await construirExcelReport(enRangoExport, exportDesde, exportHasta);
     const nombre = `Report_${exportDesde}_a_${exportHasta}.xlsx`;
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
     const url = URL.createObjectURL(blob);
     const enlace = document.createElement('a');
     enlace.href = url;
@@ -723,7 +599,7 @@ export function TrabajosExtraAdminView() {
             {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
             {lista.length === 1 ? 'trabajo' : 'trabajos'}
           </Chip>
-          <Button isDisabled={trabajos.length === 0} onPress={abrirExportar} variant="secondary">
+          <Button isDisabled={trabajos.length === 0} onPress={() => setExportando(true)} variant="secondary">
             Exportar Excel
           </Button>
           <Button onPress={() => setCreando(true)}>Nueva actividad</Button>
@@ -964,26 +840,51 @@ export function TrabajosExtraAdminView() {
                   Elegí de qué fecha hasta qué fecha exportar. Salen todos los trabajos del rango, sin
                   importar los filtros de la tabla.
                 </p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <TextField fullWidth name="exportDesde" onChange={setExportDesde} value={exportDesde}>
-                    <Label>Desde</Label>
-                    <Input max={exportHasta || undefined} type="date" />
-                  </TextField>
-                  <TextField fullWidth name="exportHasta" onChange={setExportHasta} value={exportHasta}>
-                    <Label>Hasta</Label>
-                    <Input min={exportDesde || undefined} type="date" />
-                  </TextField>
-                </div>
+                {/* UN solo calendario de rango, calcado del filtro «Período» de
+                    Movimientos de inventario: el rango es una decisión, no dos
+                    campos sueltos que hay que cuadrar a mano. */}
+                <DateRangePicker aria-label="Período a exportar" onChange={setExportRange} value={exportRange}>
+                  <Label>Período</Label>
+                  {/* El `Group` de react-aria es el ancla del popover: sin él el
+                      calendario se dibuja en la esquina de la pantalla. */}
+                  <Group className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3">
+                    <DateField.Input slot="start">
+                      {(segment) => <DateField.Segment segment={segment} />}
+                    </DateField.Input>
+                    <DateRangePicker.RangeSeparator>→</DateRangePicker.RangeSeparator>
+                    <DateField.Input slot="end">
+                      {(segment) => <DateField.Segment segment={segment} />}
+                    </DateField.Input>
+                    <DateRangePicker.Trigger className="ml-auto">
+                      <DateRangePicker.TriggerIndicator />
+                    </DateRangePicker.Trigger>
+                  </Group>
+                  <DateRangePicker.Popover>
+                    <RangeCalendar>
+                      <RangeCalendar.Header>
+                        <RangeCalendar.NavButton slot="previous" />
+                        <RangeCalendar.Heading />
+                        <RangeCalendar.NavButton slot="next" />
+                      </RangeCalendar.Header>
+                      <RangeCalendar.Grid>
+                        <RangeCalendar.GridHeader>
+                          {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}
+                        </RangeCalendar.GridHeader>
+                        <RangeCalendar.GridBody>
+                          {(date) => <RangeCalendar.Cell date={date} />}
+                        </RangeCalendar.GridBody>
+                      </RangeCalendar.Grid>
+                    </RangeCalendar>
+                  </DateRangePicker.Popover>
+                </DateRangePicker>
                 <p className="text-sm text-muted-foreground" data-testid="export-conteo">
-                  {!exportDesde || !exportHasta
-                    ? 'Elegí ambas fechas para exportar.'
-                    : exportDesde > exportHasta
-                      ? 'El rango está invertido: «Desde» no puede ser después de «Hasta».'
-                      : enRangoExport.length === 0
-                        ? 'No hay trabajos en ese rango.'
-                        : `Se van a exportar ${NUM_CL.format(enRangoExport.length)} ${
-                            enRangoExport.length === 1 ? 'trabajo' : 'trabajos'
-                          }.`}
+                  {!exportRange
+                    ? 'Elegí el período para exportar.'
+                    : enRangoExport.length === 0
+                      ? 'No hay trabajos en ese período.'
+                      : `Se van a exportar ${NUM_CL.format(enRangoExport.length)} ${
+                          enRangoExport.length === 1 ? 'trabajo' : 'trabajos'
+                        }.`}
                 </p>
               </div>
             </Modal.Body>
