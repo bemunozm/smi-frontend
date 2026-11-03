@@ -136,9 +136,9 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
   });
 
-  it('«Nuevo trabajo extra» registra con operador del catálogo, horómetros y actividades', async () => {
+  it('«Nueva actividad» registra con operador del catálogo, horómetros y actividades', async () => {
     render(<TrabajosExtraAdminView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nuevo trabajo extra' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
 
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));

@@ -88,6 +88,12 @@ const EQUIPO_DETALLE: EquipmentDetail = {
   documentsAlert: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  ultimaMantencion: {
+    fecha: '2026-10-19T16:30:00.000Z',
+    titulo: 'Mantención 10.000 km',
+    tipo: 'PREVENTIVA',
+    realizadaPor: 'Pedro Soto',
+  },
   _count: { combustibles: 2, horometros: 3, trabajosExtra: 1, hallazgos: 4, stockMovements: 2 },
   // Shape real de `equipment.service.ts#findOne` (Prisma `stockMovements`,
   // `item: {select: {sku,name,unit}}` — SIN `item.id` ni relaciones extra:
@@ -357,6 +363,13 @@ describe('EquipoDetalleView', () => {
     expect(screen.getByText('Lecturas horómetro')).toBeTruthy();
     expect(screen.getByText('Trabajos extra')).toBeTruthy();
     expect(screen.getByText('Cargas combustible')).toBeTruthy();
+    // KPI de última mantención: fecha (con año) de la última OT COMPLETADA
+    // del equipo, con su título y quién la hizo como caption.
+    expect(screen.getByText('Última mantención')).toBeTruthy();
+    expect(screen.getByText(/19 oct\.? 2026/)).toBeTruthy();
+    expect(screen.getByText('Mantención 10.000 km · Pedro Soto')).toBeTruthy();
+    // Acción solo-ADMIN para la historia previa de un equipo antiguo.
+    expect(screen.getByRole('button', { name: 'Mantención anterior' })).toBeTruthy();
 
     // Datos de la unidad.
     expect(screen.getByText('Caterpillar')).toBeTruthy();

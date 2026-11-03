@@ -172,7 +172,7 @@ function CrearTrabajoExtraModal({ onClose }: { onClose: () => void }) {
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              Nuevo trabajo extraordinario
+              Nueva actividad
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -354,10 +354,10 @@ export function TrabajosExtraAdminView() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Trabajos extraordinarios
+            SMI · Report
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Trabajos extraordinarios
+            Report
           </h1>
           <p className="text-sm text-muted-foreground">
             Todos los trabajos extra registrados en terreno. Abre uno para ver su detalle completo.
@@ -368,7 +368,7 @@ export function TrabajosExtraAdminView() {
             {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
             {lista.length === 1 ? 'trabajo' : 'trabajos'}
           </Chip>
-          <Button onPress={() => setCreando(true)}>Nuevo trabajo extra</Button>
+          <Button onPress={() => setCreando(true)}>Nueva actividad</Button>
         </div>
       </div>
 
@@ -508,7 +508,7 @@ export function TrabajosExtraAdminView() {
           {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Trabajos extraordinarios" className="min-w-full">
+                <Table.Content aria-label="Report" className="min-w-full">
                   <Table.Header>
                     <Table.Column isRowHeader>Fecha</Table.Column>
                     <Table.Column>Equipo</Table.Column>

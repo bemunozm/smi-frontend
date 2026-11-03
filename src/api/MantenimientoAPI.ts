@@ -7,6 +7,7 @@ import {
   OrdenTrabajoResponseSchema,
   UmbralListResponseSchema,
   type Actividad,
+  type CreateMantencionHistoricaInput,
   type EstadoOT,
   type Intervencion,
   type OrdenTrabajo,
@@ -37,9 +38,21 @@ async function getOrdenById(id: string): Promise<OrdenTrabajo> {
   }
 }
 
+/** Mantención hecha antes de usar la app (solo ADMIN): nace COMPLETADA y
+ * fechada en `fecha` — ver `CreateMantencionHistoricaSchema`. */
+async function createMantencionHistorica(input: CreateMantencionHistoricaInput): Promise<OrdenTrabajo> {
+  try {
+    const response = await axiosInstance.post('/api/mantenimiento/ordenes/historica', input);
+    return OrdenTrabajoResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo registrar la mantención anterior.');
+  }
+}
+
 export const OrdenesAPI = {
   list: listOrdenes,
   getById: getOrdenById,
+  createHistorica: createMantencionHistorica,
 };
 
 // ---------------------------------------------------------------------------

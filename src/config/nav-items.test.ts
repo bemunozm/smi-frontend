@@ -20,10 +20,10 @@ describe('NAV_ITEMS', () => {
 
     expect(labelsDe('Administración')).toEqual(['Dashboard', 'Equipos', 'Inventario']);
     expect(labelsDe('Reportes')).toEqual([
-      'Reportes',
-      'Reportes diarios',
+      'Informe diario equipos',
+      'Informe de producción diaria',
       'Hallazgos',
-      'Trabajos extra',
+      'Report',
       'Mantenciones',
     ]);
     expect(labelsDe('Usuarios')).toEqual(['Operadores', 'Usuarios', 'Notificaciones']);
