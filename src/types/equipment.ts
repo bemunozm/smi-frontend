@@ -168,6 +168,10 @@ export const EquipmentDetailSchema = EquipmentSchema.extend({
       fecha: z.string().datetime(),
       titulo: z.string(),
       tipo: z.string(),
+      /** Quién la hizo (nombres únicos de las tareas completadas, mismo
+       * criterio que la columna «Mantenedor» del registro) — null si nadie
+       * quedó registrado; opcional para tolerar un backend más viejo. */
+      realizadaPor: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),

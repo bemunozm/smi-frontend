@@ -985,7 +985,13 @@ export function EquipoDetalleView({
           value={uso}
         />
         <KpiTile
-          caption={equipo.ultimaMantencion?.titulo ?? 'Sin mantenciones registradas'}
+          caption={
+            equipo.ultimaMantencion
+              ? [equipo.ultimaMantencion.titulo, equipo.ultimaMantencion.realizadaPor]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'Sin mantenciones registradas'
+          }
           icon={<Wrench className="h-4.25 w-4.25" />}
           label="Última mantención"
           value={equipo.ultimaMantencion ? formatFechaConAnio(equipo.ultimaMantencion.fecha) : '—'}

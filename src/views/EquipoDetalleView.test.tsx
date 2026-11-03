@@ -92,6 +92,7 @@ const EQUIPO_DETALLE: EquipmentDetail = {
     fecha: '2026-10-19T16:30:00.000Z',
     titulo: 'Mantención 10.000 km',
     tipo: 'PREVENTIVA',
+    realizadaPor: 'Pedro Soto',
   },
   _count: { combustibles: 2, horometros: 3, trabajosExtra: 1, hallazgos: 4, stockMovements: 2 },
   // Shape real de `equipment.service.ts#findOne` (Prisma `stockMovements`,
@@ -363,10 +364,10 @@ describe('EquipoDetalleView', () => {
     expect(screen.getByText('Trabajos extra')).toBeTruthy();
     expect(screen.getByText('Cargas combustible')).toBeTruthy();
     // KPI de última mantención: fecha (con año) de la última OT COMPLETADA
-    // del equipo y su título como caption.
+    // del equipo, con su título y quién la hizo como caption.
     expect(screen.getByText('Última mantención')).toBeTruthy();
     expect(screen.getByText(/19 oct\.? 2026/)).toBeTruthy();
-    expect(screen.getByText('Mantención 10.000 km')).toBeTruthy();
+    expect(screen.getByText('Mantención 10.000 km · Pedro Soto')).toBeTruthy();
     // Acción solo-ADMIN para la historia previa de un equipo antiguo.
     expect(screen.getByRole('button', { name: 'Mantención anterior' })).toBeTruthy();
 

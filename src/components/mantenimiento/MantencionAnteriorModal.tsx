@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input, Label, ListBox, Modal, Select, Spinner, TextArea, TextField } from '@heroui/react';
 
 import { useRegistrarMantencionHistorica } from '../../hooks/useOrdenes';
+import type { ControlUnit } from '../../types/equipment';
 import type { TipoOT } from '../../types/mantenimiento';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
 
@@ -30,7 +31,7 @@ export function MantencionAnteriorModal({
   isOpen,
   onOpenChange,
 }: {
-  equipo: { id: string; internalCode: string };
+  equipo: { id: string; internalCode: string; controlUnit: ControlUnit };
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }) {
@@ -38,11 +39,25 @@ export function MantencionAnteriorModal({
   const [fecha, setFecha] = useState('');
   const [tipo, setTipo] = useState<TipoOT>('PREVENTIVA');
   const [titulo, setTitulo] = useState('');
+  const [realizadaPor, setRealizadaPor] = useState('');
+  const [lectura, setLectura] = useState('');
   const [observaciones, setObservaciones] = useState('');
+
+  // La unidad de la lectura la decide el equipo: un liviano se controla por
+  // kilómetros, un pesado por horas de motor.
+  const esKm = equipo.controlUnit === 'KM';
+  const lecturaLabel = esKm ? 'Kilometraje en la mantención (km)' : 'Horómetro en la mantención (h)';
+  // Coma o punto decimal, como los demás campos numéricos de texto del admin.
+  const lecturaNumero = lectura.trim() === '' ? undefined : Number(lectura.replace(',', '.'));
+  const lecturaValida = lecturaNumero === undefined || (Number.isFinite(lecturaNumero) && lecturaNumero >= 0);
 
   const hoy = hoyLocal();
   const puedeGuardar =
-    !registrar.isPending && /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= hoy && titulo.trim().length > 0;
+    !registrar.isPending &&
+    /^\d{4}-\d{2}-\d{2}$/.test(fecha) &&
+    fecha <= hoy &&
+    titulo.trim().length > 0 &&
+    lecturaValida;
 
   const cerrar = () => {
     if (!registrar.isPending) onOpenChange(false);
@@ -56,6 +71,8 @@ export function MantencionAnteriorModal({
         fecha,
         tipo,
         titulo: titulo.trim(),
+        ...(realizadaPor.trim() ? { realizadaPor: realizadaPor.trim() } : {}),
+        ...(lecturaNumero !== undefined ? { lectura: lecturaNumero } : {}),
         ...(observaciones.trim() ? { observaciones: observaciones.trim() } : {}),
       },
       {
@@ -63,6 +80,8 @@ export function MantencionAnteriorModal({
           setFecha('');
           setTipo('PREVENTIVA');
           setTitulo('');
+          setRealizadaPor('');
+          setLectura('');
           setObservaciones('');
           onOpenChange(false);
         },
@@ -122,6 +141,18 @@ export function MantencionAnteriorModal({
                 <Label>Qué mantención fue</Label>
                 <Input placeholder="Cambio de aceite y filtros, mantención 10.000 km…" />
               </TextField>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <TextField fullWidth name="realizadaPor" onChange={setRealizadaPor} value={realizadaPor}>
+                  <Label>Quién la hizo</Label>
+                  <Input placeholder="Mecánico o taller que la realizó" />
+                </TextField>
+
+                <TextField fullWidth name="lectura" onChange={setLectura} value={lectura}>
+                  <Label>{lecturaLabel}</Label>
+                  <Input inputMode="decimal" placeholder={esKm ? '84306' : '1250'} />
+                </TextField>
+              </div>
 
               <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
                 <Label>Observaciones (opcional)</Label>

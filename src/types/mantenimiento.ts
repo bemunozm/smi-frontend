@@ -160,6 +160,11 @@ export const CreateMantencionHistoricaSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Indicá la fecha'),
   tipo: z.enum(TIPO_OT).optional(),
   titulo: z.string().min(1, 'Indicá qué mantención fue'),
+  /** Quién la hizo — texto libre (puede ser un taller externo, no un usuario). */
+  realizadaPor: z.string().optional(),
+  /** Lectura al momento de la mantención: km si el equipo es liviano,
+   * horómetro si es pesado (la unidad la decide el backend por `controlUnit`). */
+  lectura: z.number().nonnegative().optional(),
   observaciones: z.string().optional(),
 });
 export type CreateMantencionHistoricaInput = z.infer<typeof CreateMantencionHistoricaSchema>;
