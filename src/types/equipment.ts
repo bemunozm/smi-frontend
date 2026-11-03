@@ -160,6 +160,17 @@ export type EquipmentStockMovement = z.infer<typeof EquipmentStockMovementSchema
  */
 export const EquipmentDetailSchema = EquipmentSchema.extend({
   homeBranch: BranchSchema.nullable(),
+  /** Última OT COMPLETADA del equipo (misma fecha que el registro
+   * «Mantenciones» del admin) — null si nunca se registró una mantención;
+   * opcional para tolerar un backend que aún no manda el campo. */
+  ultimaMantencion: z
+    .object({
+      fecha: z.string().datetime(),
+      titulo: z.string(),
+      tipo: z.string(),
+    })
+    .nullable()
+    .optional(),
   _count: z.object({
     combustibles: z.number().int(),
     horometros: z.number().int(),

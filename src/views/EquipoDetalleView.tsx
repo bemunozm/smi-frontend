@@ -87,6 +87,14 @@ function formatFechaCorta(iso: string): string {
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(date);
 }
 
+/** Fecha con año (sin hora) — valor del KPI «Última mantención», donde el
+ * registro puede ser de meses atrás y el año sí importa. */
+function formatFechaConAnio(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
+}
+
 /** Duración real de un turno cerrado (`fechaSalida − fecha`), en formato
  * corto "Xh Ym" — complementa el uso en horas-máquina (`valorFinal −
  * valorInicial`) de la tabla de historial de horómetro: son dos medidas
@@ -944,9 +952,11 @@ export function EquipoDetalleView({
         </div>
       </div>
 
-      {/* Fila de KPIs — hero (uso acumulado) + combustible actual + los 4
-         contadores por dominio que ya traía la ficha. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Fila de KPIs — hero (uso acumulado) + última mantención + combustible
+         actual + los 4 contadores por dominio que ya traía la ficha. Con 7
+         tarjetas, `lg` va en 4 columnas (4+3, sin huérfanas) y `xl` en una
+         sola fila. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <KpiTile
           caption={
             historialHorometro[0]
@@ -957,6 +967,12 @@ export function EquipoDetalleView({
           icon={<Clock className="h-4.25 w-4.25" />}
           label={`${controlUnitLabel(equipo.controlUnit)} · uso`}
           value={uso}
+        />
+        <KpiTile
+          caption={equipo.ultimaMantencion?.titulo ?? 'Sin mantenciones registradas'}
+          icon={<Wrench className="h-4.25 w-4.25" />}
+          label="Última mantención"
+          value={equipo.ultimaMantencion ? formatFechaConAnio(equipo.ultimaMantencion.fecha) : '—'}
         />
         <KpiTile
           caption={

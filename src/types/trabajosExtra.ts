@@ -10,6 +10,10 @@ export const ACTIVIDADES = [
   // el valor guardado en la base sigue siendo `HACER_PETRIL`.
   { value: 'HACER_PETRIL', label: 'Hacer pretil' },
   { value: 'ARREGLO_CANCHA', label: 'Arreglo cancha' },
+  { value: 'LIMPIEZA_PECAS', label: 'Limpieza de pecas' },
+  { value: 'BARRIDO_CANCHA', label: 'Barrido de cancha' },
+  { value: 'LIMPIEZA_ROMANA', label: 'Limpieza de romana' },
+  { value: 'LIMPIEZA_RUTA', label: 'Limpieza de ruta' },
   // Válvula de escape para la tarea que no estaba en la lista. El texto va en
   // `otraActividad`; el servidor lo exige cuando se elige esta opción.
   { value: 'OTRO', label: 'Otro' },

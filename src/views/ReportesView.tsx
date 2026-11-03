@@ -105,10 +105,10 @@ export function ReportesView() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Reportes
+            SMI · Informe diario equipos
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Reportes de salida de turno
+            Informe diario equipos
           </h1>
           <p className="text-sm text-muted-foreground">
             Lo que cada supervisor reportó al cerrar su turno: equipos usados en el día, operadores a cargo y el
@@ -156,7 +156,7 @@ export function ReportesView() {
           {!isPending && !isError && reportes.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Reportes de salida de turno" className="min-w-full">
+                <Table.Content aria-label="Informe diario equipos" className="min-w-full">
                   <Table.Header>
                     <Table.Column isRowHeader>Turno reportado</Table.Column>
                     <Table.Column>Turno</Table.Column>
