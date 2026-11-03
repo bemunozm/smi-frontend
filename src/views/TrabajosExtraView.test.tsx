@@ -32,7 +32,12 @@ const { toastDangerMock, toastSuccessMock } = vi.hoisted(() => ({
   toastDangerMock: vi.fn(),
   toastSuccessMock: vi.fn(),
 }));
-vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: toastSuccessMock } }));
+// Parcial: `FotoRespaldoField` (la foto del report) usa componentes reales de
+// la librería — solo el `toast` se reemplaza, igual que en `HallazgosView.test`.
+vi.mock('@heroui/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@heroui/react')>();
+  return { ...actual, toast: { danger: toastDangerMock, success: toastSuccessMock } };
+});
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { id: 'u1' }, role: null, isOfflineSnapshot: false }),
 }));
@@ -64,6 +69,9 @@ const REGISTRO = {
   otraActividad: null,
   descripcion: 'Carga de material',
   observaciones: 'Neumático trasero pinchado a media tarea',
+  reportNumero: '4509',
+  destino: 'TRANSPORTE',
+  planta: null,
   fecha: '2026-08-01T09:00:00.000Z',
   equipo: { internalCode: 'CM-003' },
 };
@@ -73,6 +81,7 @@ function renderConRegistro() {
   qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
   qc.setQueryData(['trabajos-extra'], [REGISTRO]);
   qc.setQueryData(['operators', { isActive: true }], [OPERADOR, OPERADOR_NUEVO]);
+  qc.setQueryData(['plantas'], [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }]);
   return render(
     <QueryClientProvider client={qc}>
       <TrabajosExtraView />
@@ -97,6 +106,18 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
   fireEvent.change(screen.getByLabelText('Descripción de la tarea'), {
     target: { value: 'Carga de material extra' },
   });
+  // Los campos nuevos del report: folio, dónde se hizo y la foto obligatoria.
+  fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4509' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Transporte' }));
+  elegirFoto();
+}
+
+/** Elige la foto del report (obligatoria) en el único input de archivo del
+ * formulario de alta — mismo helper que `HallazgosView.test`. */
+function elegirFoto() {
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+  const foto = new File(['report'], 'report.jpg', { type: 'image/jpeg' });
+  fireEvent.change(input, { target: { files: [foto] } });
 }
 
 describe('TrabajosExtraView', () => {
@@ -349,7 +370,9 @@ describe('TrabajosExtraView', () => {
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));
     const op = (await db.outbox.toArray())[0]!;
     if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
-    expect(op).toMatchObject({ userId: 'u1', status: 'pending' });
+    // `pending_upload`: la foto del report (obligatoria) viaja como blob y se
+    // sube recién en el replay — mismo pipeline que la foto de un hallazgo.
+    expect(op).toMatchObject({ userId: 'u1', status: 'pending_upload', photoId: op.id });
     expect(op.payload).toMatchObject({
       equipoId: 'e1',
       operatorId: 'op_1',
@@ -357,11 +380,15 @@ describe('TrabajosExtraView', () => {
       horometroFinal: 112,
       actividades: ['SOLTAR_MATERIAL'],
       descripcion: 'Carga de material extra',
+      reportNumero: '4509',
+      destino: 'TRANSPORTE',
     });
+    expect(await db.blobs.count()).toBe(1);
     expect(op.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(op.payload.id).toBe(op.id);
     expect(Date.parse(op.payload.capturedAt)).not.toBeNaN();
     expect('operador' in op.payload).toBe(false);
+    expect('fotoKey' in op.payload).toBe(false);
   });
 
   it('un equipo en turno se encola igual, con su operador propuesto y las horas reales sin redondear', async () => {
@@ -392,6 +419,9 @@ describe('TrabajosExtraView', () => {
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
     fireEvent.click(screen.getByRole('button', { name: 'Soltar material' }));
     fireEvent.change(screen.getByLabelText('Descripción de la tarea'), { target: { value: 'Despeje' } });
+    fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4510' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Variado' }));
+    elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));

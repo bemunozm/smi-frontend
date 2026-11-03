@@ -10,6 +10,8 @@ const base = {
   horometroFinal: 1212,
   actividades: ['REGULACION_CARGA'],
   descripcion: 'Carga de material',
+  reportNumero: '4509',
+  destino: 'TRANSPORTE',
 };
 
 describe('trabajoExtraFormSchema', () => {
@@ -66,5 +68,37 @@ describe('trabajoExtraFormSchema', () => {
       otraActividad: 'Despeje de acceso a romana',
     });
     expect(r.success).toBe(true);
+  });
+
+  // --- Report: dónde se hizo (regla del cliente) ----------------------------
+
+  it('rechaza un trabajo sin N° de report o sin destino', () => {
+    expect(trabajoExtraFormSchema.safeParse({ ...base, reportNumero: '' }).success).toBe(false);
+    expect(trabajoExtraFormSchema.safeParse({ ...base, destino: undefined }).success).toBe(false);
+  });
+
+  it('PLANTA solo con limpieza de silos, y siempre diciendo cuál', () => {
+    // Sin limpieza de silos → no puede ser planta.
+    expect(
+      trabajoExtraFormSchema.safeParse({ ...base, destino: 'PLANTA', planta: 'Planta 1' }).success,
+    ).toBe(false);
+    // Con limpieza de silos pero sin decir cuál planta → tampoco.
+    expect(
+      trabajoExtraFormSchema.safeParse({ ...base, actividades: ['LIMPIEZA_SILOS'], destino: 'PLANTA' })
+        .success,
+    ).toBe(false);
+    // Completo → válido.
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        actividades: ['LIMPIEZA_SILOS'],
+        destino: 'PLANTA',
+        planta: 'Planta 4',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('las otras actividades aceptan Transporte o Variado', () => {
+    expect(trabajoExtraFormSchema.safeParse({ ...base, destino: 'VARIADO' }).success).toBe(true);
   });
 });

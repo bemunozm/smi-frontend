@@ -254,20 +254,44 @@ export async function enqueueCreateHallazgo(
 
 /** Encola un trabajo extraordinario (sin foto). `input.id` es el id de la
  * operación — mismo criterio que las demás. */
-export async function enqueueCreateTrabajoExtra(userId: string, input: CreateTrabajoExtraInput): Promise<void> {
-  await putOp(
-    (seq, timestamp): CreateTrabajoExtraOp => ({
-      id: input.id,
-      type: 'createTrabajoExtra',
-      v: 1,
-      userId,
-      payload: input,
-      status: 'pending',
-      attempts: 0,
-      seq,
-      entityKey: trabajoExtraEntity(input.id),
-      createdAt: timestamp,
-      updatedAt: timestamp,
+export async function enqueueCreateTrabajoExtra(
+  userId: string,
+  input: CreateTrabajoExtraInput,
+  photo?: File,
+): Promise<void> {
+  // La foto del report viaja como blob y se sube en el replay — mismo
+  // pipeline `pending_upload` → `pending_claim` que `enqueueCreateHallazgo`.
+  const compressed = photo ? await prepararArchivo(photo) : undefined;
+
+  await conCuota(() =>
+    db.transaction('rw', db.outbox, db.blobs, async () => {
+      const timestamp = now();
+      const base = {
+        id: input.id,
+        type: 'createTrabajoExtra' as const,
+        v: 1 as const,
+        userId,
+        payload: input,
+        attempts: 0,
+        seq: await nextSeq(),
+        entityKey: trabajoExtraEntity(input.id),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      if (!compressed) {
+        const op: CreateTrabajoExtraOp = { ...base, status: 'pending' };
+        await db.outbox.put(op);
+        return;
+      }
+      await db.blobs.put({
+        id: input.id,
+        data: compressed.data,
+        mime: compressed.mime,
+        name: compressed.name,
+        createdAt: timestamp,
+      });
+      const op: CreateTrabajoExtraOp = { ...base, status: 'pending_upload', photoId: input.id };
+      await db.outbox.put(op);
     }),
   );
   requestSync();
