@@ -552,8 +552,10 @@ export function TrabajosExtraAdminView() {
   /**
    * Exporta el rango elegido a un Excel con las columnas de la planilla del
    * cliente (Item, Fecha, Empresa, Equipo, Supervisor, Operador, Report N°,
-   * Planta, Actividad, horómetros y total). `exceljs` entra por import
-   * dinámico: solo se descarga al tocar «Exportar».
+   * Planta, Actividad, horómetros y total), con formato: título con el rango,
+   * encabezado en el azul del shell de SMI, cebra en las filas, filtros y
+   * fila de total. `exceljs` entra por import dinámico: solo se descarga al
+   * tocar «Exportar».
    */
   const exportarExcel = async () => {
     // Interop CJS/ESM: en Node (vitest) el módulo llega solo como `default`;
@@ -561,30 +563,87 @@ export function TrabajosExtraAdminView() {
     const excel = await import('exceljs');
     const Workbook = excel.Workbook ?? excel.default.Workbook;
     const wb = new Workbook();
-    const ws = wb.addWorksheet('Report');
-    ws.columns = [
-      { header: 'Item', key: 'item', width: 9 },
-      { header: 'Fecha', key: 'fecha', width: 12 },
-      { header: 'Empresa', key: 'empresa', width: 12 },
-      { header: 'Equipo', key: 'equipo', width: 10 },
-      { header: 'Supervisor', key: 'supervisor', width: 20 },
-      { header: 'Operador', key: 'operador', width: 20 },
-      { header: 'Report N°', key: 'report', width: 10 },
-      { header: 'Planta', key: 'planta', width: 14 },
-      { header: 'Actividad', key: 'actividad', width: 36 },
-      { header: 'Horom_Ini', key: 'horomIni', width: 10 },
-      { header: 'Horom_Fin', key: 'horomFin', width: 10 },
-      { header: 'Total_Horas', key: 'total', width: 11 },
-      { header: 'Descripción', key: 'descripcion', width: 40 },
-      { header: 'Observaciones', key: 'observaciones', width: 40 },
-    ];
-    ws.getRow(1).font = { bold: true };
+    // Encabezado congelado (título + subtítulo + vacío + encabezado): al
+    // hacer scroll, las columnas siguen a la vista.
+    const ws = wb.addWorksheet('Report', { views: [{ state: 'frozen', ySplit: 4 }] });
 
-    for (const t of enRangoExport) {
-      ws.addRow({
+    // Paleta: el azul oscuro del shell de SMI para el encabezado, gris suave
+    // para la cebra, bordes apenas visibles — legible también impreso en B/N.
+    const AZUL_SMI = 'FF1E293B';
+    const GRIS_CEBRA = 'FFF1F5F9';
+    const GRIS_TEXTO = 'FF6B7280';
+    const BORDE = { style: 'thin' as const, color: { argb: 'FFD9DEE5' } };
+    const N_COLUMNAS = 14;
+
+    ws.columns = [
+      { key: 'item', width: 9 },
+      { key: 'fecha', width: 12 },
+      { key: 'empresa', width: 12 },
+      { key: 'equipo', width: 10 },
+      { key: 'supervisor', width: 20 },
+      { key: 'operador', width: 20 },
+      { key: 'report', width: 10 },
+      { key: 'planta', width: 14 },
+      { key: 'actividad', width: 36 },
+      { key: 'horomIni', width: 10 },
+      { key: 'horomFin', width: 10 },
+      { key: 'total', width: 11 },
+      { key: 'descripcion', width: 40 },
+      { key: 'observaciones', width: 40 },
+    ];
+
+    // `dd-mm-yyyy`, como en la planilla del cliente.
+    const legible = (dia: string) => dia.split('-').reverse().join('-');
+
+    // --- Título y subtítulo ------------------------------------------------
+    const titulo = ws.addRow(['Report · Trabajos extraordinarios']);
+    ws.mergeCells(1, 1, 1, N_COLUMNAS);
+    titulo.height = 24;
+    titulo.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF111827' } };
+    titulo.getCell(1).alignment = { vertical: 'middle' };
+
+    const subtitulo = ws.addRow([
+      `Del ${legible(exportDesde)} al ${legible(exportHasta)} · ${enRangoExport.length} ${
+        enRangoExport.length === 1 ? 'trabajo' : 'trabajos'
+      } · exportado el ${legible(diaLocal(new Date().toISOString()))}`,
+    ]);
+    ws.mergeCells(2, 1, 2, N_COLUMNAS);
+    subtitulo.getCell(1).font = { size: 10, color: { argb: GRIS_TEXTO } };
+
+    ws.addRow([]);
+
+    // --- Encabezado --------------------------------------------------------
+    const encabezado = ws.addRow([
+      'Item',
+      'Fecha',
+      'Empresa',
+      'Equipo',
+      'Supervisor',
+      'Operador',
+      'Report N°',
+      'Planta',
+      'Actividad',
+      'Horom_Ini',
+      'Horom_Fin',
+      'Total_Horas',
+      'Descripción',
+      'Observaciones',
+    ]);
+    encabezado.height = 20;
+    encabezado.eachCell((celda) => {
+      celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_SMI } };
+      celda.font = { bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+      celda.alignment = { vertical: 'middle', horizontal: 'center' };
+      celda.border = { top: BORDE, bottom: BORDE, left: BORDE, right: BORDE };
+    });
+    // Filtros sobre el encabezado, como la tabla del cliente.
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: N_COLUMNAS } };
+
+    // --- Filas -------------------------------------------------------------
+    enRangoExport.forEach((t, indice) => {
+      const fila = ws.addRow({
         item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
-        // `dd-mm-yyyy`, como en la planilla del cliente.
-        fecha: diaLocal(t.fecha).split('-').reverse().join('-'),
+        fecha: legible(diaLocal(t.fecha)),
         empresa: t.faena,
         equipo: t.equipo?.internalCode ?? t.equipoId,
         supervisor: t.registradoPor ?? '',
@@ -602,7 +661,34 @@ export function TrabajosExtraAdminView() {
         descripcion: t.descripcion,
         observaciones: t.observaciones ?? '',
       });
-    }
+      fila.eachCell({ includeEmpty: true }, (celda) => {
+        celda.border = { bottom: BORDE, left: BORDE, right: BORDE };
+        if (indice % 2 === 1) {
+          celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CEBRA } };
+        }
+      });
+      fila.getCell('item').alignment = { horizontal: 'center' };
+      fila.getCell('fecha').alignment = { horizontal: 'center' };
+      fila.getCell('report').alignment = { horizontal: 'center' };
+      fila.getCell('horomIni').numFmt = '#,##0.##';
+      fila.getCell('horomFin').numFmt = '#,##0.##';
+      fila.getCell('total').numFmt = '#,##0.00';
+      fila.getCell('total').font = { bold: true };
+      // Textos largos: que crezcan hacia abajo, no hacia el costado.
+      fila.getCell('descripcion').alignment = { wrapText: true, vertical: 'top' };
+      fila.getCell('observaciones').alignment = { wrapText: true, vertical: 'top' };
+    });
+
+    // --- Total del período ---------------------------------------------------
+    const totalPeriodo = enRangoExport.reduce((acc, t) => acc + t.totalHoras, 0);
+    const filaTotal = ws.addRow({ actividad: 'Total horas del período', total: totalPeriodo });
+    filaTotal.getCell('actividad').font = { bold: true };
+    filaTotal.getCell('actividad').alignment = { horizontal: 'right' };
+    filaTotal.getCell('total').numFmt = '#,##0.00';
+    filaTotal.getCell('total').font = { bold: true };
+    filaTotal.eachCell({ includeEmpty: true }, (celda) => {
+      celda.border = { top: { style: 'double' as const, color: { argb: 'FF111827' } } };
+    });
 
     const nombre = `Report_${exportDesde}_a_${exportHasta}.xlsx`;
     const buffer = await wb.xlsx.writeBuffer();
