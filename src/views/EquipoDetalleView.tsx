@@ -27,6 +27,7 @@ import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useE
 import { useFicha } from '../hooks/useFicha';
 import { ResponsableSelect } from '../components/flota/ResponsableSelect';
 import { FechaEstimada } from '../components/mantenimiento/FechaEstimada';
+import { MantencionAnteriorModal } from '../components/mantenimiento/MantencionAnteriorModal';
 import { usePermissions } from '../hooks/usePermissions';
 import { CicloMantencionesCard } from '../components/mantenimiento/CicloMantenciones';
 import { CalendarioVencimientosCard } from '../components/vencimientos/CalendarioVencimientosCard';
@@ -48,6 +49,7 @@ import {
   turnoLabel,
 } from '../config/flota-colors';
 import { eventoTipoColor, eventoTipoIcon, eventoTipoLabel } from '../config/ficha-colors';
+import { ROLES } from '../types/roles';
 import { EQUIPMENT_STATUS, type EquipmentDetail, type EquipmentStatus } from '../types/equipment';
 import type { EquipmentDocument } from '../types/equipment-document';
 import { EquipoThumb } from '../components/flota/EquipoThumb';
@@ -745,7 +747,7 @@ export function EquipoDetalleView({
   const id = equipoId ?? idParam;
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
-  const { can, canAny } = usePermissions();
+  const { can, canAny, role } = usePermissions();
   // El historial en tablas solo en escritorio; en tablet y celular, tarjetas.
   // Arriba de los `return` tempranos: un hook no puede llamarse a veces sí y a veces no.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -762,6 +764,12 @@ export function EquipoDetalleView({
   const puedeCambiarEstado = !enTaller && can('equipment.status');
   const puedeEditar = !enTaller && can('equipment.update');
   const puedeEliminar = !enTaller && can('equipment.delete');
+  // Historia previa de un equipo antiguo (mantención hecha antes de usar la
+  // app) — carga de datos, no operación del taller: solo ADMIN, espejo del
+  // `@Roles` de `POST /mantenimiento/ordenes/historica`. Por rol directo y no
+  // por `can()`: la mutación no pasa por la cola offline, así que no tiene
+  // entrada en el registro de escrituras que tipa `WRITE_ROLES`.
+  const puedeRegistrarMantencionAnterior = !enTaller && role === ROLES.ADMIN;
   const puedeGestionarDocumentos = !enTaller && can('equipmentDocument.create');
   const puedeRegistrarHorometro = !enTaller && canAny(['horometro.create', 'horometro.close']);
   const puedeRegistrarCombustible = !enTaller && can('combustible.create');
@@ -783,6 +791,7 @@ export function EquipoDetalleView({
   const [isCargaOpen, setIsCargaOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isMantencionAnteriorOpen, setIsMantencionAnteriorOpen] = useState(false);
   // Orden del historial de cargas de combustible — "Más reciente primero" es
   // el default (`false`); el toggle de la cabecera de la sección invierte el
   // orden, calcando `fuelAsc`/`fuelOrderLabel` de `FichaEquipoClientePC.dc.html`.
@@ -928,6 +937,13 @@ export function EquipoDetalleView({
           {puedeRegistrarHorometro && !esLiviano ? (
             <Button onPress={() => setIsShiftModalOpen(true)} size="sm" variant="secondary">
               {registrarHorometroLabel(equipo)}
+            </Button>
+          ) : null}
+
+          {puedeRegistrarMantencionAnterior ? (
+            <Button onPress={() => setIsMantencionAnteriorOpen(true)} size="sm" variant="secondary">
+              <Wrench className="h-4 w-4" />
+              Mantención anterior
             </Button>
           ) : null}
 
@@ -1347,6 +1363,12 @@ export function EquipoDetalleView({
       </div>
 
       <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
+
+      <MantencionAnteriorModal
+        equipo={equipo}
+        isOpen={isMantencionAnteriorOpen}
+        onOpenChange={setIsMantencionAnteriorOpen}
+      />
       <RegistrarCargaCombustibleModal
         equipoId={equipo.id}
         equipoLabel={equipo.internalCode}

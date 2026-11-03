@@ -367,6 +367,8 @@ describe('EquipoDetalleView', () => {
     expect(screen.getByText('Última mantención')).toBeTruthy();
     expect(screen.getByText(/19 oct\.? 2026/)).toBeTruthy();
     expect(screen.getByText('Mantención 10.000 km')).toBeTruthy();
+    // Acción solo-ADMIN para la historia previa de un equipo antiguo.
+    expect(screen.getByRole('button', { name: 'Mantención anterior' })).toBeTruthy();
 
     // Datos de la unidad.
     expect(screen.getByText('Caterpillar')).toBeTruthy();

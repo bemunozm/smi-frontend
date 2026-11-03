@@ -146,6 +146,24 @@ export const CreateOrdenSchema = z.object({
 });
 export type CreateOrdenInput = z.infer<typeof CreateOrdenSchema>;
 
+/**
+ * `POST /api/mantenimiento/ordenes/historica` body (solo ADMIN) — mantención
+ * hecha ANTES de usar la aplicación (historia previa de un equipo antiguo).
+ * El backend crea una OT ya COMPLETADA con la tarea fechada en `fecha`, así
+ * la ficha (`ultimaMantencion`) y el registro «Mantenciones» la tratan igual
+ * que una mantención real del taller.
+ */
+export const CreateMantencionHistoricaSchema = z.object({
+  /** Id de Flota o código interno — el backend acepta ambos. */
+  equipoId: z.string().min(1, 'El equipo es obligatorio'),
+  /** `YYYY-MM-DD`; el backend rechaza fechas futuras. */
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Indicá la fecha'),
+  tipo: z.enum(TIPO_OT).optional(),
+  titulo: z.string().min(1, 'Indicá qué mantención fue'),
+  observaciones: z.string().optional(),
+});
+export type CreateMantencionHistoricaInput = z.infer<typeof CreateMantencionHistoricaSchema>;
+
 /** `PATCH /api/mantenimiento/ordenes/:id` body — parcial. Un campo omitido es
  * "sin cambio"; `asignadoAId: null` desasigna la orden (el DTO del backend acepta
  * `null` en un campo opcional). */
