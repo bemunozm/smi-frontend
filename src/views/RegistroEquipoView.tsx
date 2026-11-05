@@ -1137,18 +1137,6 @@ export function RegistroEquipoView() {
                 {turnoSeleccion === 'siguiente' ? 'Volver al turno del reloj' : `Adelantar a ${siguienteTurno}`}
               </button>
             )}
-            {/* Carga histórica: siempre visible (no depende de la ventana de
-                adelanto) — abre el diálogo de fecha + turno pasado. */}
-            {!modoPasado && (
-              <button
-                type="button"
-                onClick={() => setDialogoPasado(true)}
-                className="inline-flex min-h-[32px] cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold"
-                style={{ background: 'rgba(255,255,255,.22)' }}
-              >
-                Registrar turno pasado
-              </button>
-            )}
             <span
               className="inline-flex min-h-[32px] items-center rounded-full px-3"
               style={{ background: 'rgba(255,255,255,.22)' }}
@@ -1158,6 +1146,17 @@ export function RegistroEquipoView() {
           </>
         }
       />
+
+      {/* Carga histórica: botón propio FUERA de la cabecera (dentro se
+          confundía con los chips informativos de al lado — feedback del
+          cliente, 04/11). Siempre visible salvo con el modo ya activo. */}
+      {!modoPasado && (
+        <div className="mb-4">
+          <Boton ancho variante="contorno" onClick={() => setDialogoPasado(true)}>
+            <History className="h-[18px] w-[18px]" aria-hidden /> Registrar turno pasado
+          </Boton>
+        </div>
+      )}
 
       {/* Banner del modo pasado: persistente y a la vista mientras dura la
           carga histórica — la protección visible contra dejar el modo pegado
