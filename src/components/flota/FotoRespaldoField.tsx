@@ -56,7 +56,7 @@ export function FotoRespaldoField({
   subtitle,
   staleQuestion,
   requerida = true,
-  guia = 'Sacá la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
+  guia = 'Saca la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
 }: FotoRespaldoFieldProps) {
   return (
     <div>

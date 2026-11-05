@@ -63,9 +63,39 @@ const { PLANTAS_MOCK, EMPRESAS_MOCK, TARJETAS_MOCK, REPORTES_MOCK, MUTATE, EDIT_
     { id: 'em1', nombre: 'Hyd', orden: 1, activa: true },
     { id: 'em2', nombre: 'Sijam', orden: 2, activa: true },
   ],
+  // Turno de la prueba de operadores: DIURNO del 23-09.
   TARJETAS_MOCK: [
-    { id: 'c1', operatorName: 'Patricio Rojas', equipo: { internalCode: 'CG-002' }, closedAt: null },
-    { id: 'c2', operatorName: 'Marcelo Soto', equipo: { internalCode: 'EX-001' }, closedAt: '2026-09-23T10:00:00Z' },
+    {
+      id: 'c1',
+      operatorName: 'Patricio Rojas',
+      equipo: { internalCode: 'CG-002' },
+      shift: { date: '2026-09-23', type: 'DIURNO' },
+      closedAt: null,
+    },
+    // Cerrada, pero de ESTE turno: su operador sí trabajó en él.
+    {
+      id: 'c2',
+      operatorName: 'Milton Mosquera',
+      equipo: { internalCode: 'SEM 05' },
+      shift: { date: '2026-09-23', type: 'DIURNO' },
+      closedAt: '2026-09-23T18:00:00Z',
+    },
+    // Abierta, pero quedó del turno anterior: no es de este reporte.
+    {
+      id: 'c3',
+      operatorName: 'Marcelo Soto',
+      equipo: { internalCode: 'SANY 02' },
+      shift: { date: '2026-09-22', type: 'NOCTURNO' },
+      closedAt: null,
+    },
+    // Camioneta del turno: no lleva operador.
+    {
+      id: 'c4',
+      operatorName: '',
+      equipo: { internalCode: 'CM-NUV', equipmentClass: 'LIGHT' },
+      shift: { date: '2026-09-23', type: 'DIURNO' },
+      closedAt: null,
+    },
   ],
 }));
 vi.mock('../hooks/useReporteDiario', () => ({
@@ -152,7 +182,9 @@ describe('seccionesDelFormulario', () => {
 });
 
 describe('ReporteDiarioView · catálogos y operadores reales', () => {
-  it('lista las plantas y empresas del catálogo y solo los operadores con tarjeta abierta', () => {
+  it('lista las plantas y empresas del catálogo y los operadores de las tarjetas de ESTE turno', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0)); // DIURNO del 23-09
     render(<ReporteDiarioView />);
 
     expect(screen.getByLabelText('Producto de P.P.1')).toBeTruthy();
@@ -161,7 +193,10 @@ describe('ReporteDiarioView · catálogos y operadores reales', () => {
     expect(screen.getByText('Sijam')).toBeTruthy();
     expect(screen.queryByText('Spence')).toBeNull();
     expect(screen.getByText('Patricio Rojas')).toBeTruthy();
+    expect(screen.getByText('Milton Mosquera')).toBeTruthy();
     expect(screen.queryByText('Marcelo Soto')).toBeNull();
+    expect(screen.queryByText('CM-NUV')).toBeNull();
+    vi.useRealTimers();
   });
 });
 
@@ -183,7 +218,7 @@ describe('ReporteDiarioView · producción del turno', () => {
   it('nombra la faena una sola vez en la pantalla', () => {
     render(<ReporteDiarioView />);
 
-    expect(screen.getAllByText('Faena Patillo')).toHaveLength(1);
+    expect(screen.getAllByText('Faena Kainita')).toHaveLength(1);
   });
 
   /**
@@ -208,10 +243,10 @@ describe('ReporteDiarioView · producción del turno', () => {
     fireEvent.change(camionesInternos, { target: { value: '1.200' } });
     expect(screen.getByText('Internos').parentElement?.textContent).toContain('6.000');
     expect(screen.queryByText(/Se guardará/)).toBeNull();
-    expect(screen.queryByText('Escribí un número entero, sin decimales.')).toBeNull();
+    expect(screen.queryByText('Escribe un número entero, sin decimales.')).toBeNull();
 
     fireEvent.change(camionesInternos, { target: { value: '2,5' } });
-    expect(screen.getByText('Escribí un número entero, sin decimales.')).toBeTruthy();
+    expect(screen.getByText('Escribe un número entero, sin decimales.')).toBeTruthy();
   });
 
   it('recalcula el contador de la sección al cambiar sus camiones', () => {

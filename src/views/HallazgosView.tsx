@@ -79,7 +79,7 @@ const estadoColor: Record<string, string> = {
 /** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
 /** Un cambio anterior del mismo hallazgo espera una acción: encadenar otro encima lo dejaría trabado. */
-const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
+const MOTIVO_EDICION_ATENCION = 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.';
 
 const motivoSinEdicion = (h: { sinSincronizar?: boolean; edicionRequiereAtencion?: boolean }): string | undefined =>
   h.sinSincronizar ? MOTIVO_SIN_SINCRONIZAR : h.edicionRequiereAtencion ? MOTIVO_EDICION_ATENCION : undefined;

@@ -231,12 +231,12 @@ export function RegistroEquipoView() {
           <Campo
             label="Horómetro inicial"
             unidad="h"
-            error={horometroInvalido ? 'Escribí un número, por ejemplo 2120,5.' : undefined}
+            error={horometroInvalido ? 'Escribe un número, por ejemplo 2120,5.' : undefined}
             aviso={
               bajoUltimaLectura && equipoElegido?.currentHourmeter != null
                 ? modoPasado
                   ? `Es menor que la lectura actual (${fmt(equipoElegido.currentHourmeter)} h): esperado al cargar un día pasado.`
-                  : `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisá que esté bien; podés agregarlo igual.`
+                  : `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisa que esté bien; puedes agregarlo igual.`
                 : undefined
             }
             hint={
@@ -282,7 +282,7 @@ export function RegistroEquipoView() {
           </Boton>
           {!apertura.operatorId && (
             <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-              Elegí el operador para agregar el equipo.
+              Elige el operador para agregar el equipo.
             </p>
           )}
         </Form>
@@ -378,7 +378,7 @@ export function RegistroEquipoView() {
    * verdad, cada estado
    * vuelve a tener su propio color — el mismo criterio que ya usa
    * `reporteChip` (éxito/amarillo/rojo), aplicado también al fondo del
-   * panel y de la barra flotante. `'sin-enviar'` sigue aparte: usa el color
+   * panel del reporte. `'sin-enviar'` sigue aparte: usa el color
    * de marca (`--terreno-head`) para el llamado a la acción, no un tono
    * semántico.
    */
@@ -408,8 +408,8 @@ export function RegistroEquipoView() {
   const esUrgente = reporteEstado === 'sin-enviar';
   const estiloReporte = esUrgente ? null : REPORTE_ESTILO[reporteEstado];
 
-  /** Chip + línea de resumen por estado — la misma lectura en el panel de
-   * escritorio y en la barra flotante de teléfono/tablet. */
+  /** Chip + línea de resumen por estado del panel del reporte (arriba de la
+   * pantalla, en cualquier tamaño). */
   const reporteChip =
     reporteEstado === 'enviado' ? (
       <Chip tono="success">Enviado</Chip>
@@ -433,7 +433,7 @@ export function RegistroEquipoView() {
         <b>{plural(enCurso.length, 'equipo', 'equipos')}</b>. En cola: se enviará solo cuando vuelva la señal.
       </>
     ) : reporteEstado === 'requiere-atencion' ? (
-      <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisá el detalle en el panel de sincronización.'}</>
+      <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisa el detalle en el panel de sincronización.'}</>
     ) : (
       <>
         <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
@@ -449,7 +449,10 @@ export function RegistroEquipoView() {
       style={esUrgente ? { background: 'var(--terreno-head)' } : undefined}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[11.5px] font-bold tracking-[0.08em] uppercase ${esUrgente ? 'text-white/70' : ''}`}>
+        <span
+          className={`flex items-center gap-2 text-[11.5px] font-bold tracking-[0.08em] uppercase ${esUrgente ? 'text-white/70' : ''}`}
+        >
+          {esUrgente && <i aria-hidden className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-[#ff6b5a]" />}
           Reporte de salida
         </span>
         <div className="flex items-center gap-1.5">
@@ -457,6 +460,9 @@ export function RegistroEquipoView() {
           {reporteChip}
         </div>
       </div>
+      {esUrgente && (
+        <p className="m-0 text-[19px] leading-tight font-bold text-white">Falta avisar a la administración</p>
+      )}
       <p className={`m-0 text-sm leading-snug ${esUrgente ? 'text-white/85' : ''}`}>{reporteResumen}</p>
       {reporteEstado === 'sin-enviar' ? (
         <>
@@ -474,55 +480,6 @@ export function RegistroEquipoView() {
       )}
     </div>
   );
-
-  /**
-   * En teléfono y tablet el reporte no cabe en la columna: va como tarjeta
-   * flotante, pegada abajo mientras se scrollea.
-   *
-   * Flota sobre la barra de pestañas, no en `bottom-0`: esa barra también es
-   * `sticky bottom-0` y le gana en z-index, así que ahí el botón quedaba tapado
-   * justo mientras había tarjetas que mirar. 78 px = los 66 de la barra de
-   * pestañas + 12 de aire.
-   */
-  const FLOTANTE = 'sticky bottom-[78px] z-10 mt-4 rounded-3xl shadow-[0_10px_30px_rgba(13,12,10,.22)]';
-  const barraReporte =
-    reporteEstado === 'sin-enviar' ? (
-      <div className={`${FLOTANTE} px-4 py-3 text-white`} style={{ background: 'var(--terreno-head)' }}>
-        <div className="flex items-center gap-2 text-[12.5px] text-white/80">
-          <i className="h-2 w-2 shrink-0 rounded-full bg-[#ff6b5a]" />
-          <span>
-            <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
-            {enCurso.length === 1 ? 'salió' : 'salieron'} y la administración aún no lo sabe.
-          </span>
-        </div>
-        <Boton variante="acento" ancho className="mt-2 min-h-[60px] !rounded-[18px] !text-[17px]" onClick={() => setVerReporte(true)}>
-          Enviar reporte de salida <ArrowRight className="h-[19px] w-[19px]" />
-        </Boton>
-      </div>
-    ) : (
-      estiloReporte && (
-        <div
-          className={`${FLOTANTE} flex items-center gap-2.5 ${estiloReporte.borde} ${estiloReporte.fondo} px-4 py-3 text-sm font-semibold ${estiloReporte.texto}`}
-        >
-          <estiloReporte.Icono className="h-[18px] w-[18px] shrink-0" />
-          <span className="flex-1">
-            {reporteEstado === 'enviado' && reporteUltimo && (
-              <>
-                Reporte enviado · {fmtTime(reporteUltimo.requestedAt)} ·{' '}
-                {plural(reporteUltimo.cardCount, 'equipo', 'equipos')}
-              </>
-            )}
-            {reporteEstado === 'en-cola' && (
-              <>En cola · se enviará al volver la señal · {plural(enCurso.length, 'equipo', 'equipos')}</>
-            )}
-            {reporteEstado === 'requiere-atencion' && 'Reporte con error — revisá el panel de sincronización'}
-          </span>
-          <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setVerReporte(true)}>
-            Ver
-          </Boton>
-        </div>
-      )
-    );
 
   // --- Historial ------------------------------------------------------------
 
@@ -750,7 +707,7 @@ export function RegistroEquipoView() {
         ctx.turno,
         ctx.fechaCorta,
         abiertasActual,
-        veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tenés tarjetas abiertas en este turno.',
+        veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tienes tarjetas abiertas en este turno.',
       )}
 
       {abiertasAnterior.length > 0 &&
@@ -1029,6 +986,26 @@ export function RegistroEquipoView() {
         }
       />
 
+      {/*
+        Foto, OCR y subida vienen enteros de Flota: el mismo bloque que usan
+        la entrada, la salida y la carga de combustible. La foto del
+        totalizador es el respaldo de la carga y el cliente la puso como
+        obligatoria; sin ella el botón no se habilita, y la pantalla dice por
+        qué en vez de dejar un botón apagado sin explicación. Va ANTES de los
+        litros: el OCR los completa desde la foto y el supervisor los revisa
+        (y corrige) después, en vez de escribirlos para que la foto los pise.
+      */}
+      <FotoRespaldoField
+        file={foto.file}
+        isReadingPhoto={foto.isReadingPhoto}
+        captureDate={foto.captureDate}
+        onSelect={foto.handleSelectPhoto}
+        onClear={foto.handleClearPhoto}
+        title="Foto del surtidor"
+        subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+        staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
+      />
+
       <Campo
         label="Combustible cargado"
         requerido
@@ -1049,24 +1026,6 @@ export function RegistroEquipoView() {
           onLitros={(adBlueLitros) => setCierre((c) => ({ ...c, adBlueLitros }))}
         />
       )}
-
-      {/*
-        Foto, OCR y subida vienen enteros de Flota: el mismo bloque que usan
-        la entrada, la salida y la carga de combustible. La foto del
-        totalizador es el respaldo de la carga y el cliente la puso como
-        obligatoria; sin ella el botón no se habilita, y la pantalla dice por
-        qué en vez de dejar un botón apagado sin explicación.
-      */}
-      <FotoRespaldoField
-        file={foto.file}
-        isReadingPhoto={foto.isReadingPhoto}
-        captureDate={foto.captureDate}
-        onSelect={foto.handleSelectPhoto}
-        onClear={foto.handleClearPhoto}
-        title="Foto del surtidor"
-        subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-        staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
-      />
 
       {cerrando.liviano && (
         <Hint>
@@ -1195,6 +1154,16 @@ export function RegistroEquipoView() {
           desactualizado. */}
       <VistaHead titulo="Informe diario equipos" />
 
+      {/*
+        El reporte de salida va ARRIBA, antes del formulario: es lo que el
+        supervisor tiene que acordarse de hacer, y al final de la pantalla (o
+        en la columna, debajo del formulario) pasaba de largo. Sin enviar es un
+        panel oscuro con su botón; enviado, en cola o con error, el mismo panel
+        en el tono de su estado.
+        Sin tarjetas en el turno no hay nada que avisar.
+      */}
+      {(reporteEstado !== 'sin-enviar' || enCurso.length > 0) && <div className="mb-4">{panelReporte}</div>}
+
       <VistaSplit
         formulario={
           <>
@@ -1240,13 +1209,11 @@ export function RegistroEquipoView() {
             ) : (
               formApertura
             )}
-            {esEscritorio && panelReporte}
           </>
         }
         historial={claseVista === 'livianos' ? historialLivianos : historial}
       />
 
-      {!esEscritorio && barraReporte}
 
       {!esEscritorio && cerrando && (
         <Hoja
@@ -1297,7 +1264,7 @@ export function RegistroEquipoView() {
       {verReporte && (
         <Hoja
           eyebrow="Reporte de salida de turno"
-          titulo={reporteEstado === 'enviado' ? 'Reporte enviado' : 'Revisá y enviá'}
+          titulo={reporteEstado === 'enviado' ? 'Reporte enviado' : 'Revisa y envía'}
           bajada="Así lo recibe la administración, también en PDF."
           onCerrar={() => setVerReporte(false)}
         >
@@ -1386,7 +1353,7 @@ export function RegistroEquipoView() {
           {reporteEstado === 'requiere-atencion' && (
             <div className="flex items-center gap-2.5 rounded-2xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm font-medium text-[var(--danger)]">
               <AlertTriangle className="h-[18px] w-[18px] shrink-0" />
-              {reporteError?.message ?? 'El servidor rechazó el reporte.'} Reintentá o descartalo desde el panel de
+              {reporteError?.message ?? 'El servidor rechazó el reporte.'} Reinténtalo o descártalo desde el panel de
               sincronización.
             </div>
           )}
@@ -1411,7 +1378,7 @@ export function RegistroEquipoView() {
               </a>
               {!enLinea && (
                 <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-                  Necesitás señal para descargar el PDF.
+                  Necesitas señal para descargar el PDF.
                 </p>
               )}
               {reportePuedeReenviar && (

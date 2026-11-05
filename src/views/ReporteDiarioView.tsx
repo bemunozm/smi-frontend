@@ -67,6 +67,9 @@ import {
 
 // --- Datos de ejemplo. Salen de la especificación, no son inventados. -------
 
+/** La faena del reporte diario: Kainita (pedido del cliente, 04/11). */
+const FAENA = 'Faena Kainita';
+
 const TRASPASOS = [
   { clave: 'internos', label: 'Equipos internos', detalle: 'Sal y rechazos dentro de faena' },
   { clave: 'externos', label: 'Equipos externos', detalle: 'Contratistas que cargan para otras faenas' },
@@ -232,7 +235,7 @@ function CabeceraFicha({
           <span className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
             Informe de producción diaria
           </span>
-          <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">Faena Patillo</h2>
+          <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">{FAENA}</h2>
         </div>
         <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-border pt-3 sm:grid-cols-3">
           {datos.map(([label, valor, tabular]) => (
@@ -283,18 +286,30 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   const { data: empresasCatalogo, isSuccess: empresasListas } = useEmpresasExternas();
   /** Editar necesita ambos catálogos: con uno vacío el borrador borraría bloques. */
   const catalogosListos = plantasListas && empresasListas;
-  // Con turno elegido no aplica: son los operadores en turno AHORA, y
-  // SECRETARIA no tiene tarjetas (el endpoint le responde 403).
+  // En el panel (`elegirTurno`) no se piden: SECRETARIA no tiene tarjetas (el
+  // endpoint le responde 403) y `mine` solo trae las cerradas de las últimas
+  // 48 h, así que un turno viejo saldría sin operadores igual.
   const { data: tarjetas } = useShiftCardsMine({ enabled: !elegirTurno });
   const plantas = useMemo(() => plantasCatalogo ?? [], [plantasCatalogo]);
   const empresasExternas = useMemo(() => empresasCatalogo ?? [], [empresasCatalogo]);
-  /** Tarjetas abiertas (sin salida registrada): quién opera qué equipo ahora. */
+  /**
+   * Quién operó qué equipo EN ESTE TURNO: las tarjetas abiertas en el turno del
+   * reporte, sigan abiertas o ya cerradas. Antes eran «las abiertas ahora», y
+   * eso mostraba al operador de una tarjeta que quedó abierta de otro turno y
+   * escondía al del equipo que ya se cerró (reporte del cliente, 04/11). Las
+   * camionetas no van: no llevan operador, las maneja quien las saca.
+   */
   const operadoresDelTurno = useMemo(
     () =>
       (tarjetas ?? [])
-        .filter((c) => c.closedAt == null)
+        .filter(
+          (c) =>
+            c.shift?.date === toDateOnly(ctx.fecha) &&
+            c.shift.type === ctx.turno &&
+            c.equipo.equipmentClass !== 'LIGHT',
+        )
         .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode })),
-    [tarjetas],
+    [tarjetas, ctx.fecha, ctx.turno],
   );
 
   /** Reportes de la última semana, del turno más reciente al más viejo. */
@@ -714,7 +729,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   );
 
   const lista = esEscritorio ? (
-    <Tabla titulo="Reportes anteriores" detalle={`Faena Patillo · últimos ${anteriores.length} turnos`}>
+    <Tabla titulo="Reportes anteriores" detalle={`${FAENA} · últimos ${anteriores.length} turnos`}>
       <thead>
         <tr>
           <th className={TH}>Fecha</th>
@@ -1036,7 +1051,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
             ? `${edicion ? 'Editar · ' : ''}Reporte del ${fechaCompleta(detalle.fecha)} · ${detalle.turno}`
             : 'Historial de reportes'
         }
-        detalle={detalle ? detalle.supervisor : `Faena Patillo · últimos ${anteriores.length} turnos`}
+        detalle={detalle ? detalle.supervisor : `${FAENA} · últimos ${anteriores.length} turnos`}
       >
         {vistaEdicion || vistaDetalle || lista}
       </ModalTerreno>

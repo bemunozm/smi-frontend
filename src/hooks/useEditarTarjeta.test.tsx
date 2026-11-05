@@ -179,7 +179,7 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     expect(result.current.faltante).toBe('Faltan los horómetros.');
 
     act(() => result.current.setForm((f) => ({ ...f, final: '130', litros: '' })));
-    expect(result.current.faltante).toBe('Indicá los litros de combustible (cero si no cargó).');
+    expect(result.current.faltante).toBe('Indica los litros de combustible (cero si no cargó).');
     expect(result.current.puedeGuardar).toBe(false);
 
     act(() => result.current.setForm((f) => ({ ...f, litros: '0' })));
