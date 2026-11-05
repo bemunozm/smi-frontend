@@ -84,22 +84,6 @@ describe('enqueueCloseCard', () => {
     expect(requestSyncMock).toHaveBeenCalledTimes(1);
   });
 
-  it('sin foto (carga histórica): queda pending, sin photoId y sin blob', async () => {
-    await enqueueCloseCard('u1', 'card-3', {
-      closeClientId: 'close-3',
-      valorFinal: 80,
-      fuelLiters: 15,
-      capturedAt: '2026-09-24T16:00:00.000Z',
-    });
-
-    const op = await db.outbox.get('close-3');
-    expect(op).toMatchObject({ id: 'close-3', type: 'closeCard', status: 'pending' });
-    if (op?.type !== 'closeCard') throw new Error('setup inválido');
-    expect(op.photoId).toBeUndefined();
-    expect(await db.blobs.get('close-3')).toBeUndefined();
-    expect(requestSyncMock).toHaveBeenCalledTimes(1);
-  });
-
   it('atomicidad: la foto y la operación aparecen juntas (mismo id)', async () => {
     await enqueueCloseCard(
       'u1',

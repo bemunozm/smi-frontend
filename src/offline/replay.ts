@@ -710,15 +710,12 @@ function processCloseCard(op: CloseCardOp): Promise<ProcessOutcome> {
     op,
     'Falta la foto guardada para cerrar esta tarjeta — hay que volver a tomarla.',
     async (current, tmpKey) => {
-      // Con foto, el pipeline ya la subió antes de llegar acá; sin `photoId`
-      // es un cierre de carga histórica (planilla de días pasados) y el POST
-      // va sin `tmpPhotoKey` — el backend lo acepta solo para esas tarjetas.
-      if (!tmpKey && current.photoId) {
-        throw new DomainError('Falta la foto del cierre.', { code: 'PHOTO_MISSING' });
-      }
+      // Un cierre siempre lleva foto (`photoId` es obligatorio), así que el
+      // pipeline ya subió la foto antes de llegar acá.
+      if (!tmpKey) throw new DomainError('Falta la foto del cierre.', { code: 'PHOTO_MISSING' });
       const card = await ShiftCardAPI.closeCard(
         current.payload.cardId,
-        { ...current.payload.input, ...(tmpKey ? { tmpPhotoKey: tmpKey } : {}) },
+        { ...current.payload.input, tmpPhotoKey: tmpKey },
         replayConfig(JSON_TIMEOUT_MS),
       );
       afterServerAccepted('el cierre de la tarjeta', () => applyCardToCache(card));
