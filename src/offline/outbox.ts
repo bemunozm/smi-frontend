@@ -135,30 +135,34 @@ export async function enqueueCloseCard(
   userId: string,
   cardId: string,
   input: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
-  photo: File,
+  /** Sin foto = cierre de carga histórica (planilla de días pasados): la op
+   * nace `pending` y el replay postea sin `tmpPhotoKey`. */
+  photo?: File,
 ): Promise<void> {
-  const compressed = await prepararArchivo(photo);
+  const compressed = photo ? await prepararArchivo(photo) : undefined;
   const photoId = input.closeClientId;
 
   await conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
-      await db.blobs.put({
-        id: photoId,
-        data: compressed.data,
-        mime: compressed.mime,
-        name: compressed.name,
-        createdAt: timestamp,
-      });
+      if (compressed) {
+        await db.blobs.put({
+          id: photoId,
+          data: compressed.data,
+          mime: compressed.mime,
+          name: compressed.name,
+          createdAt: timestamp,
+        });
+      }
       const op: CloseCardOp = {
         id: input.closeClientId,
         type: 'closeCard',
         v: 1,
         userId,
         payload: { cardId, input },
-        status: 'pending_upload',
+        status: compressed ? 'pending_upload' : 'pending',
         attempts: 0,
-        photoId,
+        ...(compressed ? { photoId } : {}),
         seq: await nextSeq(),
         entityKey: shiftCardEntity(cardId),
         dependsOn: [cardId],

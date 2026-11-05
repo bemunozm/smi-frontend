@@ -343,6 +343,21 @@ describe('replay — cierre de tarjeta', () => {
     expect(await db.blobs.get('close-1')).toBeUndefined();
   });
 
+  it('sin foto (carga histórica): postea el cierre SIN tmpPhotoKey y sin subir nada', async () => {
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
+    await putCloseOp({ status: 'pending', photoId: undefined });
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).not.toHaveBeenCalled();
+    expect(closeCardMock).toHaveBeenCalledTimes(1);
+    const [, input] = closeCardMock.mock.calls[0]!;
+    expect('tmpPhotoKey' in input).toBe(false);
+    expect(await db.outbox.get('close-1')).toBeUndefined();
+  });
+
   it('TMP_KEY_EXPIRED: limpia la key, vuelve a pending_upload y RESUBE una vez en el mismo run', async () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/vencida.jpg', url: 'https://x' });
     closeCardMock.mockRejectedValueOnce(new DomainError('expiró', { status: 400, code: 'TMP_KEY_EXPIRED' }));
