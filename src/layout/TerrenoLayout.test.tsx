@@ -84,8 +84,8 @@ function renderLayout(size: 'phone' | 'desktop') {
  * un único nombre accesible — el que corresponde a la barra que está en uso.
  */
 const SECCIONES = {
-  phone: ['Registro', 'Reporte', 'Trabajos', 'Hallazgos', 'Checklists'],
-  desktop: ['Registro de equipo', 'Reporte diario', 'Trabajos extra', 'Hallazgos', 'Checklists'],
+  phone: ['Equipos', 'Producción', 'Report', 'Hallazgos', 'Checklists'],
+  desktop: ['Informe diario equipos', 'Informe de producción diaria', 'Report', 'Hallazgos', 'Checklists'],
 } as const;
 
 afterEach(() => {

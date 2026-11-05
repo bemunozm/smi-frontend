@@ -1193,7 +1193,7 @@ export function RegistroEquipoView() {
           offline ya existe y su estado real se ve en el `SyncStatus` del
           layout de Terreno — repetirlo acá sería redundante o, peor, quedar
           desactualizado. */}
-      <VistaHead titulo="Registro de equipo" />
+      <VistaHead titulo="Informe diario equipos" />
 
       <VistaSplit
         formulario={
