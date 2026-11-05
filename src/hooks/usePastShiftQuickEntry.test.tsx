@@ -34,7 +34,7 @@ function hook() {
 const FOTO = new File([new Uint8Array([1, 2, 3])], 'surtidor.jpg', { type: 'image/jpeg' });
 
 describe('usePastShiftQuickEntry', () => {
-  it('guardar() encola apertura + cierre por fila: con litros lleva SU foto, sin litros va sin foto', async () => {
+  it('guardar() encola apertura + cierre por fila, cada una con SU foto', async () => {
     const { result } = hook();
 
     act(() => {
@@ -48,6 +48,7 @@ describe('usePastShiftQuickEntry', () => {
       });
       result.current.agregarFila();
     });
+    const FOTO_2 = new File([new Uint8Array([4, 5])], 'carga2.jpg', { type: 'image/jpeg' });
     act(() => {
       result.current.setFila(1, {
         equipoId: 'e2',
@@ -55,6 +56,7 @@ describe('usePastShiftQuickEntry', () => {
         inicial: '3059,1',
         final: '3069,1',
         litros: '',
+        foto: FOTO_2,
       });
     });
 
@@ -77,19 +79,19 @@ describe('usePastShiftQuickEntry', () => {
     const [, cardId1, close1, foto1] = enqueueCloseCardMock.mock.calls[0]!;
     expect(cardId1).toBe(open1.id); // el cierre apunta a la apertura de SU fila
     expect(close1).toMatchObject({ valorFinal: 4533.7, fuelLiters: 167 });
-    expect(foto1).toBe(FOTO); // con litros, viaja la foto del combustible
+    expect(foto1).toBe(FOTO); // cada fila viaja con SU foto
 
-    // Litros vacío = turno sin carga (0 L), sin foto.
+    // Litros vacío = turno sin carga (0 L) — la foto va igual (obligatoria).
     const [, , close2, foto2] = enqueueCloseCardMock.mock.calls[1]!;
     expect(close2).toMatchObject({ valorFinal: 3069.1, fuelLiters: 0 });
-    expect(foto2).toBeUndefined();
+    expect(foto2).toBe(FOTO_2);
 
     // Tras guardar, la grilla vuelve a una fila vacía.
     expect(result.current.filas).toHaveLength(1);
     expect(result.current.filas[0].equipoId).toBe('');
   });
 
-  it('una fila con litros pero sin foto no se puede guardar y lo dice', () => {
+  it('una fila sin foto no se puede guardar y lo dice — aun sin litros', () => {
     const { result } = hook();
 
     act(() => {
@@ -98,7 +100,7 @@ describe('usePastShiftQuickEntry', () => {
         operatorId: 'op_1',
         inicial: '100',
         final: '110',
-        litros: '40',
+        litros: '',
       });
     });
 
