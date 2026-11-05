@@ -18,6 +18,11 @@ export const SHIFT_CARDS_MINE_KEY = ['shift-cards', 'mine'] as const;
 /** Registro de reportes de salida de turno (vista «Reportes» del admin). */
 export const SHIFT_REPORTS_KEY = ['shift-reports'] as const;
 
+/** Resumen de un turno por fecha y tipo (`GET /api/shifts?date&type`) — lo
+ * consulta el modo "registrar un turno pasado" de Registro de equipo. */
+export const shiftsByDateKey = (date: string, type: string) =>
+  ['shifts', 'by-date', date, type] as const;
+
 /**
  * Listas de Hallazgos y Trabajos extra — las lee `hooks/useHallazgos.ts` /
  * `hooks/useTrabajosExtra.ts` y las escribe `offline/replay.ts` (upsert del

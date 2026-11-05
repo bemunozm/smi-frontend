@@ -22,6 +22,7 @@ vi.mock('../hooks/useCurrentUser', () => ({
 }));
 
 import { db } from '../offline/db';
+import { toDateOnly } from '../lib/turno';
 import { HallazgosView } from './HallazgosView';
 
 /** El historial de cambios viene del servidor; acá se simula. La corrección va por la cola. */
@@ -163,6 +164,32 @@ describe('HallazgosView', () => {
     expect(fuelReadingOcrMock).not.toHaveBeenCalled();
     await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringContaining('Guardado')));
     expect((screen.getByPlaceholderText(/Qué se detectó/) as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('la fecha por defecto es hoy y NO viaja en el payload (conserva la hora real de captura)', async () => {
+    renderView();
+
+    completarFormulario();
+    fireEvent.click(screen.getByRole('button', { name: /Registrar hallazgo/ }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createHallazgo') throw new Error('tipo inesperado');
+    expect('fecha' in op.payload).toBe(false);
+  });
+
+  it('con una fecha pasada elegida, el payload la lleva (carga histórica)', async () => {
+    const ayer = toDateOnly(new Date(Date.now() - 86_400_000));
+    renderView();
+
+    completarFormulario();
+    fireEvent.change(screen.getByLabelText('Fecha del hallazgo'), { target: { value: ayer } });
+    fireEvent.click(screen.getByRole('button', { name: /Registrar hallazgo/ }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createHallazgo') throw new Error('tipo inesperado');
+    expect(op.payload).toMatchObject({ fecha: ayer });
   });
 
   it('el pendiente aparece en el historial como "Sin sincronizar" con "Foto pendiente de subir"', async () => {

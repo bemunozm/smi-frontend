@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { db } from '../offline/db';
+import { toDateOnly } from '../lib/turno';
 import { TrabajosExtraView } from './TrabajosExtraView';
 import { listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
 
@@ -362,6 +363,32 @@ describe('TrabajosExtraView', () => {
     expect(op.payload.id).toBe(op.id);
     expect(Date.parse(op.payload.capturedAt)).not.toBeNaN();
     expect('operador' in op.payload).toBe(false);
+  });
+
+  it('la fecha por defecto es hoy y NO viaja en el payload (conserva la hora real de captura)', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect('fecha' in op.payload).toBe(false);
+  });
+
+  it('con una fecha pasada elegida, el payload la lleva (carga histórica)', async () => {
+    const ayer = toDateOnly(new Date(Date.now() - 86_400_000));
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.change(screen.getByLabelText('Fecha del trabajo'), { target: { value: ayer } });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op.payload).toMatchObject({ fecha: ayer });
   });
 
   it('un equipo en turno se encola igual, con su operador propuesto y las horas reales sin redondear', async () => {

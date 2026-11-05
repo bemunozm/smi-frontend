@@ -10,6 +10,7 @@ import { mensajeErrorOperacion } from '../lib/error-messages';
 import { TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
+import { toDateOnly } from '../lib/turno';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
 import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
@@ -80,8 +81,12 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
     }
     setIsGuardando(true);
     try {
+      // `fecha` solo viaja cuando difiere de hoy (carga histórica): para los
+      // registros del día, el backend conserva la hora real de captura.
+      const { fecha, ...resto } = values;
       await enqueueCreateTrabajoExtra(user.id, {
-        ...values,
+        ...resto,
+        ...(fecha && fecha !== toDateOnly(new Date()) ? { fecha } : {}),
         id: generateUuid(),
         capturedAt: new Date().toISOString(),
       });

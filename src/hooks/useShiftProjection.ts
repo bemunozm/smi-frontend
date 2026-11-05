@@ -126,6 +126,11 @@ export interface UseShiftProjectionParams {
   ops: OutboxOp[];
   supervisor: string;
   userId: string | undefined;
+  /** Carga histórica de un día de negocio PASADO: el estado ACTUAL del
+   * equipo no dice nada de ese día, así que los pesados no operativos
+   * también entran en `disponibles` (misma relajación que hace el backend
+   * en `openCard`). La unicidad de tarjeta abierta se respeta igual. */
+  incluirNoOperativos?: boolean;
 }
 
 export interface UseShiftProjectionResult {
@@ -163,6 +168,7 @@ export function useShiftProjection({
   ops,
   supervisor,
   userId,
+  incluirNoOperativos = false,
 }: UseShiftProjectionParams): UseShiftProjectionResult {
   const opsAbrir = useMemo(() => ops.filter((op): op is OpenCardOp => op.type === 'openCard'), [ops]);
   const opsCerrar = useMemo(() => ops.filter((op): op is CloseCardOp => op.type === 'closeCard'), [ops]);
@@ -243,11 +249,11 @@ export function useShiftProjection({
     () =>
       equipos.filter(
         (e) =>
-          e.status === 'OPERATIONAL' &&
+          (e.status === 'OPERATIONAL' || (incluirNoOperativos && e.equipmentClass !== 'LIGHT')) &&
           (e.openShift == null || pendingClosedEquipoIds.has(e.id)) &&
           !pendingOpenEquipoIds.has(e.id),
       ),
-    [equipos, pendingClosedEquipoIds, pendingOpenEquipoIds],
+    [equipos, incluirNoOperativos, pendingClosedEquipoIds, pendingOpenEquipoIds],
   );
   const disponibles = useMemo(() => libres.filter((e) => e.equipmentClass !== 'LIGHT'), [libres]);
   const disponiblesLivianos = useMemo(() => libres.filter((e) => e.equipmentClass === 'LIGHT'), [libres]);
@@ -277,7 +283,11 @@ export function useShiftProjection({
       ),
     [equipos, equipoIdsConTarjetaPropiaAbierta],
   );
-  const equipoHint = useMemo(() => construirHintEquipo(enTaller, ocupados), [enTaller, ocupados]);
+  // Con los no operativos ya elegibles, el hint de "no aparecen" mentiría.
+  const equipoHint = useMemo(
+    () => construirHintEquipo(incluirNoOperativos ? [] : enTaller, ocupados),
+    [incluirNoOperativos, enTaller, ocupados],
+  );
 
   return {
     tarjetas,
