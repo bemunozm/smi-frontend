@@ -64,7 +64,8 @@ export interface EmailCredentials {
 
 /** Lo que la pantalla de login necesita de un intento: el mensaje a mostrar, si falló. */
 export interface SignInResult {
-  error: { message?: string } | null;
+  /** `status`/`code` de Better Auth: con ellos `mensajeErrorLogin` traduce. */
+  error: { message?: string; status?: number; code?: string } | null;
 }
 
 /**

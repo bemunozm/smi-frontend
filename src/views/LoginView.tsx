@@ -5,6 +5,7 @@ import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { z } from 'zod';
 import { Button, Card, FieldError, Input, Label, Spinner, TextField } from '@heroui/react';
 
+import { mensajeErrorLogin } from '../lib/login-error';
 import { signInWithEmail } from '../lib/server-signout';
 
 /** `state` que `ProtectedRoute` adjunta al redirigir a `/login`
@@ -43,7 +44,7 @@ export function LoginView() {
     const { error } = await signInWithEmail({ email: values.email, password: values.password });
 
     if (error) {
-      setFormError(error.message ?? 'No se pudo iniciar sesión. Verifica tus credenciales.');
+      setFormError(mensajeErrorLogin(error));
       return;
     }
 
