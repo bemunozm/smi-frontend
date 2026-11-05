@@ -112,7 +112,7 @@ describe('TrabajosExtraView', () => {
   it('renderiza con datos sin lanzar', () => {
     renderConRegistro();
 
-    expect(screen.getByRole('heading', { name: 'Trabajos extraordinarios' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Report' })).toBeTruthy();
     expect(screen.getByText('Registrar trabajo')).toBeTruthy();
   });
 

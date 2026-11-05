@@ -16,9 +16,12 @@ const POR_VALIDAR = ['SUBMITTED'] as const;
  * únicas con backend real; ver el comentario en `routes.tsx`.
  */
 const tabs: ShellTab[] = [
-  { to: '/terreno/registro', label: 'Registro de equipo', corto: 'Registro', icon: ClipboardCheck },
-  { to: '/terreno/reporte-diario', label: 'Reporte diario', corto: 'Reporte', icon: FileText },
-  { to: '/terreno/trabajos-extra', label: 'Trabajos extra', corto: 'Trabajos', icon: Briefcase },
+  // Mismos nombres que el panel del administrador (`config/nav-items.ts`,
+  // sección Reportes) — pedido del cliente: una sola nomenclatura en toda la
+  // app. Las rutas y el dominio conservan los nombres viejos.
+  { to: '/terreno/registro', label: 'Informe diario equipos', corto: 'Equipos', icon: ClipboardCheck },
+  { to: '/terreno/reporte-diario', label: 'Informe de producción diaria', corto: 'Producción', icon: FileText },
+  { to: '/terreno/trabajos-extra', label: 'Report', corto: 'Report', icon: Briefcase },
   { to: '/terreno/hallazgos', label: 'Hallazgos', corto: 'Hallazgos', icon: TriangleAlert },
   // Módulo 3: el supervisor valida el checklist del mantenedor y libera el equipo.
   { to: '/terreno/checklists', label: 'Checklists', corto: 'Checklists', icon: ListChecks },
