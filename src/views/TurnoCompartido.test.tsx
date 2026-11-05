@@ -32,6 +32,11 @@ vi.mock('../hooks/useReporteDiario', () => ({
 vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
 }));
+// Resumen del turno elegido: acá no interesa (estas pruebas miran el turno
+// compartido) y el hook real exige un QueryClientProvider.
+vi.mock('../hooks/usePastShiftSummary', () => ({
+  usePastShiftSummary: () => ({ data: undefined }),
+}));
 
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useTurnoSelector } from '../hooks/useTurnoSelector';

@@ -109,6 +109,9 @@ export const ShiftSummarySchema = z.object({
         internalCode: z.string(),
         type: z.string(),
         controlUnit: z.enum(CONTROL_UNIT),
+        /** Para excluir camionetas de los «Operadores del turno» del informe
+         * de producción. Opcional: tolera un backend que aún no lo manda. */
+        equipmentClass: z.enum(EQUIPMENT_CLASS).optional(),
       }),
       operatorId: z.string().nullable(),
       operatorName: z.string(),
