@@ -656,6 +656,17 @@ describe('RegistroEquipoView', () => {
       expect(screen.queryByText('Carga rápida del turno')).toBeNull();
     });
 
+    it('la foto de la carga rápida ofrece la vía galería (input sin cámara forzada)', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+      expect(inputs.length).toBeGreaterThan(0);
+      // La foto del combustible de un día pasado ya está tomada y vive en la
+      // galería: tiene que existir una entrada SIN `capture` (el botón
+      // «Elegir de la galería» de `PhotoCaptureField`), además de la cámara.
+      expect(inputs.some((input) => !input.hasAttribute('capture'))).toBe(true);
+    });
+
     it('el botón de la carga rápida guarda vía el hook', () => {
       renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
 
