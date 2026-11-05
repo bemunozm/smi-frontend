@@ -34,9 +34,17 @@ describe('NAV_ITEMS', () => {
     expect(dashboard?.roles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
   });
 
-  it('SECRETARIA ve solo el dashboard, sus tres reportes y notificaciones', () => {
+  it('SECRETARIA ve el dashboard, los cinco reportes del administrador y notificaciones', () => {
     const suyos = NAV_ITEMS.filter((item) => item.roles.includes(ROLES.SECRETARIA)).map((item) => item.to);
-    expect(suyos).toEqual(['/', '/reportes-diarios', '/hallazgos', '/trabajos-extra', '/notificaciones']);
+    expect(suyos).toEqual([
+      '/',
+      '/reportes',
+      '/reportes-diarios',
+      '/hallazgos',
+      '/trabajos-extra',
+      '/mantenciones',
+      '/notificaciones',
+    ]);
   });
 
   it('Terreno y Mantenimiento no van en el menú: son los home de sus roles', () => {

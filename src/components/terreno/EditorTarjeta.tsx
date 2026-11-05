@@ -15,8 +15,8 @@ const fmt = (n: number) => n.toLocaleString('es-CL', { minimumFractionDigits: 1,
 
 /**
  * Corregir una tarjeta de turno ya enviada (queda en su historial de cambios).
- * Abierta: operador,
- * horómetro inicial y observaciones. Cerrada: además horómetro final, litros y
+ * Abierta: operador (solo en pesados: un liviano no lleva), horómetro o
+ * kilometraje inicial y observaciones. Cerrada: además horómetro final, litros y
  * AdBlue. Los datos y las reglas viven en `useEditarTarjeta`; acá solo se dibuja.
  */
 export function EditorTarjeta({
@@ -30,6 +30,9 @@ export function EditorTarjeta({
   const { editando, form, setForm } = edicion;
   if (!editando) return null;
 
+  const liviano = editando.liviano === true;
+  const lectura = liviano ? 'Kilometraje' : 'Horómetro';
+  const unidad = liviano ? 'km' : 'h';
   const horas =
     edicion.esCerrada && !edicion.finalInvalido ? diferenciaHoras(form.inicial, form.final) : null;
 
@@ -46,37 +49,39 @@ export function EditorTarjeta({
         <AvisoEdicion />
       )}
       <Form>
-        <Campo label="Operador">
-          <Selector
-            etiqueta="Operador"
-            valor={form.operatorId}
-            onChange={(operatorId) => setForm((f) => ({ ...f, operatorId }))}
-            opciones={operadores}
-          />
-        </Campo>
-        <Campo label="Horómetro inicial" unidad="h">
+        {!liviano && (
+          <Campo label="Operador">
+            <Selector
+              etiqueta="Operador"
+              valor={form.operatorId}
+              onChange={(operatorId) => setForm((f) => ({ ...f, operatorId }))}
+              opciones={operadores}
+            />
+          </Campo>
+        )}
+        <Campo label={`${lectura} inicial`} unidad={unidad}>
           <Input numerico value={form.inicial} onChange={(e) => setForm((f) => ({ ...f, inicial: e.target.value }))} />
         </Campo>
 
         {edicion.esCerrada && (
           <>
-            <Campo label="Horómetro final" unidad="h">
+            <Campo label={`${lectura} final`} unidad={unidad}>
               <Input numerico value={form.final} onChange={(e) => setForm((f) => ({ ...f, final: e.target.value }))} />
             </Campo>
             {edicion.finalInvalido && (
               <span className="text-[13px] font-semibold text-[var(--danger)]">
-                El horómetro final no puede ser menor que el inicial.
+                El {lectura.toLowerCase()} final no puede ser menor que el inicial.
               </span>
             )}
             <Calculado
-              label="Horas máquina"
+              label={liviano ? 'Recorrido' : 'Horas máquina'}
               nota={
                 <span className="flex items-center gap-1.5">
                   <Lock className="h-[13px] w-[13px]" />
                   Calculado · no editable
                 </span>
               }
-              valor={horas != null ? `${fmt(horas)} h` : '—'}
+              valor={horas != null ? `${fmt(horas)} ${unidad}` : '—'}
             />
             <Campo label="Combustible cargado" unidad="L" hint="Cero si no cargó en el turno.">
               <Input

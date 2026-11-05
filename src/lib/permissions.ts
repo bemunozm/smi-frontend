@@ -43,11 +43,14 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   // MANTENEDOR incluido: el taller inicia operaciones desde los hallazgos de
   // su bandeja (la OT nace ligada y el hallazgo pasa a EN_PROCESO).
   'orden.create': [ADMIN, SUPERVISOR, MANTENEDOR],
-  'orden.update': [ADMIN, SUPERVISOR, MANTENEDOR],
+  // SECRETARIA: corrige y cierra la orden que el taller olvidó.
+  'orden.update': [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA],
   'orden.toggleTarea': [ADMIN, SUPERVISOR, MANTENEDOR],
   // ADMIN incluido: puede cerrar una tarea del taller (registrar el cierre
   // con insumos/foto), además del MANTENEDOR que la trabaja.
-  'intervencion.create': [ADMIN, MANTENEDOR],
+  // SECRETARIA: solo el «qué se hizo» al cerrar, sin insumos (el backend se
+  // los rechaza; el stock lo descuenta el taller).
+  'intervencion.create': [ADMIN, MANTENEDOR, SECRETARIA],
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
@@ -108,7 +111,16 @@ export function canDeleteHallazgo(role: Role | null | undefined): boolean {
  * equipo) para no llevarla a una pantalla que la rebota a `/forbidden`.
  * Para el resto de los roles el dashboard no cambia.
  */
-const RUTAS_SECRETARIA = ['/', '/hallazgos', '/trabajos-extra', '/reportes-diarios', '/notificaciones', '/perfil'];
+const RUTAS_SECRETARIA = [
+  '/',
+  '/reportes',
+  '/reportes-diarios',
+  '/hallazgos',
+  '/trabajos-extra',
+  '/mantenciones',
+  '/notificaciones',
+  '/perfil',
+];
 
 export function canOpenPath(role: Role | null | undefined, path: string): boolean {
   if (role !== SECRETARIA) return true;

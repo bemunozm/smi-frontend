@@ -4,13 +4,31 @@ import { MemoryRouter } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
 
-const { ordenesHook, intervencionesHook } = vi.hoisted(() => ({
+const { ordenesHook, intervencionesHook, finalizarMock, actualizarMock, rol } = vi.hoisted(() => ({
   ordenesHook: vi.fn(),
   intervencionesHook: vi.fn(),
+  finalizarMock: vi.fn(),
+  actualizarMock: vi.fn(),
+  rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'SUPERVISOR' },
 }));
 
-vi.mock('../hooks/useOrdenes', () => ({ useOrdenes: () => ordenesHook() }));
-vi.mock('../hooks/useIntervenciones', () => ({ useIntervenciones: (id: string | undefined) => intervencionesHook(id) }));
+vi.mock('../hooks/useOrdenes', () => ({
+  useOrdenes: () => ordenesHook(),
+  useActualizarOrden: () => ({ mutate: actualizarMock, isPending: false }),
+}));
+vi.mock('../hooks/useIntervenciones', () => ({
+  useIntervenciones: (id: string | undefined) => intervencionesHook(id),
+  useFinishTask: () => ({ mutate: finalizarMock, isPending: false }),
+}));
+vi.mock('../hooks/usePermissions', async () => {
+  const { canWrite } = await import('../lib/permissions');
+  return {
+    usePermissions: () => ({
+      role: rol.value,
+      can: (action: Parameters<typeof canWrite>[1]) => canWrite(rol.value, action),
+    }),
+  };
+});
 vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({ data: [{ id: 'e1', internalCode: 'SEM 02' }, { id: 'e2', internalCode: 'WA470' }] }),
 }));
@@ -69,6 +87,7 @@ const LISTA: OrdenTrabajo[] = [
 const ok = (data: OrdenTrabajo[]) => ({ data, isPending: false, isError: false, error: null });
 
 beforeEach(() => {
+  rol.value = 'ADMIN';
   ordenesHook.mockReturnValue(ok(LISTA));
   intervencionesHook.mockReturnValue({ data: [], isPending: false });
 });
@@ -160,6 +179,52 @@ describe('MantencionesAdminView', () => {
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Reparación de frenos')).toBeTruthy();
+  });
+
+  it('«Sin terminar» lista las órdenes que el taller dejó abiertas', () => {
+    renderView('/mantenciones?estado=sin-terminar');
+    const filas = screen.getAllByTestId(/mantencion-fila-/);
+    expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['mantencion-fila-ot3']);
+    expect(within(filas[0]).getByText('En proceso')).toBeTruthy();
+  });
+
+  it('SECRETARIA cierra una orden sin terminar: qué se hizo y cómo queda el equipo, sin insumos', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones?estado=sin-terminar&id=ot3');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    const finalizar = within(dialog).getByRole('button', { name: 'Finalizar mantención' });
+    expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(true);
+
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de filtros' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Inoperativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+
+    expect(finalizarMock).toHaveBeenCalledWith(
+      {
+        orden: expect.objectContaining({ id: 'ot3' }),
+        intervencion: { tipo: 'PREVENTIVA', detalle: 'Cambio de filtros' },
+        equipmentStatus: 'OUT_OF_SERVICE',
+      },
+      expect.anything(),
+    );
+  });
+
+  it('una orden completada se edita (título, prioridad) pero no se vuelve a finalizar', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones?id=ot1');
+    const detalle = screen.getByRole('dialog');
+    expect(within(detalle).queryByRole('button', { name: 'Marcar como finalizada' })).toBeNull();
+    fireEvent.click(within(detalle).getByRole('button', { name: 'Editar' }));
+
+    const editor = screen.getByRole('dialog');
+    fireEvent.change(within(editor).getByLabelText('Título'), { target: { value: 'Mantención 500 h motor' } });
+    fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
+    expect(actualizarMock).toHaveBeenCalledWith(
+      { orden: expect.objectContaining({ id: 'ot1' }), input: { titulo: 'Mantención 500 h motor', prioridad: 'MEDIA' } },
+      expect.anything(),
+    );
   });
 
   it('muestra el error del listado', () => {

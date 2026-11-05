@@ -4,7 +4,7 @@ import { ENDPOINTS } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
 import { MOVEMENT_ACTIONS, WRITE_ROLES, canCloseShiftCardFromFleet, canWrite, canWriteAny } from './permissions';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
 
 describe('WRITE_ROLES', () => {
   it('cubre exactamente las escrituras del registro: ninguna queda sin decidir ni sobra una', () => {
@@ -23,9 +23,9 @@ describe('WRITE_ROLES', () => {
     ['combustible.create', [ADMIN, SUPERVISOR]],
     ['equipment.create', [ADMIN]],
     ['equipment.status', [ADMIN, SUPERVISOR]],
-    ['intervencion.create', [ADMIN, MANTENEDOR]],
+    ['intervencion.create', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['umbral.create', [ADMIN]],
-    ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR]],
+    ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA]],
   ])('%s la hacen %j', (accion, roles) => {
     expect([...WRITE_ROLES[accion]].sort()).toEqual([...roles].sort());
   });

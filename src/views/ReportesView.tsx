@@ -1,7 +1,9 @@
-import { Card, Chip, Spinner, Table } from '@heroui/react';
-import { Download } from 'lucide-react';
+import { useState } from 'react';
+import { Button, Card, Chip, Spinner, Table } from '@heroui/react';
+import { Download, Eye } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
+import { RegistroTurnoModal } from '../components/reportes/RegistroTurnoModal';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useShiftReports } from '../hooks/useShiftReports';
 import { turnoLabel } from '../config/flota-colors';
@@ -48,7 +50,7 @@ function EstadoCorreo({ reporte }: { reporte: ShiftReportListItem }) {
  * Un reporte en tablet y celular: la tabla de siete columnas obligaba a
  * desplazarse hacia los lados; acá todo cabe en el ancho y el PDF es un botón.
  */
-function TarjetaReporte({ reporte }: { reporte: ShiftReportListItem }) {
+function TarjetaReporte({ reporte, onVer }: { reporte: ShiftReportListItem; onVer: () => void }) {
   return (
     <li
       className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
@@ -73,24 +75,31 @@ function TarjetaReporte({ reporte }: { reporte: ShiftReportListItem }) {
           <dd className="m-0 text-foreground">{formatEnviado(reporte.createdAt)}</dd>
         </div>
       </dl>
-      <a
-        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-(--accent) hover:bg-default"
-        href={ShiftReportAPI.fileUrl(reporte.id)}
-        rel="noreferrer"
-        target="_blank"
-      >
-        <Download aria-hidden size={16} />
-        Descargar PDF
-      </a>
+      <div className="grid grid-cols-2 gap-2">
+        <Button className="min-h-11" onPress={onVer} variant="secondary">
+          <Eye aria-hidden size={16} />
+          Ver registro
+        </Button>
+        <a
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-(--accent) hover:bg-default"
+          href={ShiftReportAPI.fileUrl(reporte.id)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Download aria-hidden size={16} />
+          Descargar PDF
+        </a>
+      </div>
     </li>
   );
 }
 
 /**
- * Vista «Reportes» del ADMINISTRADOR (`/reportes`, ruta solo ADMIN): el
- * registro de los reportes de salida de turno que envían los supervisores
+ * Vista «Informe diario equipos» del panel (`/reportes`, ADMIN y SECRETARIA):
+ * el registro de los reportes de salida de turno que envían los supervisores
  * desde Terreno — qué equipos se usaron en el día, con qué operadores y qué
- * supervisor a cargo. Cada fila descarga el MISMO PDF que genera el envío
+ * supervisor a cargo. «Ver registro» abre las tarjetas del turno
+ * (`RegistroTurnoModal`; el administrador puede corregirlas). Cada fila descarga el MISMO PDF que genera el envío
  * (`GET /api/shift-reports/:id/file`, URL firmada; el navegador manda la
  * cookie solo, por eso es un `<a>` y no un fetch).
  */
@@ -99,6 +108,7 @@ export function ReportesView() {
   const reportes = data ?? [];
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  const [abierto, setAbierto] = useState<ShiftReportListItem | null>(null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,7 +158,7 @@ export function ReportesView() {
           {!isPending && !isError && reportes.length > 0 && !esEscritorio ? (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {reportes.map((reporte) => (
-                <TarjetaReporte key={reporte.id} reporte={reporte} />
+                <TarjetaReporte key={reporte.id} onVer={() => setAbierto(reporte)} reporte={reporte} />
               ))}
             </ul>
           ) : null}
@@ -164,6 +174,7 @@ export function ReportesView() {
                     <Table.Column className="text-right">Equipos</Table.Column>
                     <Table.Column>Enviado</Table.Column>
                     <Table.Column>Correo</Table.Column>
+                    <Table.Column>Registro</Table.Column>
                     <Table.Column>PDF</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -182,6 +193,12 @@ export function ReportesView() {
                         </Table.Cell>
                         <Table.Cell className="whitespace-nowrap">
                           <EstadoCorreo reporte={reporte} />
+                        </Table.Cell>
+                        <Table.Cell className="whitespace-nowrap">
+                          <Button onPress={() => setAbierto(reporte)} size="sm" variant="secondary">
+                            <Eye aria-hidden size={15} />
+                            Ver registro
+                          </Button>
                         </Table.Cell>
                         <Table.Cell className="whitespace-nowrap">
                           <a
@@ -203,6 +220,8 @@ export function ReportesView() {
           ) : null}
         </Card.Content>
       </Card>
+
+      <RegistroTurnoModal reporte={abierto} onClose={() => setAbierto(null)} />
     </div>
   );
 }

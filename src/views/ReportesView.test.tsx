@@ -1,11 +1,16 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, within } from '@testing-library/react';
+import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 
 import type { ShiftReportListItem } from '../types/shift';
 
 const { reportesHook } = vi.hoisted(() => ({ reportesHook: vi.fn() }));
 
 vi.mock('../hooks/useShiftReports', () => ({ useShiftReports: () => reportesHook() }));
+// El modal tiene su propio test (`RegistroTurnoModal.test.tsx`): acá solo importa qué reporte abre.
+vi.mock('../components/reportes/RegistroTurnoModal', () => ({
+  RegistroTurnoModal: ({ reporte }: { reporte: ShiftReportListItem | null }) =>
+    reporte ? <div role="dialog">Registro de {reporte.id}</div> : null,
+}));
 
 import { ReportesView } from './ReportesView';
 
@@ -64,6 +69,13 @@ describe('ReportesView', () => {
     const enlace = within(screen.getByTestId('reporte-fila-r2')).getByRole('link', { name: /Descargar PDF/ });
     expect(enlace.getAttribute('href')).toContain('/api/shift-reports/r2/file');
     expect(enlace.getAttribute('target')).toBe('_blank');
+  });
+
+  it('«Ver registro» abre las tarjetas del turno de esa fila', () => {
+    render(<ReportesView />);
+    const fila = screen.getByTestId('reporte-fila-r1');
+    fireEvent.click(within(fila).getByRole('button', { name: /Ver registro/ }));
+    expect(screen.getByRole('dialog').textContent).toBe('Registro de r1');
   });
 
   it('muestra el estado del correo de cada envío', () => {

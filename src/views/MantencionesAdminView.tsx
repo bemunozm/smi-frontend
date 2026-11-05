@@ -1,17 +1,29 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import { Button, Card, Chip, Label, ListBox, Modal, Select, Spinner, Table, TextArea, TextField, Input } from '@heroui/react';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { useIntervenciones } from '../hooks/useIntervenciones';
+import { useFinishTask, useIntervenciones } from '../hooks/useIntervenciones';
+import { usePermissions } from '../hooks/usePermissions';
 import { useItems } from '../hooks/useInventory';
-import { useOrdenes } from '../hooks/useOrdenes';
+import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL_1 } from '../lib/dashboard-format';
-import type { OrdenTrabajo, Tarea } from '../types/mantenimiento';
+import { ESTADO_OT_LABELS, PRIORIDAD_OT_OPTIONS, estadoOTChipColor } from '../config/mantenimiento-colors';
+import type { EquipmentStatus } from '../types/equipment';
+import type { OrdenTrabajo, PrioridadOT, Tarea } from '../types/mantenimiento';
 
 const TIPOS = ['PREVENTIVA', 'CORRECTIVA'] as const;
+
+/** Órdenes que el taller no terminó: las que se pueden cerrar desde acá. */
+const SIN_TERMINAR = new Set(['PENDIENTE', 'ASIGNADA', 'EN_PROCESO']);
+
+/** Cómo queda el equipo al cerrar — mismas dos opciones que «Finalizar tarea». */
+const EQUIPO_FINAL: { valor: EquipmentStatus; label: string }[] = [
+  { valor: 'OPERATIONAL', label: 'Operativo' },
+  { valor: 'OUT_OF_SERVICE', label: 'Inoperativo' },
+];
 
 const TIPO_LABEL: Record<string, string> = {
   PREVENTIVA: 'Preventiva',
@@ -113,10 +125,16 @@ function DetalleMantencionModal({
   orden,
   codigoEquipo,
   onClose,
+  onEditar,
+  onFinalizar,
 }: {
   orden: OrdenTrabajo | null;
   codigoEquipo: string;
   onClose: () => void;
+  /** Sin él (rol sin `orden.update`) no hay «Editar». */
+  onEditar?: () => void;
+  /** Solo en una orden sin terminar y para quien puede cerrarla. */
+  onFinalizar?: () => void;
 }) {
   const { data: intervenciones, isPending: cargandoIntervenciones } = useIntervenciones(orden?.id);
   const { data: items } = useItems({ isActive: true });
@@ -142,6 +160,11 @@ function DetalleMantencionModal({
                 <Chip color={TIPO_COLOR[orden.tipo] ?? 'default'} size="sm" variant="soft">
                   {TIPO_LABEL[orden.tipo] ?? orden.tipo}
                 </Chip>
+                {orden.estado !== 'COMPLETADA' ? (
+                  <Chip color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+                    {ESTADO_OT_LABELS[orden.estado]}
+                  </Chip>
+                ) : null}
                 <span className="font-mono text-sm text-muted-foreground">{codigoEquipo}</span>
               </div>
             ) : null}
@@ -215,6 +238,162 @@ function DetalleMantencionModal({
               </div>
             ) : null}
           </Modal.Body>
+          {onEditar || onFinalizar ? (
+            <Modal.Footer>
+              {onEditar ? (
+                <Button onPress={onEditar} variant="secondary">
+                  Editar
+                </Button>
+              ) : null}
+              {onFinalizar ? <Button onPress={onFinalizar}>Marcar como finalizada</Button> : null}
+            </Modal.Footer>
+          ) : null}
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+/**
+ * Cerrar desde el panel una orden que el taller dejó sin terminar (pedido del
+ * administrador: a veces el mantenedor se olvida). Registra «qué se hizo» como
+ * intervención SIN insumos —el stock lo descuenta el taller— y pasa la orden a
+ * COMPLETADA con el estado en que queda el equipo, obligatorio igual que en
+ * «Finalizar tarea» (`useFinishTask`, por la cola).
+ */
+function FinalizarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onClose: () => void }) {
+  const finalizar = useFinishTask();
+  const [detalle, setDetalle] = useState('');
+  const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
+  const valido = detalle.trim().length >= 3 && equipoFinal !== '';
+
+  const guardar = () => {
+    if (!valido || !equipoFinal) return;
+    finalizar.mutate(
+      { orden, intervencion: { tipo: orden.tipo, detalle: detalle.trim() }, equipmentStatus: equipoFinal },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Marcar como finalizada
+            </Modal.Heading>
+            <p className="pt-1 text-sm text-muted-foreground">{orden.titulo}</p>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="flex flex-col gap-4">
+              <TextField fullWidth name="detalle" onChange={setDetalle} value={detalle}>
+                <Label>Qué se hizo</Label>
+                <TextArea placeholder="Lo que el taller realizó…" rows={3} />
+              </TextField>
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-foreground">Cómo queda el equipo</span>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Cómo queda el equipo">
+                  {EQUIPO_FINAL.map((opcion) => (
+                    <Button
+                      aria-pressed={equipoFinal === opcion.valor}
+                      key={opcion.valor}
+                      onPress={() => setEquipoFinal(opcion.valor)}
+                      size="sm"
+                      variant={equipoFinal === opcion.valor ? 'primary' : 'tertiary'}
+                    >
+                      {opcion.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Los insumos no se cargan acá: si se usaron repuestos, los descuenta el taller desde su stock.
+              </p>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={onClose} variant="tertiary">
+              Cancelar
+            </Button>
+            <Button isDisabled={!valido} isPending={finalizar.isPending} onPress={guardar}>
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Finalizar mantención')}
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+/** Corregir el título o la prioridad de una orden (`useActualizarOrden`, solo lo que cambió). */
+function EditarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onClose: () => void }) {
+  const actualizar = useActualizarOrden();
+  const [titulo, setTitulo] = useState(orden.titulo);
+  const [prioridad, setPrioridad] = useState<PrioridadOT>(orden.prioridad);
+  const hayCambios = titulo.trim() !== orden.titulo || prioridad !== orden.prioridad;
+  const valido = titulo.trim().length >= 3;
+
+  const guardar = () => {
+    actualizar.mutate({ orden, input: { titulo: titulo.trim(), prioridad } }, { onSuccess: onClose });
+  };
+
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Editar mantención
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_200px]">
+              <TextField fullWidth isInvalid={!valido} name="titulo" onChange={setTitulo} value={titulo}>
+                <Label>Título</Label>
+                <Input />
+              </TextField>
+              <Select fullWidth value={prioridad} onChange={(value) => value && setPrioridad(value as PrioridadOT)}>
+                <Label>Prioridad</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {PRIORIDAD_OT_OPTIONS.map((opcion) => (
+                      <ListBox.Item id={opcion.value} key={opcion.value} textValue={opcion.label}>
+                        {opcion.label}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={onClose} variant="tertiary">
+              Cancelar
+            </Button>
+            <Button isDisabled={!hayCambios || !valido} isPending={actualizar.isPending} onPress={guardar}>
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Guardar cambios')}
+            </Button>
+          </Modal.Footer>
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
@@ -224,11 +403,13 @@ function DetalleMantencionModal({
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
- * Registro de mantenciones del ADMINISTRADOR (`/mantenciones`, ruta solo
- * ADMIN): cada fila es una orden de trabajo COMPLETADA del taller —preventiva
- * o correctiva—, con filtros por fecha, mantenedor y tipo, y el detalle en
- * popup (tareas, intervenciones, insumos). Es también el destino del aviso
- * «Orden de trabajo completada» del administrador (`?id=` abre el detalle).
+ * Registro de mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA):
+ * por defecto las órdenes de trabajo COMPLETADAS del taller —preventivas o
+ * correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
+ * popup (tareas, intervenciones, insumos). «Sin terminar» muestra las que el
+ * taller dejó abiertas, para cerrarlas si el mantenedor se olvidó
+ * (`FinalizarMantencionModal`). Es también el destino del aviso «Orden de
+ * trabajo completada» del administrador (`?id=` abre el detalle).
  */
 export function MantencionesAdminView() {
   const { data, isPending, isError, error } = useOrdenes();
@@ -236,6 +417,12 @@ export function MantencionesAdminView() {
   const [params, setParams] = useSearchParams();
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  const { can } = usePermissions();
+  const puedeEditar = can('orden.update');
+  const puedeFinalizar = puedeEditar && can('intervencion.create');
+  const [editando, setEditando] = useState<OrdenTrabajo | null>(null);
+  const [finalizando, setFinalizando] = useState<OrdenTrabajo | null>(null);
+  const estadoFiltro = params.get('estado') === 'sin-terminar' ? 'sin-terminar' : 'completadas';
 
   // `equipoId` de la OT es soft-ref: puede traer el id del equipo o su código.
   const codigoDe = (equipoRef: string) =>
@@ -244,9 +431,11 @@ export function MantencionesAdminView() {
   const mantenciones = useMemo(
     () =>
       (data ?? [])
-        .filter((orden) => orden.estado === 'COMPLETADA')
+        .filter((orden) =>
+          estadoFiltro === 'completadas' ? orden.estado === 'COMPLETADA' : SIN_TERMINAR.has(orden.estado),
+        )
         .sort((a, b) => fechaDeMantencion(b).localeCompare(fechaDeMantencion(a))),
-    [data],
+    [data, estadoFiltro],
   );
 
   const mantenedores = useMemo(() => {
@@ -281,7 +470,8 @@ export function MantencionesAdminView() {
     [mantenciones, tipoFiltro, mantenedorFiltro, desde, hasta],
   );
 
-  const detalle = detalleId ? (mantenciones.find((orden) => orden.id === detalleId) ?? null) : null;
+  // Se busca en todas: el aviso de una orden puede llegar con el filtro de la otra pestaña.
+  const detalle = detalleId ? ((data ?? []).find((orden) => orden.id === detalleId) ?? null) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -292,7 +482,9 @@ export function MantencionesAdminView() {
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">Mantenciones</h1>
           <p className="text-sm text-muted-foreground">
-            Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.
+            {estadoFiltro === 'completadas'
+              ? 'Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.'
+              : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
           </p>
         </div>
         <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
@@ -308,6 +500,17 @@ export function MantencionesAdminView() {
               <Card.Description>De la más reciente a la más antigua. El total sigue al filtro.</Card.Description>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Estado
+                <select
+                  className={SELECT_FILTRO}
+                  onChange={(e) => setFiltro('estado', e.target.value, 'completadas')}
+                  value={estadoFiltro}
+                >
+                  <option value="completadas">Completadas</option>
+                  <option value="sin-terminar">Sin terminar</option>
+                </select>
+              </label>
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Tipo
                 <select className={SELECT_FILTRO} onChange={(e) => setFiltro('tipo', e.target.value, 'TODOS')} value={tipoFiltro}>
@@ -373,7 +576,9 @@ export function MantencionesAdminView() {
           {!isPending && !isError && lista.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
               {mantenciones.length === 0
-                ? 'Todavía no hay mantenciones completadas.'
+                ? estadoFiltro === 'completadas'
+                  ? 'Todavía no hay mantenciones completadas.'
+                  : 'No hay mantenciones sin terminar.'
                 : 'Ninguna mantención calza con el filtro.'}
             </p>
           ) : null}
@@ -405,6 +610,11 @@ export function MantencionesAdminView() {
                     </Chip>
                   </div>
                   <p className="m-0 text-[15px] font-semibold break-words text-foreground">{orden.titulo}</p>
+                  {orden.estado !== 'COMPLETADA' ? (
+                    <Chip className="w-fit" color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+                      {ESTADO_OT_LABELS[orden.estado]}
+                    </Chip>
+                  ) : null}
                   <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
                     <div className="flex min-w-0 flex-col">
                       <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -448,7 +658,14 @@ export function MantencionesAdminView() {
                           {formatFecha(fechaDeMantencion(orden))}
                         </Table.Cell>
                         <Table.Cell className="font-mono text-sm whitespace-nowrap">{codigoDe(orden.equipoId)}</Table.Cell>
-                        <Table.Cell className="max-w-0 truncate text-sm">{orden.titulo}</Table.Cell>
+                        <Table.Cell className="max-w-0 truncate text-sm">
+                          {orden.estado !== 'COMPLETADA' ? (
+                            <Chip className="mr-2" color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+                              {ESTADO_OT_LABELS[orden.estado]}
+                            </Chip>
+                          ) : null}
+                          {orden.titulo}
+                        </Table.Cell>
                         <Table.Cell className="whitespace-nowrap">
                           <Chip color={TIPO_COLOR[orden.tipo] ?? 'default'} size="sm" variant="soft">
                             {TIPO_LABEL[orden.tipo] ?? orden.tipo}
@@ -474,7 +691,26 @@ export function MantencionesAdminView() {
         codigoEquipo={detalle ? codigoDe(detalle.equipoId) : ''}
         orden={detalle}
         onClose={() => setFiltro('id', '', '')}
+        onEditar={
+          puedeEditar && detalle
+            ? () => {
+                setEditando(detalle);
+                setFiltro('id', '', '');
+              }
+            : undefined
+        }
+        onFinalizar={
+          puedeFinalizar && detalle && SIN_TERMINAR.has(detalle.estado)
+            ? () => {
+                setFinalizando(detalle);
+                setFiltro('id', '', '');
+              }
+            : undefined
+        }
       />
+
+      {editando ? <EditarMantencionModal orden={editando} onClose={() => setEditando(null)} /> : null}
+      {finalizando ? <FinalizarMantencionModal orden={finalizando} onClose={() => setFinalizando(null)} /> : null}
     </div>
   );
 }

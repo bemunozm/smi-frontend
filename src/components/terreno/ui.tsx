@@ -673,7 +673,10 @@ export function Textarea({ className = '', ...props }: React.TextareaHTMLAttribu
     <textarea
       {...props}
       placeholder={props.placeholder ?? ' '}
-      className={`${INPUT} h-auto min-h-[84px] resize-y py-3 leading-snug ${className}`}
+      // Con label flotante (`Campo`) la franja del label necesita más aire arriba:
+      // `py-3` es una utilidad y le gana a la regla de `index.css` (capa
+      // components), así que el ajuste va acá, con más especificidad.
+      className={`${INPUT} h-auto min-h-[84px] resize-y py-3 leading-snug [.campo-flotante_&]:pt-[26px] [.campo-flotante_&]:pb-[10px] ${className}`}
     />
   );
 }
