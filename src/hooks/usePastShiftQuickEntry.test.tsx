@@ -31,8 +31,10 @@ function hook() {
   );
 }
 
+const FOTO = new File([new Uint8Array([1, 2, 3])], 'surtidor.jpg', { type: 'image/jpeg' });
+
 describe('usePastShiftQuickEntry', () => {
-  it('guardar() encola apertura + cierre SIN foto por cada fila completa, en orden', async () => {
+  it('guardar() encola apertura + cierre por fila: con litros lleva SU foto, sin litros va sin foto', async () => {
     const { result } = hook();
 
     act(() => {
@@ -42,6 +44,7 @@ describe('usePastShiftQuickEntry', () => {
         inicial: '4526,0',
         final: '4533,7',
         litros: '167',
+        foto: FOTO,
       });
       result.current.agregarFila();
     });
@@ -74,15 +77,33 @@ describe('usePastShiftQuickEntry', () => {
     const [, cardId1, close1, foto1] = enqueueCloseCardMock.mock.calls[0]!;
     expect(cardId1).toBe(open1.id); // el cierre apunta a la apertura de SU fila
     expect(close1).toMatchObject({ valorFinal: 4533.7, fuelLiters: 167 });
-    expect(foto1).toBeUndefined(); // carga histórica: sin foto
+    expect(foto1).toBe(FOTO); // con litros, viaja la foto del combustible
 
-    // Litros vacío = turno sin carga (0 L).
-    const [, , close2] = enqueueCloseCardMock.mock.calls[1]!;
+    // Litros vacío = turno sin carga (0 L), sin foto.
+    const [, , close2, foto2] = enqueueCloseCardMock.mock.calls[1]!;
     expect(close2).toMatchObject({ valorFinal: 3069.1, fuelLiters: 0 });
+    expect(foto2).toBeUndefined();
 
     // Tras guardar, la grilla vuelve a una fila vacía.
     expect(result.current.filas).toHaveLength(1);
     expect(result.current.filas[0].equipoId).toBe('');
+  });
+
+  it('una fila con litros pero sin foto no se puede guardar y lo dice', () => {
+    const { result } = hook();
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '40',
+      });
+    });
+
+    expect(result.current.errorDeFila(0)).toMatch(/foto/i);
+    expect(result.current.puedeGuardar).toBe(false);
   });
 
   it('una fila incompleta bloquea el guardado y lo dice', () => {

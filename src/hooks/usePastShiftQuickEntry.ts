@@ -9,20 +9,30 @@ import { enqueueCloseCard, enqueueOpenCard } from '../offline/outbox';
 import type { Equipment } from '../types/equipment';
 import type { ShiftType } from '../types/shift';
 
-/** Una fila de la planilla: equipo · operador · horómetros · litros. Todo en
- * texto crudo del input; se parsea recién al validar/guardar. */
+/** Una fila de la planilla: equipo · operador · horómetros · litros · foto.
+ * Los números en texto crudo del input; se parsean recién al validar/guardar. */
 export interface QuickEntryRow {
   equipoId: string;
   operatorId: string;
   inicial: string;
   final: string;
   litros: string;
+  /** Foto del combustible de ESA carga — obligatoria cuando la fila lleva
+   * litros (misma evidencia que el cierre normal); sin litros no se pide. */
+  foto: File | null;
 }
 
-const FILA_VACIA: QuickEntryRow = { equipoId: '', operatorId: '', inicial: '', final: '', litros: '' };
+const FILA_VACIA: QuickEntryRow = {
+  equipoId: '',
+  operatorId: '',
+  inicial: '',
+  final: '',
+  litros: '',
+  foto: null,
+};
 
 const esVacia = (f: QuickEntryRow) =>
-  !f.equipoId && !f.operatorId && !f.inicial.trim() && !f.final.trim() && !f.litros.trim();
+  !f.equipoId && !f.operatorId && !f.inicial.trim() && !f.final.trim() && !f.litros.trim() && !f.foto;
 
 export interface UsePastShiftQuickEntryParams {
   /** El turno pasado elegido — `guardar()` abre y cierra las tarjetas en él. */
@@ -87,6 +97,8 @@ export function usePastShiftQuickEntry({
     if (f.litros.trim() !== '' && parseDecimal(f.litros) == null) {
       return 'Litros inválidos (vacío = sin carga).';
     }
+    const litros = f.litros.trim() === '' ? 0 : (parseDecimal(f.litros) ?? 0);
+    if (litros > 0 && !f.foto) return 'Agrega la foto del combustible de esta carga.';
     return null;
   };
 
@@ -114,14 +126,20 @@ export function usePastShiftQuickEntry({
           shiftType: ctx.turno as ShiftType,
           capturedAt,
         });
-        // Sin foto: cierre de carga histórica (el backend lo acepta solo
-        // para tarjetas de días pasados creadas hoy).
-        await enqueueCloseCard(userId, id, {
-          closeClientId: generateUuid(),
-          valorFinal: parseDecimal(f.final)!,
-          fuelLiters: f.litros.trim() === '' ? 0 : parseDecimal(f.litros)!,
-          capturedAt,
-        });
+        // Con litros viaja la foto de ESA carga; una fila sin carga va sin
+        // foto (cierre de carga histórica: el backend lo acepta solo para
+        // tarjetas de días pasados creadas hoy).
+        await enqueueCloseCard(
+          userId,
+          id,
+          {
+            closeClientId: generateUuid(),
+            valorFinal: parseDecimal(f.final)!,
+            fuelLiters: f.litros.trim() === '' ? 0 : parseDecimal(f.litros)!,
+            capturedAt,
+          },
+          f.foto ?? undefined,
+        );
       }
       avisarGuardadoEnCola();
       setFilas([FILA_VACIA]);
