@@ -58,6 +58,7 @@ const LISTA: TrabajoExtraordinario[] = [
   trabajo({ id: 't1', registradoPor: 'Ana Soto' }),
   trabajo({
     id: 't2',
+    numero: 12,
     equipoId: 'e2',
     equipo: { internalCode: 'EX-001' },
     turno: 'NOCTURNO',
@@ -96,6 +97,9 @@ describe('TrabajosExtraAdminView', () => {
     expect(screen.getByTestId('total-filtrado').textContent).toBe('9,5 h en 3 trabajos');
     // «Otro» muestra el texto libre en vez del valor crudo.
     expect(screen.getByText('Otro: Rescate de camión')).toBeTruthy();
+    // El N° de Report encabeza cada fila; uno sin número todavía lo dice.
+    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('N° 12');
+    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin N° aún');
   });
 
   it('filtra por equipo, por turno y por rango de fechas, y el total sigue al filtro', () => {
@@ -131,7 +135,7 @@ describe('TrabajosExtraAdminView', () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Trabajo extraordinario · EX-001')).toBeTruthy();
+    expect(within(dialog).getByText('Report N° 12 · EX-001')).toBeTruthy();
     expect(within(dialog).getByText('P. Rojas')).toBeTruthy();
     expect(within(dialog).getByText('Nocturno')).toBeTruthy();
     expect(within(dialog).getByText('Otro: Rescate de camión')).toBeTruthy();
@@ -141,14 +145,14 @@ describe('TrabajosExtraAdminView', () => {
 
   it('«Editar» abre el formulario con los datos del trabajo y guarda la corrección', async () => {
     rol.value = 'SECRETARIA';
-    const original = trabajo({ id: 't9', operatorId: 'op_1', operador: 'Juan Rojas' });
+    const original = trabajo({ id: 't9', numero: 9, operatorId: 'op_1', operador: 'Juan Rojas' });
     listHook.mockReturnValue(ok([original]));
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t9'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
     const editor = screen.getByRole('dialog');
-    expect(within(editor).getByText('Editar actividad · CG-002')).toBeTruthy();
+    expect(within(editor).getByText('Editar Report N° 9 · CG-002')).toBeTruthy();
     expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
     fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));

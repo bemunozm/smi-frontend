@@ -1100,7 +1100,7 @@ export function RegistroEquipoView() {
               className="inline-flex min-h-[32px] items-center rounded-full px-3"
               style={{ background: 'rgba(255,255,255,.22)' }}
             >
-              Faena Patillo
+              Faena Kainita
             </span>
           </>
         }

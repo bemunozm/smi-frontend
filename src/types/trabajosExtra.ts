@@ -76,6 +76,9 @@ export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
 
 export interface TrabajoExtraordinario {
   id: string;
+  /** N° de Report correlativo (lo asigna la base). Sin él todavía: un
+   * registro que sigue en el equipo, sin señal. */
+  numero?: number | null;
   equipoId: string;
   /** `id` del catálogo de Operadores — `null` en registros legacy (previos al
    * catálogo) o si el operador fue borrado (`onDelete: SetNull`). */
@@ -103,6 +106,10 @@ export interface TrabajoExtraordinario {
 /** Forma de un trabajo extraordinario en las respuestas del servidor. */
 export const TrabajoExtraordinarioSchema = z.object({
   id: z.string(),
+  /** N° de Report correlativo que asigna la base al crear. `nullish`: un
+   * registro guardado en el equipo (sin señal) todavía no lo tiene, y una
+   * respuesta cacheada antes de la columna tampoco. */
+  numero: z.number().nullish(),
   equipoId: z.string(),
   operatorId: z.string().nullable(),
   operador: z.string(),
