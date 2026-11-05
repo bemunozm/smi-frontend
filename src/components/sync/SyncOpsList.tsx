@@ -41,7 +41,9 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly O
     case 'sendExitReport':
       return 'Reporte de salida';
     case 'createHallazgo': {
-      return conCodigo('Hallazgo', codigoEquipo(equipos, op.payload.equipoId));
+      // Uno de zona no tiene equipo: se nombra por su lugar.
+      if (op.payload.tipo === 'ZONA') return conCodigo('Hallazgo de zona', op.payload.lugar);
+      return conCodigo('Hallazgo', op.payload.equipoId ? codigoEquipo(equipos, op.payload.equipoId) : undefined);
     }
     case 'createTrabajoExtra': {
       return conCodigo('Trabajo extra', codigoEquipo(equipos, op.payload.equipoId));

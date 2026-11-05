@@ -104,8 +104,8 @@ describe('TrabajosExtraAdminView', () => {
     // «Otro» muestra el texto libre en vez del valor crudo.
     expect(screen.getByText('Otro: Rescate de camión')).toBeTruthy();
     // El N° de Report encabeza cada fila; uno sin número todavía lo dice.
-    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('N° 12');
-    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin N° aún');
+    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('#12');
+    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin correlativo aún');
   });
 
   it('filtra por equipo, por turno y por rango de fechas, y el total sigue al filtro', () => {
@@ -141,7 +141,7 @@ describe('TrabajosExtraAdminView', () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Report N° 12 · EX-001')).toBeTruthy();
+    expect(within(dialog).getByText('Report #12 · EX-001')).toBeTruthy();
     expect(within(dialog).getByText('P. Rojas')).toBeTruthy();
     expect(within(dialog).getByText('Nocturno')).toBeTruthy();
     expect(within(dialog).getByText('Otro: Rescate de camión')).toBeTruthy();
@@ -158,7 +158,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
     const editor = screen.getByRole('dialog');
-    expect(within(editor).getByText('Editar Report N° 9 · CG-002')).toBeTruthy();
+    expect(within(editor).getByText('Editar Report #9 · CG-002')).toBeTruthy();
     expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
     fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));

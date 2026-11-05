@@ -33,6 +33,8 @@ import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
+  Automatico,
+  Automaticos,
   Boton,
   Calculado,
   Campo,
@@ -248,7 +250,7 @@ export function TrabajosExtraView() {
       <Tabla titulo="Trabajos registrados" detalle={`Patillo y Kainita · ${registros.length} registros`}>
         <thead>
           <tr>
-            <th className={TH}>N°</th>
+            <th className={TH}>Correlativo</th>
             <th className={TH}>Fecha</th>
             <th className={TH}>Faena</th>
             <th className={TH}>Equipo</th>
@@ -359,6 +361,7 @@ export function TrabajosExtraView() {
         opcionesEquipo={opcionesEquipo}
         plantas={plantas}
         textoBoton="Guardar cambios"
+        numero={detalle.numero}
         pendiente={isActualizando}
         onGuardar={async (payload) => {
           if (await guardarCambio(detalle, payload)) setEditando(false);
@@ -410,7 +413,7 @@ export function TrabajosExtraView() {
         <GrupoHead titulo="Trabajo" />
         <Filas
           filas={[
-            ['N° de Report', numeroReport(detalle.numero)],
+            ['Correlativo', numeroReport(detalle.numero)],
             ['Fecha', fmtDate(detalle.fecha)],
             ['Turno', detalle.turno],
             ['Faena', detalle.faena],
@@ -541,8 +544,11 @@ function FormularioTrabajo({
   pendiente,
   onGuardar,
   onCancelar,
+  numero,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
+  /** El correlativo al corregir; sin él (alta), se asigna al guardar. */
+  numero?: number | null;
   equipos: { id: string; internalCode: string }[];
   /** Catálogo de operadores activos: el operador se elige, no se escribe. */
   operadores: Pick<Operator, 'id' | 'name'>[];
@@ -787,6 +793,17 @@ function FormularioTrabajo({
             {fotoFaltante && <Hint>La foto del report es obligatoria: sacala antes de registrar.</Hint>}
           </>
         )}
+
+        {/* El correlativo lo pone el sistema, nunca el usuario: se informa,
+            no se edita (el backend rechaza un `numero` en el body). No es el
+            folio del papel («N° del report», arriba), que sí se escribe. */}
+        <Automaticos>
+          <Automatico
+            label="Correlativo"
+            valor={numero != null ? numeroReport(numero) : 'Se asigna al guardar'}
+            nota={numero != null ? 'No se cambia' : 'Automático'}
+          />
+        </Automaticos>
 
         <Boton ancho type="submit" disabled={pendiente}>
           {pendiente ? 'Guardando…' : textoBoton}

@@ -140,7 +140,7 @@ export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
 
 export interface TrabajoExtraordinario {
   id: string;
-  /** N° de Report correlativo (lo asigna la base). Sin él todavía: un
+  /** Correlativo del sistema (lo asigna la base; no es el folio `reportNumero`). Sin él todavía: un
    * registro que sigue en el equipo, sin señal. */
   numero?: number | null;
   equipoId: string;
@@ -179,7 +179,7 @@ export interface TrabajoExtraordinario {
 /** Forma de un trabajo extraordinario en las respuestas del servidor. */
 export const TrabajoExtraordinarioSchema = z.object({
   id: z.string(),
-  /** N° de Report correlativo que asigna la base al crear. `nullish`: un
+  /** Correlativo del sistema que asigna la base al crear (no es el folio `reportNumero`). `nullish`: un
    * registro guardado en el equipo (sin señal) todavía no lo tiene, y una
    * respuesta cacheada antes de la columna tampoco. */
   numero: z.number().nullish(),

@@ -25,10 +25,13 @@ export interface HallazgoProyectado extends Hallazgo {
 }
 
 function mapOpToHallazgo(op: CreateHallazgoOp, equipos: Equipment[]): HallazgoProyectado {
-  const equipo = equipos.find((e) => e.id === op.payload.equipoId);
+  const equipo = op.payload.equipoId ? equipos.find((e) => e.id === op.payload.equipoId) : undefined;
   return {
     id: op.id,
-    equipoId: op.payload.equipoId,
+    tipo: op.payload.tipo ?? 'EQUIPO',
+    equipoId: op.payload.equipoId ?? null,
+    faena: op.payload.faena ?? null,
+    lugar: op.payload.lugar ?? null,
     descripcion: op.payload.descripcion,
     prioridad: op.payload.prioridad,
     // Un hallazgo nace abierto (mismo criterio que el servidor).

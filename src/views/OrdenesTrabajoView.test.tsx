@@ -138,6 +138,19 @@ const HALLAZGOS = [
     fotoUrl: null,
     fecha: '2026-10-06T08:00:00.000Z',
   },
+  // ABIERTO pero de ZONA (un lugar de la faena): no es del taller.
+  {
+    id: 'h-4',
+    tipo: 'ZONA' as const,
+    equipoId: null,
+    faena: 'Kainita',
+    lugar: 'Cancha norte',
+    descripcion: 'Bache en la entrada de la cancha',
+    prioridad: 'ALTA',
+    estado: 'ABIERTO',
+    fotoUrl: null,
+    fecha: '2026-10-06T08:10:00.000Z',
+  },
 ];
 
 // Permisos como los resuelve `lib/permissions` para cada rol (espejo del
@@ -301,6 +314,8 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.queryByText('Vidrio trizado')).toBeNull();
     // Y uno sin equipo asociado tampoco llega al mantenedor.
     expect(screen.queryByText('Observación general sin equipo')).toBeNull();
+    // Ni uno de zona: lo atiende el administrador, no el taller.
+    expect(screen.queryByText('Bache en la entrada de la cancha')).toBeNull();
   });
 
   it('la pauta pendiente se INICIA desde la bandeja; el checklist se registra EN PROCESO', () => {

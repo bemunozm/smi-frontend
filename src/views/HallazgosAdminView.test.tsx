@@ -221,7 +221,7 @@ describe('HallazgosAdminView', () => {
     // Sin equipo ni descripción todavía no hay nada que registrar.
     expect(registrar.hasAttribute('disabled') || registrar.getAttribute('aria-disabled') === 'true').toBe(true);
 
-    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Elegir equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
     fireEvent.change(within(dialog).getByLabelText('Descripción'), {
       target: { value: 'Neumático delantero cortado' },
@@ -234,6 +234,7 @@ describe('HallazgosAdminView', () => {
 
     expect(crearMock).toHaveBeenCalledWith(
       {
+        tipo: 'EQUIPO',
         equipoId: 'e2',
         descripcion: 'Neumático delantero cortado',
         prioridad: 'MEDIA',
@@ -243,11 +244,43 @@ describe('HallazgosAdminView', () => {
     );
   });
 
+  it('uno de zona se registra con faena y lugar, sin equipo', async () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Zona de la faena' }));
+    // Sin equipo que elegir: la faena y el lugar lo reemplazan.
+    expect(within(dialog).queryByRole('button', { name: /Elegir equipo/ })).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Elegir faena/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Kainita' }));
+    fireEvent.change(within(dialog).getByLabelText('Lugar'), { target: { value: ' Cancha norte ' } });
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Bache en la entrada' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar hallazgo' }));
+
+    expect(crearMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'ZONA', faena: 'Kainita', lugar: 'Cancha norte' }),
+      expect.anything(),
+    );
+    expect(crearMock.mock.calls[0]?.[0]).not.toHaveProperty('equipoId');
+  });
+
+  it('la lista nombra al de zona por su lugar y faena', () => {
+    listHook.mockReturnValue({
+      data: [hallazgo({ id: 'hz', tipo: 'ZONA', equipoId: null, equipo: null, faena: 'Kainita', lugar: 'Cancha norte' })],
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    renderView();
+    expect(screen.getByTestId('hallazgo-fila-hz').textContent).toContain('Cancha norte · Kainita');
+  });
+
   it('una fecha futura no deja registrar el hallazgo', async () => {
     renderView();
     fireEvent.click(screen.getByRole('button', { name: 'Nuevo hallazgo' }));
     const dialog = screen.getByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Elegir equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
     fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Fuga en manguera' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha y hora del hallazgo'), {

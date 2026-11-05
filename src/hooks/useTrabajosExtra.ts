@@ -12,6 +12,7 @@ import { TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
 import { toDateOnly } from '../lib/turno';
+import { numeroReport } from '../lib/trabajos-extra';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
 import type { TrabajoExtraEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
@@ -70,8 +71,9 @@ export function useCrearTrabajoExtra() {
         capturedAt: new Date().toISOString(),
       });
     },
-    onSuccess: () => {
-      toast.success('Trabajo extraordinario registrado');
+    onSuccess: (creado) => {
+      // Dice el correlativo que le tocó: lo asigna el sistema, no el usuario.
+      toast.success(creado.numero != null ? `Report ${numeroReport(creado.numero)} registrado` : 'Report registrado');
       void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
     },
     onError: (error: unknown) => {

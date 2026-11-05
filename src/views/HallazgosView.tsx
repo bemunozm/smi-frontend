@@ -3,7 +3,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, Camera, Check, Pencil } from 'lucide-react';
 
-import { hallazgoFormSchema, type Hallazgo, type HallazgoForm } from '../types/hallazgos';
+import {
+  HALLAZGO_FAENAS,
+  dondeHallazgo,
+  esHallazgoDeZona,
+  hallazgoFormSchema,
+  type Hallazgo,
+  type HallazgoForm,
+  type HallazgoTipo,
+} from '../types/hallazgos';
 import type { CorreccionHallazgo } from '../api/HallazgosAPI';
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useRegistrarHallazgo, useEditarHallazgo, useCambiosHallazgo } from '../hooks/useHallazgos';
@@ -30,6 +38,7 @@ import {
   Form,
   GrupoHead,
   HistorialCambios,
+  Input,
   Label,
   ModalTerreno,
   Segmentado,
@@ -43,6 +52,12 @@ import {
   VistaSplit,
   type Tono,
 } from '../components/terreno/ui';
+
+/** De qué es el hallazgo: de un equipo (va al taller) o de una zona de la faena. */
+const TIPOS = [
+  { valor: 'EQUIPO', label: 'Equipo' },
+  { valor: 'ZONA', label: 'Zona de la faena' },
+];
 
 const PRIORIDADES = [
   { valor: 'BAJA' as const, label: 'BAJA', colorActivo: '#353c46' },
@@ -113,10 +128,11 @@ export function HallazgosView() {
     formState: { errors },
   } = useForm<HallazgoForm>({
     resolver: zodResolver(hallazgoFormSchema),
-    defaultValues: { equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) },
+    defaultValues: { tipo: 'EQUIPO', equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) },
   });
 
   const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
+  const tipo = watch('tipo') ?? 'EQUIPO';
   /**
    * Un hallazgo no tiene un display que leer, así que el OCR de litros se
    * apaga. Del flujo se usa el resto: EXIF para avisar si la foto es vieja.
@@ -128,7 +144,7 @@ export function HallazgosView() {
   const onSubmit = async (values: HallazgoForm) => {
     const guardado = await registrar(values, foto.file);
     if (!guardado) return;
-    reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) });
+    reset({ tipo: 'EQUIPO', equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) });
     foto.resetPhoto();
   };
 
@@ -139,15 +155,47 @@ export function HallazgosView() {
       <Card>
         <CardHead titulo="Nuevo hallazgo" bajada="Una falla o condición que alguien tiene que revisar." />
         <Form>
-          <Campo label="Equipo" hint={errors.equipoId?.message}>
-            <Selector
-              etiqueta="Equipo"
-              tituloTabular
-              valor={watch('equipoId') ?? ''}
-              onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
-              opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+          {/* De un equipo (va al taller) o de una zona de la faena —un camino,
+              una cancha, la romana—, que no tiene máquina que reparar. */}
+          <div className="flex flex-col gap-1.5">
+            <Label>¿De qué es el hallazgo?</Label>
+            <Segmentado
+              etiqueta="¿De qué es el hallazgo?"
+              valor={tipo}
+              onChange={(t) => setValue('tipo', t as HallazgoTipo, { shouldValidate: false })}
+              opciones={TIPOS}
             />
-          </Campo>
+          </div>
+
+          {tipo === 'EQUIPO' ? (
+            <Campo label="Equipo" hint={errors.equipoId?.message}>
+              <Selector
+                etiqueta="Equipo"
+                tituloTabular
+                valor={watch('equipoId') ?? ''}
+                onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
+                opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+              />
+            </Campo>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label>Faena</Label>
+                <Segmentado
+                  etiqueta="Faena"
+                  valor={watch('faena') ?? ''}
+                  onChange={(f) => setValue('faena', f as (typeof HALLAZGO_FAENAS)[number], { shouldValidate: true })}
+                  opciones={HALLAZGO_FAENAS.map((f) => ({ valor: f, label: f }))}
+                />
+                {errors.faena?.message && (
+                  <span className="text-[13px] font-semibold text-[var(--danger)]">{errors.faena.message}</span>
+                )}
+              </div>
+              <Campo label="Lugar" hint={errors.lugar?.message}>
+                <Input placeholder="Ej: cancha norte, camino a la romana" {...register('lugar')} />
+              </Campo>
+            </>
+          )}
 
           {/* Segmentado y no desplegable: son cuatro opciones y la elegida es
               la que define la urgencia. Esconderla detrás de un toque extra
@@ -219,7 +267,9 @@ export function HallazgosView() {
           {/* Dice a quién llega para que el supervisor no lo avise además
               por radio o WhatsApp. */}
           <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-            Al registrarlo se avisa a los mantenedores y al administrador, en el sistema y por correo.
+            {tipo === 'ZONA'
+              ? 'Al registrarlo se avisa al administrador, en el sistema y por correo. No va al taller.'
+              : 'Al registrarlo se avisa a los mantenedores y al administrador, en el sistema y por correo.'}
           </p>
         </Form>
       </Card>
@@ -236,7 +286,7 @@ export function HallazgosView() {
         <thead>
           <tr>
             <th className={TH}>Fecha</th>
-            <th className={TH}>Equipo</th>
+            <th className={TH}>Equipo o zona</th>
             <th className={TH}>Prioridad</th>
             <th className={TH}>Descripción</th>
             <th className={TH}>Foto</th>
@@ -259,7 +309,8 @@ export function HallazgosView() {
                 )}
               </td>
               <td className={TD}>
-                <b className="tabular block text-[15px] font-semibold">{h.equipo?.internalCode ?? h.equipoId}</b>
+                <b className={`block text-[15px] font-semibold ${esHallazgoDeZona(h) ? '' : 'tabular'}`}>{dondeHallazgo(h)}</b>
+                {esHallazgoDeZona(h) && <div className="text-[12.5px] text-muted-foreground">Zona</div>}
               </td>
               <td className={TD}>
                 <Chip tono={prioridadTono[h.prioridad] ?? 'neutral'}>
@@ -285,7 +336,7 @@ export function HallazgosView() {
                 <Boton
                   variante="contorno"
                   className="!min-h-10 !px-3 !text-[13.5px]"
-                  aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}${motivoSinEdicion(h) ? `. ${motivoSinEdicion(h)}` : ''}`}
+                  aria-label={`Editar hallazgo de ${dondeHallazgo(h)}${motivoSinEdicion(h) ? `. ${motivoSinEdicion(h)}` : ''}`}
                   title={motivoSinEdicion(h)}
                   disabled={motivoSinEdicion(h) != null}
                   onClick={() => setEditandoId(h.id)}
@@ -309,10 +360,15 @@ export function HallazgosView() {
             >
               <div className="flex items-start justify-between gap-2.5">
                 <div>
-                  <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">
-                    {h.equipo?.internalCode ?? h.equipoId}
+                  <div
+                    className={`text-[19px] font-semibold tracking-[-0.01em] ${esHallazgoDeZona(h) ? '' : 'tabular'}`}
+                  >
+                    {dondeHallazgo(h)}
                   </div>
-                  <div className="text-[13px] text-muted-foreground">{fmtTime(h.fecha)}</div>
+                  <div className="text-[13px] text-muted-foreground">
+                    {esHallazgoDeZona(h) ? 'Zona · ' : ''}
+                    {fmtTime(h.fecha)}
+                  </div>
                 </div>
                 <Chip tono={prioridadTono[h.prioridad] ?? 'neutral'}>
                   {prioridadLabel[h.prioridad] ?? h.prioridad}
@@ -338,7 +394,7 @@ export function HallazgosView() {
                 variante="contorno"
                 ancho
                 className="!min-h-11 !text-[14.5px]"
-                aria-label={`Editar hallazgo de ${h.equipo?.internalCode ?? h.equipoId}`}
+                aria-label={`Editar hallazgo de ${dondeHallazgo(h)}`}
                 disabled={motivoSinEdicion(h) != null}
                 onClick={() => setEditandoId(h.id)}
               >
@@ -369,7 +425,7 @@ export function HallazgosView() {
       <ModalTerreno
         abierto={editando != null}
         onAbiertoChange={(abierto) => !abierto && setEditandoId(null)}
-        titulo={editando ? `Editar · hallazgo de ${editando.equipo?.internalCode ?? editando.equipoId}` : ''}
+        titulo={editando ? `Editar · hallazgo de ${dondeHallazgo(editando)}` : ''}
         detalle={editando ? `Registrado el ${fmtDate(editando.fecha)} a las ${fmtTime(editando.fecha)}` : undefined}
       >
         {/* `key`: al abrir otro hallazgo el formulario arranca con sus datos. */}
@@ -403,14 +459,18 @@ function EditorHallazgo({
 }) {
   const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarHallazgo();
   const cambios = useCambiosHallazgo(hallazgo.id);
+  const deZona = esHallazgoDeZona(hallazgo);
   const [form, setForm] = useState<CorreccionHallazgo>({
     equipoId: hallazgo.equipoId,
+    faena: hallazgo.faena ?? null,
+    lugar: hallazgo.lugar ?? null,
     descripcion: hallazgo.descripcion,
     prioridad: hallazgo.prioridad,
     estado: hallazgo.estado,
   });
   const [guardado, setGuardado] = useState(false);
   const descripcionCorta = form.descripcion.trim().length < 3;
+  const sinLugar = deZona && !form.lugar?.trim();
 
   return (
     <div className="flex flex-col gap-4">
@@ -421,15 +481,33 @@ function EditorHallazgo({
       )}
       <AvisoEdicion />
       <Form>
-        <Campo label="Equipo">
-          <Selector
-            etiqueta="Equipo"
-            tituloTabular
-            valor={form.equipoId}
-            onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
-            opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
-          />
-        </Campo>
+        {/* El tipo no cambia: uno de equipo corrige el equipo, uno de zona su lugar. */}
+        {deZona ? (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label>Faena</Label>
+              <Segmentado
+                etiqueta="Faena"
+                valor={form.faena ?? ''}
+                onChange={(faena) => setForm((f) => ({ ...f, faena }))}
+                opciones={HALLAZGO_FAENAS.map((f) => ({ valor: f, label: f }))}
+              />
+            </div>
+            <Campo label="Lugar" hint={sinLugar ? 'Escribe el lugar.' : undefined}>
+              <Input value={form.lugar ?? ''} onChange={(e) => setForm((f) => ({ ...f, lugar: e.target.value }))} />
+            </Campo>
+          </>
+        ) : (
+          <Campo label="Equipo">
+            <Selector
+              etiqueta="Equipo"
+              tituloTabular
+              valor={form.equipoId ?? ''}
+              onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
+              opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+            />
+          </Campo>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label>Nivel de prioridad</Label>
           <Segmentado
@@ -452,7 +530,7 @@ function EditorHallazgo({
             }))}
           />
         </div>
-        <Campo label="Descripción" hint={descripcionCorta ? 'Describí el hallazgo.' : undefined}>
+        <Campo label="Descripción" hint={descripcionCorta ? 'Describe el hallazgo.' : undefined}>
           <Textarea
             rows={3}
             value={form.descripcion}
@@ -461,9 +539,13 @@ function EditorHallazgo({
         </Campo>
         <Boton
           ancho
-          disabled={isActualizando || descripcionCorta}
+          disabled={isActualizando || descripcionCorta || sinLugar}
           onClick={async () => {
-            const ok = await guardarCambio(hallazgo, { ...form, descripcion: form.descripcion.trim() });
+            const ok = await guardarCambio(hallazgo, {
+              ...form,
+              lugar: form.lugar?.trim() ?? null,
+              descripcion: form.descripcion.trim(),
+            });
             if (ok) setGuardado(true);
           }}
         >
