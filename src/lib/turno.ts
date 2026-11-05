@@ -159,6 +159,20 @@ export function fromDateOnly(dateOnly: string): Date {
   return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
+/**
+ * ¿El par (fecha, turno) es un turno ESTRICTAMENTE anterior al vigente?
+ * Lo usa el modo "registrar un turno pasado" de Registro de equipo: el
+ * diálogo solo ofrece pares que ya terminaron — el vigente se registra en el
+ * modo normal, y el futuro no existe. Con fechas iguales, el único par
+ * anterior es el DIURNO cuando el reloj ya va en el NOCTURNO.
+ */
+export function esTurnoPasado(fecha: Date, turno: Turno, reloj: ContextoTurno): boolean {
+  const dia = toDateOnly(fecha);
+  const diaReloj = toDateOnly(reloj.fecha);
+  if (dia < diaReloj) return true;
+  return dia === diaReloj && turno === 'DIURNO' && reloj.turno === 'NOCTURNO';
+}
+
 export function contextoTurno(ahora: Date): ContextoTurno {
   return contextoDeTurno(turnoDe(ahora), fechaDeTurno(ahora), ahora);
 }

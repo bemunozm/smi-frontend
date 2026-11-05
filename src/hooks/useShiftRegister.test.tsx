@@ -4,7 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { lineaEstadoCorreo, mapCardToTarjeta, useShiftRegister } from './useShiftRegister';
-import { contextoTurno } from '../lib/turno';
+import { contextoTurno, toDateOnly } from '../lib/turno';
 import { ROLES } from '../types/roles';
 import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
@@ -242,6 +242,85 @@ describe('useShiftRegister', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(2026, 8, 24, 10, 0)); // DIURNO, 2026-09-24
+  });
+
+  describe('modo "registrar un turno pasado"', () => {
+    const EQUIPO_TALLER = {
+      ...EQUIPO,
+      id: 'eq_2',
+      internalCode: 'BD-001',
+      status: 'IN_WORKSHOP',
+    };
+
+    it('elegirTurnoPasado fija el ctx al par elegido y volverTurnoActual lo limpia', async () => {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'NOCTURNO'));
+      expect(result.current.turnoSeleccion).toBe('pasado');
+      expect(toDateOnly(result.current.ctx.fecha)).toBe('2026-09-22');
+      expect(result.current.ctx.turno).toBe('NOCTURNO');
+      expect(result.current.esDiaPasado).toBe(true);
+
+      act(() => result.current.volverTurnoActual());
+      expect(result.current.turnoSeleccion).toBe('reloj');
+      expect(toDateOnly(result.current.ctx.fecha)).toBe('2026-09-24');
+    });
+
+    it('elegirTurnoPasado ignora el turno vigente (no-op)', async () => {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 24), 'DIURNO'));
+      expect(result.current.turnoSeleccion).toBe('reloj');
+    });
+
+    it('en un día pasado, los equipos no operativos entran en disponibles', async () => {
+      mockApis({ equipos: [EQUIPO, EQUIPO_TALLER] });
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(2));
+      expect(result.current.esDiaPasado).toBe(true);
+    });
+
+    it('en el DIURNO de hoy ya pasado (reloj NOCTURNO), los no operativos siguen fuera', async () => {
+      vi.setSystemTime(new Date(2026, 8, 24, 21, 0)); // NOCTURNO del 24-09
+      mockApis({ equipos: [EQUIPO, EQUIPO_TALLER] });
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 24), 'DIURNO'));
+
+      expect(result.current.turnoSeleccion).toBe('pasado');
+      expect(result.current.esDiaPasado).toBe(false);
+      expect(result.current.disponibles).toHaveLength(1);
+    });
+
+    it('en modo pasado no hay prefill del contador actual: sin horómetro tipeado no se puede abrir', async () => {
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+      // En modo normal, con el campo vacío propone el contador actual.
+      expect(result.current.valorInicialApertura).toBe(4218.7);
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+      expect(result.current.valorInicialApertura).toBeNull();
+
+      act(() => {
+        result.current.setApertura((a) => ({ ...a, horometro: '4100' }));
+      });
+      expect(result.current.valorInicialApertura).toBe(4100);
+    });
   });
 
   it('abrir() SIEMPRE encola vía enqueueOpenCard (online u offline, un único camino) con un uuid nuevo', async () => {

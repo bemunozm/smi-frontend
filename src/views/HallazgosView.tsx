@@ -11,6 +11,7 @@ import { useHallazgosProjection } from '../hooks/useHallazgosProjection';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtTime } from '../lib/format';
+import { toDateOnly } from '../lib/turno';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
@@ -28,6 +29,7 @@ import {
   Form,
   GrupoHead,
   HistorialCambios,
+  Input,
   Label,
   ModalTerreno,
   Segmentado,
@@ -111,7 +113,7 @@ export function HallazgosView() {
     formState: { errors },
   } = useForm<HallazgoForm>({
     resolver: zodResolver(hallazgoFormSchema),
-    defaultValues: { equipoId: '', descripcion: '', prioridad: 'MEDIA' },
+    defaultValues: { equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) },
   });
 
   const prioridad = (watch('prioridad') as HallazgoForm['prioridad']) ?? 'MEDIA';
@@ -126,7 +128,7 @@ export function HallazgosView() {
   const onSubmit = async (values: HallazgoForm) => {
     const guardado = await registrar(values, foto.file);
     if (!guardado) return;
-    reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA' });
+    reset({ equipoId: '', descripcion: '', prioridad: 'MEDIA', fecha: toDateOnly(new Date()) });
     foto.resetPhoto();
   };
 
@@ -172,6 +174,18 @@ export function HallazgosView() {
               })}
             </div>
           </div>
+
+          {/* Carga histórica: por defecto hoy; una fecha pasada registra el
+              hallazgo en ese día (misma ventana de 30 días del backend). */}
+          <Campo label="Fecha del hallazgo">
+            <Input
+              type="date"
+              aria-label="Fecha del hallazgo"
+              min={toDateOnly(new Date(Date.now() - 30 * 86_400_000))}
+              max={toDateOnly(new Date())}
+              {...register('fecha')}
+            />
+          </Campo>
 
           <Campo label="Descripción" hint={errors.descripcion?.message}>
             <Textarea rows={3} placeholder="Qué se detectó, dónde y en qué condición" {...register('descripcion')} />

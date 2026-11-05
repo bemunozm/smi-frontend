@@ -23,6 +23,7 @@ import { useOperators } from '../hooks/useOperators';
 import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
+import { toDateOnly } from '../lib/turno';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
@@ -139,6 +140,7 @@ export function TrabajosExtraView() {
     turno: turnoActual.turno,
     actividades: [],
     otraActividad: '',
+    fecha: toDateOnly(new Date()),
   });
 
   /**
@@ -572,6 +574,18 @@ function FormularioTrabajo({
           <Label>Turno</Label>
           <Segmentado etiqueta="Turno" valor={turno} onChange={(v) => setValue('turno', v)} opciones={TURNOS} />
         </div>
+
+        {/* Carga histórica: por defecto hoy; una fecha pasada registra el
+            trabajo en ese día (misma ventana de 30 días del backend). */}
+        <Campo label="Fecha del trabajo">
+          <Input
+            type="date"
+            aria-label="Fecha del trabajo"
+            min={toDateOnly(new Date(Date.now() - 30 * 86_400_000))}
+            max={toDateOnly(new Date())}
+            {...register('fecha')}
+          />
+        </Campo>
 
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>

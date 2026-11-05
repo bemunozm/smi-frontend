@@ -188,6 +188,48 @@ describe('ShiftCardAPI.closeCard', () => {
   });
 });
 
+describe('ShiftCardAPI.listShiftsByDate', () => {
+  it('pide GET /api/shifts con date y type, y devuelve el resumen con sus reportes de salida', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: 'sh_1',
+            date: '2026-10-20',
+            type: 'DIURNO',
+            supervisorId: 'u1',
+            cards: [
+              {
+                id: 'c1',
+                equipoId: 'eq_1',
+                equipo: { internalCode: 'EX-005', type: 'Excavadora', controlUnit: 'HOURS' },
+                operatorId: 'op_1',
+                operatorName: 'Patricio Rojas',
+                valorInicial: 100,
+                valorFinal: 108,
+                horasMaquina: 8,
+                fecha: '2026-10-20T15:00:00.000Z',
+                fechaSalida: '2026-10-20T15:00:00.000Z',
+              },
+            ],
+            exitReports: [{ id: 'rep_1', requestedAt: '2026-10-20T20:05:00.000Z', cardCount: 4 }],
+          },
+        ],
+        message: 'ok',
+      },
+    });
+
+    const shifts = await ShiftCardAPI.listShiftsByDate('2026-10-20', 'DIURNO');
+
+    expect(getMock).toHaveBeenCalledWith('/api/shifts', {
+      params: { date: '2026-10-20', type: 'DIURNO' },
+    });
+    expect(shifts).toHaveLength(1);
+    expect(shifts[0].cards[0].equipo.internalCode).toBe('EX-005');
+    expect(shifts[0].exitReports[0].cardCount).toBe(4);
+  });
+});
+
 describe('ShiftCardAPI.listMine', () => {
   it('pide GET /api/shift-cards/mine y devuelve la lista parseada', async () => {
     getMock.mockResolvedValueOnce({ data: { data: [CARD], message: 'ok' } });

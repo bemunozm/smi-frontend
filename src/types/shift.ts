@@ -87,6 +87,49 @@ export const ShiftCardListResponseSchema = z.object({
   message: z.string(),
 });
 
+// --- Resumen de un turno (`GET /api/shifts?date&type`) ---------------------
+
+/**
+ * Un turno con sus tarjetas, como lo devuelve `GET /api/shifts?date&type` —
+ * deliberadamente más liviano que `ShiftCardResponse` (sin foto firmada ni
+ * nombres de supervisor). Lo usa el modo "registrar un turno pasado" para
+ * avisar qué tiene YA registrado el turno elegido; sus `exitReports` vienen
+ * sin `emailStatus` (a diferencia de los de `ShiftCardShiftSchema`).
+ */
+export const ShiftSummarySchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  type: z.string(),
+  supervisorId: z.string(),
+  cards: z.array(
+    z.object({
+      id: z.string(),
+      equipoId: z.string(),
+      equipo: z.object({
+        internalCode: z.string(),
+        type: z.string(),
+        controlUnit: z.enum(CONTROL_UNIT),
+      }),
+      operatorId: z.string().nullable(),
+      operatorName: z.string(),
+      valorInicial: z.number(),
+      valorFinal: z.number().nullable(),
+      horasMaquina: z.number().nullable(),
+      fecha: z.string(),
+      fechaSalida: z.string().nullable(),
+    }),
+  ),
+  exitReports: z.array(
+    z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() }),
+  ),
+});
+export type ShiftSummary = z.infer<typeof ShiftSummarySchema>;
+
+export const ShiftSummaryListResponseSchema = z.object({
+  data: z.array(ShiftSummarySchema),
+  message: z.string(),
+});
+
 // --- Bodies de request -------------------------------------------------------
 
 /** Body de `POST /api/shift-cards`. `id` es el UUID v4 generado en el
