@@ -115,6 +115,7 @@ export function PastShiftQuickEntry({
               title="Foto del combustible"
               subtitle="Del surtidor o la boleta de esa carga"
               staleQuestion="¿es la de esa carga?"
+              allowGallery
               requerida={(parseDecimal(fila.litros) ?? 0) > 0}
               guia="De la galería del teléfono: la foto que se tomó ese día al cargar."
             />

@@ -11,6 +11,10 @@ interface PhotoCaptureFieldProps {
   subtitle?: string;
   /** Deshabilita la interacción mientras se procesa (OCR/EXIF) o se sube. */
   isBusy?: boolean;
+  /** Permite elegir de la GALERÍA (sin `capture`, que abre la cámara
+   * directo) — para evidencias que ya se tomaron, como la foto del
+   * combustible de un día pasado en la carga rápida. */
+  allowGallery?: boolean;
 }
 
 /**
@@ -29,6 +33,7 @@ export function PhotoCaptureField({
   title = 'Fotografiar',
   subtitle,
   isBusy = false,
+  allowGallery = false,
 }: PhotoCaptureFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export function PhotoCaptureField({
   const inputEl = (
     <input
       accept="image/*"
-      capture="environment"
+      {...(allowGallery ? {} : { capture: 'environment' })}
       className="hidden"
       onChange={(e) => {
         handleFiles(e.target.files);

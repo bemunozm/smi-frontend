@@ -17,6 +17,8 @@ interface FotoRespaldoFieldProps {
    * "¿es la lectura actual?" (horómetro, entrada/salida) de "¿es la carga
    * actual?" (combustible). */
   staleQuestion: string;
+  /** Deja elegir de la galería (sin cámara forzada) — ver `PhotoCaptureField`. */
+  allowGallery?: boolean;
   /**
    * Por defecto la foto es requerida (los tres usos de Flota la exigen). En
    * Hallazgos es opcional, y el encabezado tiene que decirlo: si dice
@@ -55,6 +57,7 @@ export function FotoRespaldoField({
   title,
   subtitle,
   staleQuestion,
+  allowGallery = false,
   requerida = true,
   guia = 'Sacá la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
 }: FotoRespaldoFieldProps) {
@@ -70,6 +73,7 @@ export function FotoRespaldoField({
       </p>
       <p className="mb-2 text-xs text-(--muted)">{guia}</p>
       <PhotoCaptureField
+        allowGallery={allowGallery}
         file={file}
         isBusy={isReadingPhoto}
         onClear={onClear}
