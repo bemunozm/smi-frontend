@@ -37,11 +37,12 @@ export interface CreateHallazgoInput {
   fecha?: string;
 }
 
-/** Body real de `POST /api/hallazgos`. */
+/** Body real de `POST /api/hallazgos`. `fecha` viene heredada de
+ * `CreateHallazgoInput`: date-only desde Terreno (carga histórica) o con
+ * hora desde el panel (un hallazgo olvidado) — en ambos casos gana sobre
+ * `capturedAt`. */
 export interface CreateHallazgoBody extends CreateHallazgoInput {
   fotoKey?: string;
-  /** Fecha elegida en el panel (un hallazgo olvidado): gana sobre `capturedAt`. */
-  fecha?: string;
 }
 
 export interface Hallazgo {
