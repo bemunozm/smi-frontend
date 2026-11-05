@@ -11,7 +11,7 @@ import {
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
 import { useTurnoActual } from '../hooks/useTurnoActual';
-import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables } from '../lib/trabajos-extra';
+import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables, numeroReport } from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
   useEditarTrabajoExtra,
@@ -225,6 +225,7 @@ export function TrabajosExtraView() {
       <Tabla titulo="Trabajos registrados" detalle={`Patillo y Kainita · ${registros.length} registros`}>
         <thead>
           <tr>
+            <th className={TH}>N°</th>
             <th className={TH}>Fecha</th>
             <th className={TH}>Faena</th>
             <th className={TH}>Equipo</th>
@@ -238,6 +239,7 @@ export function TrabajosExtraView() {
         <tbody>
           {registros.map((r) => (
             <tr key={r.id}>
+              <td className={`${TD} tabular font-semibold whitespace-nowrap`}>{r.numero ?? '—'}</td>
               <td className={`${TD} tabular whitespace-nowrap`}>
                 {fmtDate(r.fecha)}
                 <div className="text-[12.5px] text-muted-foreground">{r.turno}</div>
@@ -276,6 +278,7 @@ export function TrabajosExtraView() {
           <Tarjeta key={r.id}>
             <div className="flex items-start justify-between gap-2.5">
               <div className="min-w-0">
+                <div className="tabular text-[12.5px] font-semibold text-muted-foreground">{numeroReport(r.numero)}</div>
                 <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{codigo(r)}</div>
                 <div className="truncate text-[13px] text-muted-foreground">{r.operador}</div>
               </div>
@@ -380,6 +383,7 @@ export function TrabajosExtraView() {
         <GrupoHead titulo="Trabajo" />
         <Filas
           filas={[
+            ['N° de Report', numeroReport(detalle.numero)],
             ['Fecha', fmtDate(detalle.fecha)],
             ['Turno', detalle.turno],
             ['Faena', detalle.faena],
@@ -453,7 +457,7 @@ export function TrabajosExtraView() {
         }}
         titulo={
           detalle
-            ? `${editando ? 'Editar · ' : ''}${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
+            ? `${editando ? 'Editar · ' : ''}${numeroReport(detalle.numero)} · ${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
             : 'Historial de trabajos'
         }
         detalle={

@@ -9,6 +9,7 @@ import { useCrearTrabajoExtra, useEditarTrabajoExtra, useTrabajosExtraList } fro
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
+import { numeroReport } from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { ACTIVIDADES, actividadLabel, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
@@ -78,7 +79,7 @@ function DetalleTrabajoModal({
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              {`Trabajo extraordinario · ${trabajo?.equipo?.internalCode ?? '—'}`}
+              {`Report ${numeroReport(trabajo?.numero)} · ${trabajo?.equipo?.internalCode ?? '—'}`}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -205,7 +206,9 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              {trabajo ? `Editar actividad · ${trabajo.equipo?.internalCode ?? '—'}` : 'Nueva actividad'}
+              {trabajo
+                ? `Editar Report ${numeroReport(trabajo.numero)} · ${trabajo.equipo?.internalCode ?? '—'}`
+                : 'Nueva actividad'}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -511,7 +514,8 @@ export function TrabajosExtraAdminView() {
                   >
                     <div className="flex w-full items-start justify-between gap-2">
                       <span className="text-[15px] font-semibold text-foreground">
-                        {formatFecha(t.fecha)} · <span className="font-mono">{t.equipo?.internalCode ?? '—'}</span>
+                        <span className="font-mono">{numeroReport(t.numero)}</span> · {formatFecha(t.fecha)} ·{' '}
+                        <span className="font-mono">{t.equipo?.internalCode ?? '—'}</span>
                       </span>
                       <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
                         {NUM_CL_1.format(t.totalHoras)} h
@@ -555,7 +559,8 @@ export function TrabajosExtraAdminView() {
               <Table.ScrollContainer>
                 <Table.Content aria-label="Report" className="min-w-full">
                   <Table.Header>
-                    <Table.Column isRowHeader>Fecha</Table.Column>
+                    <Table.Column isRowHeader>N°</Table.Column>
+                    <Table.Column>Fecha</Table.Column>
                     <Table.Column>Equipo</Table.Column>
                     <Table.Column>Operador</Table.Column>
                     <Table.Column>Turno</Table.Column>
@@ -575,6 +580,9 @@ export function TrabajosExtraAdminView() {
                         {/* `whitespace-nowrap` en todas las columnas cortas: sin él, la
                            columna ancha (Actividades, `w-full`) las aprieta y la fecha
                            se parte en 5 líneas. */}
+                        <Table.Cell className="font-mono text-sm font-semibold whitespace-nowrap">
+                          {t.numero ?? '—'}
+                        </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
                           {formatFecha(t.fecha)}
                         </Table.Cell>

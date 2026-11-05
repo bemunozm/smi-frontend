@@ -13,6 +13,11 @@
 
 export const COBRO_MINIMO_HORAS = 1;
 
+/** «N° 12»; sin número (todavía en el equipo, sin señal), «Sin N° aún». */
+export function numeroReport(numero: number | null | undefined): string {
+  return numero == null ? 'Sin N° aún' : `N° ${numero}`;
+}
+
 export function horasCobrables(horasReales: number): number {
   return Math.max(COBRO_MINIMO_HORAS, horasReales);
 }
