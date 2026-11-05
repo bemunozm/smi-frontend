@@ -17,8 +17,8 @@ export interface QuickEntryRow {
   inicial: string;
   final: string;
   litros: string;
-  /** Foto del combustible de ESA carga — obligatoria cuando la fila lleva
-   * litros (misma evidencia que el cierre normal); sin litros no se pide. */
+  /** Foto del combustible de ESA carga — OBLIGATORIA en toda fila, igual
+   * que en el cierre normal (incluso con 0 litros queda evidencia). */
   foto: File | null;
 }
 
@@ -97,8 +97,7 @@ export function usePastShiftQuickEntry({
     if (f.litros.trim() !== '' && parseDecimal(f.litros) == null) {
       return 'Litros inválidos (vacío = sin carga).';
     }
-    const litros = f.litros.trim() === '' ? 0 : (parseDecimal(f.litros) ?? 0);
-    if (litros > 0 && !f.foto) return 'Agrega la foto del combustible de esta carga.';
+    if (!f.foto) return 'Agrega la foto del combustible de esta carga.';
     return null;
   };
 
@@ -126,9 +125,9 @@ export function usePastShiftQuickEntry({
           shiftType: ctx.turno as ShiftType,
           capturedAt,
         });
-        // Con litros viaja la foto de ESA carga; una fila sin carga va sin
-        // foto (cierre de carga histórica: el backend lo acepta solo para
-        // tarjetas de días pasados creadas hoy).
+        // Cada cierre viaja con SU foto (obligatoria — la validación de la
+        // fila no deja llegar acá sin ella), por el pipeline normal del
+        // outbox: se sube y se reclama igual que un cierre vivo.
         await enqueueCloseCard(
           userId,
           id,
@@ -138,7 +137,7 @@ export function usePastShiftQuickEntry({
             fuelLiters: f.litros.trim() === '' ? 0 : parseDecimal(f.litros)!,
             capturedAt,
           },
-          f.foto ?? undefined,
+          f.foto!,
         );
       }
       avisarGuardadoEnCola();
