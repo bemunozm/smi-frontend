@@ -233,7 +233,7 @@ function CabeceraFicha({
       <div className="flex flex-col gap-3">
         <div>
           <span className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-            Reporte diario del supervisor
+            Informe de producción diaria
           </span>
           <h2 className="text-[19px] leading-tight font-bold tracking-[-0.01em]">{FAENA}</h2>
         </div>
@@ -550,7 +550,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
             <Label>
               Operadores del turno
               <em className="rounded-md bg-[var(--accent-soft)] px-1.5 py-px text-[10.5px] font-normal text-[var(--accent-soft-foreground)] not-italic">
-                Automático · desde Registro de equipo
+                Automático · desde Informe diario equipos
               </em>
             </Label>
             <div className="flex flex-wrap gap-1.5">
@@ -1015,7 +1015,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   return (
     <>
       <VistaHead
-        titulo={elegirTurno ? 'Cargar reporte diario' : 'Reporte diario del supervisor'}
+        titulo={elegirTurno ? 'Cargar reporte diario' : 'Informe de producción diaria'}
         /* Faena y turno viven en la cabecera de la ficha: repetirlos acá los
            mostraba dos veces en la misma pantalla. */
       />

@@ -421,7 +421,7 @@ export function TrabajosExtraView() {
   return (
     <>
       <VistaHead
-        titulo="Trabajos extraordinarios"
+        titulo="Report"
         contexto={<ChipContexto>Respalda cobros posteriores</ChipContexto>}
       />
 
