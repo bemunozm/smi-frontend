@@ -295,7 +295,7 @@ describe('RegistroEquipoView', () => {
     it('un texto que no es un número se marca como error', () => {
       renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130.5' }, horometroInvalido: true, valorInicialApertura: null });
 
-      expect(screen.getByRole('alert').textContent).toMatch(/Escribí un número/);
+      expect(screen.getByRole('alert').textContent).toMatch(/Escribe un número/);
       expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(true);
     });
 
@@ -360,7 +360,7 @@ describe('RegistroEquipoView', () => {
 
       const boton = screen.getByRole('button', { name: /Agregar equipo/ });
       expect(boton.hasAttribute('disabled')).toBe(true);
-      expect(screen.getByText('Elegí el operador para agregar el equipo.')).toBeTruthy();
+      expect(screen.getByText('Elige el operador para agregar el equipo.')).toBeTruthy();
     });
 
     it('sin ningún horómetro inicial válido (ni tipeado ni último registrado), el botón queda deshabilitado', () => {
@@ -750,12 +750,12 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '' },
-        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.' },
         finalNum: 12500,
         foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
       });
 
-      expect(screen.getByRole('status').textContent).toMatch(/Es más de lo que cabe en un estanque de 30 L: revisá el dato/);
+      expect(screen.getByRole('status').textContent).toMatch(/Es más de lo que cabe en un estanque de 30 L: revisa el dato/);
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
     });
 
@@ -771,7 +771,7 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { ...conAdBlue, adBlueLitros: '45' },
-        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisá el dato.' },
+        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.' },
       });
       expect(screen.queryByText(/gastan cerca de 1 L por hora/)).toBeNull();
     });
@@ -781,13 +781,13 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '', observaciones: '' },
-        adBlueCierre: { litros: null, error: 'Indicá cuántos litros de AdBlue se cargaron.', aviso: null },
+        adBlueCierre: { litros: null, error: 'Indica cuántos litros de AdBlue se cargaron.', aviso: null },
         adBlueIncompletoCierre: true,
         finalNum: 12500,
         foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
       });
 
-      expect(screen.getByText('Indicá cuántos litros de AdBlue se cargaron.')).toBeTruthy();
+      expect(screen.getByText('Indica cuántos litros de AdBlue se cargaron.')).toBeTruthy();
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
 
@@ -886,7 +886,7 @@ describe('RegistroEquipoView', () => {
       renderView('phone', {
         edicion: {
           ...EDICION_INACTIVA,
-          motivoSinEdicion: () => 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.',
+          motivoSinEdicion: () => 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.',
         },
       });
 
@@ -945,7 +945,7 @@ describe('RegistroEquipoView', () => {
           editando: TARJETA_CERRADA,
           esCerrada: true,
           finalInvalido: true,
-          faltante: 'Indicá los litros de combustible (cero si no cargó).',
+          faltante: 'Indica los litros de combustible (cero si no cargó).',
           form: { operatorId: 'op_1', inicial: '12487,3', final: '12480', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
         },
       });
@@ -953,7 +953,7 @@ describe('RegistroEquipoView', () => {
       const ventana = within(screen.getByRole('dialog'));
       expect(ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.')).toBeTruthy();
       expect(ventana.getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
-      expect(ventana.getByText('Indicá los litros de combustible (cero si no cargó).')).toBeTruthy();
+      expect(ventana.getByText('Indica los litros de combustible (cero si no cargó).')).toBeTruthy();
       expect(ventana.getByText('Cero si no cargó en el turno.')).toBeTruthy();
       expect(ventana.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
     });

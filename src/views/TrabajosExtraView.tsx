@@ -89,7 +89,7 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
 /** Un registro guardado solo en el equipo todavía no existe en el servidor: no hay qué editar. */
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
 /** Un cambio anterior del mismo trabajo espera una acción: encadenar otro encima lo dejaría trabado. */
-const MOTIVO_EDICION_ATENCION = 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.';
+const MOTIVO_EDICION_ATENCION = 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.';
 
 /** Por qué un equipo no se puede elegir, según su estado en Flota. */
 const ESTADO_NO_DISPONIBLE: Record<string, string> = {

@@ -144,7 +144,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
         ? 'Falta el kilometraje.'
         : 'Faltan los horómetros.'
       : litrosNum == null || litrosNum < 0
-        ? 'Indicá los litros de combustible (cero si no cargó).'
+        ? 'Indica los litros de combustible (cero si no cargó).'
         : null;
   const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
 
@@ -159,7 +159,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const cerrarEdicion = () => setEditandoId(null);
 
   const motivoSinEdicion = (t: TarjetaTurno): string | null =>
-    t.edicionRequiereAtencion ? 'Resolvé el cambio pendiente en Sincronización antes de editar de nuevo.' : null;
+    t.edicionRequiereAtencion ? 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.' : null;
 
   const guardar = async () => {
     if (!editando || !puedeGuardar || !userId || inicialNum == null) return;

@@ -25,7 +25,7 @@ const SIN_ADBLUE: ResultadoAdBlue = { litros: null, error: null, aviso: null };
 export function validarAdBlue(adBlue: boolean, litros: number | null, tocado: boolean): ResultadoAdBlue {
   if (!adBlue) return SIN_ADBLUE;
   if (litros == null || litros <= 0) {
-    return { litros: null, error: tocado ? 'Indicá cuántos litros de AdBlue se cargaron.' : null, aviso: null };
+    return { litros: null, error: tocado ? 'Indica cuántos litros de AdBlue se cargaron.' : null, aviso: null };
   }
   if (litros > ADBLUE_MAX_LITROS) {
     return { litros: null, error: `No puede superar los ${ADBLUE_MAX_LITROS} L.`, aviso: null };
@@ -35,7 +35,7 @@ export function validarAdBlue(adBlue: boolean, litros: number | null, tocado: bo
     error: null,
     aviso:
       litros > ADBLUE_ESTANQUE_LITROS
-        ? `Es más de lo que cabe en un estanque de ${ADBLUE_ESTANQUE_LITROS} L: revisá el dato.`
+        ? `Es más de lo que cabe en un estanque de ${ADBLUE_ESTANQUE_LITROS} L: revisa el dato.`
         : null,
   };
 }

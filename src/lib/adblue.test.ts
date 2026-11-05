@@ -24,11 +24,11 @@ describe('validarAdBlue', () => {
     const grande = validarAdBlue(true, 30.5, true);
     expect(grande.error).toBeNull();
     expect(grande.litros).toBe(30.5);
-    expect(grande.aviso).toBe('Es más de lo que cabe en un estanque de 30 L: revisá el dato.');
+    expect(grande.aviso).toBe('Es más de lo que cabe en un estanque de 30 L: revisa el dato.');
   });
 
   it('pide los litros con el texto de Registro de equipo', () => {
-    expect(validarAdBlue(true, null, true).error).toBe('Indicá cuántos litros de AdBlue se cargaron.');
+    expect(validarAdBlue(true, null, true).error).toBe('Indica cuántos litros de AdBlue se cargaron.');
   });
 });
 

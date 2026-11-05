@@ -1150,7 +1150,7 @@ export function AvisoEdicion() {
     <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--warning-soft)] px-3 py-2.5 text-[13px] leading-snug text-[var(--warning-soft-foreground)]">
       <Bell className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       <span>
-        Podés cambiar cualquier dato. <b>Al guardar se avisa al administrador</b> y queda registro de
+        Puedes cambiar cualquier dato. <b>Al guardar se avisa al administrador</b> y queda registro de
         quién cambió qué y cuándo.
       </span>
     </div>

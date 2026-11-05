@@ -67,7 +67,7 @@ export function parseInteger(texto: string): number | null {
 /** Error de un campo entero con algo escrito que no es un entero; `null` si está vacío o es válido. */
 export function errorDeEntero(texto: string): string | null {
   if (texto.trim() === '' || parseInteger(texto) != null) return null;
-  return 'Escribí un número entero, sin decimales.';
+  return 'Escribe un número entero, sin decimales.';
 }
 
 const PARECE_AGRUPADO = /^[1-9]\d{0,2}[.,]\d{3}$/;

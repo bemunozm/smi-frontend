@@ -69,7 +69,7 @@ describe('errorDeEntero', () => {
   });
 
   it('marca error cuando hay algo escrito que no es un entero', () => {
-    expect(errorDeEntero('2,5')).toBe('Escribí un número entero, sin decimales.');
+    expect(errorDeEntero('2,5')).toBe('Escribe un número entero, sin decimales.');
     expect(errorDeEntero('abc')).not.toBeNull();
   });
 });

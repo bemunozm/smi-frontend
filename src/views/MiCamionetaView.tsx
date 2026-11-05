@@ -251,6 +251,17 @@ export function MiCamionetaView({
           }
           valor={cierre.horasMaquina != null && cierre.horasMaquina >= 0 ? fmtKm(cierre.horasMaquina) : '—'}
         />
+        {/* La foto antes que los litros: el OCR los lee de ella y se revisan después. */}
+        <FotoRespaldoField
+          file={cierre.foto.file}
+          isReadingPhoto={cierre.foto.isReadingPhoto}
+          captureDate={cierre.foto.captureDate}
+          onSelect={cierre.foto.handleSelectPhoto}
+          onClear={cierre.foto.handleClearPhoto}
+          title="Foto del surtidor"
+          subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+          staleQuestion="¿Es la carga de esta camioneta?"
+        />
         <Campo
           label="Combustible cargado"
           requerido
@@ -264,16 +275,6 @@ export function MiCamionetaView({
             onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
           />
         </Campo>
-        <FotoRespaldoField
-          file={cierre.foto.file}
-          isReadingPhoto={cierre.foto.isReadingPhoto}
-          captureDate={cierre.foto.captureDate}
-          onSelect={cierre.foto.handleSelectPhoto}
-          onClear={cierre.foto.handleClearPhoto}
-          title="Foto del surtidor"
-          subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-          staleQuestion="¿Es la carga de esta camioneta?"
-        />
         <Campo label="Observaciones">
           <Textarea
             rows={2}
