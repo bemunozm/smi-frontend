@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Check, ChevronDown, Minus, Pencil, Plus, Thermometer, Trash2, Wrench, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ImageUp, Minus, Pencil, Plus, Thermometer, Trash2, Wrench, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import {
@@ -675,6 +675,7 @@ function Fotos({
   onChange: (f: FotoForm[]) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const galeria = useRef<HTMLInputElement>(null);
   // Las ya guardadas (al corregir) traen su URL; las nuevas, una local.
   const urls = useMemo(() => fotos.map((f) => (esFotoGuardada(f) ? f.url : URL.createObjectURL(f))), [fotos]);
   useEffect(() => () => urls.forEach((u, i) => fotos[i] instanceof File && URL.revokeObjectURL(u)), [urls, fotos]);
@@ -718,11 +719,34 @@ function Fotos({
           </span>
         </button>
       )}
+      {fotos.length < 10 && (
+        <button
+          className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 self-center rounded-xl px-3 text-sm font-semibold text-(--accent) transition hover:bg-(--accent-soft)"
+          type="button"
+          onClick={() => galeria.current?.click()}
+        >
+          <ImageUp aria-hidden className="h-4 w-4" />
+          Elegir de la galería
+        </button>
+      )}
       <input
         ref={input}
         hidden
         accept="image/*"
         capture="environment"
+        type="file"
+        onChange={(e) => {
+          const nuevas = Array.from(e.target.files ?? []);
+          if (nuevas.length) onChange([...fotos, ...nuevas].slice(0, 10));
+          e.target.value = '';
+        }}
+      />
+      {/* Sin `capture`: la galería, para fotos ya sacadas (se pueden elegir varias). */}
+      <input
+        ref={galeria}
+        hidden
+        multiple
+        accept="image/*"
         type="file"
         onChange={(e) => {
           const nuevas = Array.from(e.target.files ?? []);
