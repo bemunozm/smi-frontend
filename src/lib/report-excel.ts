@@ -1,4 +1,13 @@
 import { actividadLabel, destinoLabel, type TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { DetalleActividadRegistro } from '../types/trabajosExtra';
+import { actividadDeFila } from './trabajos-extra';
+
+/** Columna «Planta» de la planilla: la planta concreta cuando la fila es
+ * PLANTA, el lugar legible en el resto. */
+function lugarExcel(f: DetalleActividadRegistro): string {
+  if (f.lugar === 'PLANTA') return f.planta ?? destinoLabel.PLANTA;
+  return destinoLabel[f.lugar] ?? f.lugar;
+}
 
 /** Día local (YYYY-MM-DD) de un timestamp — el mismo día que el usuario ve en
  * la tabla de la vista Report (misma regla que su filtro). */
@@ -12,27 +21,27 @@ function diaLocal(iso: string): string {
 /** `dd-mm-yyyy`, como en la planilla del cliente. */
 const legible = (dia: string) => dia.split('-').reverse().join('-');
 
-/** Actividades legibles; «Otro» muestra el texto libre si lo trae. */
+/** Actividades legibles (registro LEGACY, sin desglose); «Otro» muestra el
+ * texto libre si lo trae. */
 function actividadesDe(trabajo: TrabajoExtraordinario): string {
   return trabajo.actividades
     .map((a) => (a === 'OTRO' && trabajo.otraActividad ? `Otro: ${trabajo.otraActividad}` : (actividadLabel[a] ?? a)))
     .join(', ');
 }
 
-/** Columna «Planta» de la planilla: la planta concreta cuando el destino es
- * PLANTA, el destino legible en el resto, vacío en registros previos al campo. */
-function plantaDe(trabajo: TrabajoExtraordinario): string {
-  if (!trabajo.destino) return '';
-  if (trabajo.destino === 'PLANTA') return trabajo.planta ?? destinoLabel.PLANTA;
-  return destinoLabel[trabajo.destino] ?? trabajo.destino;
-}
-
 /**
  * Arma el Excel del módulo Report con las columnas de la planilla del cliente
  * (Item, Fecha, Empresa, Equipo, Supervisor, Operador, Report N°, Planta,
- * Actividad, horómetros y total) y su formato: título con el rango,
- * encabezado en el azul del shell de SMI con filtros, cebra en las filas,
- * formatos numéricos, encabezado congelado y fila de total del período.
+ * Actividad y sus horas, horómetros y total) y su formato: título con el
+ * rango, encabezado en el azul del shell de SMI con filtros, cebra POR
+ * TRABAJO, formatos numéricos, encabezado congelado y fila de total.
+ *
+ * Cada trabajo sale en UNA FILA POR ACTIVIDAD (decisión del cliente, 05-11):
+ * folio, equipo, operador y fecha se repiten en cada fila; la columna
+ * «Planta» es el lugar DE ESA actividad y «HM_Act» sus horas. Los horómetros,
+ * el total, la descripción y las observaciones van solo en la primera fila
+ * del trabajo — así la columna Total_Horas se puede sumar sin duplicar. Un
+ * registro anterior al desglose sale en una sola fila, como antes.
  *
  * Vive fuera de la vista para poder probarse releyendo el archivo generado;
  * `exceljs` entra por import dinámico, así que solo se descarga al exportar.
@@ -57,7 +66,7 @@ export async function construirExcelReport(
   const GRIS_CEBRA = 'FFF1F5F9';
   const GRIS_TEXTO = 'FF6B7280';
   const BORDE = { style: 'thin' as const, color: { argb: 'FFD9DEE5' } };
-  const N_COLUMNAS = 14;
+  const N_COLUMNAS = 15;
 
   ws.columns = [
     { key: 'item', width: 9 },
@@ -67,8 +76,9 @@ export async function construirExcelReport(
     { key: 'supervisor', width: 20 },
     { key: 'operador', width: 20 },
     { key: 'report', width: 10 },
-    { key: 'planta', width: 14 },
-    { key: 'actividad', width: 36 },
+    { key: 'planta', width: 16 },
+    { key: 'actividad', width: 30 },
+    { key: 'horasAct', width: 9 },
     { key: 'horomIni', width: 10 },
     { key: 'horomFin', width: 10 },
     { key: 'total', width: 11 },
@@ -104,6 +114,7 @@ export async function construirExcelReport(
     'Report N°',
     'Planta',
     'Actividad',
+    'HM_Act',
     'Horom_Ini',
     'Horom_Fin',
     'Total_Horas',
@@ -122,7 +133,8 @@ export async function construirExcelReport(
 
   // --- Filas -------------------------------------------------------------------
   trabajos.forEach((t, indice) => {
-    const fila = ws.addRow({
+    // Los datos del trabajo que se repiten en cada fila de su desglose.
+    const comunes = {
       item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
       fecha: legible(diaLocal(t.fecha)),
       empresa: t.faena,
@@ -130,30 +142,52 @@ export async function construirExcelReport(
       supervisor: t.registradoPor ?? '',
       report: t.reportNumero ?? '',
       operador: t.operador,
-      planta: plantaDe(t),
-      actividad: actividadesDe(t),
+    };
+    // Los que van SOLO en la primera fila: sumar Total_Horas no debe duplicar.
+    const soloPrimera = {
       horomIni: t.horometroInicial,
       horomFin: t.horometroFinal,
       total: t.totalHoras,
       descripcion: t.descripcion,
       observaciones: t.observaciones ?? '',
-    });
-    fila.eachCell({ includeEmpty: true }, (celda) => {
-      celda.border = { bottom: BORDE, left: BORDE, right: BORDE };
-      if (indice % 2 === 1) {
-        celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CEBRA } };
+    };
+    const desglose = t.detalleActividades ?? [];
+    const valores =
+      desglose.length > 0
+        ? desglose.map((f, j) => ({
+            ...comunes,
+            planta: lugarExcel(f),
+            actividad: actividadDeFila(f, t.otraActividad),
+            horasAct: f.horas,
+            ...(j === 0 ? soloPrimera : {}),
+          }))
+        : // Registro anterior al desglose: una sola fila, como antes.
+          [{ ...comunes, planta: '', actividad: actividadesDe(t), ...soloPrimera }];
+
+    valores.forEach((v, j) => {
+      const fila = ws.addRow(v);
+      fila.eachCell({ includeEmpty: true }, (celda) => {
+        celda.border = { bottom: BORDE, left: BORDE, right: BORDE };
+        // Cebra POR TRABAJO: todas sus filas comparten el fondo, así el
+        // bloque se lee como un solo report.
+        if (indice % 2 === 1) {
+          celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CEBRA } };
+        }
+      });
+      fila.getCell('item').alignment = { horizontal: 'center' };
+      fila.getCell('fecha').alignment = { horizontal: 'center' };
+      fila.getCell('report').alignment = { horizontal: 'center' };
+      fila.getCell('horasAct').numFmt = '#,##0.00';
+      if (j === 0) {
+        fila.getCell('horomIni').numFmt = '#,##0.##';
+        fila.getCell('horomFin').numFmt = '#,##0.##';
+        fila.getCell('total').numFmt = '#,##0.00';
+        fila.getCell('total').font = { bold: true };
+        // Textos largos: que crezcan hacia abajo, no hacia el costado.
+        fila.getCell('descripcion').alignment = { wrapText: true, vertical: 'top' };
+        fila.getCell('observaciones').alignment = { wrapText: true, vertical: 'top' };
       }
     });
-    fila.getCell('item').alignment = { horizontal: 'center' };
-    fila.getCell('fecha').alignment = { horizontal: 'center' };
-    fila.getCell('report').alignment = { horizontal: 'center' };
-    fila.getCell('horomIni').numFmt = '#,##0.##';
-    fila.getCell('horomFin').numFmt = '#,##0.##';
-    fila.getCell('total').numFmt = '#,##0.00';
-    fila.getCell('total').font = { bold: true };
-    // Textos largos: que crezcan hacia abajo, no hacia el costado.
-    fila.getCell('descripcion').alignment = { wrapText: true, vertical: 'top' };
-    fila.getCell('observaciones').alignment = { wrapText: true, vertical: 'top' };
   });
 
   // --- Total del período -------------------------------------------------------

@@ -213,15 +213,18 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Faena'), { target: { value: 'Rajo Norte' } });
     fireEvent.change(within(dialog).getByLabelText('Horómetro inicial'), { target: { value: '1200' } });
     fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Regulación y carga' }));
+    // El desglose: la fila dice qué se hizo, dónde y sus horas máquina.
+    fireEvent.click(within(dialog).getByRole('button', { name: /Actividad/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Regulación y carga' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
+    fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha y hora del trabajo'), {
       target: { value: '2026-10-05T21:15' },
     });
-    // Los campos nuevos del report: folio, dónde se hizo y la foto obligatoria.
+    // Los campos del report: folio y la foto obligatoria.
     fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
-    fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
     const foto = new File(['report'], 'report.jpg', { type: 'image/jpeg' });
     fireEvent.change(within(dialog).getByLabelText('Foto del report'), { target: { files: [foto] } });
 
@@ -237,10 +240,9 @@ describe('TrabajosExtraAdminView', () => {
           turno: 'DIURNO',
           horometroInicial: 1200,
           horometroFinal: 1212,
-          actividades: ['REGULACION_CARGA'],
+          detalle: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', horas: 12 }],
           descripcion: 'Carga de material',
           reportNumero: '4509',
-          destino: 'TRANSPORTE',
         }),
         foto,
       },
@@ -285,11 +287,13 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Faena'), { target: { value: 'Rajo Norte' } });
     fireEvent.change(within(dialog).getByLabelText('Horómetro inicial'), { target: { value: '1200' } });
     fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Regulación y carga' }));
-    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
-    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Actividad/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Regulación y carga' }));
     fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
+    fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
     expect(crearMock).not.toHaveBeenCalled();

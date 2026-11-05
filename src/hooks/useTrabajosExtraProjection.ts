@@ -8,7 +8,7 @@ import type { CreateTrabajoExtraOp, HttpWriteOp, OutboxOp } from '../offline/db'
 import { useOutboxOps } from '../offline/useOutboxOps';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
-import type { TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { DetalleActividadRegistro, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 /** Un trabajo del historial: el del servidor, o uno sintético armado desde
  * una operación pendiente del outbox. */
@@ -43,7 +43,15 @@ function mapOpToTrabajo(op: CreateTrabajoExtraOp, equipos: Equipment[], operador
     horometroInicial: payload.horometroInicial,
     horometroFinal: payload.horometroFinal,
     totalHoras: horasTotales(payload.horometroInicial, payload.horometroFinal),
-    actividades: payload.actividades,
+    // El resumen se deriva del desglose, igual que lo hará el servidor.
+    actividades: [...new Set(payload.detalle.map((f) => f.actividad))],
+    detalleActividades: payload.detalle.map((f) => ({
+      actividad: f.actividad,
+      lugar: f.lugar,
+      planta: f.planta ?? null,
+      horas: f.horas,
+    })),
+    reportNumero: payload.reportNumero,
     otraActividad: payload.otraActividad?.trim() || null,
     descripcion: payload.descripcion,
     observaciones: payload.observaciones?.trim() || null,
@@ -80,6 +88,16 @@ export function proyectarTrabajosExtra(
 const texto = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const numero = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
+/** El `detalle` de una edición pendiente, si el cuerpo trae uno con forma. */
+const filasDetalle = (v: unknown): DetalleActividadRegistro[] | undefined =>
+  Array.isArray(v) &&
+  v.length > 0 &&
+  v.every(
+    (f) => f != null && typeof f === 'object' && typeof (f as { actividad?: unknown }).actividad === 'string',
+  )
+    ? (v as DetalleActividadRegistro[])
+    : undefined;
+
 /** Superpone las ediciones pendientes (en orden `seq`: la última gana) sobre los
  * trabajos que ya existen en el servidor. */
 function aplicarEdiciones(
@@ -99,6 +117,7 @@ function aplicarEdiciones(
       const operatorId = texto(body.operatorId);
       const horometroInicial = numero(body.horometroInicial) ?? editado.horometroInicial;
       const horometroFinal = numero(body.horometroFinal) ?? editado.horometroFinal;
+      const detalle = filasDetalle(body.detalle);
       editado = {
         ...editado,
         equipoId: equipoId ?? editado.equipoId,
@@ -111,9 +130,11 @@ function aplicarEdiciones(
         horometroInicial,
         horometroFinal,
         totalHoras: horasTotales(horometroInicial, horometroFinal),
-        actividades: Array.isArray(body.actividades)
-          ? body.actividades.filter((a): a is string => typeof a === 'string')
-          : editado.actividades,
+        // El desglose editado reemplaza completo al vigente, y el resumen se
+        // deriva de él — espejo de lo que hará el servidor al recibirlo.
+        ...(detalle
+          ? { detalleActividades: detalle, actividades: [...new Set(detalle.map((f) => f.actividad))] }
+          : {}),
         otraActividad: 'otraActividad' in body ? texto(body.otraActividad)?.trim() || null : editado.otraActividad,
         descripcion: texto(body.descripcion) ?? editado.descripcion,
         observaciones: 'observaciones' in body ? texto(body.observaciones)?.trim() || null : editado.observaciones,

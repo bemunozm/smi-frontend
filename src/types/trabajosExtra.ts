@@ -24,9 +24,9 @@ export const actividadLabel: Record<string, string> = Object.fromEntries(
 );
 
 /**
- * Dónde se hizo el trabajo (pedido del cliente, espejo de la columna «Planta»
- * de su planilla): Transporte, una planta concreta —solo para limpieza de
- * silos— o Variado cuando la salida mezcla destinos. Lo declara el supervisor.
+ * Dónde se hizo CADA actividad (pedido del cliente, espejo de la columna
+ * «Planta» de su planilla): Transporte, una planta concreta —solo para
+ * limpieza de silos— o Variado. Lo declara el supervisor por fila.
  */
 export const DESTINOS = [
   { value: 'TRANSPORTE', label: 'Transporte' },
@@ -40,6 +40,35 @@ export const destinoLabel: Record<string, string> = Object.fromEntries(
 
 const actividadValues = ACTIVIDADES.map((a) => a.value) as [string, ...string[]];
 
+/**
+ * Una fila del desglose del report: qué se hizo, dónde y cuántas horas
+ * máquina tomó. Las horas son el DESGLOSE del trabajo: el total a cobrar
+ * sigue saliendo de los horómetros (con el mínimo de 1 h), y si las filas no
+ * suman lo mismo la vista avisa sin bloquear (decisión del cliente, 05-11).
+ */
+const actividadDetalleSchema = z.object({
+  actividad: z.enum(actividadValues, { message: 'Elegí la actividad' }),
+  lugar: z.enum(['TRANSPORTE', 'PLANTA', 'VARIADO'], { message: 'Indicá dónde se hizo' }),
+  /** En cuál planta (catálogo del reporte diario) cuando `lugar` es PLANTA.
+   * `null` es la forma canónica de «no aplica» (la misma que guarda el
+   * servidor): así el payload normalizado sigue siendo de esta forma. */
+  planta: z.string().nullable().optional(),
+  horas: z
+    .number({ message: 'Indicá las horas' })
+    .positive('Las horas deben ser mayores a 0')
+    .max(24, 'Máximo 24 h por actividad'),
+});
+
+export type ActividadDetalle = z.infer<typeof actividadDetalleSchema>;
+
+/** Una fila del desglose como la guarda y devuelve el servidor. */
+export interface DetalleActividadRegistro {
+  actividad: string;
+  lugar: string;
+  planta: string | null;
+  horas: number;
+}
+
 const camposTrabajoExtra = z
   .object({
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
@@ -51,8 +80,12 @@ const camposTrabajoExtra = z
     turno: z.enum(['DIURNO', 'NOCTURNO']),
     horometroInicial: nonNegNumber('Valor inválido'),
     horometroFinal: nonNegNumber('Valor inválido'),
-    // Varias: una misma salida suele mezclar tareas.
-    actividades: z.array(z.enum(actividadValues)).min(1, 'Elegí al menos una actividad'),
+    /** El desglose, UNA FILA POR ACTIVIDAD — el servidor deriva `actividades`
+     * (el resumen) de acá. Las reglas cruzadas van en el `.superRefine`. */
+    detalle: z
+      .array(actividadDetalleSchema)
+      .min(1, 'Agregá al menos una actividad')
+      .max(12, 'Máximo 12 actividades por report'),
     otraActividad: z.string().optional(),
     descripcion: z.string().min(3, 'Describí la tarea'),
     observaciones: z.string().optional(),
@@ -63,10 +96,6 @@ const camposTrabajoExtra = z
     fecha: z.string().optional(),
     /** N° del report en papel que respalda el trabajo — el Excel del admin lo lleva. */
     reportNumero: z.string().min(1, 'Indicá el N° del report'),
-    /** Dónde se hizo — las reglas cruzadas van en los `.refine()` de abajo. */
-    destino: z.enum(['TRANSPORTE', 'PLANTA', 'VARIADO'], { message: 'Indicá dónde se hizo' }),
-    /** En cuál planta (catálogo del reporte diario) cuando `destino` es PLANTA. */
-    planta: z.string().optional(),
   });
 
 /**
@@ -74,38 +103,41 @@ const camposTrabajoExtra = z
  * las mismas; acá solo se avisa antes de mandar):
  * - horómetro final ≥ inicial;
  * - «Otro» sin texto deja la actividad como «otro» a secas (incobrable);
- * - solo una limpieza de silos puede hacerse EN PLANTA, y un destino PLANTA
+ * - solo una limpieza de silos puede hacerse EN PLANTA, y una fila PLANTA
  *   siempre dice en cuál.
  */
 const reglasTrabajoExtra = (
-  d: Omit<z.infer<typeof camposTrabajoExtra>, 'reportNumero' | 'destino'> & {
+  d: Omit<z.infer<typeof camposTrabajoExtra>, 'reportNumero' | 'detalle'> & {
     reportNumero?: string;
-    destino?: z.infer<typeof camposTrabajoExtra>['destino'];
+    detalle?: ActividadDetalle[];
   },
   ctx: z.RefinementCtx,
 ) => {
   if (Number(d.horometroFinal) < Number(d.horometroInicial)) {
     ctx.addIssue({ code: 'custom', message: 'El horómetro final debe ser ≥ inicial', path: ['horometroFinal'] });
   }
-  if (d.actividades.includes('OTRO') && !d.otraActividad?.trim()) {
+  const detalle = d.detalle ?? [];
+  if (detalle.some((f) => f.actividad === 'OTRO') && !d.otraActividad?.trim()) {
     ctx.addIssue({ code: 'custom', message: 'Describí cuál fue la otra actividad', path: ['otraActividad'] });
   }
-  if (d.destino === 'PLANTA' && !d.actividades.includes('LIMPIEZA_SILOS')) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado',
-      path: ['destino'],
-    });
-  }
-  if (d.destino === 'PLANTA' && !d.planta?.trim()) {
-    ctx.addIssue({ code: 'custom', message: 'Indicá en qué planta se hizo', path: ['planta'] });
-  }
+  detalle.forEach((f, i) => {
+    if (f.lugar !== 'PLANTA') return;
+    if (f.actividad !== 'LIMPIEZA_SILOS') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado',
+        path: ['detalle', i, 'lugar'],
+      });
+    } else if (!f.planta?.trim()) {
+      ctx.addIssue({ code: 'custom', message: 'Indicá en qué planta se hizo', path: ['detalle', i, 'planta'] });
+    }
+  });
 };
 
 export const trabajoExtraFormSchema = camposTrabajoExtra.superRefine(reglasTrabajoExtra);
 
 /**
- * Edición desde el panel: un trabajo LEGACY (anterior al folio/destino) se
+ * Edición desde el panel: un trabajo LEGACY (anterior al folio/desglose) se
  * puede corregir sin inventarle esos datos — acá son opcionales y, si vienen
  * vacíos, el formulario los omite y el diff no los toca. Las reglas cruzadas
  * aplican igual cuando sí vienen.
@@ -113,12 +145,12 @@ export const trabajoExtraFormSchema = camposTrabajoExtra.superRefine(reglasTraba
 export const trabajoExtraEdicionSchema = camposTrabajoExtra
   .extend({
     reportNumero: z.string().min(1, 'Indicá el N° del report').optional(),
-    destino: camposTrabajoExtra.shape.destino.optional(),
+    detalle: camposTrabajoExtra.shape.detalle.optional(),
   })
   .superRefine(reglasTrabajoExtra);
 
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
-/** La forma de la EDICIÓN: folio y destino opcionales (trabajos legacy). */
+/** La forma de la EDICIÓN: folio y desglose opcionales (trabajos legacy). */
 export type TrabajoExtraEdicion = z.infer<typeof trabajoExtraEdicionSchema>;
 export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
@@ -156,16 +188,15 @@ export interface TrabajoExtraordinario {
   horometroInicial: number;
   horometroFinal: number;
   totalHoras: number;
+  /** Resumen derivado del desglose (o el dato original en registros legacy). */
   actividades: string[];
   otraActividad: string | null;
   descripcion: string;
   observaciones: string | null;
   /** N° del report en papel — null en registros previos al campo. */
   reportNumero?: string | null;
-  /** TRANSPORTE | PLANTA | VARIADO — null en registros previos al campo. */
-  destino?: string | null;
-  /** Nombre de la planta cuando `destino` es PLANTA. */
-  planta?: string | null;
+  /** El desglose por actividad — null/ausente en registros previos al campo. */
+  detalleActividades?: DetalleActividadRegistro[] | null;
   /** Foto del report, como URL firmada (~1 h) — null en registros sin foto;
    * opcional para tolerar un backend que aún no manda el campo. */
   fotoUrl?: string | null;
@@ -196,8 +227,16 @@ export const TrabajoExtraordinarioSchema = z.object({
   descripcion: z.string(),
   observaciones: z.string().nullable(),
   reportNumero: z.string().nullable().optional(),
-  destino: z.string().nullable().optional(),
-  planta: z.string().nullable().optional(),
+  detalleActividades: z
+    .array(
+      z.object({
+        actividad: z.string(),
+        lugar: z.string(),
+        planta: z.string().nullable(),
+        horas: z.number(),
+      }),
+    )
+    .nullish(),
   fotoUrl: z.string().nullable().optional(),
   fecha: z.string(),
   equipo: z.object({ internalCode: z.string() }).optional(),

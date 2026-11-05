@@ -52,9 +52,8 @@ function op(
       turno: 'DIURNO',
       horometroInicial: 100,
       horometroFinal: 112.5,
-      actividades: ['SOLTAR_MATERIAL'],
+      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'VARIADO', planta: null, horas: 12.5 }],
       reportNumero: '4509',
-      destino: 'VARIADO',
       descripcion: 'Pendiente',
       capturedAt: '2026-09-24T09:00:00.000Z',
       ...payload,
@@ -171,15 +170,26 @@ describe('proyectarTrabajosExtra — ediciones pendientes', () => {
     expect(t!.sinSincronizar).toBeUndefined();
   });
 
-  it('vaciar un texto opcional lo deja en null; las actividades se reemplazan', () => {
+  it('vaciar un texto opcional lo deja en null; el desglose editado reemplaza y re-deriva actividades', () => {
     const [t] = proyectarTrabajosExtra(
       [{ ...servidor('t-1'), observaciones: 'algo' }],
-      [edicion('t-1', { observaciones: '', actividades: ['LIMPIEZA_CANCHA'], otraActividad: '' })],
+      [
+        edicion('t-1', {
+          observaciones: '',
+          detalle: [{ actividad: 'LIMPIEZA_CANCHA', lugar: 'VARIADO', planta: null, horas: 2 }],
+          otraActividad: '',
+        }),
+      ],
       EQUIPOS,
       OPERADORES,
     );
 
-    expect(t).toMatchObject({ observaciones: null, otraActividad: null, actividades: ['LIMPIEZA_CANCHA'] });
+    expect(t).toMatchObject({
+      observaciones: null,
+      otraActividad: null,
+      actividades: ['LIMPIEZA_CANCHA'],
+      detalleActividades: [{ actividad: 'LIMPIEZA_CANCHA', lugar: 'VARIADO', planta: null, horas: 2 }],
+    });
   });
 
   it('una edición en atención lo marca', () => {
