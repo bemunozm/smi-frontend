@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'luc
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
+import { ROLES } from '../types/roles';
 import {
   useCreateReporteDiario,
   useEditReporteDiario,
@@ -16,6 +18,7 @@ import {
 } from '../hooks/useReporteDiario';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
+import { plural } from '../lib/format';
 import {
   aReporteAnterior,
   enteroOCero,
@@ -277,8 +280,27 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   const esOtroTurno =
     !elegirTurno &&
     (elegido.fecha !== toDateOnly(reloj.fecha) || elegido.turno !== reloj.turno);
-  const { user } = useCurrentUser();
+  /** El par elegido ES el turno vigente (en cualquier modo): los operadores
+   * pueden salir de «mis tarjetas», que funciona offline. */
+  const turnoVigenteElegido =
+    elegido.fecha === toDateOnly(reloj.fecha) && elegido.turno === reloj.turno;
+  const { user, role } = useCurrentUser();
   const supervisor = user?.name?.trim() || user?.email || 'Sin identificar';
+
+  /**
+   * Resumen del turno ELEGIDO cuando no es el vigente: las tarjetas que se
+   * cargaron en Informe diario equipos («mis tarjetas» solo baja lo cerrado
+   * en 48 h, así que un turno viejo saldría vacío aunque exista). El ADMIN ve
+   * las de todos los supervisores; SECRETARIA no puede consultarlo (403) y
+   * queda sin chips, como hasta ahora. Online-only, igual que el resto de la
+   * carga histórica.
+   */
+  const puedeConsultarTurno = role === ROLES.ADMIN || role === ROLES.SUPERVISOR;
+  const { data: turnoElegidoResumen } = usePastShiftSummary(
+    !turnoVigenteElegido && puedeConsultarTurno
+      ? { fecha: fromDateOnly(elegido.fecha), turno: elegido.turno }
+      : null,
+  );
 
   // Catálogos y operadores reales. Mientras cargan (o si fallan) las listas
   // quedan vacías y la pantalla sigue renderizando.
@@ -299,17 +321,52 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
    * escondía al del equipo que ya se cerró (reporte del cliente, 04/11). Las
    * camionetas no van: no llevan operador, las maneja quien las saca.
    */
-  const operadoresDelTurno = useMemo(
+  const operadoresDelTurno = useMemo(() => {
+    // Turno pasado: las tarjetas vienen del resumen de ESE turno (lo cargado
+    // en Informe diario equipos), no de «mis tarjetas».
+    if (!turnoVigenteElegido) {
+      return (turnoElegidoResumen ?? [])
+        .flatMap((s) => s.cards)
+        .filter((c) => c.equipo.equipmentClass !== 'LIGHT')
+        .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode }));
+    }
+    return (tarjetas ?? [])
+      .filter(
+        (c) =>
+          c.shift?.date === toDateOnly(ctx.fecha) &&
+          c.shift.type === ctx.turno &&
+          c.equipo.equipmentClass !== 'LIGHT',
+      )
+      .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode }));
+  }, [turnoVigenteElegido, turnoElegidoResumen, tarjetas, ctx.fecha, ctx.turno]);
+
+  /** Turno pasado consultado y sin tarjetas: se avisa el orden correcto (los
+   * equipos se cargan primero), SIN bloquear el envío — decisión del dueño
+   * del producto, 04/11: producción y personal no dependen de las tarjetas. */
+  const sinTarjetasDelTurnoPasado =
+    !turnoVigenteElegido &&
+    puedeConsultarTurno &&
+    turnoElegidoResumen !== undefined &&
+    operadoresDelTurno.length === 0;
+
+  /**
+   * La trampa de terreno (04/11): el selector parte en el turno VIGENTE (de
+   * noche, NOCTURNO) y lo backfilleado suele ser del DIURNO — el elegido sale
+   * vacío aunque el día sí tenga equipos. Solo cuando el elegido está vacío
+   * se consulta el turno opuesto del mismo día, para sugerirlo en el aviso.
+   */
+  const turnoOpuesto: Turno = elegido.turno === 'DIURNO' ? 'NOCTURNO' : 'DIURNO';
+  const { data: resumenOpuesto } = usePastShiftSummary(
+    sinTarjetasDelTurnoPasado
+      ? { fecha: fromDateOnly(elegido.fecha), turno: turnoOpuesto }
+      : null,
+  );
+  const equiposEnOtroTurno = useMemo(
     () =>
-      (tarjetas ?? [])
-        .filter(
-          (c) =>
-            c.shift?.date === toDateOnly(ctx.fecha) &&
-            c.shift.type === ctx.turno &&
-            c.equipo.equipmentClass !== 'LIGHT',
-        )
-        .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode })),
-    [tarjetas, ctx.fecha, ctx.turno],
+      (resumenOpuesto ?? [])
+        .flatMap((s) => s.cards)
+        .filter((c) => c.equipo.equipmentClass !== 'LIGHT').length,
+    [resumenOpuesto],
   );
 
   /** Reportes de la última semana, del turno más reciente al más viejo. */
@@ -561,7 +618,23 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
                 </span>
               ))}
             </div>
-            <Hint>Lista viva: se recalcula cada vez que se abre el reporte.</Hint>
+            {sinTarjetasDelTurnoPasado ? (
+              <Hint>
+                Este turno no tiene equipos registrados: cárgalos primero en Informe diario
+                equipos («Registrar turno pasado») para que aparezcan acá. El informe se puede
+                enviar igual.
+                {equiposEnOtroTurno > 0 && (
+                  <b>
+                    {' '}
+                    El {turnoOpuesto} de ese día sí tiene{' '}
+                    {plural(equiposEnOtroTurno, 'equipo registrado', 'equipos registrados')} —
+                    revisa el turno elegido arriba.
+                  </b>
+                )}
+              </Hint>
+            ) : (
+              <Hint>Lista viva: se recalcula cada vez que se abre el reporte.</Hint>
+            )}
           </div>
         </Form>
       </Card>

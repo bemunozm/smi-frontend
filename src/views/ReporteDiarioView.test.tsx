@@ -113,6 +113,25 @@ vi.mock('../hooks/useShiftCards', () => ({
   useShiftCardsMine: () => ({ data: TARJETAS_MOCK }),
 }));
 
+// Resumen del turno ELEGIDO (`usePastShiftSummary`) — alimenta los operadores
+// cuando el informe es de un turno pasado. `RESUMEN_HOOK` registra con qué
+// selección se llamó; cada test pisa `resumenPorTurno` (por turno) según necesite.
+const RESUMEN_HOOK = vi.hoisted(() => vi.fn());
+let resumenPorTurno: Record<string, unknown[]> = {};
+vi.mock('../hooks/usePastShiftSummary', () => ({
+  usePastShiftSummary: (sel: { turno: string } | null) => {
+    RESUMEN_HOOK(sel);
+    return { data: sel ? (resumenPorTurno[sel.turno] ?? []) : undefined };
+  },
+}));
+vi.mock('../hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({
+    user: { id: 'u1', name: 'Ana Soto', email: 'ana@smi.local' },
+    role: 'SUPERVISOR',
+    isOfflineSnapshot: false,
+  }),
+}));
+
 import { seccionesDelFormulario, vueltasDeSeccion } from '../lib/reporte-diario';
 import { ReporteDiarioView } from './ReporteDiarioView';
 
@@ -612,6 +631,126 @@ describe('ReporteDiarioView · enviar el reporte', () => {
     const { personal } = MUTATE.mock.calls[0][0];
     expect(personal).toHaveLength(2);
     expect(personal.map((p: { rol: string }) => p.rol)).not.toContain('Jefe de turno transporte');
+  });
+});
+
+/**
+ * Informe de un TURNO PASADO: los «Operadores del turno» ya no pueden salir de
+ * «mis tarjetas» (solo baja lo cerrado en 48 h) — salen del resumen de ese
+ * turno (`GET /api/shifts`), que son las tarjetas cargadas antes en Informe
+ * diario equipos. Si no hay, se avisa el orden correcto sin bloquear.
+ */
+describe('ReporteDiarioView · operadores de un turno pasado', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 0)); // DIURNO del 23-09
+    resumenPorTurno = {};
+    RESUMEN_HOOK.mockClear();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const elegirTurnoPasado = () =>
+    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
+      target: { value: '2026-09-20' },
+    });
+
+  it('con el turno vigente NO consulta el resumen (sigue con mis tarjetas, offline)', () => {
+    render(<ReporteDiarioView />);
+
+    expect(RESUMEN_HOOK).toHaveBeenLastCalledWith(null);
+  });
+
+  it('con un turno pasado, los operadores salen del resumen de ese turno, sin camionetas', () => {
+    resumenPorTurno.DIURNO = [
+      {
+        id: 'sh1',
+        date: '2026-09-20',
+        type: 'DIURNO',
+        supervisorId: 'u1',
+        cards: [
+          {
+            id: 'c9',
+            equipoId: 'e9',
+            equipo: { internalCode: 'SEM-02', type: 'Semirremolque', controlUnit: 'HOURS', equipmentClass: 'HEAVY' },
+            operatorId: 'op9',
+            operatorName: 'Y. Segura',
+            valorInicial: 4526,
+            valorFinal: 4533.7,
+            horasMaquina: 7.7,
+            fecha: '2026-09-20T15:00:00.000Z',
+            fechaSalida: '2026-09-20T15:00:00.000Z',
+          },
+          {
+            id: 'c10',
+            equipoId: 'e10',
+            equipo: { internalCode: 'CM-001', type: 'Camioneta', controlUnit: 'KILOMETERS', equipmentClass: 'LIGHT' },
+            operatorId: null,
+            operatorName: 'Sin conductor',
+            valorInicial: 100,
+            valorFinal: 120,
+            horasMaquina: 20,
+            fecha: '2026-09-20T15:00:00.000Z',
+            fechaSalida: null,
+          },
+        ],
+        exitReports: [],
+      },
+    ];
+    render(<ReporteDiarioView />);
+
+    elegirTurnoPasado();
+
+    expect(screen.getByText('Y. Segura')).toBeTruthy();
+    expect(screen.getByText('SEM-02')).toBeTruthy();
+    expect(screen.queryByText('Sin conductor')).toBeNull(); // camioneta fuera
+  });
+
+  it('turno pasado sin tarjetas: avisa el orden correcto sin bloquear el envío', () => {
+    render(<ReporteDiarioView />);
+
+    elegirTurnoPasado();
+
+    expect(screen.getByText(/cárgalos primero en Informe diario equipos/)).toBeTruthy();
+    const boton = screen.getByText('Enviar reporte diario').closest('button');
+    expect(boton?.disabled).toBe(false);
+  });
+
+  /**
+   * La trampa real de terreno (04/11): el selector parte en el turno VIGENTE
+   * (de noche, NOCTURNO) y las tarjetas backfilleadas suelen ser del DIURNO —
+   * el turno elegido sale vacío aunque el día sí tenga equipos. El aviso
+   * sugiere el otro turno cuando ahí sí hay tarjetas.
+   */
+  it('turno elegido vacío pero el OTRO turno del día tiene equipos: lo sugiere', () => {
+    resumenPorTurno.DIURNO = [
+      {
+        id: 'sh1',
+        date: '2026-09-20',
+        type: 'DIURNO',
+        supervisorId: 'u1',
+        cards: [
+          {
+            id: 'c9',
+            equipoId: 'e9',
+            equipo: { internalCode: 'SEM-02', type: 'Semirremolque', controlUnit: 'HOURS', equipmentClass: 'HEAVY' },
+            operatorId: 'op9',
+            operatorName: 'Y. Segura',
+            valorInicial: 1,
+            valorFinal: 2,
+            horasMaquina: 1,
+            fecha: '2026-09-20T15:00:00.000Z',
+            fechaSalida: null,
+          },
+        ],
+        exitReports: [],
+      },
+    ];
+    render(<ReporteDiarioView />);
+
+    elegirTurnoPasado();
+    fireEvent.click(screen.getByRole('button', { name: 'Nocturno' })); // vacío
+
+    expect(screen.getByText(/El DIURNO de ese día sí tiene/)).toBeTruthy();
   });
 });
 
