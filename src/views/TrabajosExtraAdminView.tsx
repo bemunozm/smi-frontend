@@ -29,7 +29,7 @@ import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
-import { numeroReport } from '../lib/trabajos-extra';
+import { numeroReport, pistaFolio, textoPistaFolio } from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
 import { ACTIVIDADES, DESTINOS, actividadLabel, destinoLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
@@ -199,6 +199,10 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const [descripcion, setDescripcion] = useState(trabajo?.descripcion ?? '');
   const [observaciones, setObservaciones] = useState(trabajo?.observaciones ?? '');
   const [reportNumero, setReportNumero] = useState(trabajo?.reportNumero ?? '');
+  // La lista ya está en caché (la pantalla la cargó): de ahí, el último folio.
+  const { data: registrados = [] } = useTrabajosExtraList();
+  const pista = pistaFolio(registrados, reportNumero, trabajo?.id);
+  const textoPista = textoPistaFolio(pista);
   const [destino, setDestino] = useState(trabajo?.destino ?? '');
   const [planta, setPlanta] = useState(trabajo?.planta ?? '');
   // Foto del report — obligatoria al CREAR, igual que en Terreno; acá se
@@ -367,10 +371,19 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
-                  <Label>N° del report</Label>
-                  <Input inputMode="numeric" placeholder="Ej: 4509" />
-                </TextField>
+                <div className="flex flex-col gap-1">
+                  <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
+                    <Label>N° del report</Label>
+                    <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
+                  </TextField>
+                  {pista.repetido ? (
+                    <p className="m-0 text-xs font-semibold text-(--warning)">
+                      El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
+                    </p>
+                  ) : textoPista ? (
+                    <p className="m-0 text-xs text-muted-foreground">{textoPista}</p>
+                  ) : null}
+                </div>
 
                 <Select
                   fullWidth

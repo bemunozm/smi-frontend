@@ -16,7 +16,14 @@ import { useTurnoActual } from '../hooks/useTurnoActual';
 import { usePlantas } from '../hooks/useReporteDiario';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
-import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables, numeroReport } from '../lib/trabajos-extra';
+import {
+  COBRO_MINIMO_HORAS,
+  cobraMinimo,
+  horasCobrables,
+  numeroReport,
+  pistaFolio,
+  textoPistaFolio,
+} from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
   useEditarTrabajoExtra,
@@ -217,6 +224,7 @@ export function TrabajosExtraView() {
       <FormularioTrabajo
         key={formKey}
         inicial={vacio()}
+        folios={registros}
         equipos={equipos}
         operadores={operadores}
         enTurno={enTurno}
@@ -362,6 +370,8 @@ export function TrabajosExtraView() {
         plantas={plantas}
         textoBoton="Guardar cambios"
         numero={detalle.numero}
+        folios={registros}
+        idEditado={detalle.id}
         pendiente={isActualizando}
         onGuardar={async (payload) => {
           if (await guardarCambio(detalle, payload)) setEditando(false);
@@ -545,8 +555,14 @@ function FormularioTrabajo({
   onGuardar,
   onCancelar,
   numero,
+  folios,
+  idEditado,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
+  /** Los Reports ya registrados: de ahí sale el último folio y si el escrito se repite. */
+  folios: readonly { id: string; reportNumero?: string | null }[];
+  /** Al corregir, el Report que se edita (su folio no cuenta como repetido). */
+  idEditado?: string;
   /** El correlativo al corregir; sin él (alta), se asigna al guardar. */
   numero?: number | null;
   equipos: { id: string; internalCode: string }[];
@@ -582,6 +598,8 @@ function FormularioTrabajo({
   const faena = watch('faena') || 'Patillo';
   const actividades = watch('actividades') ?? [];
   const destino = watch('destino') ?? '';
+  const reportNumero = (watch('reportNumero') as string | undefined) ?? '';
+  const pista = pistaFolio(folios, reportNumero, idEditado);
   const ini = Number(watch('horometroInicial'));
   const fin = Number(watch('horometroFinal'));
   // Con inicial y final iguales el trabajo igual se cobra (el mínimo): por
@@ -671,8 +689,16 @@ function FormularioTrabajo({
 
         {/* El folio del report en papel: con él se cruza este registro contra
             la planilla del cliente (y el Excel que exporta el admin). */}
-        <Campo label="N° del report" hint={errors.reportNumero?.message}>
-          <Input inputMode="numeric" placeholder="Ej: 4509" {...register('reportNumero')} />
+        <Campo
+          label="N° del report"
+          hint={errors.reportNumero?.message ?? textoPistaFolio(pista) ?? undefined}
+          aviso={pista.repetido ? `El N° ${reportNumero.trim()} ya está registrado en otro Report: revisa el folio.` : undefined}
+        >
+          <Input
+            inputMode="numeric"
+            placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'}
+            {...register('reportNumero')}
+          />
         </Campo>
 
         {/* Dónde se hizo: solo una limpieza de silos puede ser en planta —
