@@ -35,6 +35,27 @@ vi.mock('../hooks/usePastShiftSummary', () => ({
   usePastShiftSummary: (sel: unknown) => ({ data: sel ? resumenTurnoPasado : undefined }),
 }));
 
+// Carga rápida del turno pasado: el hook tiene sus propios tests
+// (`usePastShiftQuickEntry.test.tsx`); acá solo que la vista lo renderice y
+// dispare sus acciones.
+const guardarRapidoMock = vi.fn();
+vi.mock('../hooks/usePastShiftQuickEntry', () => ({
+  usePastShiftQuickEntry: () => ({
+    filas: [{ equipoId: '', operatorId: '', inicial: '', final: '', litros: '' }],
+    setFila: vi.fn(),
+    agregarFila: vi.fn(),
+    quitarFila: vi.fn(),
+    equiposDeFila: () => EQUIPOS_DISPONIBLES,
+    errorDeFila: () => null,
+    puedeGuardar: true,
+    guardar: guardarRapidoMock,
+    isGuardando: false,
+  }),
+}));
+vi.mock('../hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({ user: { id: 'u1' }, role: null, isOfflineSnapshot: false }),
+}));
+
 // `lineaEstadoCorreo` es una función pura (sin dependencias del hook) que la
 // vista importa del MISMO módulo — se reimplementa acá en vez de
 // `importActual` para no arrastrar el resto de `useShiftRegister.ts` (offline/
@@ -624,6 +645,23 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.queryByRole('group', { name: 'Tipo de equipo' })).toBeNull();
       expect(screen.getByText('Las camionetas no se cargan para días pasados.')).toBeTruthy();
+    });
+
+    it('en modo pasado ofrece la carga rápida del turno; en modo normal no', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+      expect(screen.getByText('Carga rápida del turno')).toBeTruthy();
+      cleanup();
+
+      renderView('phone');
+      expect(screen.queryByText('Carga rápida del turno')).toBeNull();
+    });
+
+    it('el botón de la carga rápida guarda vía el hook', () => {
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      fireEvent.click(screen.getByRole('button', { name: /Guardar tarjetas del turno/ }));
+
+      expect(guardarRapidoMock).toHaveBeenCalledTimes(1);
     });
 
     it('en modo pasado, elegir un equipo NO precarga el horómetro actual', () => {
