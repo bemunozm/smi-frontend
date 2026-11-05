@@ -56,6 +56,8 @@ const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.MANTENEDOR]: [MANTENCION, EQUIPOS, INVENTARIO],
   // Sus cuatro pantallas; Notificaciones queda en «Más».
   [ROLES.SECRETARIA]: [INICIO, HALLAZGOS, TRABAJOS_EXTRA, REPORTES_DIARIOS],
+  // Vive en su shell (`/camioneta`); acá solo llega a Notificaciones o Perfil.
+  [ROLES.PREVENCIONISTA]: [],
 };
 
 /** Destinos que viven fuera del menú: se muestran sin pasar por `allowed`. */

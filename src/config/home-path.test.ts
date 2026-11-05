@@ -12,6 +12,10 @@ describe('homePathFor', () => {
     expect(homePathFor(ROLES.MANTENEDOR)).toBe('/mantenimiento/ordenes');
   });
 
+  it('manda a PREVENCIONISTA a su camioneta, su única pantalla', () => {
+    expect(homePathFor(ROLES.PREVENCIONISTA)).toBe('/camioneta');
+  });
+
   it('manda a ADMIN al dashboard', () => {
     expect(homePathFor(ROLES.ADMIN)).toBe('/');
   });

@@ -22,6 +22,8 @@ export function homePathFor(role: Role | null): string {
       return '/terreno/registro';
     case ROLES.MANTENEDOR:
       return '/mantenimiento/ordenes';
+    case ROLES.PREVENCIONISTA:
+      return '/camioneta';
     case ROLES.ADMIN:
     case ROLES.SECRETARIA:
       return '/';

@@ -13,6 +13,9 @@ export const ROLES = {
   /** Oficina: dashboard, y crear/corregir hallazgos, trabajos extra y
    * reportes diarios (ver `lib/permissions.ts`). */
   SECRETARIA: 'SECRETARIA',
+  /** Prevencionista de riesgos: solo «Mi camioneta» (km de salida y de
+   * carga de combustible de los livianos), en `/camioneta`. */
+  PREVENCIONISTA: 'PREVENCIONISTA',
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];

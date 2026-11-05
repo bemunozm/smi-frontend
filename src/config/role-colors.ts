@@ -8,6 +8,7 @@ const ROLE_CHIP_COLOR: Record<Role, RoleChipColor> = {
   [ROLES.SUPERVISOR]: 'success',
   [ROLES.MANTENEDOR]: 'warning',
   [ROLES.SECRETARIA]: 'default',
+  [ROLES.PREVENCIONISTA]: 'warning',
 };
 
 /** Color de Chip/Avatar consistente por rol, reusado en Topbar y Usuarios. */
@@ -20,6 +21,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   [ROLES.SUPERVISOR]: 'Supervisor',
   [ROLES.MANTENEDOR]: 'Mantenedor',
   [ROLES.SECRETARIA]: 'Secretaria',
+  [ROLES.PREVENCIONISTA]: 'Prevencionista',
 };
 
 /** Opciones `{value,label}` para selects de rol (crear/editar usuario). */

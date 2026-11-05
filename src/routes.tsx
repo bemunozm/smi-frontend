@@ -19,6 +19,7 @@ import { MovimientosView } from './views/MovimientosView';
 import { LoginView } from './views/LoginView';
 import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
+import { PrevencionLayout } from './layout/PrevencionLayout';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
 import { MiCamionetaView } from './views/MiCamionetaView';
 import { WorkshopStockView } from './views/WorkshopStockView';
@@ -209,6 +210,18 @@ export const router = createBrowserRouter([
                     element: <FichaEquipoView contexto="taller" />,
                   },
                 ],
+              },
+            ],
+          },
+          // Prevención de riesgos — shell propio con una sola pantalla: la
+          // camioneta (km de salida y de carga de combustible). Sin «Ver
+          // camioneta»: la ficha vive en Equipos, que este rol no abre.
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.PREVENCIONISTA]} />,
+            children: [
+              {
+                element: <PrevencionLayout />,
+                children: [{ path: '/camioneta', element: <MiCamionetaView conFicha={false} /> }],
               },
             ],
           },

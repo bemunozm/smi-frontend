@@ -21,6 +21,11 @@ describe('routes', () => {
     expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
   });
 
+  it('`/camioneta` es solo del PREVENCIONISTA', () => {
+    const guard = findGuardOf(router.routes as unknown as Rt[], '/camioneta');
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.PREVENCIONISTA]);
+  });
+
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
     for (const path of [
       '/hallazgos',
