@@ -7,6 +7,7 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useTurnoActual } from '../hooks/useTurnoActual';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
+import { DateField } from '../components/terreno/DateField';
 import { ROLES } from '../types/roles';
 import {
   useCreateReporteDiario,
@@ -534,21 +535,15 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
           }
         />
         <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2">
-          <Campo label="Fecha del reporte">
-            <Input
-              type="date"
-              aria-label="Fecha del reporte"
-              min={toDateOnly(
-                new Date(reloj.fecha.getFullYear(), reloj.fecha.getMonth(), reloj.fecha.getDate() - 30),
-              )}
-              max={toDateOnly(reloj.fecha)}
-              value={elegido.fecha}
-              onChange={(e) => {
-                const fecha = e.target.value;
-                if (fecha) setElegido((p) => ({ ...p, fecha }));
-              }}
-            />
-          </Campo>
+          <DateField
+            label="Fecha del reporte"
+            value={elegido.fecha}
+            onChange={(fecha) => setElegido((p) => ({ ...p, fecha }))}
+            min={toDateOnly(
+              new Date(reloj.fecha.getFullYear(), reloj.fecha.getMonth(), reloj.fecha.getDate() - 30),
+            )}
+            max={toDateOnly(reloj.fecha)}
+          />
           <div className="flex flex-col gap-1.5">
             <Label>Turno del reporte</Label>
             <div className="flex flex-wrap gap-2">
