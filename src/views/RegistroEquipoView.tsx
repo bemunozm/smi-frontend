@@ -21,6 +21,7 @@ import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { PastShiftDialog } from '../components/terreno/PastShiftDialog';
+import { PastShiftQuickEntry } from '../components/terreno/PastShiftQuickEntry';
 import { useDailyChecklists } from '../hooks/useDailyChecklists';
 import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -1199,7 +1200,13 @@ export function RegistroEquipoView() {
         formulario={
           <>
             {modoPasado ? (
-              <Hint>Las camionetas no se cargan para días pasados.</Hint>
+              <>
+                <Hint>Las camionetas no se cargan para días pasados.</Hint>
+                {/* La planilla de papel en pantalla: N filas → N tarjetas
+                    abiertas y cerradas de este turno, de una vez. El form
+                    clásico de abajo sigue para la tarjeta suelta. */}
+                <PastShiftQuickEntry ctx={ctx} disponibles={disponibles} operadores={operadores} />
+              </>
             ) : (
               selectorClase
             )}
