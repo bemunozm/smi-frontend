@@ -30,6 +30,11 @@ describe('BottomNav', () => {
     expect(screen.getByText('Más')).toBeTruthy();
   });
 
+  it('la «Mantención» del ADMIN lleva a su registro del panel, no al taller del mantenedor', () => {
+    renderNav(ROLES.ADMIN);
+    expect(screen.getByText('Mantención').closest('a')?.getAttribute('href')).toBe('/mantenciones');
+  });
+
   it('MANTENEDOR ve Mantención primero, sin Inicio (el dashboard es solo ADMIN)', () => {
     renderNav(ROLES.MANTENEDOR);
 

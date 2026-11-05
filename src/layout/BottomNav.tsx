@@ -26,6 +26,9 @@ const INICIO: PrimaryItem = { to: '/', label: 'Inicio', icon: LayoutDashboard };
 const EQUIPOS: PrimaryItem = { to: '/equipos', label: 'Equipos', icon: Truck };
 const INVENTARIO: PrimaryItem = { to: '/inventario', label: 'Inventario', icon: Package };
 const MANTENCION: PrimaryItem = { to: '/mantenimiento', label: 'Mantención', icon: Wrench };
+// El ADMIN no trabaja en el taller: su «Mantención» es el registro del panel
+// (`/mantenciones`), no el shell del mantenedor (pedido del 05/11).
+const MANTENCIONES: PrimaryItem = { to: '/mantenciones', label: 'Mantención', icon: Wrench };
 // El ícono calca el de "Registro de equipo" en `TerrenoLayout` — `/terreno`
 // redirige ahí, así que en la práctica es el mismo destino.
 const TERRENO: PrimaryItem = { to: '/terreno', label: 'Terreno', icon: ClipboardCheck };
@@ -40,7 +43,8 @@ const REPORTES_DIARIOS: PrimaryItem = { to: '/reportes-diarios', label: 'Producc
  * - SUPERVISOR vive en Terreno y MANTENEDOR en Mantención (su home, ver
  *   `config/home-path.ts`) — van primero, y no tienen «Inicio»: el dashboard
  *   `/` es solo ADMIN;
- * - ADMIN mantiene el set original.
+ * - ADMIN mantiene el set original, con «Mantención» apuntando a su registro
+ *   del panel (`/mantenciones`), no al taller.
  *
  * Este mapa decide ORDEN + qué mostrar por rol; el gate real de acceso vive
  * en `routes.tsx` — las pantallas del menú se siguen filtrando contra
@@ -52,7 +56,7 @@ const REPORTES_DIARIOS: PrimaryItem = { to: '/reportes-diarios', label: 'Producc
  */
 const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.SUPERVISOR]: [TERRENO, EQUIPOS, INVENTARIO],
-  [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCION],
+  [ROLES.ADMIN]: [INICIO, EQUIPOS, INVENTARIO, MANTENCIONES],
   [ROLES.MANTENEDOR]: [MANTENCION, EQUIPOS, INVENTARIO],
   // Sus cuatro pantallas; Notificaciones queda en «Más».
   [ROLES.SECRETARIA]: [INICIO, HALLAZGOS, TRABAJOS_EXTRA, REPORTES_DIARIOS],
