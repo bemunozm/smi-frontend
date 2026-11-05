@@ -14,6 +14,7 @@ import { generateUuid } from '../lib/uuid';
 import { toDateOnly } from '../lib/turno';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
+import { detalleComparable } from '../lib/trabajos-extra';
 import type { TrabajoExtraEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
@@ -65,6 +66,9 @@ export function useCrearTrabajoExtra() {
       const subida = await uploadFile(foto);
       return createTrabajoExtra({
         ...values,
+        // Forma canónica del desglose (planta solo en filas PLANTA, horas a 2
+        // decimales) — la misma normalización que aplica el servidor.
+        detalle: (detalleComparable(values.detalle) ?? []) as TrabajoExtraForm['detalle'],
         fotoKey: subida.key,
         id: generateUuid(),
         capturedAt: new Date().toISOString(),
@@ -100,6 +104,7 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
         user.id,
         {
           ...resto,
+          detalle: (detalleComparable(values.detalle) ?? []) as TrabajoExtraForm['detalle'],
           ...(fecha && fecha !== toDateOnly(new Date()) ? { fecha } : {}),
           id: generateUuid(),
           capturedAt: new Date().toISOString(),
@@ -134,16 +139,10 @@ const CAMPOS_TRABAJO = [
   'turno',
   'horometroInicial',
   'horometroFinal',
-  'actividades',
   'otraActividad',
   'descripcion',
   'observaciones',
   'reportNumero',
-  'destino',
-  'planta',
-  'reportNumero',
-  'destino',
-  'planta',
 ] as const;
 
 /** Edición de un trabajo ya registrado por la cola. El administrador se entera
@@ -157,33 +156,45 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
     build: ({ original, corregido }) => {
       // Un texto opcional vacío y uno ausente son lo mismo: sin esto, abrir y
       // guardar sin tocar nada marcaría `observaciones` como cambiada.
-      const base: TrabajoExtraForm = {
+      const base = {
         equipoId: original.equipoId,
         operatorId: original.operatorId ?? '',
         faena: original.faena,
-        turno: original.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
+        turno: original.turno === 'NOCTURNO' ? ('NOCTURNO' as const) : ('DIURNO' as const),
         horometroInicial: original.horometroInicial,
         horometroFinal: original.horometroFinal,
-        actividades: original.actividades,
         otraActividad: original.otraActividad ?? '',
         descripcion: original.descripcion,
         observaciones: original.observaciones ?? '',
-        // Registros previos a los campos del report: la base vacía evita
-        // marcar como "cambio" lo que el formulario solo completó por primera
-        // vez... pero si el usuario los llena, sí viajan como edición.
+        // Registros previos al folio del report: la base vacía evita marcar
+        // como "cambio" lo que el formulario solo completó por primera vez...
+        // pero si el usuario lo llena, sí viaja como edición.
         reportNumero: original.reportNumero ?? '',
-        destino: (original.destino ?? '') as TrabajoExtraForm['destino'],
-        planta: original.planta ?? '',
       };
-      const nuevo: TrabajoExtraEdicion = {
+      const nuevo = {
         ...corregido,
         otraActividad: corregido.otraActividad ?? '',
         observaciones: corregido.observaciones ?? '',
-        planta: corregido.planta ?? '',
       };
       const cambio = edicionContraBase(base, nuevo, CAMPOS_TRABAJO);
-      if (!cambio.hayCambios) return null;
-      return { params: { id: original.id }, body: cambio.cambios, expected: cambio.esperado };
+      // El desglose va APARTE del diff de escalares: es un arreglo de objetos
+      // y la precondición `X-Expected` solo acepta primitivos. Cuando cambia,
+      // viaja completo (reemplaza al vigente) y el servidor lo audita por
+      // contenido; un formulario legacy que no armó la tabla no manda nada.
+      const detalleBase = detalleComparable(original.detalleActividades);
+      const detalleNuevo = detalleComparable(corregido.detalle);
+      const detalleCambio =
+        detalleNuevo !== undefined &&
+        JSON.stringify(detalleBase ?? null) !== JSON.stringify(detalleNuevo);
+      if (!cambio.hayCambios && !detalleCambio) return null;
+      return {
+        params: { id: original.id },
+        body: {
+          ...cambio.cambios,
+          ...(detalleCambio ? { detalle: detalleNuevo as TrabajoExtraForm['detalle'] } : {}),
+        },
+        expected: cambio.esperado,
+      };
     },
     errorFallback: 'No se pudo guardar el cambio en el equipo.',
     errorMessage: (error) => mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'),

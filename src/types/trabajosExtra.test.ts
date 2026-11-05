@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { trabajoExtraFormSchema } from './trabajosExtra';
+import { trabajoExtraEdicionSchema, trabajoExtraFormSchema } from './trabajosExtra';
+
+const fila = (over: Record<string, unknown> = {}) => ({
+  actividad: 'LIMPIEZA_CANCHA',
+  lugar: 'TRANSPORTE',
+  horas: 2,
+  ...over,
+});
 
 const base = {
   equipoId: 'e1',
@@ -8,10 +15,9 @@ const base = {
   turno: 'DIURNO',
   horometroInicial: 1200,
   horometroFinal: 1212,
-  actividades: ['REGULACION_CARGA'],
+  detalle: [fila()],
   descripcion: 'Carga de material',
   reportNumero: '4509',
-  destino: 'TRANSPORTE',
 };
 
 describe('trabajoExtraFormSchema', () => {
@@ -31,21 +37,35 @@ describe('trabajoExtraFormSchema', () => {
     }
   });
 
+  // --- El desglose: una fila por actividad, con lugar y horas --------------
+
   it('rechaza una actividad que no está en la lista', () => {
-    expect(trabajoExtraFormSchema.safeParse({ ...base, actividades: ['OTRA'] }).success).toBe(false);
+    expect(
+      trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ actividad: 'OTRA' })] }).success,
+    ).toBe(false);
   });
 
-  /** Una salida suele mezclar tareas: el formulario acepta varias. */
-  it('acepta varias actividades', () => {
+  /** Una salida suele mezclar tareas: el desglose acepta varias filas. */
+  it('acepta varias filas', () => {
     const r = trabajoExtraFormSchema.safeParse({
       ...base,
-      actividades: ['SOLTAR_MATERIAL', 'LIMPIEZA_CANCHA'],
+      detalle: [fila({ actividad: 'SOLTAR_MATERIAL', horas: 1.5 }), fila({ lugar: 'VARIADO', horas: 0.5 })],
     });
     expect(r.success).toBe(true);
   });
 
   it('rechaza un trabajo sin ninguna actividad', () => {
-    expect(trabajoExtraFormSchema.safeParse({ ...base, actividades: [] }).success).toBe(false);
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [] }).success).toBe(false);
+  });
+
+  it('cada fila exige sus horas, mayores a 0 y de hasta 24', () => {
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ horas: undefined })] }).success).toBe(false);
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ horas: 0 })] }).success).toBe(false);
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ horas: 25 })] }).success).toBe(false);
+  });
+
+  it('cada fila exige dónde se hizo', () => {
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ lugar: '' })] }).success).toBe(false);
   });
 
   /**
@@ -54,51 +74,79 @@ describe('trabajoExtraFormSchema', () => {
    * regla — acá se avisa antes de mandar.
    */
   it('rechaza «Otro» sin describir cuál fue', () => {
-    expect(trabajoExtraFormSchema.safeParse({ ...base, actividades: ['OTRO'] }).success).toBe(false);
     expect(
-      trabajoExtraFormSchema.safeParse({ ...base, actividades: ['OTRO'], otraActividad: '   ' })
-        .success,
+      trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ actividad: 'OTRO' })] }).success,
+    ).toBe(false);
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        detalle: [fila({ actividad: 'OTRO' })],
+        otraActividad: '   ',
+      }).success,
     ).toBe(false);
   });
 
   it('acepta «Otro» con su texto', () => {
     const r = trabajoExtraFormSchema.safeParse({
       ...base,
-      actividades: ['HACER_PETRIL', 'OTRO'],
+      detalle: [fila({ actividad: 'HACER_PETRIL' }), fila({ actividad: 'OTRO' })],
       otraActividad: 'Despeje de acceso a romana',
     });
     expect(r.success).toBe(true);
   });
 
-  // --- Report: dónde se hizo (regla del cliente) ----------------------------
+  // --- Report: dónde se hizo cada fila (regla del cliente) ------------------
 
-  it('rechaza un trabajo sin N° de report o sin destino', () => {
+  it('rechaza un trabajo sin N° de report', () => {
     expect(trabajoExtraFormSchema.safeParse({ ...base, reportNumero: '' }).success).toBe(false);
-    expect(trabajoExtraFormSchema.safeParse({ ...base, destino: undefined }).success).toBe(false);
   });
 
   it('PLANTA solo con limpieza de silos, y siempre diciendo cuál', () => {
-    // Sin limpieza de silos → no puede ser planta.
-    expect(
-      trabajoExtraFormSchema.safeParse({ ...base, destino: 'PLANTA', planta: 'Planta 1' }).success,
-    ).toBe(false);
-    // Con limpieza de silos pero sin decir cuál planta → tampoco.
-    expect(
-      trabajoExtraFormSchema.safeParse({ ...base, actividades: ['LIMPIEZA_SILOS'], destino: 'PLANTA' })
-        .success,
-    ).toBe(false);
-    // Completo → válido.
+    // Sin limpieza de silos → esa fila no puede ser planta.
     expect(
       trabajoExtraFormSchema.safeParse({
         ...base,
-        actividades: ['LIMPIEZA_SILOS'],
-        destino: 'PLANTA',
-        planta: 'Planta 4',
+        detalle: [fila({ lugar: 'PLANTA', planta: 'Planta 1' })],
+      }).success,
+    ).toBe(false);
+    // Con limpieza de silos pero sin decir cuál planta → tampoco.
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        detalle: [fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA' })],
+      }).success,
+    ).toBe(false);
+    // Completo → válido, incluso junto a otra fila en transporte.
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        detalle: [
+          fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA', planta: 'Planta 4' }),
+          fila({ actividad: 'SOLTAR_MATERIAL' }),
+        ],
       }).success,
     ).toBe(true);
   });
 
   it('las otras actividades aceptan Transporte o Variado', () => {
-    expect(trabajoExtraFormSchema.safeParse({ ...base, destino: 'VARIADO' }).success).toBe(true);
+    expect(
+      trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ lugar: 'VARIADO' })] }).success,
+    ).toBe(true);
+  });
+});
+
+describe('trabajoExtraEdicionSchema (trabajos legacy)', () => {
+  it('acepta una edición sin folio ni desglose: el diff no los toca', () => {
+    const { reportNumero: _folio, detalle: _detalle, ...sinReport } = base;
+    expect(trabajoExtraEdicionSchema.safeParse(sinReport).success).toBe(true);
+  });
+
+  it('cuando el desglose sí viene, aplica las mismas reglas', () => {
+    expect(
+      trabajoExtraEdicionSchema.safeParse({
+        ...base,
+        detalle: [fila({ lugar: 'PLANTA', planta: 'Planta 1' })],
+      }).success,
+    ).toBe(false);
   });
 });

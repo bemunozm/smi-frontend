@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil, Plus, X } from 'lucide-react';
 
 import {
   trabajoExtraFormSchema,
   ACTIVIDADES,
   DESTINOS,
   actividadLabel,
-  destinoLabel,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
@@ -16,7 +15,15 @@ import { useTurnoActual } from '../hooks/useTurnoActual';
 import { usePlantas } from '../hooks/useReporteDiario';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
-import { COBRO_MINIMO_HORAS, cobraMinimo, horasCobrables, numeroReport } from '../lib/trabajos-extra';
+import {
+  COBRO_MINIMO_HORAS,
+  actividadDeFila,
+  cobraMinimo,
+  horasCobrables,
+  horasDelDetalle,
+  lugarDeFila,
+  numeroReport,
+} from '../lib/trabajos-extra';
 import {
   useRegistrarTrabajoExtra,
   useEditarTrabajoExtra,
@@ -39,7 +46,6 @@ import {
   Card,
   CardHead,
   Chip,
-  ChipSeleccion,
   ChipContexto,
   Cifras,
   Filas,
@@ -108,6 +114,20 @@ const FAENAS = [
   { valor: 'Kainita', label: 'Kainita' },
 ];
 
+/**
+ * Una fila del desglose mientras se escribe: los campos parten vacíos, cosa
+ * que el schema no admite — por eso el tipo propio y los `as` al leer/escribir
+ * el formulario. Validar valida la forma final, no la intermedia.
+ */
+interface FilaDetalleInput {
+  actividad: string;
+  lugar: string;
+  planta?: string;
+  horas?: number;
+}
+
+const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', planta: '', horas: undefined });
+
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
@@ -144,11 +164,10 @@ export function TrabajosExtraView() {
     operatorId: '',
     faena: 'Patillo',
     turno: turnoActual.turno,
-    actividades: [],
+    detalle: [filaVacia()] as unknown as TrabajoExtraFormInput['detalle'],
     otraActividad: '',
     fecha: toDateOnly(new Date()),
     reportNumero: '',
-    planta: '',
   });
 
   // Catálogo de plantas del reporte diario (precargado para offline): dónde
@@ -345,13 +364,20 @@ export function TrabajosExtraView() {
           turno: detalle.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
           horometroInicial: detalle.horometroInicial,
           horometroFinal: detalle.horometroFinal,
-          actividades: detalle.actividades,
+          // El desglose guardado; en un registro LEGACY (previo al desglose)
+          // se parte de sus actividades y se completan lugar y horas acá.
+          detalle: (detalle.detalleActividades?.length
+            ? detalle.detalleActividades.map((f) => ({
+                actividad: f.actividad,
+                lugar: f.lugar,
+                planta: f.planta ?? '',
+                horas: f.horas,
+              }))
+            : detalle.actividades.map((a) => ({ ...filaVacia(), actividad: a }))) as unknown as TrabajoExtraFormInput['detalle'],
           otraActividad: detalle.otraActividad ?? '',
           descripcion: detalle.descripcion,
           observaciones: detalle.observaciones ?? '',
           reportNumero: detalle.reportNumero ?? '',
-          destino: (detalle.destino ?? undefined) as TrabajoExtraFormInput['destino'],
-          planta: detalle.planta ?? '',
         }}
         equipos={equipos}
         operadores={operadores}
@@ -417,27 +443,38 @@ export function TrabajosExtraView() {
             ['Equipo', codigo(detalle)],
             ['Operador', detalle.operador],
             ['Report N°', detalle.reportNumero || '—'],
-            [
-              'Dónde se hizo',
-              detalle.destino
-                ? detalle.destino === 'PLANTA'
-                  ? detalle.planta || destinoLabel.PLANTA
-                  : (destinoLabel[detalle.destino] ?? detalle.destino)
-                : '—',
-            ],
           ]}
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Actividades" />
-        <div className="flex flex-wrap gap-1.5">
-          {etiquetaActividades(detalle)
-            .split(', ')
-            .map((a) => (
-              <ChipContexto key={a}>{a}</ChipContexto>
+        {detalle.detalleActividades?.length ? (
+          // El desglose: qué se hizo, dónde y cuántas horas máquina cada una.
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border">
+            {detalle.detalleActividades.map((f, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2.5 border-t border-border bg-card px-3 py-2.5 first:border-t-0"
+              >
+                <div className="min-w-0">
+                  <div className="text-[14.5px] font-semibold">{actividadDeFila(f, detalle.otraActividad)}</div>
+                  <div className="text-[12.5px] text-muted-foreground">{lugarDeFila(f)}</div>
+                </div>
+                <span className="tabular shrink-0 text-[14.5px] font-semibold">{fmtNum(f.horas)} h</span>
+              </div>
             ))}
-        </div>
+          </div>
+        ) : (
+          // Registro anterior al desglose: solo la lista de actividades.
+          <div className="flex flex-wrap gap-1.5">
+            {etiquetaActividades(detalle)
+              .split(', ')
+              .map((a) => (
+                <ChipContexto key={a}>{a}</ChipContexto>
+              ))}
+          </div>
+        )}
       </div>
 
       {(
@@ -564,7 +601,7 @@ function FormularioTrabajo({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
     resolver: zodResolver(trabajoExtraFormSchema),
     defaultValues: inicial,
@@ -574,14 +611,37 @@ function FormularioTrabajo({
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
   const faena = watch('faena') || 'Patillo';
-  const actividades = watch('actividades') ?? [];
-  const destino = watch('destino') ?? '';
+  /** Las filas del desglose, con los vacíos intermedios que el schema no admite. */
+  const filas = (watch('detalle') ?? []) as unknown as FilaDetalleInput[];
+  // Antes del primer intento de guardar no se valida al tipear: marcaría en
+  // rojo las celdas de la fila que recién se está llenando.
+  const ponerFilas = (nuevas: FilaDetalleInput[]) =>
+    setValue('detalle', nuevas as unknown as TrabajoExtraFormInput['detalle'], { shouldValidate: isSubmitted });
+  const cambiarFila = (i: number, cambios: Partial<FilaDetalleInput>) =>
+    ponerFilas(filas.map((f, j) => (j === i ? { ...f, ...cambios } : f)));
+  /** Errores por fila (`detalle.0.lugar`…) y el del arreglo (sin filas). */
+  const erroresDetalle = errors.detalle as
+    | (Array<Partial<Record<keyof FilaDetalleInput, { message?: string }>> | undefined> & { message?: string })
+    | undefined;
   const ini = Number(watch('horometroInicial'));
   const fin = Number(watch('horometroFinal'));
   // Con inicial y final iguales el trabajo igual se cobra (el mínimo): por
   // eso `>=` y no `>`. Si falta uno de los dos, todavía no hay nada que calcular.
   const totalHoras =
     Number.isFinite(ini) && Number.isFinite(fin) && fin >= ini ? Number((fin - ini).toFixed(2)) : null;
+
+  // Aviso (no bloquea, decisión del cliente): el desglose debería sumar lo
+  // que marca el trabajo. Se compara contra las horas reales Y las cobrables
+  // —con el mínimo de 1 h ambas son referencias legítimas— y solo cuando
+  // todas las filas ya tienen horas, para no retar a quien va a mitad.
+  const horasFilas = filas.map((f) => Number(f.horas)).filter((h) => Number.isFinite(h) && h > 0);
+  const sumaDetalle = horasDelDetalle(horasFilas.map((horas) => ({ horas })));
+  const descuadre =
+    totalHoras != null &&
+    filas.length > 0 &&
+    horasFilas.length === filas.length &&
+    Math.abs(sumaDetalle - totalHoras) > 0.01 &&
+    Math.abs(sumaDetalle - horasCobrables(totalHoras)) > 0.01;
 
   const equipoId = watch('equipoId') ?? '';
   const operadorEnTurno = enTurno.get(equipoId);
@@ -669,31 +729,6 @@ function FormularioTrabajo({
           <Input inputMode="numeric" placeholder="Ej: 4509" {...register('reportNumero')} />
         </Campo>
 
-        {/* Dónde se hizo: solo una limpieza de silos puede ser en planta —
-            la regla la avisa el schema (`.refine`) al intentar guardar. */}
-        <div className="flex flex-col gap-1.5">
-          <Label>Dónde se hizo</Label>
-          <Segmentado
-            etiqueta="Dónde se hizo"
-            valor={destino}
-            onChange={(v) => setValue('destino', v as TrabajoExtraForm['destino'], { shouldValidate: true })}
-            opciones={DESTINOS.map((d) => ({ valor: d.value as string, label: d.label }))}
-          />
-          {errors.destino?.message && <Hint>{errors.destino.message}</Hint>}
-        </div>
-
-        {destino === 'PLANTA' && (
-          <Campo label="¿En qué planta?" requerido hint={errors.planta?.message}>
-            <Selector
-              etiqueta="Planta"
-              placeholder="Elegí la planta"
-              valor={watch('planta') ?? ''}
-              onChange={(nombre) => setValue('planta', nombre, { shouldValidate: true })}
-              opciones={plantas.map((p) => ({ valor: p.nombre, titulo: p.nombre }))}
-            />
-          </Campo>
-        )}
-
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
             <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroInicial', { valueAsNumber: true })} />
@@ -722,38 +757,96 @@ function FormularioTrabajo({
         />
 
         {/*
-          Multi-selección con chips grandes y no un `select` múltiple: una
-          salida suele mezclar tareas, y el `select` múltiple obliga a saber
-          que hay que mantener Ctrl apretado — impensable con guantes.
+          El desglose del report, UNA FILA POR ACTIVIDAD (planilla del
+          cliente): qué se hizo, dónde —solo una limpieza de silos puede ser
+          en planta; la regla la avisa el schema al guardar— y cuántas horas
+          máquina tomó. Las horas son desglose: el cobro sigue saliendo de
+          los horómetros, y un descuadre avisa sin bloquear.
         */}
-        <div className="flex flex-col gap-1.5">
-          <Label>Actividades</Label>
-          <div className="flex flex-wrap gap-2">
-            {ACTIVIDADES.map((a) => (
-              <ChipSeleccion
-                key={a.value}
-                activo={actividades.includes(a.value)}
-                onToggle={() =>
-                  setValue(
-                    'actividades',
-                    actividades.includes(a.value)
-                      ? actividades.filter((v) => v !== a.value)
-                      : [...actividades, a.value],
-                    { shouldValidate: true },
-                  )
-                }
-              >
-                {a.label}
-              </ChipSeleccion>
-            ))}
-          </div>
-          {errors.actividades?.message && <Hint>{errors.actividades.message}</Hint>}
+        <div className="flex flex-col gap-2">
+          <Label>Actividades del report</Label>
+          {filas.map((fila, i) => {
+            const err = erroresDetalle?.[i];
+            return (
+              <div key={i} className="flex flex-col gap-2 rounded-2xl border border-border bg-[#fafbfc] p-2.5">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Campo label={`Actividad ${i + 1}`} error={err?.actividad?.message}>
+                      <Selector
+                        etiqueta={`Actividad ${i + 1}`}
+                        placeholder="Elegí la actividad"
+                        valor={fila.actividad}
+                        onChange={(v) => cambiarFila(i, { actividad: v })}
+                        opciones={ACTIVIDADES.map((a) => ({ valor: a.value, titulo: a.label }))}
+                      />
+                    </Campo>
+                  </div>
+                  {filas.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label={`Quitar la actividad ${i + 1}`}
+                      onClick={() => ponerFilas(filas.filter((_, j) => j !== i))}
+                      className="inline-flex h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl border-[1.5px] border-[var(--line2,#c3c9d1)] bg-card text-muted-foreground"
+                    >
+                      <X className="h-[18px] w-[18px]" aria-hidden />
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
+                  <Campo label="Dónde se hizo" error={err?.lugar?.message}>
+                    <Selector
+                      etiqueta={`Dónde se hizo la actividad ${i + 1}`}
+                      placeholder="Elegí dónde"
+                      valor={fila.lugar}
+                      onChange={(v) => cambiarFila(i, { lugar: v, ...(v !== 'PLANTA' ? { planta: '' } : {}) })}
+                      opciones={DESTINOS.map((d) => ({ valor: d.value as string, titulo: d.label }))}
+                    />
+                  </Campo>
+                  <Campo label="HM" unidad="h" error={err?.horas?.message}>
+                    <Input
+                      numerico
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      aria-label={`Horas máquina de la actividad ${i + 1}`}
+                      value={fila.horas ?? ''}
+                      onChange={(e) =>
+                        cambiarFila(i, { horas: e.target.value === '' ? undefined : Number(e.target.value) })
+                      }
+                    />
+                  </Campo>
+                </div>
+                {fila.lugar === 'PLANTA' && (
+                  <Campo label="¿En qué planta?" requerido error={err?.planta?.message}>
+                    <Selector
+                      etiqueta={`Planta de la actividad ${i + 1}`}
+                      placeholder="Elegí la planta"
+                      valor={fila.planta ?? ''}
+                      onChange={(nombre) => cambiarFila(i, { planta: nombre })}
+                      opciones={plantas.map((p) => ({ valor: p.nombre, titulo: p.nombre }))}
+                    />
+                  </Campo>
+                )}
+              </div>
+            );
+          })}
+          <Boton variante="contorno" ancho type="button" onClick={() => ponerFilas([...filas, filaVacia()])}>
+            <Plus className="h-[18px] w-[18px]" /> Agregar actividad
+          </Boton>
+          {erroresDetalle?.message && <Hint>{erroresDetalle.message}</Hint>}
+          {descuadre && totalHoras != null && (
+            <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" role="status">
+              Las actividades suman {fmtNum(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
+              {fmtNum(horasCobrables(totalHoras))} h a cobrar. Se puede registrar igual — revisá el desglose por si
+              un dato quedó mal.
+            </span>
+          )}
         </div>
 
-        {/* El texto aparece solo si se eligió «Otro», y es obligatorio: sin
-            él la actividad quedaría como «otro» a secas y el trabajo no se
-            podría justificar ni cobrar. */}
-        {actividades.includes('OTRO') && (
+        {/* El texto aparece solo si alguna fila eligió «Otro», y es
+            obligatorio: sin él la actividad quedaría como «otro» a secas y el
+            trabajo no se podría justificar ni cobrar. */}
+        {filas.some((f) => f.actividad === 'OTRO') && (
           <Campo label="¿Cuál fue la otra actividad?" requerido hint={errors.otraActividad?.message}>
             <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
           </Campo>
