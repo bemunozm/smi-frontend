@@ -53,6 +53,8 @@ function op(
       horometroInicial: 100,
       horometroFinal: 112.5,
       actividades: ['SOLTAR_MATERIAL'],
+      reportNumero: '4509',
+      destino: 'VARIADO',
       descripcion: 'Pendiente',
       capturedAt: '2026-09-24T09:00:00.000Z',
       ...payload,

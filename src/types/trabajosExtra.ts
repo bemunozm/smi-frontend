@@ -23,9 +23,24 @@ export const actividadLabel: Record<string, string> = Object.fromEntries(
   ACTIVIDADES.map((a) => [a.value, a.label]),
 );
 
+/**
+ * Dónde se hizo el trabajo (pedido del cliente, espejo de la columna «Planta»
+ * de su planilla): Transporte, una planta concreta —solo para limpieza de
+ * silos— o Variado cuando la salida mezcla destinos. Lo declara el supervisor.
+ */
+export const DESTINOS = [
+  { value: 'TRANSPORTE', label: 'Transporte' },
+  { value: 'PLANTA', label: 'Planta' },
+  { value: 'VARIADO', label: 'Variado' },
+] as const;
+
+export const destinoLabel: Record<string, string> = Object.fromEntries(
+  DESTINOS.map((d) => [d.value, d.label]),
+);
+
 const actividadValues = ACTIVIDADES.map((a) => a.value) as [string, ...string[]];
 
-export const trabajoExtraFormSchema = z
+const camposTrabajoExtra = z
   .object({
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
     // `id` del catálogo de Operadores (ver `types/operator.ts`) — ya no texto
@@ -46,32 +61,81 @@ export const trabajoExtraFormSchema = z
      * `useRegistrarTrabajoExtra`): así los registros del día conservan la
      * hora real de captura. */
     fecha: z.string().optional(),
-  })
-  .refine((d) => Number(d.horometroFinal) >= Number(d.horometroInicial), {
-    message: 'El horómetro final debe ser ≥ inicial',
-    path: ['horometroFinal'],
-  })
-  /**
-   * «Otro» sin texto deja la actividad registrada como «otro» a secas, y el
-   * trabajo no se podría justificar ni cobrar. El servidor aplica la misma
-   * regla; acá solo se avisa antes de mandar.
-   */
-  .refine((d) => !d.actividades.includes('OTRO') || !!d.otraActividad?.trim(), {
-    message: 'Describí cuál fue la otra actividad',
-    path: ['otraActividad'],
+    /** N° del report en papel que respalda el trabajo — el Excel del admin lo lleva. */
+    reportNumero: z.string().min(1, 'Indicá el N° del report'),
+    /** Dónde se hizo — las reglas cruzadas van en los `.refine()` de abajo. */
+    destino: z.enum(['TRANSPORTE', 'PLANTA', 'VARIADO'], { message: 'Indicá dónde se hizo' }),
+    /** En cuál planta (catálogo del reporte diario) cuando `destino` es PLANTA. */
+    planta: z.string().optional(),
   });
 
+/**
+ * Reglas cruzadas COMPARTIDAS entre creación y edición (el servidor aplica
+ * las mismas; acá solo se avisa antes de mandar):
+ * - horómetro final ≥ inicial;
+ * - «Otro» sin texto deja la actividad como «otro» a secas (incobrable);
+ * - solo una limpieza de silos puede hacerse EN PLANTA, y un destino PLANTA
+ *   siempre dice en cuál.
+ */
+const reglasTrabajoExtra = (
+  d: Omit<z.infer<typeof camposTrabajoExtra>, 'reportNumero' | 'destino'> & {
+    reportNumero?: string;
+    destino?: z.infer<typeof camposTrabajoExtra>['destino'];
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (Number(d.horometroFinal) < Number(d.horometroInicial)) {
+    ctx.addIssue({ code: 'custom', message: 'El horómetro final debe ser ≥ inicial', path: ['horometroFinal'] });
+  }
+  if (d.actividades.includes('OTRO') && !d.otraActividad?.trim()) {
+    ctx.addIssue({ code: 'custom', message: 'Describí cuál fue la otra actividad', path: ['otraActividad'] });
+  }
+  if (d.destino === 'PLANTA' && !d.actividades.includes('LIMPIEZA_SILOS')) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado',
+      path: ['destino'],
+    });
+  }
+  if (d.destino === 'PLANTA' && !d.planta?.trim()) {
+    ctx.addIssue({ code: 'custom', message: 'Indicá en qué planta se hizo', path: ['planta'] });
+  }
+};
+
+export const trabajoExtraFormSchema = camposTrabajoExtra.superRefine(reglasTrabajoExtra);
+
+/**
+ * Edición desde el panel: un trabajo LEGACY (anterior al folio/destino) se
+ * puede corregir sin inventarle esos datos — acá son opcionales y, si vienen
+ * vacíos, el formulario los omite y el diff no los toca. Las reglas cruzadas
+ * aplican igual cuando sí vienen.
+ */
+export const trabajoExtraEdicionSchema = camposTrabajoExtra
+  .extend({
+    reportNumero: z.string().min(1, 'Indicá el N° del report').optional(),
+    destino: camposTrabajoExtra.shape.destino.optional(),
+  })
+  .superRefine(reglasTrabajoExtra);
+
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
+/** La forma de la EDICIÓN: folio y destino opcionales (trabajos legacy). */
+export type TrabajoExtraEdicion = z.infer<typeof trabajoExtraEdicionSchema>;
 export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
 /** Body de `POST /api/trabajos-extra` y payload del outbox: el formulario
  * validado + `id` (clave de idempotencia, uuid v4 del cliente) + `capturedAt`
- * (hora del dispositivo). `fecha` solo viaja cuando difiere de hoy. */
+ * (hora del dispositivo). `fecha` solo viaja cuando difiere de hoy. La foto
+ * del report NO viaja acá: en Terreno queda como blob junto a la operación y
+ * el replay sube el archivo e inyecta `fotoKey` recién al mandar (el admin,
+ * online, la sube antes del POST). */
 export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
   id: string;
   capturedAt: string;
   /** Fecha elegida en el panel (un trabajo olvidado): gana sobre `capturedAt`. */
   fecha?: string;
+  /** Key `tmp/...` de la foto del report ya subida — la pone el replay o el
+   * flujo online del admin, nunca el formulario. */
+  fotoKey?: string;
 }
 
 export interface TrabajoExtraordinario {
@@ -96,6 +160,15 @@ export interface TrabajoExtraordinario {
   otraActividad: string | null;
   descripcion: string;
   observaciones: string | null;
+  /** N° del report en papel — null en registros previos al campo. */
+  reportNumero?: string | null;
+  /** TRANSPORTE | PLANTA | VARIADO — null en registros previos al campo. */
+  destino?: string | null;
+  /** Nombre de la planta cuando `destino` es PLANTA. */
+  planta?: string | null;
+  /** Foto del report, como URL firmada (~1 h) — null en registros sin foto;
+   * opcional para tolerar un backend que aún no manda el campo. */
+  fotoUrl?: string | null;
   fecha: string;
   equipo?: { internalCode: string };
   /** Nombre de quien lo registró — null si la cuenta ya no existe; opcional
@@ -122,6 +195,10 @@ export const TrabajoExtraordinarioSchema = z.object({
   otraActividad: z.string().nullable(),
   descripcion: z.string(),
   observaciones: z.string().nullable(),
+  reportNumero: z.string().nullable().optional(),
+  destino: z.string().nullable().optional(),
+  planta: z.string().nullable().optional(),
+  fotoUrl: z.string().nullable().optional(),
   fecha: z.string(),
   equipo: z.object({ internalCode: z.string() }).optional(),
   registradoPor: z.string().nullable().optional(),

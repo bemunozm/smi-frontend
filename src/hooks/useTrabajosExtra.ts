@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { createTrabajoExtra, listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
+import { uploadFile } from '../api/UploadsAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { useQueuedMutation } from './useQueuedMutation';
 import { DomainError } from '../lib/api-error';
@@ -13,7 +14,7 @@ import { generateUuid } from '../lib/uuid';
 import { toDateOnly } from '../lib/turno';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
-import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { TrabajoExtraEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
 
@@ -22,11 +23,11 @@ export function useTrabajosExtraList() {
 }
 
 export interface UseRegistrarTrabajoExtraResult {
-  /** Encola el trabajo en el outbox — SIEMPRE, con o sin señal: un único
-   * camino. Los rechazos de negocio (operador inactivo, equipo/operador
-   * inexistente) llegan después, desde el replay, a la hoja de `SyncStatus`
-   * (`needs_attention`). `true` si quedó guardado. */
-  registrar: (values: TrabajoExtraForm) => Promise<boolean>;
+  /** Encola el trabajo (con la foto del report) en el outbox — SIEMPRE, con o
+   * sin señal: un único camino. Los rechazos de negocio (operador inactivo,
+   * equipo/operador inexistente) llegan después, desde el replay, a la hoja
+   * de `SyncStatus` (`needs_attention`). `true` si quedó guardado. */
+  registrar: (values: TrabajoExtraForm, foto: File) => Promise<boolean>;
   isGuardando: boolean;
 }
 
@@ -50,15 +51,25 @@ function mensajeErrorTrabajoExtra(
 
 /**
  * Creación directa para la vista de trabajos extra del administrador
- * (escritorio, online): POST inmediato + invalidación del listado — sin
- * outbox, a diferencia de `useRegistrarTrabajoExtra` (Terreno). El `id` lo
- * genera el cliente igual: un reintento del POST no duplica el registro.
+ * (escritorio, online): sube la foto del report, luego POST inmediato +
+ * invalidación del listado — sin outbox, a diferencia de
+ * `useRegistrarTrabajoExtra` (Terreno). El `id` lo genera el cliente igual:
+ * un reintento del POST no duplica el registro.
  */
 export function useCrearTrabajoExtra() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (values: TrabajoExtraForm & { fecha?: string }) =>
-      createTrabajoExtra({ ...values, id: generateUuid(), capturedAt: new Date().toISOString() }),
+    // `values.fecha` (panel, trabajo olvidado) viaja tal cual; la foto del
+    // report se sube ANTES del POST y viaja como `fotoKey`.
+    mutationFn: async ({ values, foto }: { values: TrabajoExtraForm & { fecha?: string }; foto: File }) => {
+      const subida = await uploadFile(foto);
+      return createTrabajoExtra({
+        ...values,
+        fotoKey: subida.key,
+        id: generateUuid(),
+        capturedAt: new Date().toISOString(),
+      });
+    },
     onSuccess: () => {
       toast.success('Trabajo extraordinario registrado');
       void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
@@ -73,7 +84,7 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
   const { user } = useCurrentUser();
   const [isGuardando, setIsGuardando] = useState(false);
 
-  const registrar = async (values: TrabajoExtraForm): Promise<boolean> => {
+  const registrar = async (values: TrabajoExtraForm, foto: File): Promise<boolean> => {
     if (isGuardando) return false;
     if (!user?.id) {
       toast.danger('No hay una sesión activa. Iniciá sesión para guardar el trabajo.');
@@ -82,14 +93,19 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
     setIsGuardando(true);
     try {
       // `fecha` solo viaja cuando difiere de hoy (carga histórica): para los
-      // registros del día, el backend conserva la hora real de captura.
+      // registros del día, el backend conserva la hora real de captura. La
+      // foto del report queda como blob junto a la op y la sube el replay.
       const { fecha, ...resto } = values;
-      await enqueueCreateTrabajoExtra(user.id, {
-        ...resto,
-        ...(fecha && fecha !== toDateOnly(new Date()) ? { fecha } : {}),
-        id: generateUuid(),
-        capturedAt: new Date().toISOString(),
-      });
+      await enqueueCreateTrabajoExtra(
+        user.id,
+        {
+          ...resto,
+          ...(fecha && fecha !== toDateOnly(new Date()) ? { fecha } : {}),
+          id: generateUuid(),
+          capturedAt: new Date().toISOString(),
+        },
+        foto,
+      );
       avisarGuardadoEnCola();
       return true;
     } catch (error: unknown) {
@@ -107,7 +123,7 @@ export interface UseEditarTrabajoExtraResult {
   /** Encola solo los campos que cambiaron respecto de `original` (lo que la
    * pantalla muestra hoy, con las ediciones pendientes ya aplicadas), con su
    * precondición. `true` si quedó guardado. */
-  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraForm) => Promise<boolean>;
+  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion) => Promise<boolean>;
   isGuardando: boolean;
 }
 
@@ -122,13 +138,19 @@ const CAMPOS_TRABAJO = [
   'otraActividad',
   'descripcion',
   'observaciones',
+  'reportNumero',
+  'destino',
+  'planta',
+  'reportNumero',
+  'destino',
+  'planta',
 ] as const;
 
 /** Edición de un trabajo ya registrado por la cola. El administrador se entera
  * cuando el servidor la recibe, no al guardar. */
 export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   const { user } = useCurrentUser();
-  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraForm }>({
+  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraEdicion }>({
     endpoint: 'trabajoExtra.edit',
     waitMs: 0,
     userId: user?.id,
@@ -146,11 +168,18 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
         otraActividad: original.otraActividad ?? '',
         descripcion: original.descripcion,
         observaciones: original.observaciones ?? '',
+        // Registros previos a los campos del report: la base vacía evita
+        // marcar como "cambio" lo que el formulario solo completó por primera
+        // vez... pero si el usuario los llena, sí viajan como edición.
+        reportNumero: original.reportNumero ?? '',
+        destino: (original.destino ?? '') as TrabajoExtraForm['destino'],
+        planta: original.planta ?? '',
       };
-      const nuevo: TrabajoExtraForm = {
+      const nuevo: TrabajoExtraEdicion = {
         ...corregido,
         otraActividad: corregido.otraActividad ?? '',
         observaciones: corregido.observaciones ?? '',
+        planta: corregido.planta ?? '',
       };
       const cambio = edicionContraBase(base, nuevo, CAMPOS_TRABAJO);
       if (!cambio.hayCambios) return null;
@@ -160,7 +189,7 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
     errorMessage: (error) => mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'),
   });
 
-  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraForm): Promise<boolean> => {
+  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion): Promise<boolean> => {
     try {
       await edicion.mutateAsync({ original, corregido });
       return true;
