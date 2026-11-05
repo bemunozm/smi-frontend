@@ -118,6 +118,8 @@ export const trabajoExtraEdicionSchema = camposTrabajoExtra
   .superRefine(reglasTrabajoExtra);
 
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
+/** La forma de la EDICIÓN: folio y destino opcionales (trabajos legacy). */
+export type TrabajoExtraEdicion = z.infer<typeof trabajoExtraEdicionSchema>;
 export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
 
 /** Body de `POST /api/trabajos-extra` y payload del outbox: el formulario

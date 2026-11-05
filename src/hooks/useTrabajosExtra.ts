@@ -14,7 +14,7 @@ import { generateUuid } from '../lib/uuid';
 import { toDateOnly } from '../lib/turno';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
-import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { TrabajoExtraEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
 
@@ -123,7 +123,7 @@ export interface UseEditarTrabajoExtraResult {
   /** Encola solo los campos que cambiaron respecto de `original` (lo que la
    * pantalla muestra hoy, con las ediciones pendientes ya aplicadas), con su
    * precondición. `true` si quedó guardado. */
-  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraForm) => Promise<boolean>;
+  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion) => Promise<boolean>;
   isGuardando: boolean;
 }
 
@@ -150,7 +150,7 @@ const CAMPOS_TRABAJO = [
  * cuando el servidor la recibe, no al guardar. */
 export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   const { user } = useCurrentUser();
-  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraForm }>({
+  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraEdicion }>({
     endpoint: 'trabajoExtra.edit',
     waitMs: 0,
     userId: user?.id,
@@ -175,7 +175,7 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
         destino: (original.destino ?? '') as TrabajoExtraForm['destino'],
         planta: original.planta ?? '',
       };
-      const nuevo: TrabajoExtraForm = {
+      const nuevo: TrabajoExtraEdicion = {
         ...corregido,
         otraActividad: corregido.otraActividad ?? '',
         observaciones: corregido.observaciones ?? '',
@@ -189,7 +189,7 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
     errorMessage: (error) => mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'),
   });
 
-  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraForm): Promise<boolean> => {
+  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion): Promise<boolean> => {
     try {
       await edicion.mutateAsync({ original, corregido });
       return true;

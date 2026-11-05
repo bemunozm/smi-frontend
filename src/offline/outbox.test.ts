@@ -324,6 +324,8 @@ const TRABAJO_INPUT: CreateTrabajoExtraInput = {
   horometroFinal: 112,
   actividades: ['SOLTAR_MATERIAL'],
   descripcion: 'Carga extra',
+  reportNumero: '4509',
+  destino: 'VARIADO',
   capturedAt: '2026-09-24T09:00:00.000Z',
 };
 

@@ -33,7 +33,7 @@ import { numeroReport } from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
 import { ACTIVIDADES, DESTINOS, actividadLabel, destinoLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
-import type { TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
 
@@ -250,7 +250,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
       return;
     }
     if (!fechaIso || !foto) return;
-    crear.mutate({ values: { ...parsed.data, fecha: fechaIso }, foto }, { onSuccess: onClose });
+    crear.mutate({ values: { ...(parsed.data as TrabajoExtraForm), fecha: fechaIso }, foto }, { onSuccess: onClose });
   };
   const pendiente = trabajo ? isGuardando : crear.isPending;
 
