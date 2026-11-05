@@ -190,6 +190,17 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
   });
 
+  it('«N° del report» muestra el último registrado y avisa uno repetido', () => {
+    listHook.mockReturnValue(ok([trabajo({ id: 'f1', reportNumero: '4508' }), trabajo({ id: 'f2', reportNumero: '4507' })]));
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
+    const dialog = screen.getByRole('dialog');
+
+    expect(within(dialog).getByText('Último report registrado: 4508 · el siguiente sería 4509.')).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4508' } });
+    expect(within(dialog).getByText(/El N° 4508 ya está registrado en otro Report/)).toBeTruthy();
+  });
+
   it('«Nueva actividad» registra con operador del catálogo, horómetros, actividades, report y foto', async () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
