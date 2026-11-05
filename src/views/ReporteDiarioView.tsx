@@ -18,6 +18,7 @@ import {
 } from '../hooks/useReporteDiario';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
+import { plural } from '../lib/format';
 import {
   aReporteAnterior,
   enteroOCero,
@@ -348,6 +349,26 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
     turnoElegidoResumen !== undefined &&
     operadoresDelTurno.length === 0;
 
+  /**
+   * La trampa de terreno (04/11): el selector parte en el turno VIGENTE (de
+   * noche, NOCTURNO) y lo backfilleado suele ser del DIURNO — el elegido sale
+   * vacío aunque el día sí tenga equipos. Solo cuando el elegido está vacío
+   * se consulta el turno opuesto del mismo día, para sugerirlo en el aviso.
+   */
+  const turnoOpuesto: Turno = elegido.turno === 'DIURNO' ? 'NOCTURNO' : 'DIURNO';
+  const { data: resumenOpuesto } = usePastShiftSummary(
+    sinTarjetasDelTurnoPasado
+      ? { fecha: fromDateOnly(elegido.fecha), turno: turnoOpuesto }
+      : null,
+  );
+  const equiposEnOtroTurno = useMemo(
+    () =>
+      (resumenOpuesto ?? [])
+        .flatMap((s) => s.cards)
+        .filter((c) => c.equipo.equipmentClass !== 'LIGHT').length,
+    [resumenOpuesto],
+  );
+
   /** Reportes de la última semana, del turno más reciente al más viejo. */
   const desde = toDateOnly(new Date(ctx.fecha.getFullYear(), ctx.fecha.getMonth(), ctx.fecha.getDate() - 7));
   const hasta = toDateOnly(ctx.fecha);
@@ -602,6 +623,14 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
                 Este turno no tiene equipos registrados: cárgalos primero en Informe diario
                 equipos («Registrar turno pasado») para que aparezcan acá. El informe se puede
                 enviar igual.
+                {equiposEnOtroTurno > 0 && (
+                  <b>
+                    {' '}
+                    El {turnoOpuesto} de ese día sí tiene{' '}
+                    {plural(equiposEnOtroTurno, 'equipo registrado', 'equipos registrados')} —
+                    revisa el turno elegido arriba.
+                  </b>
+                )}
               </Hint>
             ) : (
               <Hint>Lista viva: se recalcula cada vez que se abre el reporte.</Hint>

@@ -115,13 +115,13 @@ vi.mock('../hooks/useShiftCards', () => ({
 
 // Resumen del turno ELEGIDO (`usePastShiftSummary`) — alimenta los operadores
 // cuando el informe es de un turno pasado. `RESUMEN_HOOK` registra con qué
-// selección se llamó; cada test pisa `resumenTurnoElegido` según necesite.
+// selección se llamó; cada test pisa `resumenPorTurno` (por turno) según necesite.
 const RESUMEN_HOOK = vi.hoisted(() => vi.fn());
-let resumenTurnoElegido: unknown[] = [];
+let resumenPorTurno: Record<string, unknown[]> = {};
 vi.mock('../hooks/usePastShiftSummary', () => ({
-  usePastShiftSummary: (sel: unknown) => {
+  usePastShiftSummary: (sel: { turno: string } | null) => {
     RESUMEN_HOOK(sel);
-    return { data: sel ? resumenTurnoElegido : undefined };
+    return { data: sel ? (resumenPorTurno[sel.turno] ?? []) : undefined };
   },
 }));
 vi.mock('../hooks/useCurrentUser', () => ({
@@ -644,7 +644,7 @@ describe('ReporteDiarioView · operadores de un turno pasado', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 8, 23, 14, 0)); // DIURNO del 23-09
-    resumenTurnoElegido = [];
+    resumenPorTurno = {};
     RESUMEN_HOOK.mockClear();
   });
   afterEach(() => vi.useRealTimers());
@@ -661,7 +661,7 @@ describe('ReporteDiarioView · operadores de un turno pasado', () => {
   });
 
   it('con un turno pasado, los operadores salen del resumen de ese turno, sin camionetas', () => {
-    resumenTurnoElegido = [
+    resumenPorTurno.DIURNO = [
       {
         id: 'sh1',
         date: '2026-09-20',
@@ -713,6 +713,44 @@ describe('ReporteDiarioView · operadores de un turno pasado', () => {
     expect(screen.getByText(/cárgalos primero en Informe diario equipos/)).toBeTruthy();
     const boton = screen.getByText('Enviar reporte diario').closest('button');
     expect(boton?.disabled).toBe(false);
+  });
+
+  /**
+   * La trampa real de terreno (04/11): el selector parte en el turno VIGENTE
+   * (de noche, NOCTURNO) y las tarjetas backfilleadas suelen ser del DIURNO —
+   * el turno elegido sale vacío aunque el día sí tenga equipos. El aviso
+   * sugiere el otro turno cuando ahí sí hay tarjetas.
+   */
+  it('turno elegido vacío pero el OTRO turno del día tiene equipos: lo sugiere', () => {
+    resumenPorTurno.DIURNO = [
+      {
+        id: 'sh1',
+        date: '2026-09-20',
+        type: 'DIURNO',
+        supervisorId: 'u1',
+        cards: [
+          {
+            id: 'c9',
+            equipoId: 'e9',
+            equipo: { internalCode: 'SEM-02', type: 'Semirremolque', controlUnit: 'HOURS', equipmentClass: 'HEAVY' },
+            operatorId: 'op9',
+            operatorName: 'Y. Segura',
+            valorInicial: 1,
+            valorFinal: 2,
+            horasMaquina: 1,
+            fecha: '2026-09-20T15:00:00.000Z',
+            fechaSalida: null,
+          },
+        ],
+        exitReports: [],
+      },
+    ];
+    render(<ReporteDiarioView />);
+
+    elegirTurnoPasado();
+    fireEvent.click(screen.getByRole('button', { name: 'Nocturno' })); // vacío
+
+    expect(screen.getByText(/El DIURNO de ese día sí tiene/)).toBeTruthy();
   });
 });
 
