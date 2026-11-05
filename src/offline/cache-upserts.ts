@@ -49,8 +49,9 @@ function upsertFirst<T extends { id: string }>(list: T[] | undefined, item: T): 
 /** Si el servidor no incluyó `equipo` en la respuesta, lo completa desde el
  * catálogo ya cacheado: sin esto la fila recién sincronizada mostraría el
  * `equipoId` crudo hasta que llegue el refetch. */
-function withEquipo<T extends { equipoId: string; equipo?: { internalCode: string } }>(record: T): T {
-  if (record.equipo) return record;
+function withEquipo<T extends { equipoId: string | null; equipo?: { internalCode: string } | null }>(record: T): T {
+  // Un hallazgo de zona no tiene equipo que completar.
+  if (record.equipo || !record.equipoId) return record;
   const internalCode = queryClient
     .getQueryData<Equipment[]>(EQUIPMENT_KEY)
     ?.find((e) => e.id === record.equipoId)?.internalCode;

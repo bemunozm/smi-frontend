@@ -28,6 +28,8 @@ import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
+  Automatico,
+  Automaticos,
   Boton,
   Calculado,
   Campo,
@@ -333,6 +335,7 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
+        numero={detalle.numero}
         pendiente={isActualizando}
         onGuardar={async (payload) => {
           if (await guardarCambio(detalle, payload)) setEditando(false);
@@ -490,8 +493,11 @@ function FormularioTrabajo({
   pendiente,
   onGuardar,
   onCancelar,
+  numero,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
+  /** El N° de Report al corregir; sin él (alta), se asigna al guardar. */
+  numero?: number | null;
   equipos: { id: string; internalCode: string }[];
   /** Catálogo de operadores activos: el operador se elige, no se escribe. */
   operadores: Pick<Operator, 'id' | 'name'>[];
@@ -664,6 +670,16 @@ function FormularioTrabajo({
         <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">
           <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
         </Campo>
+
+        {/* El N° de Report lo pone el sistema, nunca el usuario: se informa,
+            no se edita (el backend rechaza un `numero` en el body). */}
+        <Automaticos>
+          <Automatico
+            label="N° de Report"
+            valor={numero != null ? numeroReport(numero) : 'Se asigna al guardar'}
+            nota={numero != null ? 'No se cambia' : 'Automático'}
+          />
+        </Automaticos>
 
         <Boton ancho type="submit" disabled={pendiente}>
           {pendiente ? 'Guardando…' : textoBoton}

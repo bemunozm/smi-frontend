@@ -8,7 +8,7 @@ import {
   chipColorToTono,
   prioridadOTChipColor,
 } from '../../config/mantenimiento-colors';
-import type { Hallazgo } from '../../types/hallazgos';
+import type { HallazgoDeEquipo } from '../../types/hallazgos';
 import { equipmentLabel, toPrioridadOT, type EquipmentRef } from './workshop';
 
 /**
@@ -21,7 +21,8 @@ export function StartFromHallazgoModal({
   hallazgo,
   equipment,
 }: {
-  hallazgo: Hallazgo;
+  /** Solo uno de equipo: los de zona no llegan al taller. */
+  hallazgo: HallazgoDeEquipo;
   equipment: readonly EquipmentRef[] | undefined;
 }) {
   const logOperation = useLogOperation();

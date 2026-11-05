@@ -52,7 +52,11 @@ export function useRegistrarHallazgo(): UseRegistrarHallazgoResult {
         user.id,
         {
           id: generateUuid(),
-          equipoId: values.equipoId,
+          tipo: values.tipo,
+          // Cada tipo manda lo suyo: el backend rechaza un equipo en uno de zona.
+          ...(values.tipo === 'ZONA'
+            ? { faena: values.faena, lugar: values.lugar?.trim() }
+            : { equipoId: values.equipoId }),
           descripcion: values.descripcion,
           prioridad: values.prioridad,
           capturedAt: new Date().toISOString(),
@@ -85,7 +89,7 @@ export interface UseEditarHallazgoResult {
   isGuardando: boolean;
 }
 
-const CAMPOS_HALLAZGO = ['equipoId', 'descripcion', 'prioridad', 'estado'] as const;
+const CAMPOS_HALLAZGO = ['equipoId', 'faena', 'lugar', 'descripcion', 'prioridad', 'estado'] as const;
 
 /** Corrección de un hallazgo ya enviado por la cola: el aviso al administrador
  * sale cuando el servidor la recibe, no al guardar. */
@@ -98,6 +102,8 @@ export function useEditarHallazgo(): UseEditarHallazgoResult {
     build: ({ original, corregido }) => {
       const base: CorreccionHallazgo = {
         equipoId: original.equipoId,
+        faena: original.faena ?? null,
+        lugar: original.lugar ?? null,
         descripcion: original.descripcion,
         prioridad: original.prioridad,
         estado: original.estado,
@@ -132,7 +138,11 @@ export function useEditarHallazgo(): UseEditarHallazgoResult {
 export function useCrearHallazgo() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (form: Pick<HallazgoForm, 'equipoId' | 'descripcion' | 'prioridad'> & { fecha?: string }) =>
+    mutationFn: (
+      form: Pick<HallazgoForm, 'tipo' | 'equipoId' | 'faena' | 'lugar' | 'descripcion' | 'prioridad'> & {
+        fecha?: string;
+      },
+    ) =>
       createHallazgo({ ...form, id: generateUuid(), capturedAt: new Date().toISOString() }),
     onSuccess: () => {
       toast.success('Hallazgo registrado');

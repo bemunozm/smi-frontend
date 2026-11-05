@@ -59,8 +59,8 @@ export function useCrearTrabajoExtra() {
   return useMutation({
     mutationFn: (values: TrabajoExtraForm & { fecha?: string }) =>
       createTrabajoExtra({ ...values, id: generateUuid(), capturedAt: new Date().toISOString() }),
-    onSuccess: () => {
-      toast.success('Trabajo extraordinario registrado');
+    onSuccess: (creado) => {
+      toast.success(creado.numero != null ? `Report N° ${creado.numero} registrado` : 'Report registrado');
       void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
     },
     onError: (error: unknown) => {

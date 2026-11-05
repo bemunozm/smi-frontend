@@ -28,8 +28,14 @@ import {
   hallazgoEstadoLabel,
 } from '../config/dashboard-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
-import { PRIORIDADES } from '../types/hallazgos';
-import type { EditHallazgoBody, Hallazgo } from '../types/hallazgos';
+import { HALLAZGO_FAENAS, PRIORIDADES, dondeHallazgo, esHallazgoDeZona } from '../types/hallazgos';
+import type { EditHallazgoBody, Hallazgo, HallazgoTipo } from '../types/hallazgos';
+
+/** De qué es el hallazgo: de un equipo (va al taller) o de una zona de la faena. */
+const TIPOS: { valor: HallazgoTipo; label: string }[] = [
+  { valor: 'EQUIPO', label: 'Equipo' },
+  { valor: 'ZONA', label: 'Zona de la faena' },
+];
 import type { Criticidad, HallazgoEstado } from '../types/dashboard';
 
 const ESTADOS = ['ABIERTO', 'EN_PROCESO', 'CERRADO'] as const;
@@ -118,7 +124,7 @@ function DetalleHallazgoModal({
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              {`Hallazgo · ${hallazgo?.equipo?.internalCode ?? '—'}`}
+              {`Hallazgo · ${hallazgo ? dondeHallazgo(hallazgo) : '—'}`}
             </Modal.Heading>
             {hallazgo ? (
               <div className="flex flex-wrap items-center gap-2 pt-1.5">
@@ -135,7 +141,11 @@ function DetalleHallazgoModal({
                 <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
                   <Dato label="Fecha" value={formatSoloFecha(hallazgo.fecha)} />
                   <Dato label="Hora" value={formatHora(hallazgo.fecha)} />
-                  <Dato label="Equipo" value={hallazgo.equipo?.internalCode ?? '—'} />
+                  {esHallazgoDeZona(hallazgo) ? (
+                    <Dato label="Zona" value={dondeHallazgo(hallazgo)} />
+                  ) : (
+                    <Dato label="Equipo" value={hallazgo.equipo?.internalCode ?? '—'} />
+                  )}
                   <Dato label="Registrado por" value={hallazgo.registradoPor ?? 'Sin registro'} />
                 </div>
 
@@ -156,7 +166,7 @@ function DetalleHallazgoModal({
                       target="_blank"
                     >
                       <img
-                        alt={`Foto del hallazgo de ${hallazgo.equipo?.internalCode ?? 'equipo'}`}
+                        alt={`Foto del hallazgo de ${dondeHallazgo(hallazgo)}`}
                         className="max-h-80 w-full bg-surface-secondary object-contain"
                         src={hallazgo.fotoUrl}
                       />
@@ -186,8 +196,9 @@ function DetalleHallazgoModal({
 }
 
 /**
- * Alta directa desde el panel: equipo, prioridad, descripción y fecha — la
- * foto no va acá (se adjunta desde Terreno, donde se saca). La fecha parte en
+ * Alta directa desde el panel: de un equipo o de una zona de la faena (faena
+ * y lugar), prioridad, descripción y fecha — la foto no va acá (se adjunta
+ * desde Terreno, donde se saca). Uno de zona no va al taller. La fecha parte en
  * ahora y se cambia para cargar un hallazgo que se olvidó. El POST es online,
  * con id idempotente del cliente (`useCrearHallazgo`); el hallazgo nace
  * ABIERTO y dispara el mismo aviso al taller que uno reportado en terreno.
@@ -195,19 +206,26 @@ function DetalleHallazgoModal({
 function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
   const { data: equipos } = useEquipment();
   const crear = useCrearHallazgo();
+  const [tipo, setTipo] = useState<HallazgoTipo>('EQUIPO');
   const [equipoId, setEquipoId] = useState('');
+  const [faena, setFaena] = useState('');
+  const [lugar, setLugar] = useState('');
   const [prioridad, setPrioridad] = useState<string>('MEDIA');
   const [descripcion, setDescripcion] = useState('');
   const [fecha, setFecha] = useState(() => toDateTimeLocal(new Date()));
   const fechaIso = fechaRegistroIso(fecha);
 
-  const valido = equipoId.length > 0 && descripcion.trim().length >= 3 && fechaIso !== null;
+  const dondeValido = tipo === 'ZONA' ? faena !== '' && lugar.trim() !== '' : equipoId.length > 0;
+  const valido = dondeValido && descripcion.trim().length >= 3 && fechaIso !== null;
 
   const registrar = () => {
     if (!fechaIso) return;
     crear.mutate(
       {
-        equipoId,
+        tipo,
+        ...(tipo === 'ZONA'
+          ? { faena: faena as (typeof HALLAZGO_FAENAS)[number], lugar: lugar.trim() }
+          : { equipoId }),
         descripcion: descripcion.trim(),
         prioridad: prioridad as (typeof PRIORIDADES)[number],
         fecha: fechaIso,
@@ -234,7 +252,51 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
           </Modal.Header>
           <Modal.Body>
             <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-foreground">¿De qué es el hallazgo?</span>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="¿De qué es el hallazgo?">
+                  {TIPOS.map((opcion) => (
+                    <Button
+                      aria-pressed={tipo === opcion.valor}
+                      key={opcion.valor}
+                      onPress={() => setTipo(opcion.valor)}
+                      size="sm"
+                      variant={tipo === opcion.valor ? 'primary' : 'tertiary'}
+                    >
+                      {opcion.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {tipo === 'ZONA' ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[200px_1fr]">
+                  <Select fullWidth placeholder="Elegir faena" value={faena} onChange={(value) => value && setFaena(String(value))}>
+                  <Label>Faena</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {HALLAZGO_FAENAS.map((opcion) => (
+                        <ListBox.Item id={opcion} key={opcion} textValue={opcion}>
+                          {opcion}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                  <TextField fullWidth name="lugar" onChange={setLugar} value={lugar}>
+                    <Label>Lugar</Label>
+                    <Input placeholder="Ej: cancha norte, camino a la romana" />
+                  </TextField>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {tipo === 'EQUIPO' ? (
                 <Select fullWidth placeholder="Elegir equipo" value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
                   <Label>Equipo</Label>
                   <Select.Trigger>
@@ -252,6 +314,7 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
                     </ListBox>
                   </Select.Popover>
                 </Select>
+                ) : null}
 
                 <Select fullWidth value={prioridad} onChange={(value) => value && setPrioridad(String(value))}>
                   <Label>Prioridad</Label>
@@ -283,7 +346,9 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
               </TextField>
 
               <p className="text-xs text-muted-foreground">
-                La foto del hallazgo se adjunta desde Terreno, al momento de reportarlo en la máquina.
+                {tipo === 'ZONA'
+                  ? 'Un hallazgo de zona no va al taller: lo sigues tú desde esta lista. La foto se adjunta desde Terreno.'
+                  : 'La foto del hallazgo se adjunta desde Terreno, al momento de reportarlo en la máquina.'}
               </p>
             </div>
           </Modal.Body>
@@ -311,19 +376,25 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
 function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClose: () => void }) {
   const { data: equipos } = useEquipment();
   const actualizar = useActualizarHallazgo();
-  const [equipoId, setEquipoId] = useState(hallazgo.equipoId);
+  // El tipo no cambia: uno de equipo corrige su equipo; uno de zona, faena y lugar.
+  const deZona = esHallazgoDeZona(hallazgo);
+  const [equipoId, setEquipoId] = useState(hallazgo.equipoId ?? '');
+  const [faena, setFaena] = useState(hallazgo.faena ?? '');
+  const [lugar, setLugar] = useState(hallazgo.lugar ?? '');
   const [descripcion, setDescripcion] = useState(hallazgo.descripcion);
   const [prioridad, setPrioridad] = useState(hallazgo.prioridad);
   const [estado, setEstado] = useState(hallazgo.estado);
 
   const cambios: EditHallazgoBody = {
-    ...(equipoId !== hallazgo.equipoId ? { equipoId } : {}),
+    ...(!deZona && equipoId !== hallazgo.equipoId ? { equipoId } : {}),
+    ...(deZona && faena !== (hallazgo.faena ?? '') ? { faena } : {}),
+    ...(deZona && lugar.trim() !== (hallazgo.lugar ?? '') ? { lugar: lugar.trim() } : {}),
     ...(descripcion.trim() !== hallazgo.descripcion ? { descripcion: descripcion.trim() } : {}),
     ...(prioridad !== hallazgo.prioridad ? { prioridad } : {}),
     ...(estado !== hallazgo.estado ? { estado } : {}),
   };
   const hayCambios = Object.keys(cambios).length > 0;
-  const descripcionValida = descripcion.trim().length >= 3;
+  const descripcionValida = descripcion.trim().length >= 3 && (!deZona || lugar.trim() !== '');
 
   const guardar = () => {
     actualizar.mutate({ id: hallazgo.id, cambios }, { onSuccess: onClose });
@@ -342,12 +413,38 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              {`Editar hallazgo · ${hallazgo.equipo?.internalCode ?? '—'}`}
+              {`Editar hallazgo · ${dondeHallazgo(hallazgo)}`}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
             <div className="flex flex-col gap-4">
+              {deZona ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[200px_1fr]">
+                  <Select fullWidth placeholder="Elegir faena" value={faena} onChange={(value) => value && setFaena(String(value))}>
+                  <Label>Faena</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {HALLAZGO_FAENAS.map((opcion) => (
+                        <ListBox.Item id={opcion} key={opcion} textValue={opcion}>
+                          {opcion}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                  <TextField fullWidth isInvalid={lugar.trim() === ''} name="lugar" onChange={setLugar} value={lugar}>
+                    <Label>Lugar</Label>
+                    <Input />
+                  </TextField>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {!deZona ? (
                 <Select fullWidth value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
                   <Label>Equipo</Label>
                   <Select.Trigger>
@@ -365,6 +462,7 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
                     </ListBox>
                   </Select.Popover>
                 </Select>
+                ) : null}
 
                 <Select fullWidth value={prioridad} onChange={(value) => value && setPrioridad(String(value))}>
                   <Label>Prioridad</Label>
@@ -454,7 +552,7 @@ export function HallazgosAdminView() {
       if (!texto) return true;
       return (
         h.descripcion.toLowerCase().includes(texto) ||
-        (h.equipo?.internalCode ?? '').toLowerCase().includes(texto)
+        dondeHallazgo(h).toLowerCase().includes(texto)
       );
     });
   }, [hallazgos, busqueda, estadoFiltro]);
@@ -562,7 +660,9 @@ export function HallazgosAdminView() {
                   >
                     <div className="flex w-full flex-wrap items-start justify-between gap-2">
                       <span className="text-[15px] font-semibold text-foreground">
-                        {formatFecha(h.fecha)} · <span className="font-mono">{h.equipo?.internalCode ?? '—'}</span>
+                        {formatFecha(h.fecha)} ·{' '}
+                        <span className={esHallazgoDeZona(h) ? '' : 'font-mono'}>{dondeHallazgo(h)}</span>
+                        {esHallazgoDeZona(h) ? <span className="text-muted-foreground"> · zona</span> : null}
                       </span>
                       <span className="flex flex-wrap gap-1.5">
                         <Chip color={criticidadChipColor(h.prioridad as Criticidad)} size="sm" variant="soft">
@@ -600,7 +700,7 @@ export function HallazgosAdminView() {
                 <Table.Content aria-label="Hallazgos" className="min-w-full">
                   <Table.Header>
                     <Table.Column isRowHeader>Fecha</Table.Column>
-                    <Table.Column>Equipo</Table.Column>
+                    <Table.Column>Equipo o zona</Table.Column>
                     <Table.Column className="w-full">Descripción</Table.Column>
                     <Table.Column>Prioridad</Table.Column>
                     <Table.Column>Estado</Table.Column>
@@ -621,8 +721,9 @@ export function HallazgosAdminView() {
                         <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
                           {formatFecha(h.fecha)}
                         </Table.Cell>
-                        <Table.Cell className="font-mono text-sm whitespace-nowrap">
-                          {h.equipo?.internalCode ?? '—'}
+                        <Table.Cell className={`text-sm whitespace-nowrap ${esHallazgoDeZona(h) ? '' : 'font-mono'}`}>
+                          {dondeHallazgo(h)}
+                          {esHallazgoDeZona(h) ? <span className="ml-1.5 text-xs text-muted-foreground">zona</span> : null}
                         </Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{h.descripcion}</Table.Cell>
                         <Table.Cell className="whitespace-nowrap">
@@ -685,7 +786,7 @@ export function HallazgosAdminView() {
                 </AlertDialog.Header>
                 <AlertDialog.Body>
                   <p>
-                    El hallazgo de {eliminando?.equipo?.internalCode ?? 'este equipo'} (
+                    El hallazgo de {eliminando ? dondeHallazgo(eliminando) : 'este equipo'} (
                     {eliminando ? `«${eliminando.descripcion}»` : ''}) se eliminará definitivamente, junto a su foto.
                     Esta acción no se puede deshacer.
                   </p>

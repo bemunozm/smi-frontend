@@ -271,6 +271,17 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 </Select>
               </div>
 
+              {/* El N° de Report lo pone el sistema: se informa, no se edita. */}
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5">
+                <span className="text-sm text-muted-foreground">N° de Report</span>
+                <span className="font-mono text-sm font-semibold text-foreground">
+                  {trabajo ? numeroReport(trabajo.numero) : 'Se asigna al guardar'}
+                </span>
+                <span className="text-[11px] font-bold tracking-wide text-(--accent) uppercase">
+                  {trabajo ? 'No se cambia' : 'Automático'}
+                </span>
+              </div>
+
               {trabajo ? null : (
                 <TextField fullWidth isInvalid={fechaIso === null} name="fecha" onChange={setFecha} value={fecha}>
                   <Label>Fecha y hora del trabajo</Label>

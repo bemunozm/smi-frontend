@@ -28,7 +28,14 @@ const formTrabajo: TrabajoExtraForm = {
   actividades: ['OTRO'], otraActividad: 'x', descripcion: 'abc',
 };
 
-const correccion = { equipoId: 'e1', descripcion: 'Fuga', prioridad: 'CRITICA', estado: 'ABIERTO' };
+const correccion = {
+  equipoId: 'e1',
+  faena: null,
+  lugar: null,
+  descripcion: 'Fuga',
+  prioridad: 'CRITICA',
+  estado: 'ABIERTO',
+};
 
 function creacion(type: 'createHallazgo' | 'createTrabajoExtra', id: string, entityKey: string): OutboxOp {
   return {

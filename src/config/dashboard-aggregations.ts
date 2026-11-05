@@ -1,4 +1,4 @@
-import type { Hallazgo } from '../types/hallazgos';
+import { dondeHallazgo, type Hallazgo } from '../types/hallazgos';
 import type {
   Criticidad,
   HallazgoEstado,
@@ -58,7 +58,8 @@ export function hallazgosRecientes(hallazgos: Hallazgo[], limit = 5): HallazgoRe
 function aResumen(h: Hallazgo): HallazgoResumen {
   return {
     id: h.id,
-    equipo: h.equipo?.internalCode ?? '—',
+    // El de zona se nombra por su lugar y faena («Cancha norte · Kainita»).
+    equipo: dondeHallazgo(h),
     descripcion: h.descripcion,
     criticidad: h.prioridad as Criticidad,
     estado: h.estado as HallazgoEstado,

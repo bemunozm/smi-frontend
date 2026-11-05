@@ -112,7 +112,7 @@ describe('HallazgosView', () => {
     renderView('desktop');
 
     expect(screen.getByRole('table', { name: /Hallazgos recientes/ })).toBeTruthy();
-    for (const columna of ['Fecha', 'Equipo', 'Prioridad', 'Descripción', 'Foto', 'Estado']) {
+    for (const columna of ['Fecha', 'Equipo o zona', 'Prioridad', 'Descripción', 'Foto', 'Estado']) {
       expect(screen.getByRole('columnheader', { name: columna })).toBeTruthy();
     }
 
@@ -230,12 +230,30 @@ describe('HallazgosView', () => {
     expect(tabla.getByText('Sin sincronizar')).toBeTruthy();
   });
 
+  it('uno de zona encola faena y lugar, sin equipo, y avisa que no va al taller', async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zona de la faena' }));
+    expect(screen.queryByLabelText('Equipo')).toBeNull();
+    expect(screen.getByText(/No va al taller/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Kainita' }));
+    fireEvent.change(screen.getByPlaceholderText(/cancha norte/), { target: { value: 'Camino a la romana' } });
+    fireEvent.change(screen.getByPlaceholderText(/Qué se detectó/), { target: { value: 'Bache profundo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Registrar hallazgo/ }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const [op] = await db.outbox.toArray();
+    const payload = op && 'payload' in op ? op.payload : undefined;
+    expect(payload).toMatchObject({ tipo: 'ZONA', faena: 'Kainita', lugar: 'Camino a la romana' });
+    expect(payload).not.toHaveProperty('equipoId');
+  });
+
   it('sin equipo no encola: muestra la validación', async () => {
     renderView();
 
     fireEvent.click(screen.getByRole('button', { name: /Registrar hallazgo/ }));
 
-    await waitFor(() => expect(screen.getByText('Seleccioná un equipo')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Selecciona un equipo')).toBeTruthy());
     expect(await db.outbox.count()).toBe(0);
   });
 

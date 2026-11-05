@@ -29,7 +29,10 @@ export async function createHallazgo(payload: CreateHallazgoBody, config?: Axios
  * corrige sin autorización y queda en su historial de cambios. La foto no. La
  * corrección viaja por la cola (`offline/endpoints#hallazgo.edit`). */
 export interface CorreccionHallazgo {
-  equipoId: string;
+  /** Uno de zona no tiene equipo: corrige faena y lugar. */
+  equipoId: string | null;
+  faena: string | null;
+  lugar: string | null;
   descripcion: string;
   prioridad: string;
   estado: string;
