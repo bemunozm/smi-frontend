@@ -114,6 +114,7 @@ export function PastShiftQuickEntry({
               onClear={() => q.setFila(i, { foto: null })}
               title="Foto del combustible"
               subtitle="Del surtidor o la boleta de esa carga"
+              staleQuestion="¿es la de esa carga?"
               requerida={(parseDecimal(fila.litros) ?? 0) > 0}
               guia="De la galería del teléfono: la foto que se tomó ese día al cargar."
             />
