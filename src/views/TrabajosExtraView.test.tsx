@@ -382,7 +382,8 @@ describe('TrabajosExtraView', () => {
     renderConRegistro();
 
     completarFormularioValido();
-    fireEvent.change(screen.getByLabelText('Fecha del trabajo'), { target: { value: ayer } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fecha del trabajo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ayer' }));
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));

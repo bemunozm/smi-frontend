@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { usePastShiftSummary } from '../../hooks/usePastShiftSummary';
 import { useTurnoActual } from '../../hooks/useTurnoActual';
 import { esTurnoPasado, fromDateOnly, toDateOnly, type Turno } from '../../lib/turno';
-import { Boton, Campo, Form, Hint, Input, Label, ModalTerreno, Segmentado } from './ui';
+import { DateField } from './DateField';
+import { Boton, Form, Hint, Label, ModalTerreno, Segmentado } from './ui';
 
 /**
  * Diálogo del modo "registrar un turno pasado" (carga histórica): fecha +
@@ -47,16 +48,13 @@ export function PastShiftDialog({
       detalle="Hasta 30 días hacia atrás · los datos quedan fechados en ese día"
     >
       <Form>
-        <Campo label="Fecha del turno">
-          <Input
-            type="date"
-            aria-label="Fecha del turno pasado"
-            min={toDateOnly(new Date(Date.now() - 30 * 86_400_000))}
-            max={hoy}
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-          />
-        </Campo>
+        <DateField
+          label="Fecha del turno"
+          value={fecha}
+          onChange={setFecha}
+          min={toDateOnly(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30))}
+          max={hoy}
+        />
 
         <div className="flex flex-col gap-1.5">
           <Label>Turno</Label>

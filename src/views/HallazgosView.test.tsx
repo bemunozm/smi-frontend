@@ -183,7 +183,8 @@ describe('HallazgosView', () => {
     renderView();
 
     completarFormulario();
-    fireEvent.change(screen.getByLabelText('Fecha del hallazgo'), { target: { value: ayer } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fecha del hallazgo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ayer' }));
     fireEvent.click(screen.getByRole('button', { name: /Registrar hallazgo/ }));
 
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));

@@ -13,6 +13,7 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtTime } from '../lib/format';
 import { toDateOnly } from '../lib/turno';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import {
@@ -29,7 +30,6 @@ import {
   Form,
   GrupoHead,
   HistorialCambios,
-  Input,
   Label,
   ModalTerreno,
   Segmentado,
@@ -177,15 +177,15 @@ export function HallazgosView() {
 
           {/* Carga histórica: por defecto hoy; una fecha pasada registra el
               hallazgo en ese día (misma ventana de 30 días del backend). */}
-          <Campo label="Fecha del hallazgo">
-            <Input
-              type="date"
-              aria-label="Fecha del hallazgo"
-              min={toDateOnly(new Date(Date.now() - 30 * 86_400_000))}
-              max={toDateOnly(new Date())}
-              {...register('fecha')}
-            />
-          </Campo>
+          <DateField
+            label="Fecha del hallazgo"
+            value={(watch('fecha') as string | undefined) ?? toDateOnly(new Date())}
+            onChange={(v) => setValue('fecha', v)}
+            min={toDateOnly(
+              new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
+            )}
+            max={toDateOnly(new Date())}
+          />
 
           <Campo label="Descripción" hint={errors.descripcion?.message}>
             <Textarea rows={3} placeholder="Qué se detectó, dónde y en qué condición" {...register('descripcion')} />

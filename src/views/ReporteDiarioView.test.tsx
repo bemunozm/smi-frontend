@@ -372,12 +372,16 @@ describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () =
     });
   });
 
+  /** Abre el calendario del kit (`DateField`) y toca el día pedido. */
+  const elegirFecha = (dia: RegExp) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Fecha del reporte' }));
+    fireEvent.click(screen.getByRole('button', { name: dia }));
+  };
+
   it('con fecha y turno elegidos, el payload los lleva', () => {
     render(<ReporteDiarioView />);
 
-    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
-      target: { value: '2026-09-20' },
-    });
+    elegirFecha(/domingo,? 20 de septiembre/i);
     fireEvent.click(screen.getByRole('button', { name: 'Nocturno' }));
     fireEvent.click(screen.getByText('Enviar reporte diario'));
 
@@ -392,14 +396,12 @@ describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () =
     // mensaje del backend lo muestra el hook como toast — mockeado acá).
     render(<ReporteDiarioView />);
 
-    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
-      target: { value: '2026-09-20' },
-    });
+    elegirFecha(/domingo,? 20 de septiembre/i);
     fireEvent.click(screen.getByText('Enviar reporte diario'));
 
     expect(MUTATE).toHaveBeenCalledTimes(1);
-    expect((screen.getByLabelText('Fecha del reporte') as HTMLInputElement).value).toBe(
-      '2026-09-20',
+    expect(screen.getByRole('button', { name: 'Fecha del reporte' }).textContent).toContain(
+      '20-09-2026',
     );
   });
 
@@ -407,9 +409,7 @@ describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () =
     // REPORTES_MOCK trae el DIURNO del 2026-09-22 ya reportado.
     render(<ReporteDiarioView />);
 
-    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
-      target: { value: '2026-09-22' },
-    });
+    elegirFecha(/martes,? 22 de septiembre/i);
 
     const boton = screen.getByText('Enviar reporte diario').closest('button');
     expect(boton?.disabled).toBe(true);
@@ -649,10 +649,10 @@ describe('ReporteDiarioView · operadores de un turno pasado', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const elegirTurnoPasado = () =>
-    fireEvent.change(screen.getByLabelText('Fecha del reporte'), {
-      target: { value: '2026-09-20' },
-    });
+  const elegirTurnoPasado = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Fecha del reporte' }));
+    fireEvent.click(screen.getByRole('button', { name: /domingo,? 20 de septiembre/i }));
+  };
 
   it('con el turno vigente NO consulta el resumen (sigue con mis tarjetas, offline)', () => {
     render(<ReporteDiarioView />);

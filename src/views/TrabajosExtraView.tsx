@@ -24,6 +24,7 @@ import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { fmtDate, fmtNum } from '../lib/format';
 import { toDateOnly } from '../lib/turno';
+import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
@@ -581,15 +582,15 @@ function FormularioTrabajo({
 
         {/* Carga histórica: por defecto hoy; una fecha pasada registra el
             trabajo en ese día (misma ventana de 30 días del backend). */}
-        <Campo label="Fecha del trabajo">
-          <Input
-            type="date"
-            aria-label="Fecha del trabajo"
-            min={toDateOnly(new Date(Date.now() - 30 * 86_400_000))}
-            max={toDateOnly(new Date())}
-            {...register('fecha')}
-          />
-        </Campo>
+        <DateField
+          label="Fecha del trabajo"
+          value={(watch('fecha') as string | undefined) ?? toDateOnly(new Date())}
+          onChange={(v) => setValue('fecha', v)}
+          min={toDateOnly(
+            new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
+          )}
+          max={toDateOnly(new Date())}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
