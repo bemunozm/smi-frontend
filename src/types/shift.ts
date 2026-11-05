@@ -157,9 +157,8 @@ export interface CloseShiftCardInput {
   /** Litros cargados al cierre — obligatorio, 0 permitido. */
   fuelLiters: number;
   /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` (ver
-   * `api/UploadsAPI.ts#uploadFile`). Ausente SOLO en el cierre de carga
-   * histórica (planilla de días pasados): el backend lo acepta sin foto. */
-  tmpPhotoKey?: string;
+   * `api/UploadsAPI.ts#uploadFile`). */
+  tmpPhotoKey: string;
   /** AdBlue cargado en el turno. Opcional: un cierre ya encolado antes de que
    * existiera el campo sigue siendo válido. */
   adBlue?: boolean;

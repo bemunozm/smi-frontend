@@ -124,9 +124,8 @@ export interface CloseCardOp extends OutboxBase {
    * payload lo guarda sin esa clave. */
   payload: { cardId: string; input: Omit<CloseShiftCardInput, 'tmpPhotoKey'> };
   /** id de la fila en `blobs` — se borra recién cuando el cierre tiene
-   * éxito (ver `offline/replay.ts`). AUSENTE en el cierre de carga
-   * histórica (planilla de días pasados, sin foto): la op nace `pending`. */
-  photoId?: string;
+   * éxito (ver `offline/replay.ts`). */
+  photoId: string;
   /** Key `tmp/<userId>/<uuid>.<ext>` YA subida a R2/MinIO — presente solo
    * desde que `status` pasa a `'pending_claim'`. `TMP_KEY_EXPIRED` la limpia
    * y vuelve a `'pending_upload'` para resubir. */
