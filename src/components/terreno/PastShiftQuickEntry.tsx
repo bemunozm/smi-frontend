@@ -1,7 +1,9 @@
 import { ArrowRight, Plus, X } from 'lucide-react';
 
+import { FotoRespaldoField } from '../flota/FotoRespaldoField';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { usePastShiftQuickEntry } from '../../hooks/usePastShiftQuickEntry';
+import { parseDecimal } from '../../lib/decimal';
 import type { ContextoTurno } from '../../lib/turno';
 import type { Equipment } from '../../types/equipment';
 import type { Operator } from '../../types/operator';
@@ -101,6 +103,21 @@ export function PastShiftQuickEntry({
               </Campo>
             </div>
 
+            {/* La evidencia de la carga, igual que en el cierre normal: se
+                exige solo cuando la fila lleva litros (la validación del
+                hook bloquea el guardado sin ella). */}
+            <FotoRespaldoField
+              file={fila.foto}
+              isReadingPhoto={false}
+              captureDate={null}
+              onSelect={(foto) => q.setFila(i, { foto })}
+              onClear={() => q.setFila(i, { foto: null })}
+              title="Foto del combustible"
+              subtitle="Del surtidor o la boleta de esa carga"
+              requerida={(parseDecimal(fila.litros) ?? 0) > 0}
+              guia="De la galería del teléfono: la foto que se tomó ese día al cargar."
+            />
+
             {q.errorDeFila(i) && <Hint>{q.errorDeFila(i)}</Hint>}
           </div>
         ))}
@@ -114,8 +131,9 @@ export function PastShiftQuickEntry({
           <ArrowRight className="h-[19px] w-[19px]" aria-hidden />
         </Boton>
         <Hint>
-          Cada fila queda como tarjeta cerrada de este turno, sin foto (carga histórica). Litros
-          vacío = turno sin carga. Al final envía el reporte de salida como siempre.
+          Cada fila queda como tarjeta cerrada de este turno; la foto del combustible se pide
+          cuando la fila lleva litros (vacío = turno sin carga, sin foto). Al final envía el
+          reporte de salida como siempre.
         </Hint>
       </Form>
     </Card>
