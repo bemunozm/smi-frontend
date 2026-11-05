@@ -151,6 +151,12 @@ export interface CreateHallazgoOp extends OutboxBase {
 export interface CreateTrabajoExtraOp extends OutboxBase {
   type: 'createTrabajoExtra';
   payload: CreateTrabajoExtraInput;
+  /** id de la fila en `blobs` con la foto del report — opcional por las
+   * operaciones encoladas por versiones viejas de la app (hoy el formulario
+   * la exige). Se borra recién cuando el POST tiene éxito. */
+  photoId?: string;
+  /** Misma semántica que `CloseCardOp#tmpKey`. */
+  tmpKey?: string;
 }
 
 export interface HttpWriteFile {
@@ -194,7 +200,7 @@ export type OutboxOp =
 
 /** Operaciones que pueden arrastrar una foto por subir — comparten el
  * pipeline `pending_upload` → `pending_claim` de `offline/replay.ts`. */
-export type PhotoOp = CloseCardOp | CreateHallazgoOp;
+export type PhotoOp = CloseCardOp | CreateHallazgoOp | CreateTrabajoExtraOp;
 
 /** Un archivo guardado en el equipo, a la espera de subirse (≤ 8 MB). */
 export interface BlobRecord {

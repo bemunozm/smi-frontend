@@ -34,6 +34,12 @@ vi.mock('../hooks/useOperators', () => ({
   useOperators: () => ({ data: [{ id: 'op_1', name: 'Juan Rojas', isActive: true }] }),
 }));
 
+// Catálogo de plantas del reporte diario: el selector «¿En qué planta?» del
+// modal de alta lo consume cuando el destino es PLANTA.
+vi.mock('../hooks/useReporteDiario', () => ({
+  usePlantas: () => ({ data: [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }] }),
+}));
+
 import { TrabajosExtraAdminView } from './TrabajosExtraAdminView';
 
 const trabajo = (over: Partial<TrabajoExtraordinario> & Pick<TrabajoExtraordinario, 'id'>): TrabajoExtraordinario => ({
@@ -98,8 +104,8 @@ describe('TrabajosExtraAdminView', () => {
     // «Otro» muestra el texto libre en vez del valor crudo.
     expect(screen.getByText('Otro: Rescate de camión')).toBeTruthy();
     // El N° de Report encabeza cada fila; uno sin número todavía lo dice.
-    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('N° 12');
-    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin N° aún');
+    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('#12');
+    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin correlativo aún');
   });
 
   it('filtra por equipo, por turno y por rango de fechas, y el total sigue al filtro', () => {
@@ -135,7 +141,7 @@ describe('TrabajosExtraAdminView', () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Report N° 12 · EX-001')).toBeTruthy();
+    expect(within(dialog).getByText('Report #12 · EX-001')).toBeTruthy();
     expect(within(dialog).getByText('P. Rojas')).toBeTruthy();
     expect(within(dialog).getByText('Nocturno')).toBeTruthy();
     expect(within(dialog).getByText('Otro: Rescate de camión')).toBeTruthy();
@@ -152,7 +158,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
     const editor = screen.getByRole('dialog');
-    expect(within(editor).getByText('Editar Report N° 9 · CG-002')).toBeTruthy();
+    expect(within(editor).getByText('Editar Report #9 · CG-002')).toBeTruthy();
     expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
     fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
@@ -184,7 +190,7 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
   });
 
-  it('«Nueva actividad» registra con operador del catálogo, horómetros y actividades', async () => {
+  it('«Nueva actividad» registra con operador del catálogo, horómetros, actividades, report y foto', async () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
 
@@ -201,21 +207,80 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Fecha y hora del trabajo'), {
       target: { value: '2026-10-05T21:15' },
     });
+    // Los campos nuevos del report: folio, dónde se hizo y la foto obligatoria.
+    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
+    const foto = new File(['report'], 'report.jpg', { type: 'image/jpeg' });
+    fireEvent.change(within(dialog).getByLabelText('Foto del report'), { target: { files: [foto] } });
+
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
 
     expect(crearMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fecha: new Date('2026-10-05T21:15').toISOString(),
-        equipoId: 'e2',
-        operatorId: 'op_1',
-        faena: 'Rajo Norte',
-        turno: 'DIURNO',
-        horometroInicial: 1200,
-        horometroFinal: 1212,
-        actividades: ['REGULACION_CARGA'],
-        descripcion: 'Carga de material',
-      }),
+      {
+        values: expect.objectContaining({
+          fecha: new Date('2026-10-05T21:15').toISOString(),
+          equipoId: 'e2',
+          operatorId: 'op_1',
+          faena: 'Rajo Norte',
+          turno: 'DIURNO',
+          horometroInicial: 1200,
+          horometroFinal: 1212,
+          actividades: ['REGULACION_CARGA'],
+          descripcion: 'Carga de material',
+          reportNumero: '4509',
+          destino: 'TRANSPORTE',
+        }),
+        foto,
+      },
       expect.anything(),
     );
+  });
+
+  it('«Exportar Excel» pide el período en UN calendario de rango y sin rango no descarga', () => {
+    // jsdom no implementa los object URL con los que se descarga el archivo.
+    const createObjectURL = vi.fn(() => 'blob:report');
+    URL.createObjectURL = createObjectURL as never;
+    URL.revokeObjectURL = vi.fn() as never;
+
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+
+    const dialog = screen.getByRole('dialog');
+    // UN solo selector de rango (mismo patrón que Movimientos), no dos campos.
+    expect(within(dialog).getByText('Período')).toBeTruthy();
+    expect(within(dialog).queryByText('Desde')).toBeNull();
+    expect(within(dialog).queryByText('Hasta')).toBeNull();
+    // El popover del calendario tiene su ancla (regresión de Movimientos).
+    expect(dialog.querySelector('[data-slot="date-range-picker-trigger"]')).not.toBeNull();
+
+    // Sin período elegido no hay descarga: el botón queda deshabilitado.
+    expect(within(dialog).getByTestId('export-conteo').textContent).toContain('Elegí el período');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Exportar' }));
+    expect(createObjectURL).not.toHaveBeenCalled();
+    // El armado y contenido del archivo se prueba en `lib/report-excel.test.ts`,
+    // releyendo el Excel generado.
+  });
+
+  it('sin foto del report, «Registrar trabajo» queda deshabilitado', async () => {
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'EX-001' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Operador/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Juan Rojas' }));
+    fireEvent.change(within(dialog).getByLabelText('Faena'), { target: { value: 'Rajo Norte' } });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro inicial'), { target: { value: '1200' } });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Regulación y carga' }));
+    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
+    expect(crearMock).not.toHaveBeenCalled();
   });
 });

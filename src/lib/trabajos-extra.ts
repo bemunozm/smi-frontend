@@ -13,9 +13,14 @@
 
 export const COBRO_MINIMO_HORAS = 1;
 
-/** «N° 12»; sin número (todavía en el equipo, sin señal), «Sin N° aún». */
+/**
+ * El correlativo del sistema: «#12». Sin él (todavía en el equipo, sin señal),
+ * «Sin correlativo aún». No es el folio del report en papel (`reportNumero`,
+ * «Report N°»), que escribe el supervisor: este lo asigna la base y nadie lo
+ * cambia.
+ */
 export function numeroReport(numero: number | null | undefined): string {
-  return numero == null ? 'Sin N° aún' : `N° ${numero}`;
+  return numero == null ? 'Sin correlativo aún' : `#${numero}`;
 }
 
 export function horasCobrables(horasReales: number): number {
