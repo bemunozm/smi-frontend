@@ -116,14 +116,20 @@ function UsoCerrado({ t, op }: { t: TarjetaTurno; op: OutboxOp | undefined }) {
 }
 
 /**
- * «Mi camioneta» del mantenedor, vista propia del taller: la camioneta con que
- * se mueve en faena. Abre con el km inicial y se cierra recién al cargar
+ * «Mi camioneta» del mantenedor (vista propia del taller) y del prevencionista
+ * (su única pantalla, `/camioneta`): la camioneta con que se mueve en faena.
+ * Abre con el km inicial y se cierra recién al cargar
  * combustible (km final, litros y foto del surtidor). Es la misma tarjeta de
  * liviano del supervisor (`/shift-cards`), así que también la ve —y la puede
  * cerrar— un supervisor. Va por la cola sin conexión, igual que en Terreno, y
  * dice cuando algo no llegó al servidor.
  */
-export function MiCamionetaView() {
+export function MiCamionetaView({
+  conFicha = true,
+}: {
+  /** «Ver camioneta» lleva a su ficha en el taller; el prevencionista no la abre. */
+  conFicha?: boolean;
+} = {}) {
   const { user } = useCurrentUser();
   const userId = user?.id;
   const nombre = user?.name?.trim() || user?.email || 'Mantenedor';
@@ -197,7 +203,7 @@ export function MiCamionetaView() {
             <Boton className="sm:flex-1 lg:flex-none" onClick={() => cierre.abrirCierre(mia.id)}>
               <Fuel className="size-[18px]" aria-hidden /> Cargar combustible y cerrar
             </Boton>
-            {equipoEnUso && (
+            {conFicha && equipoEnUso && (
               <Boton variante="contorno" onClick={() => navigate(`/mantenimiento/equipos/${equipoEnUso.id}`)}>
                 <Eye className="size-[18px]" aria-hidden /> Ver camioneta
               </Boton>

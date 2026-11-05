@@ -200,7 +200,11 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
    * navegación dos veces. Es el caso que `useMediaQuery` documenta; todo lo
    * demás de esta pantalla es estilo y va con clases `sm:`/`lg:`.
    */
-  const navEnHeader = useMediaQuery(DESKTOP_QUERY);
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  // Con una sola sección (el prevencionista solo tiene «Mi camioneta») una
+  // barra de navegación sería un botón que lleva a donde ya se está.
+  const conNav = tabs.length > 1;
+  const navEnHeader = esEscritorio;
 
   /**
    * "Ir al panel" lleva al dashboard del administrador (`/`, solo ADMIN).
@@ -230,7 +234,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
               </span>
             </div>
 
-            {navEnHeader && (
+            {conNav && navEnHeader && (
               <nav aria-label={etiquetaNav} className="mr-auto flex items-center gap-1">
                 {tabs.map((t) => {
                   const Icon = t.icon;
@@ -282,7 +286,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
           </div>
         </main>
 
-        {!navEnHeader && (
+        {conNav && !navEnHeader && (
           <nav
             aria-label={etiquetaNav}
             className="sticky bottom-0 z-20 flex-none border-t bg-white/[.97] backdrop-blur"
