@@ -31,8 +31,10 @@ function hook() {
   );
 }
 
+const FOTO = new File([new Uint8Array([1, 2, 3])], 'surtidor.jpg', { type: 'image/jpeg' });
+
 describe('usePastShiftQuickEntry', () => {
-  it('guardar() encola apertura + cierre SIN foto por cada fila completa, en orden', async () => {
+  it('guardar() encola apertura + cierre por fila, cada una con SU foto', async () => {
     const { result } = hook();
 
     act(() => {
@@ -42,9 +44,11 @@ describe('usePastShiftQuickEntry', () => {
         inicial: '4526,0',
         final: '4533,7',
         litros: '167',
+        foto: FOTO,
       });
       result.current.agregarFila();
     });
+    const FOTO_2 = new File([new Uint8Array([4, 5])], 'carga2.jpg', { type: 'image/jpeg' });
     act(() => {
       result.current.setFila(1, {
         equipoId: 'e2',
@@ -52,6 +56,7 @@ describe('usePastShiftQuickEntry', () => {
         inicial: '3059,1',
         final: '3069,1',
         litros: '',
+        foto: FOTO_2,
       });
     });
 
@@ -74,15 +79,33 @@ describe('usePastShiftQuickEntry', () => {
     const [, cardId1, close1, foto1] = enqueueCloseCardMock.mock.calls[0]!;
     expect(cardId1).toBe(open1.id); // el cierre apunta a la apertura de SU fila
     expect(close1).toMatchObject({ valorFinal: 4533.7, fuelLiters: 167 });
-    expect(foto1).toBeUndefined(); // carga histórica: sin foto
+    expect(foto1).toBe(FOTO); // cada fila viaja con SU foto
 
-    // Litros vacío = turno sin carga (0 L).
-    const [, , close2] = enqueueCloseCardMock.mock.calls[1]!;
+    // Litros vacío = turno sin carga (0 L) — la foto va igual (obligatoria).
+    const [, , close2, foto2] = enqueueCloseCardMock.mock.calls[1]!;
     expect(close2).toMatchObject({ valorFinal: 3069.1, fuelLiters: 0 });
+    expect(foto2).toBe(FOTO_2);
 
     // Tras guardar, la grilla vuelve a una fila vacía.
     expect(result.current.filas).toHaveLength(1);
     expect(result.current.filas[0].equipoId).toBe('');
+  });
+
+  it('una fila sin foto no se puede guardar y lo dice — aun sin litros', () => {
+    const { result } = hook();
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '',
+      });
+    });
+
+    expect(result.current.errorDeFila(0)).toMatch(/foto/i);
+    expect(result.current.puedeGuardar).toBe(false);
   });
 
   it('una fila incompleta bloquea el guardado y lo dice', () => {
