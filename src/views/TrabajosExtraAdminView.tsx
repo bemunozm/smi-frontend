@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   Button,
   Card,
-  Checkbox,
   Chip,
   DateField,
   DateRangePicker,
@@ -29,13 +28,32 @@ import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
-import { numeroReport, pistaFolio, textoPistaFolio } from '../lib/trabajos-extra';
+import {
+  actividadDeFila,
+  horasDelDetalle,
+  horasCobrables,
+  lugarDeFila,
+  numeroReport,
+  pistaFolio,
+  textoPistaFolio,
+} from '../lib/trabajos-extra';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
-import { ACTIVIDADES, DESTINOS, actividadLabel, destinoLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
+import { ACTIVIDADES, DESTINOS, actividadLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
 import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
+
+/** Una fila del desglose mientras se escribe (horas como texto, igual que los
+ * horómetros de este modal): el schema valida la forma final. */
+interface FilaDetalleAdmin {
+  actividad: string;
+  lugar: string;
+  planta: string;
+  horas: string;
+}
+
+const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', planta: '', horas: '' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -63,6 +81,13 @@ function actividadesDe(trabajo: TrabajoExtraordinario): string {
   return trabajo.actividades
     .map((a) => (a === 'OTRO' && trabajo.otraActividad ? `Otro: ${trabajo.otraActividad}` : (actividadLabel[a] ?? a)))
     .join(', ');
+}
+
+/** Columna «Dónde» de la tabla: los lugares del desglose, sin repetir. */
+function lugaresDe(trabajo: TrabajoExtraordinario): string {
+  const filas = trabajo.detalleActividades ?? [];
+  if (filas.length === 0) return '—';
+  return [...new Set(filas.map((f) => lugarDeFila(f)))].join(', ');
 }
 
 function Dato({ label, value }: { label: string; value: string }) {
@@ -117,20 +142,34 @@ function DetalleTrabajoModal({
                     value={`${NUM_CL_1.format(trabajo.horometroInicial)} → ${NUM_CL_1.format(trabajo.horometroFinal)} h`}
                   />
                   <Dato label="Horas máquina" value={`${NUM_CL_1.format(trabajo.totalHoras)} h`} />
-                  <Dato label="Actividades" value={actividadesDe(trabajo)} />
                   <Dato label="Report N°" value={trabajo.reportNumero || '—'} />
-                  <Dato
-                    label="Dónde se hizo"
-                    value={
-                      trabajo.destino
-                        ? trabajo.destino === 'PLANTA'
-                          ? trabajo.planta || destinoLabel.PLANTA
-                          : (destinoLabel[trabajo.destino] ?? trabajo.destino)
-                        : '—'
-                    }
-                  />
                   <Dato label="Registrado por" value={trabajo.registradoPor ?? 'Sin registro'} />
                 </div>
+                {trabajo.detalleActividades?.length ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
+                      Actividades
+                    </span>
+                    <div className="overflow-hidden rounded-xl border border-separator">
+                      {trabajo.detalleActividades.map((f, i) => (
+                        <div
+                          className="flex items-center justify-between gap-3 border-t border-separator px-3 py-2 first:border-t-0"
+                          key={i}
+                        >
+                          <span className="min-w-0 text-sm text-foreground">
+                            {actividadDeFila(f, trabajo.otraActividad)}
+                            <span className="text-muted-foreground"> · {lugarDeFila(f)}</span>
+                          </span>
+                          <span className="shrink-0 font-mono text-sm font-semibold">
+                            {NUM_CL_1.format(f.horas)} h
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <Dato label="Actividades" value={actividadesDe(trabajo)} />
+                )}
                 {trabajo.fotoUrl ? (
                   <a
                     className="text-sm font-medium text-(--accent) hover:underline"
@@ -194,7 +233,19 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const [faena, setFaena] = useState(trabajo?.faena ?? '');
   const [horometroInicial, setHorometroInicial] = useState(trabajo ? String(trabajo.horometroInicial) : '');
   const [horometroFinal, setHorometroFinal] = useState(trabajo ? String(trabajo.horometroFinal) : '');
-  const [actividades, setActividades] = useState<string[]>(trabajo?.actividades ?? []);
+  // El desglose, una fila por actividad. En la edición de un trabajo LEGACY
+  // (anterior al desglose) la tabla parte vacía y, si se deja así, el diff no
+  // la toca; agregar filas reemplaza el desglose completo.
+  const [filas, setFilas] = useState<FilaDetalleAdmin[]>(() =>
+    trabajo
+      ? (trabajo.detalleActividades ?? []).map((f) => ({
+          actividad: f.actividad,
+          lugar: f.lugar,
+          planta: f.planta ?? '',
+          horas: String(f.horas),
+        }))
+      : [FILA_VACIA],
+  );
   const [otraActividad, setOtraActividad] = useState(trabajo?.otraActividad ?? '');
   const [descripcion, setDescripcion] = useState(trabajo?.descripcion ?? '');
   const [observaciones, setObservaciones] = useState(trabajo?.observaciones ?? '');
@@ -203,8 +254,6 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const { data: registrados = [] } = useTrabajosExtraList();
   const pista = pistaFolio(registrados, reportNumero, trabajo?.id);
   const textoPista = textoPistaFolio(pista);
-  const [destino, setDestino] = useState(trabajo?.destino ?? '');
-  const [planta, setPlanta] = useState(trabajo?.planta ?? '');
   // Foto del report — obligatoria al CREAR, igual que en Terreno; acá se
   // sube online antes del POST (`useCrearTrabajoExtra`). Al editar se
   // conserva la existente.
@@ -213,13 +262,20 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const fechaIso = trabajo ? null : fechaRegistroIso(fecha);
   const fechaValida = trabajo != null || fechaIso !== null;
 
-  const alternarActividad = (valor: string, marcada: boolean) => {
-    setActividades((previas) => (marcada ? [...previas, valor] : previas.filter((a) => a !== valor)));
+  const cambiarFila = (i: number, cambios: Partial<FilaDetalleAdmin>) => {
+    setFilas((previas) => previas.map((f, j) => (j === i ? { ...f, ...cambios } : f)));
   };
 
   // El schema espera números (inputs `valueAsNumber` en Terreno); acá los
   // campos son de texto — vacío queda NaN, que el schema trata como requerido.
   const aNumero = (texto: string) => (texto.trim() === '' ? Number.NaN : Number(texto));
+
+  const detalleEntrada = filas.map((f) => ({
+    actividad: f.actividad,
+    lugar: f.lugar,
+    planta: f.planta || undefined,
+    horas: aNumero(f.horas),
+  }));
 
   const entrada = {
     equipoId,
@@ -228,22 +284,33 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     turno,
     horometroInicial: aNumero(horometroInicial),
     horometroFinal: aNumero(horometroFinal),
-    actividades,
     otraActividad: otraActividad.trim() || undefined,
     descripcion,
     observaciones: observaciones.trim() || undefined,
-    planta: planta || undefined,
   };
-  // Al CREAR, folio y destino son obligatorios. Al EDITAR un trabajo legacy
+  // Al CREAR, folio y desglose son obligatorios. Al EDITAR un trabajo legacy
   // (anterior a esos campos) se pueden dejar vacíos: se omiten del parse y el
   // diff de la edición no los toca (`edicionContraBase` ignora `undefined`).
   const parsed = trabajo
     ? trabajoExtraEdicionSchema.safeParse({
         ...entrada,
         ...(reportNumero.trim() ? { reportNumero: reportNumero.trim() } : {}),
-        ...(destino ? { destino } : {}),
+        ...(filas.length > 0 ? { detalle: detalleEntrada } : {}),
       })
-    : trabajoExtraFormSchema.safeParse({ ...entrada, reportNumero, destino });
+    : trabajoExtraFormSchema.safeParse({ ...entrada, reportNumero, detalle: detalleEntrada });
+
+  // Aviso del descuadre del desglose, que NO bloquea (decisión del cliente);
+  // la regla de PLANTA se avisa por fila y la corta el schema con el botón.
+  const totalHorometros = aNumero(horometroFinal) - aNumero(horometroInicial);
+  const horasFilas = filas.map((f) => aNumero(f.horas)).filter((h) => Number.isFinite(h) && h > 0);
+  const sumaDetalle = horasDelDetalle(horasFilas.map((horas) => ({ horas })));
+  const descuadre =
+    Number.isFinite(totalHorometros) &&
+    totalHorometros >= 0 &&
+    filas.length > 0 &&
+    horasFilas.length === filas.length &&
+    Math.abs(sumaDetalle - totalHorometros) > 0.01 &&
+    Math.abs(sumaDetalle - horasCobrables(totalHorometros)) > 0.01;
 
   const registrar = () => {
     if (!parsed.success) return;
@@ -370,97 +437,150 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 </TextField>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="flex flex-col gap-1">
-                  <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
-                    <Label>N° del report</Label>
-                    <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
-                  </TextField>
-                  {pista.repetido ? (
-                    <p className="m-0 text-xs font-semibold text-(--warning)">
-                      El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
-                    </p>
-                  ) : textoPista ? (
-                    <p className="m-0 text-xs text-muted-foreground">{textoPista}</p>
-                  ) : null}
-                </div>
-
-                <Select
-                  fullWidth
-                  placeholder="Elegir destino"
-                  value={destino}
-                  onChange={(value) => value && setDestino(String(value))}
-                >
-                  <Label>Dónde se hizo</Label>
-                  <Select.Trigger>
-                    <Select.Value />
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox>
-                      {DESTINOS.map((d) => (
-                        <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
-                          {d.label}
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
-
-                {destino === 'PLANTA' ? (
-                  <Select
-                    fullWidth
-                    placeholder="Elegir planta"
-                    value={planta}
-                    onChange={(value) => value && setPlanta(String(value))}
-                  >
-                    <Label>¿En qué planta?</Label>
-                    <Select.Trigger>
-                      <Select.Value />
-                      <Select.Indicator />
-                    </Select.Trigger>
-                    <Select.Popover>
-                      <ListBox>
-                        {(plantas ?? []).map((p) => (
-                          <ListBox.Item id={p.nombre} key={p.id} textValue={p.nombre}>
-                            {p.nombre}
-                            <ListBox.ItemIndicator />
-                          </ListBox.Item>
-                        ))}
-                      </ListBox>
-                    </Select.Popover>
-                  </Select>
+              <div className="flex flex-col gap-1">
+                <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
+                  <Label>N° del report</Label>
+                  <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
+                </TextField>
+                {pista.repetido ? (
+                  <p className="m-0 text-xs font-semibold text-(--warning)">
+                    El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
+                  </p>
+                ) : textoPista ? (
+                  <p className="m-0 text-xs text-muted-foreground">{textoPista}</p>
                 ) : null}
               </div>
-              {/* La regla del cliente, visible apenas se contradice: solo una
-                  limpieza de silos puede hacerse en planta. */}
-              {destino === 'PLANTA' && !actividades.includes('LIMPIEZA_SILOS') ? (
-                <p className="text-sm text-danger-soft-foreground">
-                  Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado.
-                </p>
-              ) : null}
 
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Actividades</span>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  {ACTIVIDADES.map((actividad) => (
-                    <Checkbox
-                      aria-label={actividad.label}
-                      isSelected={actividades.includes(actividad.value)}
-                      key={actividad.value}
-                      onChange={(marcada) => alternarActividad(actividad.value, marcada)}
-                    >
-                      <Checkbox.Content>
-                        <Checkbox.Control>
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        <span className="text-sm text-foreground">{actividad.label}</span>
-                      </Checkbox.Content>
-                    </Checkbox>
-                  ))}
+              {/* El desglose: una fila por actividad con dónde se hizo y sus
+                  horas máquina. En un trabajo legacy la tabla parte vacía;
+                  agregar filas reemplaza el desglose completo. */}
+              <div className="flex flex-col gap-3">
+                <span className="text-sm font-medium text-foreground">Actividades (qué · dónde · HM)</span>
+                {trabajo && filas.length === 0 ? (
+                  <p className="m-0 text-sm text-muted-foreground">
+                    Este trabajo es anterior al desglose ({actividadesDe(trabajo)}). Si agregás filas, el
+                    desglose nuevo lo reemplaza.
+                  </p>
+                ) : null}
+                {filas.map((fila, i) => (
+                  <div className="flex flex-col gap-3 rounded-xl border border-separator p-3" key={i}>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_96px]">
+                      <Select
+                        fullWidth
+                        placeholder="Actividad"
+                        value={fila.actividad}
+                        onChange={(value) => value && cambiarFila(i, { actividad: String(value) })}
+                      >
+                        <Label>Actividad</Label>
+                        <Select.Trigger>
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            {ACTIVIDADES.map((a) => (
+                              <ListBox.Item id={a.value} key={a.value} textValue={a.label}>
+                                {a.label}
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
+
+                      <Select
+                        fullWidth
+                        placeholder="Dónde"
+                        value={fila.lugar}
+                        onChange={(value) =>
+                          value &&
+                          cambiarFila(i, {
+                            lugar: String(value),
+                            ...(String(value) !== 'PLANTA' ? { planta: '' } : {}),
+                          })
+                        }
+                      >
+                        <Label>Dónde se hizo</Label>
+                        <Select.Trigger>
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            {DESTINOS.map((d) => (
+                              <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
+                                {d.label}
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
+
+                      <TextField
+                        fullWidth
+                        name={`detalle-horas-${i}`}
+                        onChange={(valor) => cambiarFila(i, { horas: valor })}
+                        value={fila.horas}
+                      >
+                        <Label>HM</Label>
+                        <Input inputMode="decimal" placeholder="0" />
+                      </TextField>
+                    </div>
+
+                    {fila.lugar === 'PLANTA' ? (
+                      <Select
+                        fullWidth
+                        placeholder="Elegir planta"
+                        value={fila.planta}
+                        onChange={(value) => value && cambiarFila(i, { planta: String(value) })}
+                      >
+                        <Label>¿En qué planta?</Label>
+                        <Select.Trigger>
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            {(plantas ?? []).map((p) => (
+                              <ListBox.Item id={p.nombre} key={p.id} textValue={p.nombre}>
+                                {p.nombre}
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
+                    ) : null}
+
+                    {fila.lugar === 'PLANTA' && fila.actividad !== 'LIMPIEZA_SILOS' ? (
+                      <p className="m-0 text-sm text-danger-soft-foreground">
+                        Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado.
+                      </p>
+                    ) : null}
+
+                    {filas.length > 1 || trabajo ? (
+                      <div className="flex justify-end">
+                        <Button onPress={() => setFilas((previas) => previas.filter((_, j) => j !== i))} size="sm" variant="tertiary">
+                          Quitar actividad
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                <div>
+                  <Button onPress={() => setFilas((previas) => [...previas, FILA_VACIA])} size="sm" variant="secondary">
+                    Agregar actividad
+                  </Button>
                 </div>
-                {actividades.includes('OTRO') ? (
+                {descuadre ? (
+                  <p className="m-0 text-sm text-warning-soft-foreground" role="status">
+                    Las actividades suman {NUM_CL_1.format(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
+                    {NUM_CL_1.format(horasCobrables(totalHorometros))} h a cobrar. Se puede guardar igual — revisá
+                    el desglose por si un dato quedó mal.
+                  </p>
+                ) : null}
+                {filas.some((f) => f.actividad === 'OTRO') ? (
                   <TextField fullWidth name="otraActividad" onChange={setOtraActividad} value={otraActividad}>
                     <Label>Cuál fue la otra actividad</Label>
                     <Input placeholder="Describí la actividad" />
@@ -804,13 +924,7 @@ export function TrabajosExtraAdminView() {
                         <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
                         <Table.Cell className="font-mono text-sm whitespace-nowrap">{t.reportNumero ?? '—'}</Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">
-                          {t.destino
-                            ? t.destino === 'PLANTA'
-                              ? (t.planta ?? destinoLabel.PLANTA)
-                              : (destinoLabel[t.destino] ?? t.destino)
-                            : '—'}
-                        </Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{lugaresDe(t)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? 'Sin registro'}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
                         <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">

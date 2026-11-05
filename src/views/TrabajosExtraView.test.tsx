@@ -67,12 +67,11 @@ const REGISTRO = {
   horometroFinal: 5400,
   totalHoras: 12,
   actividades: ['REGULACION_CARGA'],
+  detalleActividades: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', planta: null, horas: 12 }],
   otraActividad: null,
   descripcion: 'Carga de material',
   observaciones: 'Neumático trasero pinchado a media tarea',
   reportNumero: '4509',
-  destino: 'TRANSPORTE',
-  planta: null,
   fecha: '2026-08-01T09:00:00.000Z',
   equipo: { internalCode: 'CM-003' },
 };
@@ -103,14 +102,30 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
 
   fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
   fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '112' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Soltar material' }));
+  completarFila(1, { actividad: 'Soltar material', lugar: 'Transporte', horas: '12' });
   fireEvent.change(screen.getByLabelText('Descripción de la tarea'), {
     target: { value: 'Carga de material extra' },
   });
-  // Los campos nuevos del report: folio, dónde se hizo y la foto obligatoria.
+  // Los campos del report: folio y la foto obligatoria.
   fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4509' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Transporte' }));
   elegirFoto();
+}
+
+/** Completa una fila del desglose (actividad · dónde · HM). */
+function completarFila(n: number, fila: { actividad?: string; lugar?: string; horas?: string }) {
+  if (fila.actividad) {
+    fireEvent.click(screen.getByLabelText(`Actividad ${n}`));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: fila.actividad }));
+  }
+  if (fila.lugar) {
+    fireEvent.click(screen.getByLabelText(`Dónde se hizo la actividad ${n}`));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: fila.lugar }));
+  }
+  if (fila.horas != null) {
+    fireEvent.change(screen.getByLabelText(`Horas máquina de la actividad ${n}`), {
+      target: { value: fila.horas },
+    });
+  }
 }
 
 /** Elige la foto del report (obligatoria) en el único input de archivo del
@@ -295,11 +310,11 @@ describe('TrabajosExtraView', () => {
   });
 
   /**
-   * Una salida suele mezclar tareas, así que las actividades son varias. Y
-   * «Otro» sin texto dejaría la actividad como «otro» a secas: el trabajo no
-   * se podría justificar ni cobrar, así que el campo aparece solo al elegirlo.
+   * Una salida suele mezclar tareas, así que el desglose acepta varias filas
+   * (cada una con su lugar y sus HM). Y «Otro» sin texto dejaría la actividad
+   * como «otro» a secas: el campo aparece solo al elegirlo en alguna fila.
    */
-  it('permite elegir varias actividades y pide el texto al marcar Otro', () => {
+  it('permite agregar filas de actividades y pide el texto al elegir Otro', () => {
     const qc = new QueryClient();
     qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
     qc.setQueryData(['trabajos-extra'], []);
@@ -314,17 +329,20 @@ describe('TrabajosExtraView', () => {
     // El campo de texto no está hasta que se elige «Otro».
     expect(screen.queryByLabelText(/otra actividad/i)).toBeNull();
 
-    const soltar = screen.getByRole('button', { name: 'Soltar material' });
-    const limpiar = screen.getByRole('button', { name: 'Limpieza de cancha' });
-    fireEvent.click(soltar);
-    fireEvent.click(limpiar);
+    completarFila(1, { actividad: 'Soltar material', lugar: 'Transporte', horas: '2' });
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar actividad' }));
+    completarFila(2, { actividad: 'Limpieza de cancha', lugar: 'Variado', horas: '1' });
 
-    // Las dos quedan marcadas a la vez: no es excluyente.
-    expect(soltar.getAttribute('aria-pressed')).toBe('true');
-    expect(limpiar.getAttribute('aria-pressed')).toBe('true');
+    // Las dos filas conviven, cada una con su actividad.
+    expect(screen.getByLabelText('Actividad 1').textContent).toContain('Soltar material');
+    expect(screen.getByLabelText('Actividad 2').textContent).toContain('Limpieza de cancha');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Otro' }));
+    completarFila(2, { actividad: 'Otro' });
     expect(screen.getByLabelText(/otra actividad/i)).toBeTruthy();
+
+    // Quitar la fila de «Otro» también quita su campo de texto.
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar la actividad 2' }));
+    expect(screen.queryByLabelText(/otra actividad/i)).toBeNull();
   });
 
   /**
@@ -379,10 +397,10 @@ describe('TrabajosExtraView', () => {
       operatorId: 'op_1',
       horometroInicial: 100,
       horometroFinal: 112,
-      actividades: ['SOLTAR_MATERIAL'],
+      // El desglose viaja normalizado: planta solo en filas PLANTA (null acá).
+      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', planta: null, horas: 12 }],
       descripcion: 'Carga de material extra',
       reportNumero: '4509',
-      destino: 'TRANSPORTE',
     });
     expect(await db.blobs.count()).toBe(1);
     expect(op.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -445,10 +463,9 @@ describe('TrabajosExtraView', () => {
     fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-003/ }));
     fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Soltar material' }));
+    completarFila(1, { actividad: 'Soltar material', lugar: 'Variado', horas: '0.3' });
     fireEvent.change(screen.getByLabelText('Descripción de la tarea'), { target: { value: 'Despeje' } });
     fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4510' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Variado' }));
     elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
