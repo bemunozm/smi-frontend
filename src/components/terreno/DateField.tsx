@@ -25,6 +25,13 @@ const fmtDiaLargo = new Intl.DateTimeFormat('es-CL', {
 });
 const fmtGatillo = new Intl.DateTimeFormat('es-CL', { weekday: 'short' });
 
+/** `Noviembre de 2026` — solo la inicial en mayúscula (la clase `capitalize`
+ * de Tailwind pondría «Noviembre De 2026»). */
+function tituloMes(mes: Date): string {
+  const texto = fmtMes.format(mes);
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 /** `mié 03-11-2026` — día de semana + fecha tabular, como el resto del kit. */
 function etiquetaFecha(d: Date): string {
   const dd = String(d.getDate()).padStart(2, '0');
@@ -133,9 +140,7 @@ export function DateField({
             >
               <ChevronLeft className="h-5 w-5" aria-hidden />
             </button>
-            <span className="font-display text-[15.5px] font-bold capitalize">
-              {fmtMes.format(mes)}
-            </span>
+            <span className="font-display text-[15.5px] font-bold">{tituloMes(mes)}</span>
             <button
               type="button"
               aria-label="Mes siguiente"
