@@ -117,6 +117,9 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
 
   const editando = tarjetas.find((t) => t.id === editandoId) ?? null;
   const esCerrada = editando?.estado === 'cerrada';
+  // Un liviano (camioneta) no lleva operador: lo maneja quien la saca
+  // (administrador, supervisor, mantenedor…). Solo el pesado lo exige.
+  const pideOperador = editando != null && !editando.liviano;
   const opApertura = ops.find((o) => o.type === 'openCard' && o.id === editandoId);
   const soloEnElEquipo = opApertura != null;
 
@@ -131,13 +134,15 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const finalInvalido = esCerrada && inicialNum != null && finalNum != null && finalNum < inicialNum;
   const incompleto =
     inicialNum == null ||
-    !form.operatorId ||
+    (pideOperador && !form.operatorId) ||
     (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
   const faltante = !esCerrada
     ? null
     : inicialNum == null || finalNum == null
-      ? 'Faltan los horómetros.'
+      ? editando?.liviano
+        ? 'Falta el kilometraje.'
+        : 'Faltan los horómetros.'
       : litrosNum == null || litrosNum < 0
         ? 'Indicá los litros de combustible (cero si no cargó).'
         : null;
@@ -174,7 +179,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
       observaciones: form.observaciones.trim(),
     };
     const campos: (keyof EditShiftCardBody)[] = [
-      'operatorId',
+      ...(pideOperador ? (['operatorId'] as const) : []),
       'valorInicial',
       ...(esCerrada ? (['valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
       'observaciones',

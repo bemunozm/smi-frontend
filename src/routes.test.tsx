@@ -22,7 +22,14 @@ describe('routes', () => {
   });
 
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
-    for (const path of ['/hallazgos', '/trabajos-extra', '/reportes-diarios', '/reportes-diarios/cargar']) {
+    for (const path of [
+      '/hallazgos',
+      '/trabajos-extra',
+      '/reportes-diarios',
+      '/reportes-diarios/cargar',
+      '/mantenciones',
+      '/reportes',
+    ]) {
       const guard = findGuardOf(router.routes as unknown as Rt[], path);
       expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
     }

@@ -4,9 +4,11 @@ import { axiosInstance } from '../lib/axios';
 import { env } from '../config/env';
 import { toDomainError } from '../lib/api-error';
 import {
+  ShiftCardListResponseSchema,
   ShiftReportListResponseSchema,
   ShiftReportWrapperSchema,
   type SendExitReportInput,
+  type ShiftCardResponse,
   type ShiftReportListItem,
   type ShiftReportResponse,
 } from '../types/shift';
@@ -45,6 +47,17 @@ async function list(): Promise<ShiftReportListItem[]> {
   }
 }
 
+/** Las tarjetas del turno de un reporte (`GET /api/shift-reports/:id/cards`,
+ * ADMIN y SECRETARIA) — «Ver registro» del Informe diario equipos. */
+async function cards(id: string): Promise<ShiftCardResponse[]> {
+  try {
+    const response = await axiosInstance.get(`/api/shift-reports/${id}/cards`);
+    return ShiftCardListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cargar el registro del turno.');
+  }
+}
+
 /**
  * URL de descarga (`GET /api/shift-reports/:id/file`, 302 a una URL
  * firmada) — un `<a target="_blank">` directo, no un `fetch` desde acá: el
@@ -58,5 +71,6 @@ function fileUrl(id: string): string {
 export const ShiftReportAPI = {
   sendExitReport,
   list,
+  cards,
   fileUrl,
 };

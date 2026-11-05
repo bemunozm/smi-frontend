@@ -145,18 +145,18 @@ export const router = createBrowserRouter([
                   // El formulario de Terreno con fecha y turno a elección: para
                   // cargar o corregir el reporte de un turno que ya pasó.
                   { path: '/reportes-diarios/cargar', element: <ReporteDiarioView elegirTurno /> },
+                  // Registro de mantenciones del taller (filtros y detalle), con
+                  // cierre de las que quedaron sin terminar; destino del aviso
+                  // «Orden de trabajo completada» del administrador.
+                  { path: '/mantenciones', element: <MantencionesAdminView /> },
+                  // Registro de reportes de salida de turno de los
+                  // supervisores: ver sus tarjetas y descargar el PDF.
+                  { path: '/reportes', element: <ReportesView /> },
                 ],
               },
               {
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [
-                  // Registro de mantenciones completadas del taller (solo
-                  // lectura, con filtros y detalle); destino del aviso
-                  // «Orden de trabajo completada» del administrador.
-                  { path: '/mantenciones', element: <MantencionesAdminView /> },
-                  // Registro de reportes de salida de turno de los
-                  // supervisores, con descarga del PDF.
-                  { path: '/reportes', element: <ReportesView /> },
                   { path: '/usuarios', element: <UsersView /> },
                 ],
               },
