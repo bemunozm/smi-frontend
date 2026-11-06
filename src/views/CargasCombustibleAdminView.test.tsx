@@ -103,6 +103,10 @@ const LISTA: RegistroCombustible[] = [
 
 const ok = (data: RegistroCombustible[]) => ({ data, isPending: false, isError: false, error: null });
 
+/** La barra de filtros: las cards móviles también dicen «Clase», así que los
+ * triggers de los selects se buscan dentro de la barra, no en toda la vista. */
+const filtros = () => within(screen.getByTestId('filtros-cargas'));
+
 beforeEach(() => {
   rol.value = 'ADMIN';
   listHook.mockReturnValue(ok(LISTA));
@@ -126,51 +130,76 @@ describe('CargasCombustibleAdminView', () => {
     expect(screen.getByTestId('total-filtrado').textContent).toBe('285,5 L en 4 cargas');
   });
 
-  it('filtra por equipo, por clase y por supervisor, y el total sigue al filtro', () => {
+  it('filtra por equipo, por clase y por supervisor, y el total sigue al filtro', async () => {
     render(<CargasCombustibleAdminView />);
 
-    fireEvent.change(screen.getByLabelText(/equipo/i), { target: { value: 'e9' } });
+    fireEvent.click(filtros().getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'CM-01' }));
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
     expect(screen.getByTestId('total-filtrado').textContent).toBe('35,5 L en 1 carga');
 
-    fireEvent.change(screen.getByLabelText(/equipo/i), { target: { value: 'TODOS' } });
-    fireEvent.change(screen.getByLabelText(/clase/i), { target: { value: 'HEAVY' } });
+    fireEvent.click(filtros().getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Todos' }));
+    fireEvent.click(filtros().getByRole('button', { name: /Clase/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Pesado' }));
     expect(screen.getAllByTestId(/carga-fila-/).map((f) => f.getAttribute('data-testid'))).toEqual([
       'carga-fila-c1',
       'carga-fila-c4',
       'carga-fila-c3',
     ]);
 
-    fireEvent.change(screen.getByLabelText(/clase/i), { target: { value: 'TODOS' } });
-    fireEvent.change(screen.getByLabelText(/supervisor/i), { target: { value: 'Pedro Soto' } });
+    fireEvent.click(filtros().getByRole('button', { name: /Clase/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Todos' }));
+    fireEvent.click(filtros().getByRole('button', { name: /Supervisor/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Pedro Soto' }));
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
   });
 
-  it('una carga cuyo equipo no está en el catálogo usa la clase que trae el backend', () => {
+  it('una carga cuyo equipo no está en el catálogo usa la clase que trae el backend', async () => {
     render(<CargasCombustibleAdminView />);
-    fireEvent.change(screen.getByLabelText(/clase/i), { target: { value: 'LIGHT' } });
+    fireEvent.click(filtros().getByRole('button', { name: /Clase/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Liviano' }));
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
   });
 
-  it('filtra por rango de fechas con el día LOCAL: la carga de las 23:30 cae en su día', () => {
+  it('el período se elige en UN calendario de rango y la carga de las 23:30 cae en su día local', async () => {
     render(<CargasCombustibleAdminView />);
-    fireEvent.change(screen.getByLabelText(/desde/i), { target: { value: '2026-11-05' } });
-    fireEvent.change(screen.getByLabelText(/hasta/i), { target: { value: '2026-11-05' } });
+
+    // Un solo selector de rango (patrón de Movimientos), no dos campos date;
+    // el `Group` de react-aria es el ancla del popover (regresión conocida).
+    expect(screen.getByText('Período')).toBeTruthy();
+    expect(screen.queryByText('Desde')).toBeNull();
+    expect(screen.queryByText('Hasta')).toBeNull();
+    const grupo = document.querySelector('[role="group"]');
+    expect(grupo?.querySelector('[data-slot="date-range-picker-trigger"]')).not.toBeNull();
+
+    // Elegir 5-nov → 5-nov en el calendario: solo c2 (las 23:30 LOCALES del
+    // 05-11 son su día, aunque en UTC ya sea 06-11).
+    fireEvent.click(grupo!.querySelector('[data-slot="date-range-picker-trigger"]') as HTMLElement);
+    const celda = await screen.findAllByRole('button', { name: /November 5, 2026/ });
+    fireEvent.click(celda[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /November 5, 2026/ })[0]);
+
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
+
+    // «Limpiar período» vuelve a mostrar todo.
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar período' }));
+    expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(4);
   });
 
-  it('una fila vieja sin realizadoPor muestra «—» y el filtro de supervisor no la pierde en «Todos»', () => {
+  it('una fila vieja sin realizadoPor muestra «—» y el filtro de supervisor no la pierde en «Todos»', async () => {
     render(<CargasCombustibleAdminView />);
     const fila = screen.getByTestId('carga-fila-c4');
     expect(within(fila).getByText('Realizó')).toBeTruthy();
     expect(within(fila).getAllByText('—').length).toBeGreaterThan(0);
     // Las opciones del select salen de los datos: sin opción vacía para null.
-    const supervisor = screen.getByLabelText(/supervisor/i) as HTMLSelectElement;
-    expect([...supervisor.options].map((o) => o.textContent)).toEqual([
+    fireEvent.click(filtros().getByRole('button', { name: /Supervisor/ }));
+    const opciones = await screen.findAllByRole('option');
+    expect(opciones.map((o) => o.textContent)).toEqual([
       'Todos',
       'Admin SMI',
       'Juan Pérez',
@@ -210,9 +239,13 @@ describe('CargasCombustibleAdminView', () => {
     expect(within(dialog).queryByText('Sin foto adjunta.')).toBeNull();
   });
 
-  it('ningún calce con el filtro muestra el vacío sin romper', () => {
+  it('ningún calce con el filtro muestra el vacío sin romper', async () => {
     render(<CargasCombustibleAdminView />);
-    fireEvent.change(screen.getByLabelText(/desde/i), { target: { value: '2030-01-01' } });
+    // Pedro Soto solo tiene una carga de camioneta: cruzado con Pesado, nada.
+    fireEvent.click(filtros().getByRole('button', { name: /Supervisor/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Pedro Soto' }));
+    fireEvent.click(filtros().getByRole('button', { name: /Clase/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Pesado' }));
     expect(screen.queryAllByTestId(/carga-fila-/)).toHaveLength(0);
     expect(screen.getByText('Ninguna carga calza con el filtro.')).toBeTruthy();
     expect(screen.getByTestId('total-filtrado').textContent).toBe('0 L en 0 cargas');

@@ -1,5 +1,20 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import {
+  Button,
+  Card,
+  Chip,
+  DateField,
+  DateRangePicker,
+  Label,
+  ListBox,
+  Modal,
+  RangeCalendar,
+  Select,
+  Spinner,
+  Table,
+} from '@heroui/react';
+import { Group } from 'react-aria-components/Group';
+import type { DateValue } from 'react-aria-components/Calendar';
 
 import { assetUrl } from '../api/UploadsAPI';
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
@@ -128,7 +143,47 @@ function DetalleCargaModal({
   );
 }
 
-const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
+/** Select HeroUI de la barra de filtros (label flotante del patrón del repo):
+ * nunca un `<select>` nativo — pedido explícito del administrador. */
+function SelectFiltro({
+  label,
+  onChange,
+  opciones,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  opciones: ReadonlyArray<{ value: string; label: string }>;
+  value: string;
+}) {
+  return (
+    <Select
+      fullWidth
+      onChange={(elegido) => {
+        if (elegido) onChange(String(elegido));
+      }}
+      value={value}
+    >
+      <Label>{label}</Label>
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          {opciones.map((opcion) => (
+            <ListBox.Item id={opcion.value} key={opcion.value} textValue={opcion.label}>
+              {opcion.label}
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  );
+}
+
+const TODOS = 'TODOS';
 
 /**
  * Cargas de combustible del ADMINISTRADOR (`/cargas-combustible`, ADMIN +
@@ -140,11 +195,15 @@ const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 te
 export function CargasCombustibleAdminView() {
   const { data, isPending, isError, error } = useCombustibleList();
   const { data: catalogo } = useEquipment();
-  const [equipoFiltro, setEquipoFiltro] = useState('TODOS');
-  const [claseFiltro, setClaseFiltro] = useState('TODOS');
-  const [supervisorFiltro, setSupervisorFiltro] = useState('TODOS');
-  const [desde, setDesde] = useState('');
-  const [hasta, setHasta] = useState('');
+  const [equipoFiltro, setEquipoFiltro] = useState(TODOS);
+  const [claseFiltro, setClaseFiltro] = useState(TODOS);
+  const [supervisorFiltro, setSupervisorFiltro] = useState(TODOS);
+  // Período en UN calendario de rango (patrón de Movimientos): el rango es una
+  // decisión («esta semana»), no dos campos sueltos que cuadrar a mano.
+  const [range, setRange] = useState<{ start: DateValue; end: DateValue } | null>(null);
+  // `DateValue.toString()` es `YYYY-MM-DD`: comparable contra `diaLocal`.
+  const desde = range?.start.toString() ?? '';
+  const hasta = range?.end.toString() ?? '';
   const [detalle, setDetalle] = useState<RegistroCombustible | null>(null);
   const [creando, setCreando] = useState(false);
   const puedeCrear = usePermissions().can('combustible.create');
@@ -186,9 +245,9 @@ export function CargasCombustibleAdminView() {
   const lista = useMemo(
     () =>
       cargas.filter((c) => {
-        if (equipoFiltro !== 'TODOS' && c.equipoId !== equipoFiltro) return false;
-        if (claseFiltro !== 'TODOS' && claseDe(c) !== claseFiltro) return false;
-        if (supervisorFiltro !== 'TODOS' && c.realizadoPor !== supervisorFiltro) return false;
+        if (equipoFiltro !== TODOS && c.equipoId !== equipoFiltro) return false;
+        if (claseFiltro !== TODOS && claseDe(c) !== claseFiltro) return false;
+        if (supervisorFiltro !== TODOS && c.realizadoPor !== supervisorFiltro) return false;
         const dia = diaLocal(c.fecha);
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
@@ -226,77 +285,81 @@ export function CargasCombustibleAdminView() {
 
       <Card>
         <Card.Header>
-          <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-4">
             <div>
               <Card.Title>Listado</Card.Title>
               <Card.Description>De la más reciente a la más antigua. El total de arriba sigue al filtro.</Card.Description>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                Equipo
-                <select
-                  className={SELECT_FILTRO}
-                  onChange={(event) => setEquipoFiltro(event.target.value)}
-                  value={equipoFiltro}
-                >
-                  <option value="TODOS">Todos</option>
-                  {equipos.map((equipo) => (
-                    <option key={equipo.id} value={equipo.id}>
-                      {equipo.codigo}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                Clase
-                <select
-                  className={SELECT_FILTRO}
-                  onChange={(event) => setClaseFiltro(event.target.value)}
-                  value={claseFiltro}
-                >
-                  <option value="TODOS">Todos</option>
-                  {EQUIPMENT_CLASS_OPTIONS.map((clase) => (
-                    <option key={clase.value} value={clase.value}>
-                      {clase.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                Supervisor
-                <select
-                  className={SELECT_FILTRO}
-                  onChange={(event) => setSupervisorFiltro(event.target.value)}
-                  value={supervisorFiltro}
-                >
-                  <option value="TODOS">Todos</option>
-                  {supervisores.map((nombre) => (
-                    <option key={nombre} value={nombre}>
-                      {nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                Desde
-                <input
-                  className={SELECT_FILTRO}
-                  max={hasta || undefined}
-                  onChange={(event) => setDesde(event.target.value)}
-                  type="date"
-                  value={desde}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                Hasta
-                <input
-                  className={SELECT_FILTRO}
-                  min={desde || undefined}
-                  onChange={(event) => setHasta(event.target.value)}
-                  type="date"
-                  value={hasta}
-                />
-              </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="filtros-cargas">
+              <SelectFiltro
+                label="Equipo"
+                onChange={setEquipoFiltro}
+                opciones={[
+                  { value: TODOS, label: 'Todos' },
+                  ...equipos.map((equipo) => ({ value: equipo.id, label: equipo.codigo })),
+                ]}
+                value={equipoFiltro}
+              />
+              <SelectFiltro
+                label="Clase"
+                onChange={setClaseFiltro}
+                opciones={[{ value: TODOS, label: 'Todos' }, ...EQUIPMENT_CLASS_OPTIONS]}
+                value={claseFiltro}
+              />
+              <SelectFiltro
+                label="Supervisor"
+                onChange={setSupervisorFiltro}
+                opciones={[
+                  { value: TODOS, label: 'Todos' },
+                  ...supervisores.map((nombre) => ({ value: nombre, label: nombre })),
+                ]}
+                value={supervisorFiltro}
+              />
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <DateRangePicker aria-label="Período" onChange={setRange} value={range}>
+                  <Label>Período</Label>
+                  {/* El `Group` de react-aria es el ancla del popover: sin él
+                      el calendario se dibuja en la esquina de la pantalla. */}
+                  <Group className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3">
+                    <DateField.Input slot="start">
+                      {(segment) => <DateField.Segment segment={segment} />}
+                    </DateField.Input>
+                    <DateRangePicker.RangeSeparator>→</DateRangePicker.RangeSeparator>
+                    <DateField.Input slot="end">
+                      {(segment) => <DateField.Segment segment={segment} />}
+                    </DateField.Input>
+                    <DateRangePicker.Trigger className="ml-auto">
+                      <DateRangePicker.TriggerIndicator />
+                    </DateRangePicker.Trigger>
+                  </Group>
+                  <DateRangePicker.Popover>
+                    <RangeCalendar>
+                      <RangeCalendar.Header>
+                        <RangeCalendar.NavButton slot="previous" />
+                        <RangeCalendar.Heading />
+                        <RangeCalendar.NavButton slot="next" />
+                      </RangeCalendar.Header>
+                      <RangeCalendar.Grid>
+                        <RangeCalendar.GridHeader>
+                          {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}
+                        </RangeCalendar.GridHeader>
+                        <RangeCalendar.GridBody>
+                          {(date) => <RangeCalendar.Cell date={date} />}
+                        </RangeCalendar.GridBody>
+                      </RangeCalendar.Grid>
+                    </RangeCalendar>
+                  </DateRangePicker.Popover>
+                </DateRangePicker>
+                {range ? (
+                  <button
+                    className="self-end text-sm font-semibold text-(--accent) hover:underline"
+                    onClick={() => setRange(null)}
+                    type="button"
+                  >
+                    Limpiar período
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </Card.Header>
