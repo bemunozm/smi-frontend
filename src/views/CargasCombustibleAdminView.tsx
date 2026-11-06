@@ -3,8 +3,6 @@ import {
   Button,
   Card,
   Chip,
-  DateField,
-  DateRangePicker,
   Label,
   ListBox,
   Modal,
@@ -13,8 +11,9 @@ import {
   Spinner,
   Table,
 } from '@heroui/react';
-import { Group } from 'react-aria-components/Group';
+import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
+import { CalendarDays } from 'lucide-react';
 
 import { assetUrl } from '../api/UploadsAPI';
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
@@ -185,6 +184,9 @@ function SelectFiltro({
 
 const TODOS = 'TODOS';
 
+/** `DateValue.toString()` es `YYYY-MM-DD` → `dd/mm/aaaa` para el botón. */
+const fmtDiaRango = (dia: DateValue) => dia.toString().split('-').reverse().join('/');
+
 /**
  * Cargas de combustible del ADMINISTRADOR (`/cargas-combustible`, ADMIN +
  * SECRETARIA): TODAS las cargas — las que nacen del cierre de tarjeta en
@@ -198,9 +200,11 @@ export function CargasCombustibleAdminView() {
   const [equipoFiltro, setEquipoFiltro] = useState(TODOS);
   const [claseFiltro, setClaseFiltro] = useState(TODOS);
   const [supervisorFiltro, setSupervisorFiltro] = useState(TODOS);
-  // Período en UN calendario de rango (patrón de Movimientos): el rango es una
-  // decisión («esta semana»), no dos campos sueltos que cuadrar a mano.
+  // Período en UN calendario de rango: el rango es una decisión («esta
+  // semana»), no dos campos sueltos. Se abre desde un botón, sin segmentos
+  // dd/mm/aaaa a la vista (pedido del administrador).
   const [range, setRange] = useState<{ start: DateValue; end: DateValue } | null>(null);
+  const [periodoAbierto, setPeriodoAbierto] = useState(false);
   // `DateValue.toString()` es `YYYY-MM-DD`: comparable contra `diaLocal`.
   const desde = range?.start.toString() ?? '';
   const hasta = range?.end.toString() ?? '';
@@ -290,7 +294,7 @@ export function CargasCombustibleAdminView() {
               <Card.Title>Listado</Card.Title>
               <Card.Description>De la más reciente a la más antigua. El total de arriba sigue al filtro.</Card.Description>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="filtros-cargas">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="filtros-cargas">
               <SelectFiltro
                 label="Equipo"
                 onChange={setEquipoFiltro}
@@ -315,41 +319,43 @@ export function CargasCombustibleAdminView() {
                 ]}
                 value={supervisorFiltro}
               />
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <DateRangePicker aria-label="Período" onChange={setRange} value={range}>
-                  <Label>Período</Label>
-                  {/* El `Group` de react-aria es el ancla del popover: sin él
-                      el calendario se dibuja en la esquina de la pantalla. */}
-                  <Group className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3">
-                    <DateField.Input slot="start">
-                      {(segment) => <DateField.Segment segment={segment} />}
-                    </DateField.Input>
-                    <DateRangePicker.RangeSeparator>→</DateRangePicker.RangeSeparator>
-                    <DateField.Input slot="end">
-                      {(segment) => <DateField.Segment segment={segment} />}
-                    </DateField.Input>
-                    <DateRangePicker.Trigger className="ml-auto">
-                      <DateRangePicker.TriggerIndicator />
-                    </DateRangePicker.Trigger>
-                  </Group>
-                  <DateRangePicker.Popover>
-                    <RangeCalendar>
-                      <RangeCalendar.Header>
-                        <RangeCalendar.NavButton slot="previous" />
-                        <RangeCalendar.Heading />
-                        <RangeCalendar.NavButton slot="next" />
-                      </RangeCalendar.Header>
-                      <RangeCalendar.Grid>
-                        <RangeCalendar.GridHeader>
-                          {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}
-                        </RangeCalendar.GridHeader>
-                        <RangeCalendar.GridBody>
-                          {(date) => <RangeCalendar.Cell date={date} />}
-                        </RangeCalendar.GridBody>
-                      </RangeCalendar.Grid>
-                    </RangeCalendar>
-                  </DateRangePicker.Popover>
-                </DateRangePicker>
+              <div className="flex h-full flex-col gap-1">
+                <DialogTrigger isOpen={periodoAbierto} onOpenChange={setPeriodoAbierto}>
+                  <Button className="w-full flex-1 justify-start" variant="secondary">
+                    <CalendarDays aria-hidden className="size-[18px]" />
+                    {range ? `${fmtDiaRango(range.start)} → ${fmtDiaRango(range.end)}` : 'Filtrar por fecha'}
+                  </Button>
+                  <Popover
+                    className="rounded-2xl border border-border bg-card p-2 shadow-[0_18px_44px_rgba(20,23,28,.18)] outline-none"
+                    offset={6}
+                  >
+                    <Dialog aria-label="Período" className="outline-none">
+                      <RangeCalendar
+                        onChange={(valor) => {
+                          setRange(valor);
+                          // Con el rango completo (segundo clic) el popover se
+                          // cierra solo: lo elegido queda a la vista en el botón.
+                          setPeriodoAbierto(false);
+                        }}
+                        value={range}
+                      >
+                        <RangeCalendar.Header>
+                          <RangeCalendar.NavButton slot="previous" />
+                          <RangeCalendar.Heading />
+                          <RangeCalendar.NavButton slot="next" />
+                        </RangeCalendar.Header>
+                        <RangeCalendar.Grid>
+                          <RangeCalendar.GridHeader>
+                            {(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}
+                          </RangeCalendar.GridHeader>
+                          <RangeCalendar.GridBody>
+                            {(date) => <RangeCalendar.Cell date={date} />}
+                          </RangeCalendar.GridBody>
+                        </RangeCalendar.Grid>
+                      </RangeCalendar>
+                    </Dialog>
+                  </Popover>
+                </DialogTrigger>
                 {range ? (
                   <button
                     className="self-end text-sm font-semibold text-(--accent) hover:underline"

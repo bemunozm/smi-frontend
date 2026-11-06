@@ -165,30 +165,30 @@ describe('CargasCombustibleAdminView', () => {
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
   });
 
-  it('el período se elige en UN calendario de rango y la carga de las 23:30 cae en su día local', async () => {
+  it('«Filtrar por fecha» abre el calendario de rango y la carga de las 23:30 cae en su día local', async () => {
     render(<CargasCombustibleAdminView />);
 
-    // Un solo selector de rango (patrón de Movimientos), no dos campos date;
-    // el `Group` de react-aria es el ancla del popover (regresión conocida).
-    expect(screen.getByText('Período')).toBeTruthy();
+    // Un BOTÓN, no un campo con segmentos dd/mm/aaaa (pedido del administrador).
+    expect(screen.queryByText('dd/mm/aaaa')).toBeNull();
     expect(screen.queryByText('Desde')).toBeNull();
     expect(screen.queryByText('Hasta')).toBeNull();
-    const grupo = document.querySelector('[role="group"]');
-    expect(grupo?.querySelector('[data-slot="date-range-picker-trigger"]')).not.toBeNull();
 
     // Elegir 5-nov → 5-nov en el calendario: solo c2 (las 23:30 LOCALES del
     // 05-11 son su día, aunque en UTC ya sea 06-11).
-    fireEvent.click(grupo!.querySelector('[data-slot="date-range-picker-trigger"]') as HTMLElement);
+    fireEvent.click(filtros().getByRole('button', { name: 'Filtrar por fecha' }));
     const celda = await screen.findAllByRole('button', { name: /November 5, 2026/ });
     fireEvent.click(celda[0]);
     fireEvent.click(screen.getAllByRole('button', { name: /November 5, 2026/ })[0]);
 
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('carga-fila-c2')).toBeTruthy();
+    // El botón ahora dice el rango elegido.
+    expect(filtros().getByRole('button', { name: /05\/11\/2026/ })).toBeTruthy();
 
-    // «Limpiar período» vuelve a mostrar todo.
+    // «Limpiar período» vuelve a mostrar todo y el botón recupera su nombre.
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar período' }));
     expect(screen.getAllByTestId(/carga-fila-/)).toHaveLength(4);
+    expect(filtros().getByRole('button', { name: 'Filtrar por fecha' })).toBeTruthy();
   });
 
   it('una fila vieja sin realizadoPor muestra «—» y el filtro de supervisor no la pierde en «Todos»', async () => {
