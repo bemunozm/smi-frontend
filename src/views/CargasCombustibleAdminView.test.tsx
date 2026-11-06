@@ -1,7 +1,17 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 import type { RegistroCombustible } from '../types/combustible';
+
+// El flujo foto→OCR→EXIF del modal de alta: dobles para no tocar la red. En
+// estos tests nunca se elige foto, pero el módulo igual se importa.
+vi.mock('../lib/photo-reading', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/photo-reading')>()),
+  readCaptureDate: vi.fn().mockResolvedValue(null),
+}));
+vi.mock('../api/OcrAPI', () => ({
+  fuelReadingOcr: vi.fn().mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 }),
+}));
 
 const { listHook, crearMock } = vi.hoisted(() => ({
   listHook: vi.fn(),
@@ -30,6 +40,7 @@ vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({
     data: [
       { id: 'e1', internalCode: 'EX-001', type: 'Excavadora', equipmentClass: 'HEAVY', controlUnit: 'HOURS' },
+      { id: 'e2', internalCode: 'CM-02', type: 'Camioneta', equipmentClass: 'LIGHT', controlUnit: 'KM' },
     ],
   }),
 }));
@@ -221,5 +232,67 @@ describe('CargasCombustibleAdminView', () => {
     rol.value = 'MANTENEDOR';
     render(<CargasCombustibleAdminView />);
     expect(screen.queryByRole('button', { name: 'Nueva carga' })).toBeNull();
+  });
+});
+
+describe('alta manual («Nueva carga»)', () => {
+  it('elegir la clase filtra los equipos y guarda con los valores del formulario; sin foto va foto: null', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva carga' }));
+    const dialog = screen.getByRole('dialog');
+
+    // Parte en Pesado: la camioneta no está entre las opciones del equipo.
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    expect(await screen.findByRole('option', { name: /EX-001/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /CM-02/ })).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: /EX-001/ }));
+
+    // Cambiar a Liviano abre la camioneta (y resetea el equipo elegido).
+    fireEvent.click(within(dialog).getByRole('button', { name: /Clase/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Liviano' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /CM-02/ }));
+
+    fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), {
+      target: { value: '2026-11-04T10:30' },
+    });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar carga' }));
+
+    await waitFor(() => expect(crearMock).toHaveBeenCalledTimes(1));
+    expect(crearMock).toHaveBeenCalledWith(
+      {
+        values: {
+          equipoId: 'e2',
+          litros: 40,
+          tipo: 'PETROLEO',
+          fecha: new Date('2026-11-04T10:30').toISOString(),
+        },
+        foto: null,
+      },
+      expect.anything(),
+    );
+  });
+
+  it('no guarda sin equipo, con litros vacíos o con la fecha borrada', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva carga' }));
+    const dialog = screen.getByRole('dialog');
+    const guardar = within(dialog).getByRole('button', { name: 'Registrar carga' });
+
+    // Sin equipo ni litros: deshabilitado.
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+
+    // Con equipo pero litros en 0, sigue deshabilitado.
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+
+    // Con litros pero la fecha borrada, tampoco.
+    fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '' } });
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+    expect(crearMock).not.toHaveBeenCalled();
   });
 });
