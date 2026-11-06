@@ -27,5 +27,19 @@ export interface RegistroCombustible {
   tipo: string;
   fotoUrl: string | null;
   fecha: string;
-  equipo?: { internalCode: string };
+  /** Tarjeta de turno que originó la carga (cierre con litros); null/ausente
+   * en cargas manuales. */
+  registroHorometroId?: string | null;
+  /** `type`/`equipmentClass` los agrega el backend para la vista admin de
+   * cargas; opcionales para tolerar respuestas del backend anterior. */
+  equipo?: {
+    internalCode: string;
+    type?: string;
+    equipmentClass?: 'LIGHT' | 'HEAVY';
+  };
+  /** Nombre YA resuelto de quien realizó la carga: el supervisor que cerró la
+   * tarjeta, o quien creó la carga manual. Null en filas viejas sin ninguno. */
+  realizadoPor?: string | null;
+  /** TARJETA = nació del cierre de una tarjeta de turno; MANUAL = alta directa. */
+  origen?: 'TARJETA' | 'MANUAL';
 }
