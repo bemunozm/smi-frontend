@@ -8,6 +8,7 @@ import { DecimalField } from '../DecimalField';
 import { EQUIPMENT_CLASS_OPTIONS } from '../../config/flota-colors';
 import { useCrearCargaCombustible } from '../../hooks/useCombustible';
 import { useEquipment } from '../../hooks/useEquipment';
+import { fechaRegistroIso, toDateTimeLocal } from '../../lib/format';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import type { EquipmentClass } from '../../types/equipment';
 import { FotoRespaldoField } from './FotoRespaldoField';
@@ -27,13 +28,6 @@ const CargaManualSchema = z.object({
   fecha: z.string().min(1, 'Requerido'),
 });
 type CargaManualValues = z.infer<typeof CargaManualSchema>;
-
-/** Formato LOCAL de `<input type="datetime-local">` — ver el comentario
- * equivalente en `RegistrarCargaCombustibleModal`. */
-function toLocalDateTimeInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 /**
  * Alta manual de una carga desde el panel admin (`CargasCombustibleAdminView`),
@@ -62,7 +56,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
       equipoId: '',
       litros: 0,
       tipo: 'PETROLEO',
-      fecha: toLocalDateTimeInputValue(new Date()),
+      fecha: toDateTimeLocal(new Date()),
     },
   });
 
@@ -79,7 +73,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
   useEffect(() => {
     if (!photoFlow.file || photoFlow.isReadingPhoto) return;
     const capturada = photoFlow.captureDate ?? new Date();
-    setValue('fecha', toLocalDateTimeInputValue(capturada), { shouldValidate: true });
+    setValue('fecha', toDateTimeLocal(capturada), { shouldValidate: true });
   }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue]);
 
   const cerrar = () => {
@@ -91,23 +85,29 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
 
   const litros = watch('litros');
   const equipoId = watch('equipoId');
-  const fecha = watch('fecha');
+  // `fechaRegistroIso` da null con la fecha vacía, no-fecha o futura: el
+  // backend rechazaría una futura y esta vista no tiene edición para
+  // corregirla después — se bloquea acá (mismo patrón que el alta del panel
+  // de Trabajos extra y Hallazgos).
+  const fechaIso = fechaRegistroIso(watch('fecha'));
   const puedeGuardar =
     equipoId !== '' &&
-    fecha !== '' &&
+    fechaIso !== null &&
     !photoFlow.isReadingPhoto &&
     !crear.isPending &&
     Number.isFinite(litros) &&
     litros > 0;
 
   const onSubmit = (values: CargaManualValues) => {
+    const iso = fechaRegistroIso(values.fecha);
+    if (!iso) return;
     crear.mutate(
       {
         values: {
           equipoId: values.equipoId,
           litros: values.litros,
           tipo: values.tipo,
-          fecha: new Date(values.fecha).toISOString(),
+          fecha: iso,
         },
         foto: photoFlow.file ?? null,
       },
@@ -271,7 +271,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                 render={({ field }) => (
                   <TextField
                     fullWidth
-                    isInvalid={!!errors.fecha}
+                    isInvalid={!!errors.fecha || fechaIso === null}
                     name={field.name}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
@@ -279,7 +279,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                     value={field.value}
                   >
                     <Label>Fecha de carga</Label>
-                    <Input max={toLocalDateTimeInputValue(new Date())} />
+                    <Input max={toDateTimeLocal(new Date())} />
                     {errors.fecha ? <FieldError>{errors.fecha.message}</FieldError> : null}
                   </TextField>
                 )}

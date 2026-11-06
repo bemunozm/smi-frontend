@@ -45,6 +45,8 @@ vi.mock('../hooks/useEquipment', () => ({
   }),
 }));
 
+import { assetUrl } from '../api/UploadsAPI';
+import { toDateTimeLocal } from '../lib/format';
 import { CargasCombustibleAdminView } from './CargasCombustibleAdminView';
 
 /** Fechas construidas en hora LOCAL (TZ-safe): el filtro compara días locales. */
@@ -188,6 +190,17 @@ describe('CargasCombustibleAdminView', () => {
     expect(within(dialog).getByText('Sin foto adjunta.')).toBeTruthy();
   });
 
+  it('una foto legacy (/uploads/...) se sirve vía assetUrl, nunca con la ruta cruda', () => {
+    listHook.mockReturnValue(ok([carga({ id: 'c9', fotoUrl: '/uploads/carga-vieja.jpg' })]));
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c9'));
+    const dialog = screen.getByRole('dialog');
+    const img = within(dialog).getByRole('img');
+    expect(img.getAttribute('src')).toBe(assetUrl('/uploads/carga-vieja.jpg'));
+    expect(img.getAttribute('src')).not.toBe('/uploads/carga-vieja.jpg');
+    expect(img.closest('a')?.getAttribute('href')).toBe(assetUrl('/uploads/carga-vieja.jpg'));
+  });
+
   it('el detalle de una carga con foto la muestra con enlace al tamaño completo', () => {
     render(<CargasCombustibleAdminView />);
     fireEvent.click(screen.getByTestId('carga-fila-c2'));
@@ -273,6 +286,26 @@ describe('alta manual («Nueva carga»)', () => {
       },
       expect.anything(),
     );
+  });
+
+  it('una fecha futura tipeada a mano deja «Registrar carga» deshabilitado', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva carga' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
+    fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
+
+    const guardar = within(dialog).getByRole('button', { name: 'Registrar carga' });
+    // Con la fecha por defecto (ahora) alcanza para guardar…
+    expect(guardar.hasAttribute('disabled')).toBe(false);
+
+    // …pero una fecha futura (el backend las rechazaría y esta vista no
+    // tiene edición para corregirla) bloquea el guardado.
+    const futura = toDateTimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: futura } });
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+    expect(crearMock).not.toHaveBeenCalled();
   });
 
   it('no guarda sin equipo, con litros vacíos o con la fecha borrada', async () => {

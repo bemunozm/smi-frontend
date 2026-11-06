@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
 
+import { assetUrl } from '../api/UploadsAPI';
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { EQUIPMENT_CLASS_OPTIONS, equipmentClassLabel } from '../config/flota-colors';
@@ -99,14 +100,17 @@ function DetalleCargaModal({
                 {carga.fotoUrl ? (
                   <a
                     className="group relative block overflow-hidden rounded-2xl border border-border"
-                    href={carga.fotoUrl}
+                    // `assetUrl`: las fotoUrl legacy de combustible son rutas
+                    // relativas del backend (/uploads/...) — crudas se rompen
+                    // cuando front y API viven en orígenes distintos.
+                    href={assetUrl(carga.fotoUrl)}
                     rel="noreferrer"
                     target="_blank"
                   >
                     <img
                       alt={`Foto de la carga de ${carga.equipo?.internalCode ?? 'equipo'}`}
                       className="max-h-80 w-full bg-surface-secondary object-contain"
-                      src={carga.fotoUrl}
+                      src={assetUrl(carga.fotoUrl)}
                     />
                     <span className="absolute right-2 bottom-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
                       Abrir en tamaño completo
