@@ -1,7 +1,433 @@
+import { useMemo, useState } from 'react';
+import { Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+
+import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
+import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
+import { EQUIPMENT_CLASS_OPTIONS, equipmentClassLabel } from '../config/flota-colors';
+import { useCombustibleList } from '../hooks/useCombustible';
+import { useEquipment } from '../hooks/useEquipment';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { usePermissions } from '../hooks/usePermissions';
+import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
+import type { RegistroCombustible } from '../types/combustible';
+import type { EquipmentClass } from '../types/equipment';
+
+const TIPO_LABEL: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
+
+const ORIGEN_LABEL: Record<string, string> = { TARJETA: 'Tarjeta de turno', MANUAL: 'Manual' };
+
+function tipoDe(carga: RegistroCombustible): string {
+  return TIPO_LABEL[carga.tipo] ?? carga.tipo;
+}
+
+function origenDe(carga: RegistroCombustible): string {
+  return (carga.origen && ORIGEN_LABEL[carga.origen]) || '—';
+}
+
+function formatFecha(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+/** Día local (YYYY-MM-DD) de un timestamp — para comparar contra los inputs
+ * `type="date"` del filtro con el mismo día que ve el usuario en la tabla. */
+function diaLocal(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function Dato({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3.5 border-t border-separator py-2.5">
+      <span className="shrink-0 text-[11px] font-bold tracking-wider text-(--label-color) uppercase">{label}</span>
+      <span className="text-right text-sm text-foreground">{value}</span>
+    </div>
+  );
+}
+
+/** Popup de detalle de UNA carga: todo lo que la tabla trunca, más la foto del
+ * surtidor cuando existe — solo lectura. */
+function DetalleCargaModal({
+  carga,
+  clase,
+  onClose,
+}: {
+  carga: RegistroCombustible | null;
+  clase: EquipmentClass | undefined;
+  onClose: () => void;
+}) {
+  return (
+    <Modal.Backdrop
+      isDismissable
+      isOpen={carga !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Container>
+        <Modal.Dialog className={`${RESPONSIVE_SHEET_DIALOG_WIDE_CLASS} sm:w-full`}>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              {`Carga de combustible · ${carga?.equipo?.internalCode ?? '—'}`}
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body>
+            {carga ? (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
+                  <Dato label="Fecha" value={formatFecha(carga.fecha)} />
+                  <Dato
+                    label="Equipo"
+                    value={`${carga.equipo?.internalCode ?? '—'}${carga.equipo?.type ? ` · ${carga.equipo.type}` : ''}`}
+                  />
+                  <Dato label="Clase" value={clase ? equipmentClassLabel(clase) : '—'} />
+                  <Dato label="Litros" value={`${NUM_CL_1.format(carga.litros)} L`} />
+                  <Dato label="Combustible" value={tipoDe(carga)} />
+                  <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
+                  <Dato label="Origen" value={origenDe(carga)} />
+                </div>
+                {carga.fotoUrl ? (
+                  <a
+                    className="group relative block overflow-hidden rounded-2xl border border-border"
+                    href={carga.fotoUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <img
+                      alt={`Foto de la carga de ${carga.equipo?.internalCode ?? 'equipo'}`}
+                      className="max-h-80 w-full bg-surface-secondary object-contain"
+                      src={carga.fotoUrl}
+                    />
+                    <span className="absolute right-2 bottom-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      Abrir en tamaño completo
+                    </span>
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sin foto adjunta.</p>
+                )}
+              </div>
+            ) : null}
+          </Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
+const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
+
 /**
- * Cargas de combustible del administrador — placeholder: la vista real
- * (lista + filtros + alta manual) llega en la tarea siguiente del plan.
+ * Cargas de combustible del ADMINISTRADOR (`/cargas-combustible`, ADMIN +
+ * SECRETARIA): TODAS las cargas — las que nacen del cierre de tarjeta en
+ * Terreno y las manuales — de la última a la primera, con filtros por equipo,
+ * clase (liviano/pesado), supervisor y rango de fechas, y alta manual para
+ * cualquier equipo. El detalle de cada carga (con su foto) va en popup.
  */
 export function CargasCombustibleAdminView() {
-  return <h1>Cargas de combustible</h1>;
+  const { data, isPending, isError, error } = useCombustibleList();
+  const { data: catalogo } = useEquipment();
+  const [equipoFiltro, setEquipoFiltro] = useState('TODOS');
+  const [claseFiltro, setClaseFiltro] = useState('TODOS');
+  const [supervisorFiltro, setSupervisorFiltro] = useState('TODOS');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const [detalle, setDetalle] = useState<RegistroCombustible | null>(null);
+  const [creando, setCreando] = useState(false);
+  const puedeCrear = usePermissions().can('combustible.create');
+
+  const cargas = useMemo(
+    () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
+    [data],
+  );
+
+  // Clase por equipo del catálogo: fallback para cargas de un backend que aún
+  // no manda `equipo.equipmentClass` (lo que trae la carga manda).
+  const clasePorEquipo = useMemo(() => {
+    const porId = new Map<string, EquipmentClass>();
+    for (const equipo of catalogo ?? []) porId.set(equipo.id, equipo.equipmentClass);
+    return porId;
+  }, [catalogo]);
+
+  const claseDe = (carga: RegistroCombustible): EquipmentClass | undefined =>
+    carga.equipo?.equipmentClass ?? clasePorEquipo.get(carga.equipoId);
+
+  // Opciones de los filtros: solo lo que existe en los datos cargados.
+  const equipos = useMemo(() => {
+    const porId = new Map<string, string>();
+    for (const c of cargas) porId.set(c.equipoId, c.equipo?.internalCode ?? c.equipoId);
+    return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
+  }, [cargas]);
+
+  const supervisores = useMemo(
+    () =>
+      [...new Set(cargas.map((c) => c.realizadoPor).filter((nombre): nombre is string => Boolean(nombre)))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [cargas],
+  );
+
+  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+
+  const lista = useMemo(
+    () =>
+      cargas.filter((c) => {
+        if (equipoFiltro !== 'TODOS' && c.equipoId !== equipoFiltro) return false;
+        if (claseFiltro !== 'TODOS' && claseDe(c) !== claseFiltro) return false;
+        if (supervisorFiltro !== 'TODOS' && c.realizadoPor !== supervisorFiltro) return false;
+        const dia = diaLocal(c.fecha);
+        if (desde && dia < desde) return false;
+        if (hasta && dia > hasta) return false;
+        return true;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `claseDe` deriva de `clasePorEquipo`
+    [cargas, equipoFiltro, claseFiltro, supervisorFiltro, desde, hasta, clasePorEquipo],
+  );
+
+  const totalLitros = lista.reduce((acc, c) => acc + c.litros, 0);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+            SMI · Combustible
+          </span>
+          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+            Cargas de combustible
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Todas las cargas: las del cierre de tarjeta en terreno y las manuales. Abre una para ver su detalle y la
+            foto del surtidor.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
+            {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)}{' '}
+            {lista.length === 1 ? 'carga' : 'cargas'}
+          </Chip>
+          {puedeCrear ? <Button onPress={() => setCreando(true)}>Nueva carga</Button> : null}
+        </div>
+      </div>
+
+      <Card>
+        <Card.Header>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <Card.Title>Listado</Card.Title>
+              <Card.Description>De la más reciente a la más antigua. El total de arriba sigue al filtro.</Card.Description>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Equipo
+                <select
+                  className={SELECT_FILTRO}
+                  onChange={(event) => setEquipoFiltro(event.target.value)}
+                  value={equipoFiltro}
+                >
+                  <option value="TODOS">Todos</option>
+                  {equipos.map((equipo) => (
+                    <option key={equipo.id} value={equipo.id}>
+                      {equipo.codigo}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Clase
+                <select
+                  className={SELECT_FILTRO}
+                  onChange={(event) => setClaseFiltro(event.target.value)}
+                  value={claseFiltro}
+                >
+                  <option value="TODOS">Todos</option>
+                  {EQUIPMENT_CLASS_OPTIONS.map((clase) => (
+                    <option key={clase.value} value={clase.value}>
+                      {clase.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Supervisor
+                <select
+                  className={SELECT_FILTRO}
+                  onChange={(event) => setSupervisorFiltro(event.target.value)}
+                  value={supervisorFiltro}
+                >
+                  <option value="TODOS">Todos</option>
+                  {supervisores.map((nombre) => (
+                    <option key={nombre} value={nombre}>
+                      {nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Desde
+                <input
+                  className={SELECT_FILTRO}
+                  max={hasta || undefined}
+                  onChange={(event) => setDesde(event.target.value)}
+                  type="date"
+                  value={desde}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Hasta
+                <input
+                  className={SELECT_FILTRO}
+                  min={desde || undefined}
+                  onChange={(event) => setHasta(event.target.value)}
+                  type="date"
+                  value={hasta}
+                />
+              </label>
+            </div>
+          </div>
+        </Card.Header>
+        <Card.Content>
+          {isPending ? (
+            <div className="flex justify-center py-10">
+              <Spinner color="accent" size="sm" />
+            </div>
+          ) : null}
+
+          {isError ? (
+            <p className="text-sm text-danger-soft-foreground" role="alert">
+              {error instanceof Error ? error.message : 'No se pudieron cargar las cargas de combustible.'}
+            </p>
+          ) : null}
+
+          {!isPending && !isError && lista.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              {cargas.length === 0
+                ? 'No hay cargas de combustible registradas.'
+                : 'Ninguna carga calza con el filtro.'}
+            </p>
+          ) : null}
+
+          {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {lista.map((c) => {
+                const clase = claseDe(c);
+                return (
+                  <li key={c.id}>
+                    <button
+                      data-testid={`carga-fila-${c.id}`}
+                      className="flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left hover:bg-default"
+                      type="button"
+                      onClick={() => setDetalle(c)}
+                    >
+                      <div className="flex w-full items-start justify-between gap-2">
+                        <span className="text-[15px] font-semibold text-foreground">
+                          {formatFecha(c.fecha)} · <span className="font-mono">{c.equipo?.internalCode ?? '—'}</span>
+                        </span>
+                        <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
+                          {NUM_CL_1.format(c.litros)} L
+                        </span>
+                      </div>
+                      <dl className="m-0 grid w-full grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Combustible
+                          </dt>
+                          <dd className="m-0 text-foreground">{tipoDe(c)}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Clase
+                          </dt>
+                          <dd className="m-0 text-foreground">{clase ? equipmentClassLabel(clase) : '—'}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Realizó
+                          </dt>
+                          <dd className="m-0 text-foreground">{c.realizadoPor ?? '—'}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Origen
+                          </dt>
+                          <dd className="m-0 text-foreground">{origenDe(c)}</dd>
+                        </div>
+                      </dl>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+
+          {!isPending && !isError && lista.length > 0 && esEscritorio ? (
+            <Table variant="secondary">
+              <Table.ScrollContainer>
+                <Table.Content aria-label="Cargas de combustible" className="min-w-full">
+                  <Table.Header>
+                    <Table.Column isRowHeader>Fecha</Table.Column>
+                    <Table.Column>Equipo</Table.Column>
+                    <Table.Column>Clase</Table.Column>
+                    <Table.Column>Combustible</Table.Column>
+                    <Table.Column>Realizó</Table.Column>
+                    <Table.Column className="w-full">Origen</Table.Column>
+                    <Table.Column>Foto</Table.Column>
+                    <Table.Column className="text-right">Litros</Table.Column>
+                  </Table.Header>
+                  <Table.Body>
+                    {lista.map((c) => {
+                      const clase = claseDe(c);
+                      return (
+                        <Table.Row
+                          className="cursor-pointer"
+                          data-testid={`carga-fila-${c.id}`}
+                          key={c.id}
+                          onAction={() => setDetalle(c)}
+                        >
+                          <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
+                            {formatFecha(c.fecha)}
+                          </Table.Cell>
+                          <Table.Cell className="font-mono text-sm whitespace-nowrap">
+                            {c.equipo?.internalCode ?? '—'}
+                          </Table.Cell>
+                          <Table.Cell className="text-sm whitespace-nowrap">
+                            {clase ? equipmentClassLabel(clase) : '—'}
+                          </Table.Cell>
+                          <Table.Cell className="text-sm whitespace-nowrap">{tipoDe(c)}</Table.Cell>
+                          <Table.Cell className="text-sm whitespace-nowrap">{c.realizadoPor ?? '—'}</Table.Cell>
+                          <Table.Cell className="text-sm whitespace-nowrap">{origenDe(c)}</Table.Cell>
+                          <Table.Cell className="text-sm whitespace-nowrap">{c.fotoUrl ? 'Sí' : '—'}</Table.Cell>
+                          <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
+                            {NUM_CL_1.format(c.litros)} L
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    })}
+                  </Table.Body>
+                </Table.Content>
+              </Table.ScrollContainer>
+            </Table>
+          ) : null}
+        </Card.Content>
+      </Card>
+
+      <DetalleCargaModal
+        carga={detalle}
+        clase={detalle ? claseDe(detalle) : undefined}
+        onClose={() => setDetalle(null)}
+      />
+
+      {creando ? <NuevaCargaCombustibleModal onClose={() => setCreando(false)} /> : null}
+    </div>
+  );
 }
