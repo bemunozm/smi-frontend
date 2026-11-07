@@ -61,6 +61,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Trabajos extraordinarios con filtros (renombrado «Report» a pedido del
   // administrador — las rutas y el dominio conservan el nombre viejo).
   { label: 'Report', to: '/trabajos-extra', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Todas las cargas de combustible (cierres de tarjeta + altas manuales),
+  // con filtros y alta manual para livianos y pesados.
+  { label: 'Cargas de combustible', to: '/cargas-combustible', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Registro de mantenciones completadas del taller.
   { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------

@@ -1,8 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { listCombustible } from '../api/CombustibleAPI';
+import { createCombustible, listCombustible } from '../api/CombustibleAPI';
+import type { CreateCombustibleBody } from '../api/CombustibleAPI';
+import { uploadFile } from '../api/UploadsAPI';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import { COMBUSTIBLE_KEY as KEY } from '../lib/query-keys';
+import { generateUuid } from '../lib/uuid';
 import type { CombustibleForm } from '../types/combustible';
 import { useQueuedCreate } from './useQueuedMutation';
 
@@ -35,5 +39,41 @@ export function useCreateCombustible() {
       toast.success('Carga de combustible registrada');
     },
     errorFallback: 'No se pudo registrar la carga de combustible.',
+  });
+}
+
+export interface CrearCargaCombustibleVars {
+  values: Omit<CreateCombustibleBody, 'id' | 'fotoKey'>;
+  /** Foto del surtidor — opcional en el alta manual del panel. */
+  foto: File | null;
+}
+
+/**
+ * Alta directa para la vista admin de cargas (escritorio, online): sube la
+ * foto solo si hay, POST inmediato + invalidación del listado — sin outbox, a
+ * diferencia de `useCreateCombustible` (Terreno). El `id` lo genera el cliente
+ * igual: un reintento del POST no duplica la carga. Mismo patrón que
+ * `useCrearTrabajoExtra`.
+ */
+export function useCrearCargaCombustible() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ values, foto }: CrearCargaCombustibleVars) => {
+      const fotoKey = foto ? (await uploadFile(foto)).key : undefined;
+      return createCombustible({
+        ...values,
+        ...(fotoKey ? { fotoKey } : {}),
+        id: generateUuid(),
+      });
+    },
+    onSuccess: () => {
+      toast.success('Carga de combustible registrada');
+      void queryClient.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(
+        mensajeErrorOperacion(error, 'No se pudo registrar la carga de combustible.'),
+      );
+    },
   });
 }
