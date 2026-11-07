@@ -66,6 +66,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Cargas de combustible', to: '/cargas-combustible', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Registro de mantenciones completadas del taller.
   { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Grilla mensual de días trabajados (supervisores + operadores), derivada
+  // de tarjetas y Reports — la hoja «DIAS TRABAJO MES» de la secretaria.
+  { label: 'Asistencia', to: '/asistencia', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR], seccion: 'Usuarios' },
   { label: 'Usuarios', to: '/usuarios', roles: [ROLES.ADMIN], seccion: 'Usuarios' },
