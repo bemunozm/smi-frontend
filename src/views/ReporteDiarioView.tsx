@@ -17,6 +17,7 @@ import {
   useReporteCambios,
   useReportesDiarios,
 } from '../hooks/useReporteDiario';
+import { semillaDeReporte } from '../lib/reporte-diario-semilla';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { errorDeEntero, formatDecimalInput } from '../lib/decimal';
 import { plural } from '../lib/format';
@@ -189,6 +190,17 @@ const fechaCompleta = (f: Date) => `${diaMes(f)}/${f.getFullYear()}`;
  * «CANTIDAD DE CAMIONES» justo debajo. Es el mismo tratamiento que ya usan
  * los ítems de Traspasos en esta pantalla.
  */
+/** «Copiado de tu reporte del 05/11 · diurno»: de dónde salen los datos ya escritos. */
+function AvisoSemilla({ desde }: { desde: { fecha: string; turno: Turno } }) {
+  const [, m, d] = desde.fecha.split('-');
+  return (
+    <Hint>
+      Copiado de tu reporte del {d}/{m} · {desde.turno === 'DIURNO' ? 'diurno' : 'nocturno'}. Cámbialo si
+      algo es distinto en este turno.
+    </Hint>
+  );
+}
+
 /** Vuelta a la lista del panel (solo con `elegirTurno`, que vive en el router del panel). */
 function VolverAReportes() {
   const navigate = useNavigate();
@@ -466,6 +478,31 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   const [empresas, setEmpresas] = useState<Record<string, boolean>>({});
   const [prod, setProd] = useState(PROD_VACIO);
 
+  /**
+   * Personal y plantas parten con lo de tu reporte anterior
+   * (`semillaDeReporte`), editables. Se rellenan mientras no hayas tocado
+   * esos campos: si cambias de turno sin escribir nada, se vuelven a sembrar
+   * desde el reporte anterior a ESE turno; lo que escribiste no se pisa.
+   */
+  const semilla = useMemo(
+    () => semillaDeReporte(reportes ?? [], user?.id, elegido.fecha, elegido.turno),
+    [reportes, user?.id, elegido.fecha, elegido.turno],
+  );
+  const [personalEditado, setPersonalEditado] = useState(false);
+  const claveSemilla = semilla ? `${elegido.fecha}|${elegido.turno}|${semilla.desde.fecha}|${semilla.desde.turno}` : '';
+  const [sembradoCon, setSembradoCon] = useState('');
+  if (!personalEditado && claveSemilla !== sembradoCon) {
+    setSembradoCon(claveSemilla);
+    setPersonal(
+      semilla
+        ? (Object.fromEntries(
+            PERSONAL.map(([clave, rol]) => [clave, semilla.personal[rol] ?? '']),
+          ) as typeof PERSONAL_VACIO)
+        : PERSONAL_VACIO,
+    );
+    setProductos(semilla?.productos ?? {});
+  }
+
   const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
   const crear = useCreateReporteDiario();
@@ -510,6 +547,9 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
         if (result.status === 'unchanged') return;
         setPersonal(PERSONAL_VACIO);
         setProductos({});
+        // El siguiente reporte se vuelve a sembrar con este (ya es el anterior).
+        setPersonalEditado(false);
+        setSembradoCon('');
         setTraspasos(TRASPASOS_VACIO);
         setEmpresas({});
         setProd(PROD_VACIO);
@@ -581,13 +621,17 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
 
       <Card>
         <CardHead titulo="Personal del turno" bajada="Los cuatro cargos los escribe el supervisor." />
+        {semilla ? <AvisoSemilla desde={semilla.desde} /> : null}
         <Form>
           <div className="flex flex-col gap-3.5 sm:grid sm:grid-cols-2 lg:flex lg:flex-col">
             {PERSONAL.map(([clave, label]) => (
               <Campo key={clave} label={label}>
                 <Input
                   value={personal[clave]}
-                  onChange={(e) => setPersonal((p) => ({ ...p, [clave]: e.target.value }))}
+                  onChange={(e) => {
+                    setPersonalEditado(true);
+                    setPersonal((p) => ({ ...p, [clave]: e.target.value }));
+                  }}
                 />
               </Campo>
             ))}
@@ -639,6 +683,7 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
           titulo="Operaciones en planta"
           bajada="Una línea por planta. El producto se escribe libre, sin catálogo."
         />
+        {semilla ? <AvisoSemilla desde={semilla.desde} /> : null}
         <div className="flex flex-col gap-2">
           {plantas.map((planta) => (
             <div key={planta.id} className="grid grid-cols-[132px_1fr] items-center gap-2.5">
@@ -648,9 +693,10 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
                 value={productos[planta.id] ?? ''}
                 placeholder="Sin operación en el turno"
                 className="!h-12 !text-[15px]"
-                onChange={(e) =>
-                  setProductos((p) => ({ ...p, [planta.id]: e.target.value }))
-                }
+                onChange={(e) => {
+                  setPersonalEditado(true);
+                  setProductos((p) => ({ ...p, [planta.id]: e.target.value }));
+                }}
               />
             </div>
           ))}
