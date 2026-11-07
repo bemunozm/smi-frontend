@@ -14,6 +14,11 @@ export const OperatorSchema = z.object({
   name: z.string(),
   rut: z.string().nullable(),
   isActive: z.boolean(),
+  /** Supervisor con que sale habitualmente (`user.id`) y su nombre; aparece
+   * primero en los selectores de ese supervisor. `nullish`: respuestas
+   * cacheadas antes del campo. */
+  supervisorHabitualId: z.string().nullish(),
+  supervisorHabitualNombre: z.string().nullish(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -42,6 +47,8 @@ export const OperatorFormSchema = z.object({
     .max(12, 'Máximo 12 caracteres')
     .refine((value) => value.trim().length === 0 || isValidRut(value), 'RUT inválido'),
   isActive: z.boolean(),
+  /** `user.id` del supervisor habitual; `''` = ninguno. Solo lo edita el ADMIN. */
+  supervisorHabitualId: z.string(),
 });
 export type OperatorFormValues = z.infer<typeof OperatorFormSchema>;
 
@@ -49,6 +56,7 @@ export type OperatorFormValues = z.infer<typeof OperatorFormSchema>;
 export interface CreateOperatorInput {
   name: string;
   rut?: string;
+  supervisorHabitualId?: string;
 }
 
 /** Body de `PATCH /api/operators/:id` — parcial; el contrato no admite
@@ -57,6 +65,8 @@ export interface UpdateOperatorInput {
   name?: string;
   rut?: string;
   isActive?: boolean;
+  /** `null` lo quita. */
+  supervisorHabitualId?: string | null;
 }
 
 export function toCreateOperatorPayload(values: OperatorFormValues): CreateOperatorInput {
@@ -64,6 +74,7 @@ export function toCreateOperatorPayload(values: OperatorFormValues): CreateOpera
   return {
     name: values.name.trim(),
     ...(rut ? { rut: normalizeRut(rut) ?? rut } : {}),
+    ...(values.supervisorHabitualId ? { supervisorHabitualId: values.supervisorHabitualId } : {}),
   };
 }
 
@@ -73,6 +84,9 @@ export function toUpdateOperatorPayload(values: OperatorFormValues): UpdateOpera
     name: values.name.trim(),
     rut: rut ? (normalizeRut(rut) ?? rut) : undefined,
     isActive: values.isActive,
+    // Solo viaja si cambió (la edición se arma contra la base): un supervisor
+    // que corrige el nombre no lo manda.
+    supervisorHabitualId: values.supervisorHabitualId || null,
   };
 }
 
@@ -82,4 +96,5 @@ export interface OperatorFields {
   name: string;
   rut: string | null;
   isActive: boolean;
+  supervisorHabitualId: string | null;
 }

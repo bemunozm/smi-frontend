@@ -39,7 +39,7 @@ export function useCreateOperator() {
   });
 }
 
-const CAMPOS_DE_OPERADOR = ['name', 'rut', 'isActive'] as const;
+const CAMPOS_DE_OPERADOR = ['name', 'rut', 'isActive', 'supervisorHabitualId'] as const;
 
 export interface UpdateOperatorVars {
   /** El operador tal como lo muestra la pantalla: la base de la edición. */
@@ -53,7 +53,8 @@ async function edicionDeOperador({ operator, input }: UpdateOperatorVars) {
   const edicion = await buildQueuedEdit<OperatorFields>({
     entity: operatorEntity(operator.id),
     ops: ['operator.update'],
-    base: pickFields(operator, CAMPOS_DE_OPERADOR),
+    // Sin supervisor habitual es `null` (una respuesta cacheada sin el campo, también).
+    base: { ...pickFields(operator, CAMPOS_DE_OPERADOR), supervisorHabitualId: operator.supervisorHabitualId ?? null },
     next: input,
     fields: CAMPOS_DE_OPERADOR,
   });

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { opcionesOperador } from '../lib/operadores-habituales';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -88,6 +90,8 @@ const fmtKm = (n: number | undefined) =>
 type Clase = 'pesados' | 'livianos';
 
 export function RegistroEquipoView() {
+  // «Tus operadores» primero: los que salen habitualmente con este supervisor.
+  const supervisorId = useCurrentUser().user?.id;
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enLinea = useOnlineStatus();
 
@@ -224,7 +228,7 @@ export function RegistroEquipoView() {
               etiqueta="Operador"
               valor={apertura.operatorId}
               onChange={(operatorId) => setApertura((a) => ({ ...a, operatorId }))}
-              opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
+              opciones={opcionesOperador(operadores, supervisorId)}
             />
           </Campo>
 
@@ -939,7 +943,7 @@ export function RegistroEquipoView() {
   );
 
   /** Operadores activos, más el de la tarjeta si ya no lo está: se puede dejar, no elegir de nuevo. */
-  const opcionesOperadorEdicion = operadores.map((o) => ({ valor: o.id, titulo: o.name }));
+  const opcionesOperadorEdicion = opcionesOperador(operadores, supervisorId);
   const operadorActual = edicion.editando;
   if (operadorActual?.operatorId && !opcionesOperadorEdicion.some((o) => o.valor === operadorActual.operatorId)) {
     opcionesOperadorEdicion.unshift({ valor: operadorActual.operatorId, titulo: operadorActual.operador });
