@@ -27,7 +27,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'equipmentDocument.delete': [ADMIN],
   'horometro.create': [ADMIN, SUPERVISOR],
   'horometro.close': [ADMIN, SUPERVISOR],
-  'combustible.create': [ADMIN, SUPERVISOR],
+  // SECRETARIA registra la carga que un supervisor olvidó — mismo criterio
+  // que trabajos extra y hallazgos (espejo del @Roles del backend).
+  'combustible.create': [ADMIN, SUPERVISOR, SECRETARIA],
   // Inventario
   'item.create': [ADMIN],
   'item.update': [ADMIN],
@@ -117,7 +119,9 @@ const RUTAS_SECRETARIA = [
   '/reportes-diarios',
   '/hallazgos',
   '/trabajos-extra',
+  '/cargas-combustible',
   '/mantenciones',
+  '/asistencia',
   '/notificaciones',
   '/perfil',
 ];

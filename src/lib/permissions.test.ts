@@ -20,7 +20,7 @@ describe('WRITE_ROLES', () => {
     ['item.setMinimum', [ADMIN, MANTENEDOR]],
     ['horometro.create', [ADMIN, SUPERVISOR]],
     ['horometro.close', [ADMIN, SUPERVISOR]],
-    ['combustible.create', [ADMIN, SUPERVISOR]],
+    ['combustible.create', [ADMIN, SUPERVISOR, SECRETARIA]],
     ['equipment.create', [ADMIN]],
     ['equipment.status', [ADMIN, SUPERVISOR]],
     ['intervencion.create', [ADMIN, MANTENEDOR, SECRETARIA]],

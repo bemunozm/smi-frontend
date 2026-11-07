@@ -68,6 +68,8 @@ export const OPERATORS_KEY = ['operators'] as const;
 /** Documentos por equipo: `[...EQUIPMENT_DOCUMENTS_KEY, equipmentId]`. */
 export const EQUIPMENT_DOCUMENTS_KEY = ['equipment-documents'] as const;
 export const COMBUSTIBLE_KEY = ['combustible'] as const;
+/** Asistencia mensual: `[...ASISTENCIA_KEY, 'YYYY-MM']`. */
+export const ASISTENCIA_KEY = ['asistencia'] as const;
 export const ORDENES_KEY = ['ordenes'] as const;
 /** Bitácora por orden: `[...INTERVENCIONES_KEY, ordenId]`. */
 export const INTERVENCIONES_KEY = ['intervenciones'] as const;

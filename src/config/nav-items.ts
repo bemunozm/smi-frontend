@@ -61,8 +61,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Trabajos extraordinarios con filtros (renombrado «Report» a pedido del
   // administrador — las rutas y el dominio conservan el nombre viejo).
   { label: 'Report', to: '/trabajos-extra', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Todas las cargas de combustible (cierres de tarjeta + altas manuales),
+  // con filtros y alta manual para livianos y pesados.
+  { label: 'Cargas de combustible', to: '/cargas-combustible', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Registro de mantenciones completadas del taller.
   { label: 'Mantenciones', to: '/mantenciones', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Grilla mensual de días trabajados (supervisores + operadores), derivada
+  // de tarjetas y Reports — la hoja «DIAS TRABAJO MES» de la secretaria.
+  { label: 'Asistencia', to: '/asistencia', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR], seccion: 'Usuarios' },
   { label: 'Usuarios', to: '/usuarios', roles: [ROLES.ADMIN], seccion: 'Usuarios' },

@@ -30,6 +30,8 @@ describe('routes', () => {
     for (const path of [
       '/hallazgos',
       '/trabajos-extra',
+      '/cargas-combustible',
+      '/asistencia',
       '/reportes-diarios',
       '/reportes-diarios/cargar',
       '/mantenciones',
