@@ -121,6 +121,7 @@ const RUTAS_SECRETARIA = [
   '/trabajos-extra',
   '/cargas-combustible',
   '/mantenciones',
+  '/asistencia',
   '/notificaciones',
   '/perfil',
 ];

@@ -34,6 +34,7 @@ import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
 import { CargasCombustibleAdminView } from './views/CargasCombustibleAdminView';
+import { AsistenciaView } from './views/AsistenciaView';
 import { MantencionesAdminView } from './views/MantencionesAdminView';
 import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ReportesView } from './views/ReportesView';
@@ -157,6 +158,9 @@ export const router = createBrowserRouter([
                   // Registro de reportes de salida de turno de los
                   // supervisores: ver sus tarjetas y descargar el PDF.
                   { path: '/reportes', element: <ReportesView /> },
+                  // Grilla mensual de días trabajados (la hoja «DIAS TRABAJO
+                  // MES» de la secretaria), derivada de tarjetas y Reports.
+                  { path: '/asistencia', element: <AsistenciaView /> },
                 ],
               },
               {
