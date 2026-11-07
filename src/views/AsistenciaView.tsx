@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { Button, Card, Chip, Label, ListBox, Select, Spinner } from '@heroui/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -96,7 +96,7 @@ export function AsistenciaView() {
     </tr>
   );
 
-  const filas: JSX.Element[] = [];
+  const filas: ReactElement[] = [];
   let grupoAnterior: PersonaAsistencia['tipo'] | null = null;
   for (const p of personas) {
     if (p.tipo !== grupoAnterior) {

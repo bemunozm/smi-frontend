@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { opcionesOperador } from '../lib/operadores-habituales';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil, Plus, X } from 'lucide-react';
@@ -613,6 +615,8 @@ function FormularioTrabajo({
   onGuardar: (values: TrabajoExtraForm) => void | Promise<void>;
   onCancelar?: () => void;
 }) {
+  // «Tus operadores» primero: los que salen habitualmente con este supervisor.
+  const supervisorId = useCurrentUser().user?.id;
   const {
     register,
     handleSubmit,
@@ -715,7 +719,7 @@ function FormularioTrabajo({
               placeholder="Elegí el operador"
               valor={watch('operatorId') ?? ''}
               onChange={(operatorId) => setValue('operatorId', operatorId, { shouldValidate: true })}
-              opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
+              opciones={opcionesOperador(operadores, supervisorId)}
             />
           </Campo>
         </div>

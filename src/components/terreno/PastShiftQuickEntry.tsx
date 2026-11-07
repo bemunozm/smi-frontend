@@ -5,6 +5,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { usePastShiftQuickEntry } from '../../hooks/usePastShiftQuickEntry';
 import type { ContextoTurno } from '../../lib/turno';
 import type { Equipment } from '../../types/equipment';
+import { opcionesOperador } from '../../lib/operadores-habituales';
 import type { Operator } from '../../types/operator';
 import { Boton, Card, CardHead, Campo, Form, Hint, Input, Selector } from './ui';
 
@@ -68,7 +69,7 @@ export function PastShiftQuickEntry({
                 etiqueta={`Operador de la fila ${i + 1}`}
                 valor={fila.operatorId}
                 onChange={(operatorId) => q.setFila(i, { operatorId })}
-                opciones={operadores.map((o) => ({ valor: o.id, titulo: o.name }))}
+                opciones={opcionesOperador(operadores, user?.id)}
               />
             </Campo>
 

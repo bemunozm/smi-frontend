@@ -13,7 +13,9 @@ import {
   Input,
   InputGroup,
   Label,
+  ListBox,
   Modal,
+  Select,
   Spinner,
   Switch,
   Table,
@@ -25,6 +27,8 @@ import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePend
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { ActionTile } from '../components/ActionTile';
 import { usePermissions } from '../hooks/usePermissions';
+import { useUsers } from '../hooks/useUsers';
+import { ROLES } from '../types/roles';
 import { RECURSOS_DE_OPERADORES } from '../lib/pending-resources';
 import { formatRutInput } from '../lib/rut';
 import {
@@ -42,7 +46,52 @@ import {
   type OperatorFormValues,
 } from '../types/operator';
 
-const DEFAULT_FORM_VALUES: OperatorFormValues = { name: '', rut: '', isActive: true };
+const DEFAULT_FORM_VALUES: OperatorFormValues = { name: '', rut: '', isActive: true, supervisorHabitualId: '' };
+
+const SIN_SUPERVISOR = 'ninguno';
+
+/**
+ * «Supervisor habitual»: con quién sale habitualmente el operador. En los
+ * selectores de ese supervisor aparece primero, en «Tus operadores»
+ * (`lib/operadores-habituales`). Solo el ADMIN lo asigna (el backend se lo
+ * rechaza al resto), así que al supervisor no se le muestra.
+ */
+function SupervisorHabitualField({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const { role } = usePermissions();
+  const esAdmin = role === ROLES.ADMIN;
+  const { data: supervisores = [] } = useUsers({ role: ROLES.SUPERVISOR }, esAdmin);
+  if (!esAdmin) return null;
+  return (
+    <Select
+      fullWidth
+      value={value || SIN_SUPERVISOR}
+      onChange={(v) => v && onChange(v === SIN_SUPERVISOR ? '' : String(v))}
+    >
+      <Label>Supervisor habitual (opcional)</Label>
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          <ListBox.Item id={SIN_SUPERVISOR} textValue="Ninguno">
+            Ninguno
+            <ListBox.ItemIndicator />
+          </ListBox.Item>
+          {supervisores.map((s) => (
+            <ListBox.Item id={s.id} key={s.id} textValue={s.name}>
+              {s.name}
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+      <span className="text-xs text-muted-foreground">
+        Le aparece primero a ese supervisor al elegir operador. Los demás lo pueden elegir igual.
+      </span>
+    </Select>
+  );
+}
 
 /**
  * Plantilla de referencia: modal con RHF + zodResolver + `useCreateOperator`
@@ -134,6 +183,11 @@ function CreateOperatorModal() {
                           </TextField>
                         )}
                       />
+                      <Controller
+                        control={control}
+                        name="supervisorHabitualId"
+                        render={({ field }) => <SupervisorHabitualField onChange={field.onChange} value={field.value} />}
+                      />
                     </form>
                   </Modal.Body>
                   <Modal.Footer>
@@ -176,7 +230,12 @@ function EditOperatorModal({ operator, isOpen, onOpenChange }: OperatorModalProp
   } = useForm<OperatorFormValues>({
     resolver: zodResolver(OperatorFormSchema),
     // Se muestra con el mismo formato que al escribirlo (12.345.678-9).
-    values: { name: operator.name, rut: formatRutInput(operator.rut ?? ''), isActive: operator.isActive },
+    values: {
+      name: operator.name,
+      rut: formatRutInput(operator.rut ?? ''),
+      isActive: operator.isActive,
+      supervisorHabitualId: operator.supervisorHabitualId ?? '',
+    },
   });
 
   return (
@@ -243,6 +302,11 @@ function EditOperatorModal({ operator, isOpen, onOpenChange }: OperatorModalProp
                           {errors.rut ? <FieldError>{errors.rut.message}</FieldError> : null}
                         </TextField>
                       )}
+                    />
+                    <Controller
+                      control={control}
+                      name="supervisorHabitualId"
+                      render={({ field }) => <SupervisorHabitualField onChange={field.onChange} value={field.value} />}
                     />
                   </form>
                 </Modal.Body>
@@ -425,6 +489,9 @@ function OperatorCardMobile({ operator, marca }: { operator: Operator; marca: Ma
               <div className="flex min-w-0 flex-col items-start gap-1">
                 <span className="max-w-full truncate text-base font-semibold text-foreground">{operator.name}</span>
                 <span className="font-mono text-xs text-muted-foreground">{operator.rut ?? 'Sin RUT'}</span>
+                {operator.supervisorHabitualNombre ? (
+                  <span className="text-xs text-muted-foreground">Sale con {operator.supervisorHabitualNombre}</span>
+                ) : null}
                 {statusChip}
                 <MarcaPendiente marca={marca} />
               </div>
@@ -574,6 +641,7 @@ export function OperadoresView() {
                   <Table.Header>
                     <Table.Column isRowHeader>Nombre</Table.Column>
                     <Table.Column>RUT</Table.Column>
+                    <Table.Column>Supervisor habitual</Table.Column>
                     <Table.Column>Estado</Table.Column>
                     <Table.Column>Acciones</Table.Column>
                   </Table.Header>
@@ -586,6 +654,7 @@ export function OperadoresView() {
                             <MarcaPendiente marca={pendientes.marcaDe('operator', operator.id)} />
                           </Table.Cell>
                           <Table.Cell className="font-mono text-sm">{operator.rut ?? '—'}</Table.Cell>
+                          <Table.Cell className="text-sm">{operator.supervisorHabitualNombre ?? '—'}</Table.Cell>
                           <Table.Cell>
                             <Chip color={operator.isActive ? 'success' : 'default'} size="sm" variant="soft">
                               {operator.isActive ? 'Activo' : 'Inactivo'}
