@@ -30,6 +30,12 @@ import {
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
 import { formatDate } from './workshop';
+import {
+  guardarPrimeroClase,
+  leerPrimeroClase,
+  opcionesEquipoPorClase,
+  type PrimeroClase,
+} from '../../lib/equipos-por-clase';
 
 const EMPTY_FORM: LogOperationFormValues = {
   equipoId: '',
@@ -53,6 +59,33 @@ function EmptyState({ title, description }: { title: string; description: string
       <p className="m-0 text-sm font-semibold">{title}</p>
       <p className="m-0 text-sm text-muted-foreground">{description}</p>
     </div>
+  );
+}
+
+/**
+ * «Ver primero: Pesados · Livianos» bajo el selector de equipo. Cada
+ * mantenedor deja arriba el grupo con que más trabaja; queda guardado en el
+ * dispositivo.
+ */
+function PrimeroToggle({ valor, onChange }: { valor: PrimeroClase; onChange: (v: PrimeroClase) => void }) {
+  const boton = (v: PrimeroClase, texto: string) => (
+    <button
+      aria-pressed={valor === v}
+      className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${
+        valor === v ? 'bg-foreground text-background' : 'bg-[#eef0f2] text-[#3a414b]'
+      }`}
+      type="button"
+      onClick={() => onChange(v)}
+    >
+      {texto}
+    </button>
+  );
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      Ver primero:
+      {boton('HEAVY', 'Pesados')}
+      {boton('LIGHT', 'Livianos')}
+    </span>
   );
 }
 
@@ -96,6 +129,11 @@ export function CreateOperationModal() {
   const { data: ordenes } = useOrdenes();
   const logOperation = useLogOperation();
   const [abierto, setAbierto] = useState(false);
+  const [primero, setPrimero] = useState<PrimeroClase>(leerPrimeroClase);
+  const elegirPrimero = (valor: PrimeroClase): void => {
+    setPrimero(valor);
+    guardarPrimeroClase(valor);
+  };
 
   const {
     control,
@@ -111,12 +149,12 @@ export function CreateOperationModal() {
 
   const opcionesEquipo: OpcionSelector[] = useMemo(
     () =>
-      (equipment ?? []).map((eq) => ({
+      opcionesEquipoPorClase(equipment ?? [], primero, (eq) => ({
         valor: eq.internalCode,
         titulo: eq.internalCode,
         detalle: `${eq.brand} ${eq.model}`,
       })),
-    [equipment],
+    [equipment, primero],
   );
 
   const selectedEquipment = useMemo(
@@ -165,7 +203,12 @@ export function CreateOperationModal() {
                 control={control}
                 name="equipoId"
                 render={({ field }) => (
-                  <Campo error={errors.equipoId?.message} label="Equipo" requerido>
+                  <Campo
+                    error={errors.equipoId?.message}
+                    hint={<PrimeroToggle valor={primero} onChange={elegirPrimero} />}
+                    label="Equipo"
+                    requerido
+                  >
                     <Selector
                       etiqueta="Equipo"
                       opciones={opcionesEquipo}
