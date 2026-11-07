@@ -60,9 +60,10 @@ const carga = (over: Partial<RegistroCombustible> & Pick<RegistroCombustible, 'i
   fotoUrl: null,
   fecha: local(2026, 11, 3, 12, 0),
   registroHorometroId: 'h1',
-  equipo: { internalCode: 'EX-001', type: 'Excavadora', equipmentClass: 'HEAVY' },
+  equipo: { internalCode: 'EX-001', type: 'Excavadora', equipmentClass: 'HEAVY', controlUnit: 'HOURS' },
   realizadoPor: 'Juan Pérez',
   origen: 'TARJETA',
+  lectura: 1534.5,
   ...over,
 });
 
@@ -73,15 +74,17 @@ const LISTA: RegistroCombustible[] = [
   carga({
     id: 'c2',
     equipoId: 'e9',
-    equipo: { internalCode: 'CM-01', type: 'Camioneta', equipmentClass: 'LIGHT' },
+    equipo: { internalCode: 'CM-01', type: 'Camioneta', equipmentClass: 'LIGHT', controlUnit: 'KM' },
     litros: 35.5,
     tipo: 'BENCINA',
     fecha: local(2026, 11, 5, 23, 30),
     registroHorometroId: 'h2',
     realizadoPor: 'Pedro Soto',
     fotoUrl: 'https://minio.local/signed/surtidor.jpg',
+    lectura: 45210,
   }),
-  // Fila vieja: sin tarjeta, sin creador — la clase sale del catálogo (e1).
+  // Fila vieja: sin tarjeta, sin creador ni lectura — la clase sale del
+  // catálogo (e1).
   carga({
     id: 'c4',
     litros: 50,
@@ -90,6 +93,7 @@ const LISTA: RegistroCombustible[] = [
     equipo: { internalCode: 'EX-001', type: 'Excavadora' },
     realizadoPor: null,
     origen: 'MANUAL',
+    lectura: null,
   }),
   carga({
     id: 'c3',
@@ -217,6 +221,21 @@ describe('CargasCombustibleAdminView', () => {
     expect(within(dialog).getByText('Petróleo')).toBeTruthy();
     expect(within(dialog).getByText('Tarjeta de turno')).toBeTruthy();
     expect(within(dialog).getByText('Sin foto adjunta.')).toBeTruthy();
+    // La lectura del contador al cargar, rotulada según el equipo (pesado → h).
+    expect(within(dialog).getByText('Horómetro al cargar')).toBeTruthy();
+    expect(within(dialog).getByText('1.534,5 h')).toBeTruthy();
+  });
+
+  it('la lectura se muestra con su unidad: km en livianos, — si la carga vieja no la tiene', () => {
+    render(<CargasCombustibleAdminView />);
+
+    const camioneta = screen.getByTestId('carga-fila-c2');
+    expect(within(camioneta).getByText('Kilometraje')).toBeTruthy();
+    expect(within(camioneta).getByText('45.210 km')).toBeTruthy();
+
+    const vieja = screen.getByTestId('carga-fila-c4');
+    expect(within(vieja).getByText('Horómetro')).toBeTruthy();
+    expect(within(vieja).getAllByText('—').length).toBeGreaterThan(0);
   });
 
   it('una foto legacy (/uploads/...) se sirve vía assetUrl, nunca con la ruta cruda', () => {
@@ -287,18 +306,25 @@ describe('alta manual («Nueva carga»)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nueva carga' }));
     const dialog = screen.getByRole('dialog');
 
-    // Parte en Pesado: la camioneta no está entre las opciones del equipo.
+    // Parte en Pesado: la camioneta no está entre las opciones del equipo y
+    // la lectura pide el horómetro.
+    expect(within(dialog).getByLabelText('Horómetro al cargar (h)')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
     expect(await screen.findByRole('option', { name: /EX-001/ })).toBeTruthy();
     expect(screen.queryByRole('option', { name: /CM-02/ })).toBeNull();
     fireEvent.click(screen.getByRole('option', { name: /EX-001/ }));
 
-    // Cambiar a Liviano abre la camioneta (y resetea el equipo elegido).
+    // Cambiar a Liviano abre la camioneta (resetea el equipo elegido) y la
+    // lectura pasa a pedir kilometraje.
     fireEvent.click(within(dialog).getByRole('button', { name: /Clase/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Liviano' }));
+    expect(within(dialog).getByLabelText('Kilometraje al cargar (km)')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: /CM-02/ }));
 
+    fireEvent.change(within(dialog).getByLabelText('Kilometraje al cargar (km)'), {
+      target: { value: '45600' },
+    });
     fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), {
       target: { value: '2026-11-04T10:30' },
@@ -314,6 +340,7 @@ describe('alta manual («Nueva carga»)', () => {
           litros: 40,
           tipo: 'PETROLEO',
           fecha: new Date('2026-11-04T10:30').toISOString(),
+          lectura: 45600,
         },
         foto: null,
       },
@@ -327,6 +354,9 @@ describe('alta manual («Nueva carga»)', () => {
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), {
+      target: { value: '1600' },
+    });
     fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
 
     const guardar = within(dialog).getByRole('button', { name: 'Registrar carga' });
@@ -355,8 +385,15 @@ describe('alta manual («Nueva carga»)', () => {
     fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
     expect(guardar.hasAttribute('disabled')).toBe(true);
 
-    // Con litros pero la fecha borrada, tampoco.
+    // Con litros pero sin la lectura del contador, tampoco (pedido del
+    // cliente: pesado → horómetro, liviano → km, al momento de cargar).
     fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+
+    // Con lectura pero la fecha borrada, tampoco.
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), {
+      target: { value: '1600' },
+    });
     fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '' } });
     expect(guardar.hasAttribute('disabled')).toBe(true);
     expect(crearMock).not.toHaveBeenCalled();

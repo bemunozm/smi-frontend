@@ -24,6 +24,9 @@ const TIPO_OPTIONS = [
 const CargaManualSchema = z.object({
   equipoId: z.string().min(1, 'Elegí un equipo'),
   litros: z.number().positive('Litros debe ser mayor a 0'),
+  // Lectura del contador al cargar (pedido del cliente): horómetro si el
+  // equipo es pesado, kilometraje si es liviano.
+  lectura: z.number().positive('Ingresá la lectura del contador'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
   fecha: z.string().min(1, 'Requerido'),
 });
@@ -55,6 +58,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
     defaultValues: {
       equipoId: '',
       litros: 0,
+      lectura: 0,
       tipo: 'PETROLEO',
       fecha: toDateTimeLocal(new Date()),
     },
@@ -84,6 +88,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
   const ocrLeido = photoFlow.file && !photoFlow.isReadingPhoto ? photoFlow.ocr : null;
 
   const litros = watch('litros');
+  const lectura = watch('lectura');
   const equipoId = watch('equipoId');
   // `fechaRegistroIso` da null con la fecha vacía, no-fecha o futura: el
   // backend rechazaría una futura y esta vista no tiene edición para
@@ -96,7 +101,9 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
     !photoFlow.isReadingPhoto &&
     !crear.isPending &&
     Number.isFinite(litros) &&
-    litros > 0;
+    litros > 0 &&
+    Number.isFinite(lectura) &&
+    lectura > 0;
 
   const onSubmit = (values: CargaManualValues) => {
     const iso = fechaRegistroIso(values.fecha);
@@ -108,6 +115,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
           litros: values.litros,
           tipo: values.tipo,
           fecha: iso,
+          lectura: values.lectura,
         },
         foto: photoFlow.file ?? null,
       },
@@ -145,8 +153,10 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                   if (!value) return;
                   setClase(value as EquipmentClass);
                   // La camioneta elegida no puede quedar colgando al pasar a
-                  // pesados (ni al revés).
+                  // pesados (ni al revés) — y una lectura tipeada para la otra
+                  // clase (km vs h) menos todavía.
                   setValue('equipoId', '', { shouldValidate: false });
+                  setValue('lectura', 0, { shouldValidate: false });
                 }}
               >
                 <Label>Clase</Label>
@@ -199,6 +209,23 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                       </ListBox>
                     </Select.Popover>
                   </Select>
+                )}
+              />
+
+              <Controller
+                control={control}
+                name="lectura"
+                render={({ field }) => (
+                  <DecimalField
+                    errorMessage={errors.lectura?.message}
+                    isInvalid={!!errors.lectura}
+                    // Pedido del cliente: al cargar un pesado se anota el
+                    // horómetro; un liviano, el kilometraje.
+                    label={clase === 'LIGHT' ? 'Kilometraje al cargar (km)' : 'Horómetro al cargar (h)'}
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                    value={field.value}
+                  />
                 )}
               />
 

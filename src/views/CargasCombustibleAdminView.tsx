@@ -39,6 +39,28 @@ function origenDe(carga: RegistroCombustible): string {
   return (carga.origen && ORIGEN_LABEL[carga.origen]) || '—';
 }
 
+/** Unidad de la lectura del contador al cargar: por el `controlUnit` del
+ * equipo, con fallback a la clase (liviano → km, pesado → h). */
+function unidadLectura(
+  carga: RegistroCombustible,
+  clase: EquipmentClass | undefined,
+): 'h' | 'km' {
+  if (carga.equipo?.controlUnit) {
+    return carga.equipo.controlUnit === 'KM' ? 'km' : 'h';
+  }
+  return clase === 'LIGHT' ? 'km' : 'h';
+}
+
+function nombreLectura(carga: RegistroCombustible, clase: EquipmentClass | undefined): string {
+  return unidadLectura(carga, clase) === 'km' ? 'Kilometraje' : 'Horómetro';
+}
+
+function lecturaTexto(carga: RegistroCombustible, clase: EquipmentClass | undefined): string {
+  return carga.lectura != null
+    ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}`
+    : '—';
+}
+
 function formatFecha(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
@@ -108,6 +130,10 @@ function DetalleCargaModal({
                   <Dato label="Clase" value={clase ? equipmentClassLabel(clase) : '—'} />
                   <Dato label="Litros" value={`${NUM_CL_1.format(carga.litros)} L`} />
                   <Dato label="Combustible" value={tipoDe(carga)} />
+                  <Dato
+                    label={`${nombreLectura(carga, clase)} al cargar`}
+                    value={lecturaTexto(carga, clase)}
+                  />
                   <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
                   <Dato label="Origen" value={origenDe(carga)} />
                 </div>
@@ -425,6 +451,12 @@ export function CargasCombustibleAdminView() {
                         </div>
                         <div className="flex flex-col">
                           <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            {nombreLectura(c, clase)}
+                          </dt>
+                          <dd className="m-0 text-foreground">{lecturaTexto(c, clase)}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                             Realizó
                           </dt>
                           <dd className="m-0 text-foreground">{c.realizadoPor ?? '—'}</dd>
@@ -452,6 +484,7 @@ export function CargasCombustibleAdminView() {
                     <Table.Column>Equipo</Table.Column>
                     <Table.Column>Clase</Table.Column>
                     <Table.Column>Combustible</Table.Column>
+                    <Table.Column>Lectura</Table.Column>
                     <Table.Column>Realizó</Table.Column>
                     <Table.Column className="w-full">Origen</Table.Column>
                     <Table.Column>Foto</Table.Column>
@@ -477,6 +510,9 @@ export function CargasCombustibleAdminView() {
                             {clase ? equipmentClassLabel(clase) : '—'}
                           </Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{tipoDe(c)}</Table.Cell>
+                          <Table.Cell className="font-mono text-sm whitespace-nowrap">
+                            {lecturaTexto(c, clase)}
+                          </Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{c.realizadoPor ?? '—'}</Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{origenDe(c)}</Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{c.fotoUrl ? 'Sí' : '—'}</Table.Cell>

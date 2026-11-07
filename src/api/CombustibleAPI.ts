@@ -15,6 +15,10 @@ export interface CreateCombustibleBody {
   tipo: 'PETROLEO' | 'BENCINA';
   /** ISO datetime; sin ella el backend cae a `@default(now())`. */
   fecha?: string;
+  /** Lectura del contador al cargar: horómetro (h) si el equipo es pesado,
+   * kilometraje (km) si es liviano. El backend la persiste y adelanta el
+   * contador del equipo (nunca lo retrocede). */
+  lectura?: number;
   /** Key `tmp/<userId>/<uuid>.<ext>` de la foto ya subida (`uploadFile`). */
   fotoKey?: string;
 }
