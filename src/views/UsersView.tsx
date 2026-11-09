@@ -491,6 +491,42 @@ function UserActionsMenu({ user, isSelf }: { user: User; isSelf: boolean }) {
 }
 
 /**
+ * Acciones de la tarjeta de usuario (tablet/celular): «Editar» y «Eliminar»
+ * como botones DENTRO de la tarjeta, al pie. Antes era el mismo kebab de la
+ * tabla, y su menú flotante se montaba sobre la barra inferior y, al abrir el
+ * de otro usuario, la pantalla saltaba hacia el anterior (06/11).
+ */
+function UserCardActions({ user, isSelf }: { user: User; isSelf: boolean }) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
+        <Button fullWidth aria-label={`Editar a ${user.name}`} size="sm" variant="secondary" onPress={() => setIsEditOpen(true)}>
+          <PencilIcon />
+          Editar
+        </Button>
+        <Button
+          fullWidth
+          aria-label={`Eliminar a ${user.name}`}
+          isDisabled={isSelf}
+          size="sm"
+          variant="danger-soft"
+          onPress={() => setIsDeleteOpen(true)}
+        >
+          <TrashIcon />
+          Eliminar
+        </Button>
+      </div>
+
+      <EditUserModal isOpen={isEditOpen} user={user} onOpenChange={setIsEditOpen} />
+      <DeleteUserAlertDialog isOpen={isDeleteOpen} isSelf={isSelf} user={user} onOpenChange={setIsDeleteOpen} />
+    </>
+  );
+}
+
+/**
  * Vista de gestión de usuarios — plantilla de referencia del patrón CRUD
  * completo: `useUsers()` (lista) + modales de creación/edición con
  * RHF+Zod+`useMutation` + confirmación de borrado, todo sobre el design
@@ -543,12 +579,9 @@ export function UsersView() {
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {users.map((user) => (
             <li className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4" key={user.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-col">
-                  <span className="text-[15px] font-semibold text-foreground">{user.name}</span>
-                  <span className="text-sm break-all text-muted-foreground">{user.email}</span>
-                </div>
-                <UserActionsMenu isSelf={user.id === currentUser?.id} user={user} />
+              <div className="flex min-w-0 flex-col">
+                <span className="text-[15px] font-semibold text-foreground">{user.name}</span>
+                <span className="text-sm break-all text-muted-foreground">{user.email}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Chip color={roleChipColor(user.role)} size="sm" variant="soft">
@@ -558,6 +591,7 @@ export function UsersView() {
                   {user.emailVerified ? 'Verificado' : 'Sin verificar'}
                 </Chip>
               </div>
+              <UserCardActions isSelf={user.id === currentUser?.id} user={user} />
             </li>
           ))}
         </ul>
