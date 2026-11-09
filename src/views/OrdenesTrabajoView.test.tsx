@@ -1,155 +1,197 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
-import type { OrdenTrabajo } from '../types/mantenimiento';
+import type { OrdenTrabajo } from "../types/mantenimiento";
 
 function orden(overrides: Partial<OrdenTrabajo>): OrdenTrabajo {
   return {
-    id: 'ot-x',
-    equipoId: 'EX-014',
+    id: "ot-x",
+    equipoId: "EX-014",
     hallazgoId: null,
     pautaMilestone: null,
     pautaCycle: null,
-    titulo: 'Sin título',
-    estado: 'PENDIENTE',
-    prioridad: 'MEDIA',
-    tipo: 'CORRECTIVA',
-    origen: 'HALLAZGO',
+    titulo: "Sin título",
+    estado: "PENDIENTE",
+    prioridad: "MEDIA",
+    tipo: "CORRECTIVA",
+    origen: "HALLAZGO",
     origenDetalle: null,
     asignadoA: null,
     tareas: [],
-    createdAt: '2026-10-05T07:50:00.000Z',
-    updatedAt: '2026-10-05T07:50:00.000Z',
+    createdAt: "2026-10-05T07:50:00.000Z",
+    updatedAt: "2026-10-05T07:50:00.000Z",
     ...overrides,
   };
 }
 
 const ORDENES: OrdenTrabajo[] = [
   orden({
-    id: 'ot-1',
-    titulo: 'Fuga de aceite hidráulico en pluma',
-    estado: 'PENDIENTE',
-    prioridad: 'CRITICA',
-    origenDetalle: 'J. Soto · Operador',
+    id: "ot-1",
+    titulo: "Fuga de aceite hidráulico en pluma",
+    estado: "PENDIENTE",
+    prioridad: "CRITICA",
+    origenDetalle: "J. Soto · Operador",
   }),
   // La tarjeta-checklist: preventiva nacida de la pauta por horómetro.
   orden({
-    id: 'ot-pauta',
-    equipoId: 'EX-014',
-    titulo: 'Mantención preventiva 250 h · EX-014',
-    estado: 'PENDIENTE',
-    tipo: 'PREVENTIVA',
-    origen: 'PREVENTIVO',
-    origenDetalle: 'Pauta: 250 h · ciclo 1',
+    id: "ot-pauta",
+    equipoId: "EX-014",
+    titulo: "Mantención preventiva 250 h · EX-014",
+    estado: "PENDIENTE",
+    tipo: "PREVENTIVA",
+    origen: "PREVENTIVO",
+    origenDetalle: "Pauta: 250 h · ciclo 1",
     pautaMilestone: 250,
     pautaCycle: 1,
     tareas: [
-      { id: 'ta-1', texto: 'Cambio de aceite', hecha: false, posicion: 0, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
-      { id: 'ta-2', texto: 'Cambio de filtro', hecha: false, posicion: 1, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
+      {
+        id: "ta-1",
+        texto: "Cambio de aceite",
+        hecha: false,
+        posicion: 0,
+        notas: null,
+        fotoUrl: null,
+        hechaPorNombre: null,
+        hechaAt: null,
+      },
+      {
+        id: "ta-2",
+        texto: "Cambio de filtro",
+        hecha: false,
+        posicion: 1,
+        notas: null,
+        fotoUrl: null,
+        hechaPorNombre: null,
+        hechaAt: null,
+      },
     ],
   }),
   // Pauta ya iniciada: el checklist se registra en la columna del medio.
   orden({
-    id: 'ot-pauta-2',
-    equipoId: 'RE-003',
-    titulo: 'Mantención preventiva 500 h · RE-003',
-    estado: 'EN_PROCESO',
-    tipo: 'PREVENTIVA',
-    origen: 'PREVENTIVO',
-    origenDetalle: 'Pauta: 500 h · ciclo 1',
+    id: "ot-pauta-2",
+    equipoId: "RE-003",
+    titulo: "Mantención preventiva 500 h · RE-003",
+    estado: "EN_PROCESO",
+    tipo: "PREVENTIVA",
+    origen: "PREVENTIVO",
+    origenDetalle: "Pauta: 500 h · ciclo 1",
     pautaMilestone: 500,
     pautaCycle: 1,
     tareas: [
-      { id: 'tb-1', texto: 'Engrase general', hecha: true, posicion: 0, notas: 'Hecho', fotoUrl: null, hechaPorNombre: null, hechaAt: null },
-      { id: 'tb-2', texto: 'Revisión de correas', hecha: false, posicion: 1, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null },
+      {
+        id: "tb-1",
+        texto: "Engrase general",
+        hecha: true,
+        posicion: 0,
+        notas: "Hecho",
+        fotoUrl: null,
+        hechaPorNombre: null,
+        hechaAt: null,
+      },
+      {
+        id: "tb-2",
+        texto: "Revisión de correas",
+        hecha: false,
+        posicion: 1,
+        notas: null,
+        fotoUrl: null,
+        hechaPorNombre: null,
+        hechaAt: null,
+      },
     ],
   }),
   orden({
-    id: 'ot-2',
-    equipoId: 'CM-007',
+    id: "ot-2",
+    equipoId: "CM-007",
     hallazgoId: null,
     pautaMilestone: null,
     pautaCycle: null,
-    titulo: 'Cambio de aceite motor y filtro',
-    estado: 'EN_PROCESO',
-    tipo: 'PREVENTIVA',
-    origen: 'MANUAL',
+    titulo: "Cambio de aceite motor y filtro",
+    estado: "EN_PROCESO",
+    tipo: "PREVENTIVA",
+    origen: "MANUAL",
   }),
   orden({
-    id: 'ot-3',
-    equipoId: 'RE-003',
+    id: "ot-3",
+    equipoId: "RE-003",
     hallazgoId: null,
     pautaMilestone: null,
     pautaCycle: null,
-    titulo: 'Engrase general y cambio de pernos',
-    estado: 'COMPLETADA',
-    tipo: 'PREVENTIVA',
-    origen: 'PREVENTIVO',
+    titulo: "Engrase general y cambio de pernos",
+    estado: "COMPLETADA",
+    tipo: "PREVENTIVA",
+    origen: "PREVENTIVO",
   }),
   // Preventiva asignada por el administrador, esperando en la bandeja.
   orden({
-    id: 'ot-4',
-    titulo: 'Mantención 500 h — filtros y aceite',
-    estado: 'PENDIENTE',
-    tipo: 'PREVENTIVA',
-    origen: 'PREVENTIVO',
+    id: "ot-4",
+    titulo: "Mantención 500 h — filtros y aceite",
+    estado: "PENDIENTE",
+    tipo: "PREVENTIVA",
+    origen: "PREVENTIVO",
     origenDetalle: null,
   }),
 ];
 
 const EQUIPMENT = [
-  { id: 'eq-1', internalCode: 'EX-014', brand: 'CAT', model: '320' },
-  { id: 'eq-2', internalCode: 'CM-007', brand: 'Volvo', model: 'FMX' },
-  { id: 'eq-3', internalCode: 'RE-003', brand: 'CAT', model: '416' },
+  { id: "eq-1", internalCode: "EX-014", brand: "CAT", model: "320" },
+  { id: "eq-2", internalCode: "CM-007", brand: "Volvo", model: "FMX" },
+  { id: "eq-3", internalCode: "RE-003", brand: "CAT", model: "416" },
 ];
 
 // Hallazgo REAL de Terreno (del supervisor), todavía sin operación.
 const HALLAZGOS = [
   {
-    id: 'h-1',
-    equipoId: 'eq-2',
-    descripcion: 'Ruido anormal en la transmisión',
-    prioridad: 'ALTA',
-    estado: 'ABIERTO',
+    id: "h-1",
+    equipoId: "eq-2",
+    descripcion: "Ruido anormal en la transmisión",
+    prioridad: "ALTA",
+    estado: "ABIERTO",
     fotoUrl: null,
-    fecha: '2026-10-06T07:50:00.000Z',
-    equipo: { internalCode: 'CM-007' },
+    fecha: "2026-10-06T07:50:00.000Z",
+    equipo: { internalCode: "CM-007" },
   },
   // CERRADO: no debe aparecer en la bandeja.
   {
-    id: 'h-2',
-    equipoId: 'eq-1',
-    descripcion: 'Vidrio trizado',
-    prioridad: 'BAJA',
-    estado: 'CERRADO',
+    id: "h-2",
+    equipoId: "eq-1",
+    descripcion: "Vidrio trizado",
+    prioridad: "BAJA",
+    estado: "CERRADO",
     fotoUrl: null,
-    fecha: '2026-10-01T07:50:00.000Z',
-    equipo: { internalCode: 'EX-014' },
+    fecha: "2026-10-01T07:50:00.000Z",
+    equipo: { internalCode: "EX-014" },
   },
   // ABIERTO pero SIN equipo asociado: al mantenedor solo le llegan hallazgos
   // de un equipo concreto — este no entra a la bandeja.
   {
-    id: 'h-3',
-    equipoId: '',
-    descripcion: 'Observación general sin equipo',
-    prioridad: 'MEDIA',
-    estado: 'ABIERTO',
+    id: "h-3",
+    equipoId: "",
+    descripcion: "Observación general sin equipo",
+    prioridad: "MEDIA",
+    estado: "ABIERTO",
     fotoUrl: null,
-    fecha: '2026-10-06T08:00:00.000Z',
+    fecha: "2026-10-06T08:00:00.000Z",
   },
   // ABIERTO pero de ZONA (un lugar de la faena): no es del taller.
   {
-    id: 'h-4',
-    tipo: 'ZONA' as const,
+    id: "h-4",
+    tipo: "ZONA" as const,
     equipoId: null,
-    faena: 'Kainita',
-    lugar: 'Cancha norte',
-    descripcion: 'Bache en la entrada de la cancha',
-    prioridad: 'ALTA',
-    estado: 'ABIERTO',
+    faena: "Kainita",
+    lugar: "Cancha norte",
+    descripcion: "Bache en la entrada de la cancha",
+    prioridad: "ALTA",
+    estado: "ABIERTO",
     fotoUrl: null,
-    fecha: '2026-10-06T08:10:00.000Z',
+    fecha: "2026-10-06T08:10:00.000Z",
   },
 ];
 
@@ -157,34 +199,38 @@ const HALLAZGOS = [
 // backend): el MANTENEDOR también crea órdenes (inicia operaciones desde los
 // hallazgos de su bandeja); el POST de intervenciones sigue siendo solo suyo.
 const CAN_MANTENEDOR = new Set([
-  'orden.create',
-  'orden.update',
-  'orden.toggleTarea',
-  'intervencion.create',
+  "orden.create",
+  "orden.update",
+  "orden.toggleTarea",
+  "intervencion.create",
 ]);
 const CAN_ADMIN = new Set([
-  'orden.create',
-  'orden.update',
-  'orden.toggleTarea',
-  'intervencion.create',
+  "orden.create",
+  "orden.update",
+  "orden.toggleTarea",
+  "intervencion.create",
 ]);
 // Un rol hipotético sin el POST de intervenciones (hoy ninguno con acceso a la
 // ruta, pero el gating debe seguir espejando `WRITE_ROLES`).
-const CAN_SOLO_LECTOR = new Set(['orden.update']);
+const CAN_SOLO_LECTOR = new Set(["orden.update"]);
 let allowed: ReadonlySet<string> = CAN_MANTENEDOR;
 
-vi.mock('../hooks/usePermissions', () => ({
+vi.mock("../hooks/usePermissions", () => ({
   usePermissions: () => ({
     role: null,
     can: (action: string) => allowed.has(action),
-    canAny: (actions: readonly string[]) => actions.some((action) => allowed.has(action)),
+    canAny: (actions: readonly string[]) =>
+      actions.some((action) => allowed.has(action)),
     canCloseShiftCardFromFleet: false,
   }),
 }));
 
-let marcaDeMock: (entity: string, id: string) => 'pendiente' | 'atencion' | null = () => null;
+let marcaDeMock: (
+  entity: string,
+  id: string,
+) => "pendiente" | "atencion" | null = () => null;
 
-vi.mock('../hooks/usePendingWrites', () => ({
+vi.mock("../hooks/usePendingWrites", () => ({
   usePendingWrites: () => ({
     ops: [],
     pendientes: 0,
@@ -193,12 +239,17 @@ vi.mock('../hooks/usePendingWrites', () => ({
   }),
 }));
 
-vi.mock('../components/sync/PendientesStrip', () => ({
+vi.mock("../components/sync/PendientesStrip", () => ({
   PendientesStrip: () => null,
 }));
 
-vi.mock('../hooks/useOrdenes', () => ({
-  useOrdenes: () => ({ data: ORDENES, isPending: false, isError: false, error: null }),
+vi.mock("../hooks/useOrdenes", () => ({
+  useOrdenes: () => ({
+    data: ORDENES,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
   useCrearOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useActualizarOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useLogOperation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -207,41 +258,48 @@ vi.mock('../hooks/useOrdenes', () => ({
   useOrden: () => ({ data: undefined }),
 }));
 
-vi.mock('../hooks/useEquipment', () => ({
+vi.mock("../hooks/useEquipment", () => ({
   useEquipment: () => ({ data: EQUIPMENT, isPending: false }),
 }));
 
-let hallazgosResult: { data: typeof HALLAZGOS | undefined; isPending: boolean; isError: boolean } = {
+let hallazgosResult: {
+  data: typeof HALLAZGOS | undefined;
+  isPending: boolean;
+  isError: boolean;
+} = {
   data: HALLAZGOS,
   isPending: false,
   isError: false,
 };
 
-vi.mock('../hooks/useHallazgos', () => ({
+vi.mock("../hooks/useHallazgos", () => ({
   useHallazgosList: () => hallazgosResult,
 }));
 
-vi.mock('../hooks/useBranches', () => ({
-  useBranches: () => ({ data: [{ id: 'br-1', name: 'Casa Matriz' }], isPending: false }),
+vi.mock("../hooks/useBranches", () => ({
+  useBranches: () => ({
+    data: [{ id: "br-1", name: "Casa Matriz" }],
+    isPending: false,
+  }),
 }));
 
-vi.mock('../hooks/useInventory', () => ({
+vi.mock("../hooks/useInventory", () => ({
   useItems: () => ({ data: [], isPending: false }),
 }));
 
-vi.mock('../hooks/useIntervenciones', () => ({
+vi.mock("../hooks/useIntervenciones", () => ({
   useIntervenciones: () => ({ data: [], isPending: false, isError: false }),
   useFinishTask: () => ({ mutate: vi.fn(), isPending: false }),
   useCrearIntervencion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-import { OrdenesTrabajoView } from './OrdenesTrabajoView';
+import { OrdenesTrabajoView } from "./OrdenesTrabajoView";
 
 // Escritorio por defecto: las tres columnas a la vista. En tablet (`false`)
 // se ve una columna a la vez, con el selector.
 let escritorio = true;
-vi.mock('../hooks/useMediaQuery', async (original) => ({
-  ...(await original<typeof import('../hooks/useMediaQuery')>()),
+vi.mock("../hooks/useMediaQuery", async (original) => ({
+  ...(await original<typeof import("../hooks/useMediaQuery")>()),
   useMediaQuery: () => escritorio,
 }));
 
@@ -261,178 +319,239 @@ function renderView() {
   );
 }
 
-describe('OrdenesTrabajoView (tablero del taller)', () => {
-  it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
+describe("OrdenesTrabajoView (tablero del taller)", () => {
+  it("en escritorio las TRES columnas están a la vista, con el resumen arriba", () => {
     renderView();
-    const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;
-    expect(board?.className).toContain('lg:grid-cols-3');
-    expect(screen.getByRole('region', { name: 'Operaciones en proceso' })).toBeTruthy();
-    expect(screen.queryByRole('group', { name: 'Columna del tablero' })).toBeNull();
+    const board = screen.getByRole("region", { name: "Órdenes" }).parentElement;
+    expect(board?.className).toContain("lg:grid-cols-3");
+    expect(
+      screen.getByRole("region", { name: "Operaciones en proceso" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("group", { name: "Columna del tablero" }),
+    ).toBeNull();
     // El resumen: 4 cifras comparables.
-    const kpis = screen.getByText('Hallazgos pendientes').closest('dl');
+    const kpis = screen.getByText("Hallazgos pendientes").closest("dl");
     expect(kpis?.children).toHaveLength(4);
   });
 
-  it('en tablet se ve UNA columna a todo el ancho y se cambia con el selector', () => {
+  it("en tablet se ve UNA columna a todo el ancho y se cambia con el selector", () => {
     escritorio = false;
     renderView();
 
-    expect(screen.getByRole('region', { name: 'Órdenes' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Operaciones en proceso' })).toBeNull();
-
-    const selector = screen.getByRole('group', { name: 'Columna del tablero' });
-    fireEvent.click(within(selector).getByRole('button', { name: /En proceso/ }));
-
-    expect(screen.queryByRole('region', { name: 'Órdenes' })).toBeNull();
+    expect(screen.getByRole("region", { name: "Órdenes" })).toBeTruthy();
     expect(
-      within(screen.getByRole('region', { name: 'Operaciones en proceso' })).getByText(
-        'Cambio de aceite motor y filtro',
-      ),
+      screen.queryByRole("region", { name: "Operaciones en proceso" }),
+    ).toBeNull();
+
+    const selector = screen.getByRole("group", { name: "Columna del tablero" });
+    fireEvent.click(
+      within(selector).getByRole("button", { name: /En proceso/ }),
+    );
+
+    expect(screen.queryByRole("region", { name: "Órdenes" })).toBeNull();
+    expect(
+      within(
+        screen.getByRole("region", { name: "Operaciones en proceso" }),
+      ).getByText("Cambio de aceite motor y filtro"),
     ).toBeTruthy();
   });
 
-  it('reparte las órdenes en las tres columnas del tablero', () => {
+  it("reparte las órdenes en las tres columnas del tablero", () => {
     renderView();
 
-    const backlog = screen.getByRole('region', { name: 'Órdenes' });
-    const inProgress = screen.getByRole('region', { name: 'Operaciones en proceso' });
-    const finished = screen.getByRole('region', { name: 'Finalizadas' });
+    const backlog = screen.getByRole("region", { name: "Órdenes" });
+    const inProgress = screen.getByRole("region", {
+      name: "Operaciones en proceso",
+    });
+    const finished = screen.getByRole("region", { name: "Finalizadas" });
 
-    expect(within(backlog).getByText('Fuga de aceite hidráulico en pluma')).toBeTruthy();
-    expect(within(inProgress).getByText('Cambio de aceite motor y filtro')).toBeTruthy();
-    expect(within(finished).getByText('Engrase general y cambio de pernos')).toBeTruthy();
+    expect(
+      within(backlog).getByText("Fuga de aceite hidráulico en pluma"),
+    ).toBeTruthy();
+    expect(
+      within(inProgress).getByText("Cambio de aceite motor y filtro"),
+    ).toBeTruthy();
+    expect(
+      within(finished).getByText("Engrase general y cambio de pernos"),
+    ).toBeTruthy();
   });
 
-  it('los hallazgos REALES abiertos llegan a la bandeja, diferenciados; los cerrados no', () => {
+  it("los hallazgos REALES abiertos llegan a la bandeja, diferenciados; los cerrados no", () => {
     renderView();
 
-    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    const backlog = screen.getByRole("region", { name: "Órdenes" });
     // El hallazgo real del supervisor, con su chip diferenciador.
-    expect(within(backlog).getByText('Ruido anormal en la transmisión')).toBeTruthy();
-    expect(within(backlog).getAllByText('Hallazgo').length).toBeGreaterThan(0);
+    expect(
+      within(backlog).getByText("Ruido anormal en la transmisión"),
+    ).toBeTruthy();
+    expect(within(backlog).getAllByText("Hallazgo").length).toBeGreaterThan(0);
     // El cerrado no vuelve a la bandeja.
-    expect(screen.queryByText('Vidrio trizado')).toBeNull();
+    expect(screen.queryByText("Vidrio trizado")).toBeNull();
     // Y uno sin equipo asociado tampoco llega al mantenedor.
-    expect(screen.queryByText('Observación general sin equipo')).toBeNull();
+    expect(screen.queryByText("Observación general sin equipo")).toBeNull();
     // Ni uno de zona: lo atiende el administrador, no el taller.
-    expect(screen.queryByText('Bache en la entrada de la cancha')).toBeNull();
+    expect(screen.queryByText("Bache en la entrada de la cancha")).toBeNull();
   });
 
-  it('la pauta pendiente se INICIA desde la bandeja; el checklist se registra EN PROCESO', () => {
+  it("la pauta pendiente se INICIA desde la bandeja; el checklist se registra EN PROCESO", () => {
     renderView();
 
     // En la bandeja: avance del checklist + "Iniciar operación" (pasa a
     // proceso) — el registro todavía no se ofrece ahí.
-    const backlog = screen.getByRole('region', { name: 'Órdenes' });
-    expect(within(backlog).getByText('0 de 2 tareas')).toBeTruthy();
-    expect(within(backlog).queryByRole('button', { name: /Registrar mantención/ })).toBeNull();
+    const backlog = screen.getByRole("region", { name: "Órdenes" });
+    expect(within(backlog).getByText("0 de 2 tareas")).toBeTruthy();
     expect(
-      within(backlog).getAllByRole('button', { name: /Iniciar operación/ }).length,
+      within(backlog).queryByRole("button", { name: /Registrar mantención/ }),
+    ).toBeNull();
+    expect(
+      within(backlog).getAllByRole("button", { name: /Iniciar operación/ })
+        .length,
     ).toBeGreaterThan(0);
 
     // En proceso: ahí vive "Registrar mantención", con su avance real.
-    const proceso = screen.getByRole('region', { name: 'Operaciones en proceso' });
-    expect(within(proceso).getByText('1 de 2 tareas')).toBeTruthy();
-    expect(within(proceso).getByRole('button', { name: /Registrar mantención/ })).toBeTruthy();
+    const proceso = screen.getByRole("region", {
+      name: "Operaciones en proceso",
+    });
+    expect(within(proceso).getByText("1 de 2 tareas")).toBeTruthy();
+    expect(
+      within(proceso).getByRole("button", { name: /Registrar mantención/ }),
+    ).toBeTruthy();
   });
 
-  it('sin permiso de tareas, la tarjeta-checklist no ofrece registrar', () => {
+  it("sin permiso de tareas, la tarjeta-checklist no ofrece registrar", () => {
     allowed = CAN_SOLO_LECTOR;
     renderView();
 
-    expect(screen.queryByRole('button', { name: /Registrar mantención/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Registrar mantención/ }),
+    ).toBeNull();
   });
 
-  it('una preventiva pendiente se distingue con su propio chip', () => {
+  it("una preventiva pendiente se distingue con su propio chip", () => {
     renderView();
-    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    const backlog = screen.getByRole("region", { name: "Órdenes" });
     // Dos preventivas en la bandeja: la manual y la tarjeta-checklist de la pauta.
-    expect(within(backlog).getAllByText('Preventiva').length).toBeGreaterThan(0);
+    expect(within(backlog).getAllByText("Preventiva").length).toBeGreaterThan(
+      0,
+    );
   });
 
-  it('cada chip es el Chip del kit de Terreno con su tono real (y sin el bug de HeroUI)', () => {
+  it("cada chip es el Chip del kit de Terreno con su tono real (y sin el bug de HeroUI)", () => {
     // Chips del kit (`components/terreno/ui.tsx`): clases de token directas,
     // un tono por nivel, inmunes al bug de slots compartidos de HeroUI.
     renderView();
 
-    expect(screen.getAllByText('Hallazgo')[0].closest('span')?.className).toContain(
-      'bg-[var(--danger-soft)]',
+    expect(
+      screen.getAllByText("Hallazgo")[0].closest("span")?.className,
+    ).toContain("bg-[var(--danger-soft)]");
+    expect(screen.getByText("Crítica").closest("span")?.className).toContain(
+      "bg-[var(--danger-soft)]",
     );
-    expect(screen.getByText('Crítica').closest('span')?.className).toContain(
-      'bg-[var(--danger-soft)]',
+    expect(screen.getByText("Alta").closest("span")?.className).toContain(
+      "bg-[var(--warning-soft)]",
     );
-    expect(screen.getByText('Alta').closest('span')?.className).toContain(
-      'bg-[var(--warning-soft)]',
-    );
-    expect(screen.getAllByText('Media')[0]!.closest('span')?.className).toContain(
-      'bg-[var(--accent-soft)]',
-    );
+    expect(
+      screen.getAllByText("Media")[0]!.closest("span")?.className,
+    ).toContain("bg-[var(--accent-soft)]");
     // 'Preventiva' también existe como chip de TIPO en otras columnas — acá
     // se verifica el de la bandeja (puede haber más de una preventiva ahí).
-    const backlog = screen.getByRole('region', { name: 'Órdenes' });
+    const backlog = screen.getByRole("region", { name: "Órdenes" });
     expect(
-      within(backlog).getAllByText('Preventiva')[0]!.closest('span')?.className,
-    ).toContain('bg-[var(--accent-soft)]');
+      within(backlog).getAllByText("Preventiva")[0]!.closest("span")?.className,
+    ).toContain("bg-[var(--accent-soft)]");
   });
 
-  it('el equipo es el TITULAR de la tarjeta: código en negrita + nombre de Flota', () => {
+  it("el equipo es el TITULAR de la tarjeta: código en negrita + nombre de Flota", () => {
     renderView();
     // Código tabular en negrita (que se note), con el nombre al lado en gris.
-    const codigo = screen.getAllByText('EX-014')[0];
-    expect(codigo.className).toContain('font-bold');
-    expect(codigo.parentElement?.textContent).toContain('CAT 320');
+    const codigo = screen.getAllByText("EX-014")[0];
+    expect(codigo.className).toContain("font-bold");
+    expect(codigo.parentElement?.textContent).toContain("CAT 320");
   });
 
-  it('las tarjetas siguen el orden del boceto: equipo → operación → hallazgo → etiquetas → origen → botón', () => {
+  it("las tarjetas siguen el orden del boceto: equipo → operación → hallazgo → etiquetas → origen → botón", () => {
     renderView();
     const card = screen
-      .getByText('Ruido anormal en la transmisión')
-      .closest('article') as HTMLElement;
+      .getByText("Ruido anormal en la transmisión")
+      .closest("article") as HTMLElement;
     // El titular es SOLO el equipo — las etiquetas ya no viven arriba.
-    expect(card.firstElementChild?.textContent).toContain('CM-007');
-    expect(card.firstElementChild?.textContent).not.toContain('Hallazgo');
+    expect(card.firstElementChild?.textContent).toContain("CM-007");
+    expect(card.firstElementChild?.textContent).not.toContain("Hallazgo");
     // Y el botón cierra la tarjeta.
-    expect(card.lastElementChild?.textContent).toContain('Iniciar operación');
+    expect(card.lastElementChild?.textContent).toContain("Iniciar operación");
   });
 
-  it('como MANTENEDOR: puede iniciar (hallazgos y órdenes) y finalizar', () => {
+  it("como MANTENEDOR: puede iniciar (hallazgos y órdenes) y finalizar", () => {
     renderView();
 
     // Un "Iniciar operación" por cada hallazgo abierto y por cada OT pendiente.
-    expect(screen.getAllByRole('button', { name: /Iniciar operación/ }).length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Ver operación/ })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /Iniciar operación/ }).length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      screen.getByRole("button", { name: /Finalizar tarea/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Ver operación/ })).toBeTruthy();
   });
 
   it('con una escritura pendiente sobre la OT, "Finalizar tarea" se retira — un doble cierre ahora duplica stock', () => {
-    marcaDeMock = (_entity, id) => (id === 'ot-2' ? 'pendiente' : null);
+    marcaDeMock = (_entity, id) => (id === "ot-2" ? "pendiente" : null);
     renderView();
 
-    expect(screen.queryByRole('button', { name: /Finalizar tarea/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Finalizar tarea/ }),
+    ).toBeNull();
     expect(screen.getByText(/Sincronizando cambios/)).toBeTruthy();
   });
 
-  it('si los hallazgos fallan al cargar, la bandeja LO DICE en vez de mostrarse vacía', () => {
+  it("si los hallazgos fallan al cargar, la bandeja LO DICE en vez de mostrarse vacía", () => {
     hallazgosResult = { data: undefined, isPending: false, isError: true };
     renderView();
 
-    expect(screen.getByText(/No se pudieron cargar los hallazgos/)).toBeTruthy();
+    expect(
+      screen.getByText(/No se pudieron cargar los hallazgos/),
+    ).toBeTruthy();
     // Las órdenes siguen visibles: solo falta la mitad de la bandeja.
-    expect(screen.getByText('Fuga de aceite hidráulico en pluma')).toBeTruthy();
+    expect(screen.getByText("Fuga de aceite hidráulico en pluma")).toBeTruthy();
   });
 
-  it('como ADMIN: puede crear órdenes Y finalizar tareas (espejo del backend ampliado)', () => {
+  it('embebida en el panel (contexto="panel"): sin su propio título, pero con crear y el tablero completos', () => {
+    allowed = CAN_ADMIN;
+    render(
+      <MemoryRouter>
+        <OrdenesTrabajoView contexto="panel" />
+      </MemoryRouter>,
+    );
+
+    // El encabezado lo pone la vista del panel que la embebe — acá no se duplica.
+    expect(screen.queryByText("Taller — Hallazgos y operaciones")).toBeNull();
+    // Pero el tablero sigue entero: crear, resumen y las tres columnas.
+    expect(screen.getByRole("button", { name: /Crear orden/ })).toBeTruthy();
+    expect(screen.getByText("Hallazgos pendientes")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Órdenes" })).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Operaciones en proceso" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Finalizadas" })).toBeTruthy();
+  });
+
+  it("como ADMIN: puede crear órdenes Y finalizar tareas (espejo del backend ampliado)", () => {
     allowed = CAN_ADMIN;
     renderView();
 
-    expect(screen.getByRole('button', { name: /Crear orden/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Crear orden/ })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Finalizar tarea/ }),
+    ).toBeTruthy();
   });
 
   it('un rol sin intervencion.create no ve "Finalizar tarea"', () => {
     allowed = CAN_SOLO_LECTOR;
     renderView();
 
-    expect(screen.queryByRole('button', { name: /Finalizar tarea/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Finalizar tarea/ }),
+    ).toBeNull();
   });
 });
