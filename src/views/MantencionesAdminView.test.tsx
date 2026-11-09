@@ -1,125 +1,108 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import {
-  render,
-  cleanup,
-  screen,
-  fireEvent,
-  within,
-} from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
-import type { OrdenTrabajo } from "../types/mantenimiento";
+import type { OrdenTrabajo } from '../types/mantenimiento';
 
-const { ordenesHook, intervencionesHook, finalizarMock, actualizarMock, rol } =
-  vi.hoisted(() => ({
-    ordenesHook: vi.fn(),
-    intervencionesHook: vi.fn(),
-    finalizarMock: vi.fn(),
-    actualizarMock: vi.fn(),
-    rol: { value: "ADMIN" as "ADMIN" | "SECRETARIA" | "SUPERVISOR" },
-  }));
+const { ordenesHook, intervencionesHook, finalizarMock, actualizarMock, rol } = vi.hoisted(() => ({
+  ordenesHook: vi.fn(),
+  intervencionesHook: vi.fn(),
+  finalizarMock: vi.fn(),
+  actualizarMock: vi.fn(),
+  rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'SUPERVISOR' },
+}));
 
-vi.mock("../hooks/useOrdenes", () => ({
+vi.mock('../hooks/useOrdenes', () => ({
   useOrdenes: () => ordenesHook(),
   useActualizarOrden: () => ({ mutate: actualizarMock, isPending: false }),
 }));
-vi.mock("../hooks/useIntervenciones", () => ({
+vi.mock('../hooks/useIntervenciones', () => ({
   useIntervenciones: (id: string | undefined) => intervencionesHook(id),
   useFinishTask: () => ({ mutate: finalizarMock, isPending: false }),
 }));
-vi.mock("../hooks/usePermissions", async () => {
-  const { canWrite } = await import("../lib/permissions");
+vi.mock('../hooks/usePermissions', async () => {
+  const { canWrite } = await import('../lib/permissions');
   return {
     usePermissions: () => ({
       role: rol.value,
-      can: (action: Parameters<typeof canWrite>[1]) =>
-        canWrite(rol.value, action),
+      can: (action: Parameters<typeof canWrite>[1]) => canWrite(rol.value, action),
     }),
   };
 });
-vi.mock("../hooks/useEquipment", () => ({
+vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({
     data: [
-      { id: "e1", internalCode: "SEM 02" },
-      { id: "e2", internalCode: "WA470" },
+      { id: 'e1', internalCode: 'SEM 02' },
+      { id: 'e2', internalCode: 'WA470' },
     ],
   }),
 }));
-vi.mock("../hooks/useInventory", () => ({
-  useItems: () => ({ data: [{ id: "item_1", name: "Filtro de aceite" }] }),
-}));
+vi.mock('../hooks/useInventory', () => ({ useItems: () => ({ data: [{ id: 'item_1', name: 'Filtro de aceite' }] }) }));
 // El tablero del taller tiene sus propios tests (`OrdenesTrabajoView.test.tsx`);
 // acá solo importa QUE se monte y con qué contexto.
-vi.mock("./OrdenesTrabajoView", () => ({
+vi.mock('./OrdenesTrabajoView', () => ({
   OrdenesTrabajoView: ({ contexto }: { contexto?: string }) => (
     <div data-contexto={contexto} data-testid="tablero-taller" />
   ),
 }));
 
-import { MantencionesAdminView } from "./MantencionesAdminView";
+import { MantencionesAdminView } from './MantencionesAdminView';
 
 const tarea = (over: Record<string, unknown>) => ({
-  id: "t1",
-  texto: "Cambio de aceite",
+  id: 't1',
+  texto: 'Cambio de aceite',
   hecha: true,
   posicion: 0,
-  notas: "Se cambió el aceite 15W-40",
+  notas: 'Se cambió el aceite 15W-40',
   fotoUrl: null,
-  hechaPorNombre: "Marco Díaz",
-  hechaAt: "2026-10-15T14:00:00.000Z",
+  hechaPorNombre: 'Marco Díaz',
+  hechaAt: '2026-10-15T14:00:00.000Z',
   ...over,
 });
 
-const orden = (
-  over: Partial<OrdenTrabajo> & Pick<OrdenTrabajo, "id">,
-): OrdenTrabajo => ({
-  equipoId: "e1",
+const orden = (over: Partial<OrdenTrabajo> & Pick<OrdenTrabajo, 'id'>): OrdenTrabajo => ({
+  equipoId: 'e1',
   hallazgoId: null,
-  titulo: "Mantención 500 h",
-  estado: "COMPLETADA",
-  prioridad: "MEDIA",
-  tipo: "PREVENTIVA",
-  origen: "MANUAL",
+  titulo: 'Mantención 500 h',
+  estado: 'COMPLETADA',
+  prioridad: 'MEDIA',
+  tipo: 'PREVENTIVA',
+  origen: 'MANUAL',
   origenDetalle: null,
   pautaMilestone: null,
   pautaCycle: null,
   asignadoA: null,
   tareas: [tarea({})],
-  createdAt: "2026-10-14T09:00:00.000Z",
-  updatedAt: "2026-10-15T14:00:00.000Z",
+  createdAt: '2026-10-14T09:00:00.000Z',
+  updatedAt: '2026-10-15T14:00:00.000Z',
   ...over,
 });
 
 const LISTA: OrdenTrabajo[] = [
-  orden({ id: "ot1" }),
+  orden({ id: 'ot1' }),
   orden({
-    id: "ot2",
-    equipoId: "e2",
-    titulo: "Reparación de frenos",
-    tipo: "CORRECTIVA",
+    id: 'ot2',
+    equipoId: 'e2',
+    titulo: 'Reparación de frenos',
+    tipo: 'CORRECTIVA',
     tareas: [
       tarea({
-        id: "t2",
-        texto: "Cambiar pastillas",
-        hechaPorNombre: "Pedro Pérez",
-        hechaAt: "2026-10-18T10:00:00.000Z",
+        id: 't2',
+        texto: 'Cambiar pastillas',
+        hechaPorNombre: 'Pedro Pérez',
+        hechaAt: '2026-10-18T10:00:00.000Z',
       }),
     ],
-    updatedAt: "2026-10-18T10:00:00.000Z",
+    updatedAt: '2026-10-18T10:00:00.000Z',
   }),
   // En proceso: NO es una mantención hecha todavía.
-  orden({ id: "ot3", titulo: "En curso", estado: "EN_PROCESO" }),
+  orden({ id: 'ot3', titulo: 'En curso', estado: 'EN_PROCESO' }),
 ];
 
-const ok = (data: OrdenTrabajo[]) => ({
-  data,
-  isPending: false,
-  isError: false,
-  error: null,
-});
+const ok = (data: OrdenTrabajo[]) => ({ data, isPending: false, isError: false, error: null });
 
 beforeEach(() => {
-  rol.value = "ADMIN";
+  rol.value = 'ADMIN';
   ordenesHook.mockReturnValue(ok(LISTA));
   intervencionesHook.mockReturnValue({ data: [], isPending: false });
 });
@@ -129,7 +112,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderView(entrada = "/mantenciones") {
+function renderView(entrada = '/mantenciones') {
   return render(
     <MemoryRouter initialEntries={[entrada]}>
       <MantencionesAdminView />
@@ -137,218 +120,168 @@ function renderView(entrada = "/mantenciones") {
   );
 }
 
-describe("MantencionesAdminView", () => {
-  it("lista SOLO las órdenes completadas, con equipo, tipo y quién la hizo", () => {
+describe('MantencionesAdminView', () => {
+  it('lista SOLO las órdenes completadas, con equipo, tipo y quién la hizo', () => {
     renderView();
 
     const filas = screen.getAllByTestId(/mantencion-fila-/);
-    expect(filas.map((f) => f.getAttribute("data-testid"))).toEqual([
-      "mantencion-fila-ot2",
-      "mantencion-fila-ot1",
-    ]);
-    expect(screen.queryByText("En curso")).toBeNull();
-    expect(
-      within(screen.getByTestId("mantencion-fila-ot1")).getByText("SEM 02"),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByTestId("mantencion-fila-ot1")).getByText("Preventiva"),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByTestId("mantencion-fila-ot1")).getByText("Marco Díaz"),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByTestId("mantencion-fila-ot2")).getByText("Correctiva"),
-    ).toBeTruthy();
+    expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['mantencion-fila-ot2', 'mantencion-fila-ot1']);
+    expect(screen.queryByText('En curso')).toBeNull();
+    expect(within(screen.getByTestId('mantencion-fila-ot1')).getByText('SEM 02')).toBeTruthy();
+    expect(within(screen.getByTestId('mantencion-fila-ot1')).getByText('Preventiva')).toBeTruthy();
+    expect(within(screen.getByTestId('mantencion-fila-ot1')).getByText('Marco Díaz')).toBeTruthy();
+    expect(within(screen.getByTestId('mantencion-fila-ot2')).getByText('Correctiva')).toBeTruthy();
   });
 
-  it("filtra por tipo, por mantenedor y por rango de fechas", () => {
+  it('filtra por tipo, por mantenedor y por rango de fechas', () => {
     renderView();
 
-    fireEvent.change(screen.getByLabelText(/tipo/i), {
-      target: { value: "CORRECTIVA" },
-    });
+    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: 'CORRECTIVA' } });
     expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(1);
-    expect(screen.getByTestId("mantencion-fila-ot2")).toBeTruthy();
+    expect(screen.getByTestId('mantencion-fila-ot2')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText(/tipo/i), {
-      target: { value: "TODOS" },
-    });
-    fireEvent.change(screen.getByLabelText(/mantenedor/i), {
-      target: { value: "Marco Díaz" },
-    });
+    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: 'TODOS' } });
+    fireEvent.change(screen.getByLabelText(/mantenedor/i), { target: { value: 'Marco Díaz' } });
     expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(1);
-    expect(screen.getByTestId("mantencion-fila-ot1")).toBeTruthy();
+    expect(screen.getByTestId('mantencion-fila-ot1')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText(/mantenedor/i), {
-      target: { value: "TODOS" },
-    });
+    fireEvent.change(screen.getByLabelText(/mantenedor/i), { target: { value: 'TODOS' } });
     // ot1 se hizo el 15-oct; ot2 el 18-oct (hora local de los mocks).
-    fireEvent.change(screen.getByLabelText(/desde/i), {
-      target: { value: "2026-10-17" },
-    });
+    fireEvent.change(screen.getByLabelText(/desde/i), { target: { value: '2026-10-17' } });
     expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(1);
-    expect(screen.getByTestId("mantencion-fila-ot2")).toBeTruthy();
+    expect(screen.getByTestId('mantencion-fila-ot2')).toBeTruthy();
   });
 
-  it("el detalle muestra qué se hizo, quién, cuándo y los insumos usados con su nombre", () => {
+  it('el detalle muestra qué se hizo, quién, cuándo y los insumos usados con su nombre', () => {
     intervencionesHook.mockReturnValue({
       data: [
         {
-          id: "int1",
-          ordenId: "ot1",
-          tipo: "PREVENTIVA",
-          detalle: "Cierre de la pauta de 500 h",
+          id: 'int1',
+          ordenId: 'ot1',
+          tipo: 'PREVENTIVA',
+          detalle: 'Cierre de la pauta de 500 h',
           horasHombre: 2.5,
           horometro: 512,
           fotoUrl: null,
           soloLectura: false,
-          realizadaPor: "Marco Díaz",
-          insumos: [{ id: "ii1", insumoId: "item_1", cantidad: 2 }],
-          fecha: "2026-10-15T14:30:00.000Z",
+          realizadaPor: 'Marco Díaz',
+          insumos: [{ id: 'ii1', insumoId: 'item_1', cantidad: 2 }],
+          fecha: '2026-10-15T14:30:00.000Z',
         },
       ],
       isPending: false,
     });
     renderView();
 
-    fireEvent.click(screen.getByTestId("mantencion-fila-ot1"));
+    fireEvent.click(screen.getByTestId('mantencion-fila-ot1'));
 
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Mantención 500 h")).toBeTruthy();
-    expect(within(dialog).getByText("Cambio de aceite")).toBeTruthy();
-    expect(within(dialog).getByText("Se cambió el aceite 15W-40")).toBeTruthy();
-    expect(
-      within(dialog).getAllByText(/Marco Díaz/).length,
-    ).toBeGreaterThanOrEqual(1);
-    expect(
-      within(dialog).getByText("Cierre de la pauta de 500 h"),
-    ).toBeTruthy();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Mantención 500 h')).toBeTruthy();
+    expect(within(dialog).getByText('Cambio de aceite')).toBeTruthy();
+    expect(within(dialog).getByText('Se cambió el aceite 15W-40')).toBeTruthy();
+    expect(within(dialog).getAllByText(/Marco Díaz/).length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText('Cierre de la pauta de 500 h')).toBeTruthy();
     // El insumo sale con su nombre del inventario y la cantidad.
     expect(within(dialog).getByText(/Filtro de aceite/)).toBeTruthy();
     expect(within(dialog).getByText(/× 2/)).toBeTruthy();
   });
 
-  it("abre el detalle directo con ?id= (el destino de la notificación de mantención)", () => {
-    renderView("/mantenciones?id=ot2");
+  it('abre el detalle directo con ?id= (el destino de la notificación de mantención)', () => {
+    renderView('/mantenciones?id=ot2');
 
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Reparación de frenos")).toBeTruthy();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Reparación de frenos')).toBeTruthy();
   });
 
-  it("«Sin terminar» lista las órdenes que el taller dejó abiertas", () => {
-    renderView("/mantenciones?estado=sin-terminar");
+  it('«Sin terminar» lista las órdenes que el taller dejó abiertas', () => {
+    renderView('/mantenciones?estado=sin-terminar');
     const filas = screen.getAllByTestId(/mantencion-fila-/);
-    expect(filas.map((f) => f.getAttribute("data-testid"))).toEqual([
-      "mantencion-fila-ot3",
-    ]);
-    expect(within(filas[0]).getByText("En proceso")).toBeTruthy();
+    expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['mantencion-fila-ot3']);
+    expect(within(filas[0]).getByText('En proceso')).toBeTruthy();
   });
 
-  it("SECRETARIA cierra una orden sin terminar: qué se hizo y cómo queda el equipo, sin insumos", () => {
-    rol.value = "SECRETARIA";
-    renderView("/mantenciones?estado=sin-terminar&id=ot3");
-    fireEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Marcar como finalizada",
-      }),
-    );
+  it('SECRETARIA cierra una orden sin terminar: qué se hizo y cómo queda el equipo, sin insumos', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones?estado=sin-terminar&id=ot3');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
 
-    const dialog = screen.getByRole("dialog");
-    const finalizar = within(dialog).getByRole("button", {
-      name: "Finalizar mantención",
-    });
-    expect(
-      finalizar.hasAttribute("disabled") ||
-        finalizar.getAttribute("aria-disabled") === "true",
-    ).toBe(true);
+    const dialog = screen.getByRole('dialog');
+    const finalizar = within(dialog).getByRole('button', { name: 'Finalizar mantención' });
+    expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(true);
 
-    fireEvent.change(within(dialog).getByLabelText("Qué se hizo"), {
-      target: { value: "Cambio de filtros" },
-    });
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Inoperativo" }),
-    );
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Finalizar mantención" }),
-    );
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de filtros' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Inoperativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
 
     expect(finalizarMock).toHaveBeenCalledWith(
       {
-        orden: expect.objectContaining({ id: "ot3" }),
-        intervencion: { tipo: "PREVENTIVA", detalle: "Cambio de filtros" },
-        equipmentStatus: "OUT_OF_SERVICE",
+        orden: expect.objectContaining({ id: 'ot3' }),
+        intervencion: { tipo: 'PREVENTIVA', detalle: 'Cambio de filtros' },
+        equipmentStatus: 'OUT_OF_SERVICE',
       },
       expect.anything(),
     );
   });
 
-  it("una orden completada se edita (título, prioridad) pero no se vuelve a finalizar", () => {
-    rol.value = "SECRETARIA";
-    renderView("/mantenciones?id=ot1");
-    const detalle = screen.getByRole("dialog");
-    expect(
-      within(detalle).queryByRole("button", { name: "Marcar como finalizada" }),
-    ).toBeNull();
-    fireEvent.click(within(detalle).getByRole("button", { name: "Editar" }));
+  it('una orden completada se edita (título, prioridad) pero no se vuelve a finalizar', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones?id=ot1');
+    const detalle = screen.getByRole('dialog');
+    expect(within(detalle).queryByRole('button', { name: 'Marcar como finalizada' })).toBeNull();
+    fireEvent.click(within(detalle).getByRole('button', { name: 'Editar' }));
 
-    const editor = screen.getByRole("dialog");
-    fireEvent.change(within(editor).getByLabelText("Título"), {
-      target: { value: "Mantención 500 h motor" },
-    });
-    fireEvent.click(
-      within(editor).getByRole("button", { name: "Guardar cambios" }),
-    );
+    const editor = screen.getByRole('dialog');
+    fireEvent.change(within(editor).getByLabelText('Título'), { target: { value: 'Mantención 500 h motor' } });
+    fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
     expect(actualizarMock).toHaveBeenCalledWith(
       {
-        orden: expect.objectContaining({ id: "ot1" }),
-        input: { titulo: "Mantención 500 h motor", prioridad: "MEDIA" },
+        orden: expect.objectContaining({ id: 'ot1' }),
+        input: { titulo: 'Mantención 500 h motor', prioridad: 'MEDIA' },
       },
       expect.anything(),
     );
   });
 
-  it("el ADMIN alterna al tablero del taller con el botón de vista, y puede volver al registro", () => {
+  it('el ADMIN alterna al tablero del taller con el botón de vista, y puede volver al registro', () => {
     renderView();
 
-    expect(screen.queryByTestId("tablero-taller")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Vista tablero" }));
+    expect(screen.queryByTestId('tablero-taller')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero' }));
 
     // El tablero se monta tal como lo ve el mantenedor (contexto del panel),
     // y la tabla Registro se retira.
-    expect(
-      screen.getByTestId("tablero-taller").getAttribute("data-contexto"),
-    ).toBe("panel");
-    expect(screen.queryByText("Registro")).toBeNull();
+    expect(screen.getByTestId('tablero-taller').getAttribute('data-contexto')).toBe('panel');
+    expect(screen.queryByText('Registro')).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Vista registro" }));
-    expect(screen.queryByTestId("tablero-taller")).toBeNull();
-    expect(screen.getByText("Registro")).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Vista registro' }));
+    expect(screen.queryByTestId('tablero-taller')).toBeNull();
+    expect(screen.getByText('Registro')).toBeTruthy();
   });
 
-  it("?vista=tablero abre directo en el tablero (la vista queda en la URL)", () => {
-    renderView("/mantenciones?vista=tablero");
+  it('?vista=tablero abre directo en el tablero (la vista queda en la URL)', () => {
+    renderView('/mantenciones?vista=tablero');
 
-    expect(screen.getByTestId("tablero-taller")).toBeTruthy();
-    expect(screen.queryByText("Registro")).toBeNull();
+    expect(screen.getByTestId('tablero-taller')).toBeTruthy();
+    expect(screen.queryByText('Registro')).toBeNull();
   });
 
-  it("SECRETARIA no ve el botón de vista y ?vista=tablero no le cambia la pantalla", () => {
-    rol.value = "SECRETARIA";
-    renderView("/mantenciones?vista=tablero");
+  it('SECRETARIA no ve el botón de vista y ?vista=tablero no le cambia la pantalla', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones?vista=tablero');
 
-    expect(screen.queryByRole("button", { name: "Vista tablero" })).toBeNull();
-    expect(screen.queryByTestId("tablero-taller")).toBeNull();
-    expect(screen.getByText("Registro")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Vista tablero' })).toBeNull();
+    expect(screen.queryByTestId('tablero-taller')).toBeNull();
+    expect(screen.getByText('Registro')).toBeTruthy();
   });
 
-  it("muestra el error del listado", () => {
+  it('muestra el error del listado', () => {
     ordenesHook.mockReturnValue({
       data: undefined,
       isPending: false,
       isError: true,
-      error: new Error("Falló Mantención"),
+      error: new Error('Falló Mantención'),
     });
     renderView();
-    expect(screen.getByText("Falló Mantención")).toBeTruthy();
+    expect(screen.getByText('Falló Mantención')).toBeTruthy();
   });
 });

@@ -1,27 +1,27 @@
-import { useMemo, useState } from "react";
-import { Spinner } from "@heroui/react";
-import { ArrowRight, Clock, TriangleAlert } from "lucide-react";
+import { useMemo, useState } from 'react';
+import { Spinner } from '@heroui/react';
+import { ArrowRight, Clock, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
-import { Boton, Chip, Segmentado, Tarjeta } from "../components/terreno/ui";
-import { MarcaPendiente } from "../components/sync/MarcaPendiente";
-import { PendientesStrip } from "../components/sync/PendientesStrip";
-import { DESKTOP_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
-import { usePendingWrites } from "../hooks/usePendingWrites";
-import { usePermissions } from "../hooks/usePermissions";
-import { useActualizarOrden, useOrdenes } from "../hooks/useOrdenes";
-import { useEquipment } from "../hooks/useEquipment";
-import { useHallazgosList } from "../hooks/useHallazgos";
-import { RECURSOS_DE_ORDENES } from "../lib/pending-resources";
+import { Boton, Chip, Segmentado, Tarjeta } from '../components/terreno/ui';
+import { MarcaPendiente } from '../components/sync/MarcaPendiente';
+import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { usePendingWrites } from '../hooks/usePendingWrites';
+import { usePermissions } from '../hooks/usePermissions';
+import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
+import { useEquipment } from '../hooks/useEquipment';
+import { useHallazgosList } from '../hooks/useHallazgos';
+import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ORIGEN_OT_LABELS,
   PRIORIDAD_OT_LABELS,
   chipColorToTono,
   prioridadOTChipColor,
-} from "../config/mantenimiento-colors";
-import type { OrdenTrabajo } from "../types/mantenimiento";
-import type { HallazgoDeEquipo } from "../types/hallazgos";
+} from '../config/mantenimiento-colors';
+import type { OrdenTrabajo } from '../types/mantenimiento';
+import type { HallazgoDeEquipo } from '../types/hallazgos';
 import {
   buildWorkshopStats,
   formatDate,
@@ -29,16 +29,13 @@ import {
   groupWorkshopBoard,
   toPrioridadOT,
   type EquipmentRef,
-} from "../components/mantenimiento/workshop";
-import { CreateOperationModal } from "../components/mantenimiento/CreateOperationModal";
-import { StartFromHallazgoModal } from "../components/mantenimiento/StartFromHallazgoModal";
-import { StartOperationModal } from "../components/mantenimiento/StartOperationModal";
-import { FinishTaskModal } from "../components/mantenimiento/FinishTaskModal";
-import {
-  PreventiveChecklistModal,
-  tareasHechas,
-} from "../components/mantenimiento/PreventiveChecklistModal";
-import { ViewOperationModal } from "../components/mantenimiento/ViewOperationModal";
+} from '../components/mantenimiento/workshop';
+import { CreateOperationModal } from '../components/mantenimiento/CreateOperationModal';
+import { StartFromHallazgoModal } from '../components/mantenimiento/StartFromHallazgoModal';
+import { StartOperationModal } from '../components/mantenimiento/StartOperationModal';
+import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
+import { PreventiveChecklistModal, tareasHechas } from '../components/mantenimiento/PreventiveChecklistModal';
+import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
 
 /** Columna del tablero: chip de cabecera + conteo + tarjetas. */
 function BoardColumn({
@@ -50,7 +47,7 @@ function BoardColumn({
   children,
 }: {
   title: string;
-  color: "neutral" | "warning" | "success";
+  color: 'neutral' | 'warning' | 'success';
   count: number;
   /** En tablet la cabecera la reemplaza el selector de columnas. */
   conCabecera?: boolean;
@@ -63,9 +60,7 @@ function BoardColumn({
       {conCabecera && (
         <div className="mb-3 flex items-center gap-2">
           <Chip tono={color}>{title}</Chip>
-          <span className="tabular ms-auto text-[15px] font-bold text-foreground">
-            {count}
-          </span>
+          <span className="tabular ms-auto text-[15px] font-bold text-foreground">{count}</span>
         </div>
       )}
       <div className="flex flex-col gap-3.5">
@@ -86,25 +81,19 @@ function BoardColumn({
  * en la mano. Etiquetas en minúscula (las mayúsculas chicas cuestan leerlas) y
  * números de 26 px; en pantallas angostas va en 2 × 2.
  */
-function ResumenTaller({
-  items,
-}: {
-  items: { label: string; valor: number; destacado?: boolean }[];
-}) {
+function ResumenTaller({ items }: { items: { label: string; valor: number; destacado?: boolean }[] }) {
   return (
     <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-4">
       {items.map((i, n) => (
         <div
           key={i.label}
-          className={`flex flex-col gap-0.5 px-4 py-3 ${n % 2 === 1 ? "border-l border-border" : ""} ${
-            n >= 2 ? "border-t border-border sm:border-t-0" : ""
-          } ${n === 2 ? "sm:border-l" : ""}`}
+          className={`flex flex-col gap-0.5 px-4 py-3 ${n % 2 === 1 ? 'border-l border-border' : ''} ${
+            n >= 2 ? 'border-t border-border sm:border-t-0' : ''
+          } ${n === 2 ? 'sm:border-l' : ''}`}
         >
-          <dt className="text-[13.5px] leading-tight font-semibold text-[var(--label-color)]">
-            {i.label}
-          </dt>
+          <dt className="text-[13.5px] leading-tight font-semibold text-[var(--label-color)]">{i.label}</dt>
           <dd
-            className={`tabular m-0 text-[26px] leading-tight font-bold ${i.destacado ? "text-[#0f2a7a]" : "text-foreground"}`}
+            className={`tabular m-0 text-[26px] leading-tight font-bold ${i.destacado ? 'text-[#0f2a7a]' : 'text-foreground'}`}
           >
             {i.valor}
           </dd>
@@ -116,7 +105,7 @@ function ResumenTaller({
 
 /** Línea "Hallazgo: …" de una OT originada en un hallazgo. */
 function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
-  if (orden.origen !== "HALLAZGO" || !orden.origenDetalle) return null;
+  if (orden.origen !== 'HALLAZGO' || !orden.origenDetalle) return null;
   return (
     <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-[14px] leading-snug text-[var(--label-color)]">
       <TriangleAlert className="size-4 shrink-0" />
@@ -125,36 +114,18 @@ function HallazgoAssoc({ orden }: { orden: OrdenTrabajo }) {
   );
 }
 
-function BoardCard({
-  children,
-  muted,
-}: {
-  children: React.ReactNode;
-  muted?: boolean;
-}) {
-  return (
-    <Tarjeta className={`min-w-0 gap-3 ${muted ? "bg-[#fafbfc]" : ""}`}>
-      {children}
-    </Tarjeta>
-  );
+function BoardCard({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+  return <Tarjeta className={`min-w-0 gap-3 ${muted ? 'bg-[#fafbfc]' : ''}`}>{children}</Tarjeta>;
 }
 
 /** Qué es la orden: la línea más importante después del equipo. */
 function TituloOrden({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[17px] leading-snug font-semibold tracking-[-0.01em] text-foreground">
-      {children}
-    </span>
-  );
+  return <span className="text-[17px] leading-snug font-semibold tracking-[-0.01em] text-foreground">{children}</span>;
 }
 
 /** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
-function TipoChip({ tipo }: { tipo: OrdenTrabajo["tipo"] }) {
-  return tipo === "PREVENTIVA" ? (
-    <PreventiveChip />
-  ) : (
-    <Chip tono="neutral">Correctiva</Chip>
-  );
+function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
+  return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
 }
 
 /**
@@ -163,7 +134,7 @@ function TipoChip({ tipo }: { tipo: OrdenTrabajo["tipo"] }) {
  * finalizar de las correctivas.
  */
 function esChecklistPauta(orden: OrdenTrabajo): boolean {
-  return orden.origen === "PREVENTIVO" && orden.tareas.length > 0;
+  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
 }
 
 /**
@@ -179,9 +150,7 @@ function IniciarMantencion({ orden }: { orden: OrdenTrabajo }) {
       disabled={actualizar.isPending}
       type="button"
       variante="acento"
-      onClick={() =>
-        actualizar.mutate({ orden, input: { estado: "EN_PROCESO" } })
-      }
+      onClick={() => actualizar.mutate({ orden, input: { estado: 'EN_PROCESO' } })}
     >
       <ArrowRight className="h-5 w-5" />
       Iniciar operación
@@ -193,9 +162,7 @@ function IniciarMantencion({ orden }: { orden: OrdenTrabajo }) {
 function TareasChip({ orden }: { orden: OrdenTrabajo }) {
   const { hechas, total } = tareasHechas(orden);
   return (
-    <Chip
-      tono={hechas === total ? "success" : hechas > 0 ? "warning" : "neutral"}
-    >
+    <Chip tono={hechas === total ? 'success' : hechas > 0 ? 'warning' : 'neutral'}>
       {hechas} de {total} tareas
     </Chip>
   );
@@ -204,22 +171,14 @@ function TareasChip({ orden }: { orden: OrdenTrabajo }) {
 /** Titular de la tarjeta (boceto del taller): el EQUIPO primero y notorio —
  * código tabular en negrita + nombre de Flota en gris, como el Selector de
  * Terreno. */
-function EquipoHead({
-  equipoId,
-  fleet,
-}: {
-  equipoId: string;
-  fleet: readonly EquipmentRef[] | undefined;
-}) {
+function EquipoHead({ equipoId, fleet }: { equipoId: string; fleet: readonly EquipmentRef[] | undefined }) {
   const eq = findEquipment(equipoId, fleet);
   return (
     <span className="min-w-0 leading-snug">
-      <span className="tabular text-[18px] font-bold text-foreground">
-        {eq?.internalCode ?? equipoId}
-      </span>
+      <span className="tabular text-[18px] font-bold text-foreground">{eq?.internalCode ?? equipoId}</span>
       {eq ? (
         <span className="text-[15px] text-[var(--label-color)]">
-          {" "}
+          {' '}
           · {eq.brand} {eq.model}
         </span>
       ) : null}
@@ -234,11 +193,7 @@ function ChipsRow({ children }: { children: React.ReactNode }) {
 
 /** Meta de UNA línea, como las tarjetas del artboard tablet del Mantenedor. */
 function CardMeta({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[14px] leading-snug text-[var(--label-color)]">
-      {children}
-    </span>
-  );
+  return <span className="text-[14px] leading-snug text-[var(--label-color)]">{children}</span>;
 }
 
 /** Chip que diferencia el ORIGEN de lo que espera en la bandeja: hallazgo
@@ -279,14 +234,10 @@ function FindingCard({
       <TituloOrden>{hallazgo.descripcion}</TituloOrden>
       <ChipsRow>
         <FindingChip />
-        <Chip tono={chipColorToTono(prioridadOTChipColor(prioridad))}>
-          {PRIORIDAD_OT_LABELS[prioridad]}
-        </Chip>
+        <Chip tono={chipColorToTono(prioridadOTChipColor(prioridad))}>{PRIORIDAD_OT_LABELS[prioridad]}</Chip>
       </ChipsRow>
       <CardMeta>Terreno · Supervisor — {formatDate(hallazgo.fecha)}</CardMeta>
-      {canStart ? (
-        <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} />
-      ) : null}
+      {canStart ? <StartFromHallazgoModal equipment={fleet} hallazgo={hallazgo} /> : null}
     </BoardCard>
   );
 }
@@ -301,16 +252,10 @@ function FindingCard({
  * tablero): el encabezado lo pone esa vista y acá solo se retira el propio;
  * todo lo demás —crear, resumen, columnas y acciones— queda idéntico al taller.
  */
-export function OrdenesTrabajoView({
-  contexto = "taller",
-}: { contexto?: "taller" | "panel" } = {}) {
+export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller' | 'panel' } = {}) {
   const { can } = usePermissions();
   const { data: ordenes, isPending, isError, error } = useOrdenes();
-  const {
-    data: hallazgos,
-    isPending: findingsPending,
-    isError: findingsError,
-  } = useHallazgosList();
+  const { data: hallazgos, isPending: findingsPending, isError: findingsError } = useHallazgosList();
   const { data: equipment } = useEquipment();
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
@@ -326,28 +271,24 @@ export function OrdenesTrabajoView({
     () =>
       (hallazgos ?? []).filter(
         (hallazgo): hallazgo is HallazgoDeEquipo =>
-          hallazgo.estado === "ABIERTO" &&
-          hallazgo.tipo !== "ZONA" &&
-          !!hallazgo.equipoId?.trim(),
+          hallazgo.estado === 'ABIERTO' && hallazgo.tipo !== 'ZONA' && !!hallazgo.equipoId?.trim(),
       ),
     [hallazgos],
   );
 
   // Espejo de los `@Roles` del backend vía `lib/permissions`: el cierre de la
   // tarea (POST de intervención) es exclusivo del MANTENEDOR.
-  const canCreate = can("orden.create");
-  const canStart = can("orden.update");
-  const canFinish = can("intervencion.create");
-  const canTarea = can("orden.toggleTarea");
+  const canCreate = can('orden.create');
+  const canStart = can('orden.update');
+  const canFinish = can('intervencion.create');
+  const canTarea = can('orden.toggleTarea');
   const fleet: readonly EquipmentRef[] | undefined = equipment;
 
   // En tablet las tres columnas quedaban de 250 px: letra chica, nombres
   // cortados y botones partidos en dos líneas. Por debajo de `lg` se ve UNA
   // columna a todo el ancho y se cambia con el selector; desde `lg`, las tres.
   const tresColumnas = useMediaQuery(DESKTOP_QUERY);
-  const [columna, setColumna] = useState<"ordenes" | "proceso" | "finalizadas">(
-    "ordenes",
-  );
+  const [columna, setColumna] = useState<'ordenes' | 'proceso' | 'finalizadas'>('ordenes');
   const conteos = {
     ordenes: openFindings.length + board.backlog.length,
     proceso: board.inProgress.length,
@@ -358,14 +299,13 @@ export function OrdenesTrabajoView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        {contexto === "taller" ? (
+        {contexto === 'taller' ? (
           <div className="flex flex-col gap-1">
             <h2 className="font-display text-[24px] leading-tight font-bold tracking-[-0.02em] text-foreground">
               Taller — Hallazgos y operaciones
             </h2>
             <p className="text-[15px] leading-snug text-[var(--label-color)]">
-              Los hallazgos reportados llegan a tu bandeja. Al iniciar una
-              operación el hallazgo pasa a "en proceso".
+              Los hallazgos reportados llegan a tu bandeja. Al iniciar una operación el hallazgo pasa a "en proceso".
             </p>
           </div>
         ) : (
@@ -378,14 +318,10 @@ export function OrdenesTrabajoView({
 
       <ResumenTaller
         items={[
-          { label: "Hallazgos pendientes", valor: openFindings.length },
-          { label: "En proceso", valor: stats.inProgress },
-          {
-            label: "Finalizadas hoy",
-            valor: stats.finishedToday,
-            destacado: true,
-          },
-          { label: "Total asignadas", valor: stats.total },
+          { label: 'Hallazgos pendientes', valor: openFindings.length },
+          { label: 'En proceso', valor: stats.inProgress },
+          { label: 'Finalizadas hoy', valor: stats.finishedToday, destacado: true },
+          { label: 'Total asignadas', valor: stats.total },
         ]}
       />
 
@@ -396,25 +332,16 @@ export function OrdenesTrabajoView({
       ) : null}
 
       {isError ? (
-        <div
-          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
-          {error instanceof Error
-            ? error.message
-            : "No se pudo cargar la lista de órdenes."}
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+          {error instanceof Error ? error.message : 'No se pudo cargar la lista de órdenes.'}
         </div>
       ) : null}
 
       {/* La bandeja sin sus hallazgos NO puede hacerse pasar por vacía: si la
           carga falla, se dice — las órdenes siguen abajo. */}
       {findingsError ? (
-        <div
-          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
-          No se pudieron cargar los hallazgos de Terreno — la bandeja puede
-          estar incompleta.
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
+          No se pudieron cargar los hallazgos de Terreno — la bandeja puede estar incompleta.
         </div>
       ) : null}
 
@@ -424,19 +351,14 @@ export function OrdenesTrabajoView({
       !findingsError &&
       (ordenes?.length ?? 0) + openFindings.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">
-            No hay nada en el tablero
-          </p>
+          <p className="text-sm font-medium text-foreground">No hay nada en el tablero</p>
           <p className="text-sm text-muted-foreground">
-            Los hallazgos reportados y las mantenciones preventivas asignadas
-            aparecen acá.
+            Los hallazgos reportados y las mantenciones preventivas asignadas aparecen acá.
           </p>
         </div>
       ) : null}
 
-      {!isPending &&
-      !isError &&
-      (ordenes?.length ?? 0) + openFindings.length > 0 ? (
+      {!isPending && !isError && (ordenes?.length ?? 0) + openFindings.length > 0 ? (
         // El tablero se dibuja aunque los hallazgos hayan fallado: esa mitad
         // ya avisó arriba y las órdenes no tienen por qué esconderse.
         // Tablet es el dispositivo principal del taller: las TRES columnas se
@@ -446,28 +368,16 @@ export function OrdenesTrabajoView({
             <Segmentado
               etiqueta="Columna del tablero"
               opciones={[
-                {
-                  valor: "ordenes",
-                  label: "Órdenes",
-                  sub: String(conteos.ordenes),
-                },
-                {
-                  valor: "proceso",
-                  label: "En proceso",
-                  sub: String(conteos.proceso),
-                },
-                {
-                  valor: "finalizadas",
-                  label: "Finalizadas",
-                  sub: String(conteos.finalizadas),
-                },
+                { valor: 'ordenes', label: 'Órdenes', sub: String(conteos.ordenes) },
+                { valor: 'proceso', label: 'En proceso', sub: String(conteos.proceso) },
+                { valor: 'finalizadas', label: 'Finalizadas', sub: String(conteos.finalizadas) },
               ]}
               valor={columna}
               onChange={setColumna}
             />
           )}
           <div className="grid items-start gap-4 lg:grid-cols-3">
-            {ver("ordenes") && (
+            {ver('ordenes') && (
               <BoardColumn
                 color="neutral"
                 conCabecera={tresColumnas}
@@ -476,42 +386,28 @@ export function OrdenesTrabajoView({
                 vacio="No hay hallazgos ni órdenes esperando."
               >
                 {openFindings.map((hallazgo) => (
-                  <FindingCard
-                    key={hallazgo.id}
-                    canStart={can("orden.create")}
-                    fleet={fleet}
-                    hallazgo={hallazgo}
-                  />
+                  <FindingCard key={hallazgo.id} canStart={can('orden.create')} fleet={fleet} hallazgo={hallazgo} />
                 ))}
                 {board.backlog.map((orden) => (
                   <BoardCard key={orden.id}>
                     <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
                     <div className="flex items-start gap-2">
                       <TituloOrden>{orden.titulo}</TituloOrden>
-                      <MarcaPendiente
-                        marca={pendientes.marcaDe("orden", orden.id)}
-                      />
+                      <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                     </div>
                     <ChipsRow>
-                      {orden.tipo === "PREVENTIVA" ? (
+                      {orden.tipo === 'PREVENTIVA' ? (
                         <PreventiveChip />
-                      ) : orden.origen === "HALLAZGO" ? (
+                      ) : orden.origen === 'HALLAZGO' ? (
                         <FindingChip />
                       ) : null}
-                      <Chip
-                        tono={chipColorToTono(
-                          prioridadOTChipColor(orden.prioridad),
-                        )}
-                      >
+                      <Chip tono={chipColorToTono(prioridadOTChipColor(orden.prioridad))}>
                         {PRIORIDAD_OT_LABELS[orden.prioridad]}
                       </Chip>
-                      {esChecklistPauta(orden) ? (
-                        <TareasChip orden={orden} />
-                      ) : null}
+                      {esChecklistPauta(orden) ? <TareasChip orden={orden} /> : null}
                     </ChipsRow>
                     <CardMeta>
-                      {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} —{" "}
-                      {formatDate(orden.createdAt)}
+                      {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} — {formatDate(orden.createdAt)}
                     </CardMeta>
                     {esChecklistPauta(orden) ? (
                       canStart ? (
@@ -525,7 +421,7 @@ export function OrdenesTrabajoView({
               </BoardColumn>
             )}
 
-            {ver("proceso") && (
+            {ver('proceso') && (
               <BoardColumn
                 color="warning"
                 conCabecera={tresColumnas}
@@ -538,35 +434,27 @@ export function OrdenesTrabajoView({
                     <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
                     <div className="flex items-start gap-2">
                       <TituloOrden>{orden.titulo}</TituloOrden>
-                      <MarcaPendiente
-                        marca={pendientes.marcaDe("orden", orden.id)}
-                      />
+                      <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                     </div>
                     <HallazgoAssoc orden={orden} />
                     <ChipsRow>
                       <TipoChip tipo={orden.tipo} />
-                      {esChecklistPauta(orden) ? (
-                        <TareasChip orden={orden} />
-                      ) : null}
+                      {esChecklistPauta(orden) ? <TareasChip orden={orden} /> : null}
                     </ChipsRow>
                     <CardMeta>
-                      Iniciada {formatDate(orden.updatedAt)} ·{" "}
-                      {orden.asignadoA?.nombre ?? "Sin asignar"}
+                      Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
                     </CardMeta>
                     {/* Con una escritura de esta OT aún sin sincronizar, el botón
                     se retira: un segundo "Guardar y finalizar" generaría OTRA
                     intervención con OTRO id — y ahora eso descuenta stock real
                     dos veces. */}
-                    {pendientes.marcaDe("orden", orden.id) ? (
+                    {pendientes.marcaDe('orden', orden.id) ? (
                       <span className="text-[14px] font-medium text-[var(--label-color)]">
                         Sincronizando cambios de esta operación…
                       </span>
                     ) : esChecklistPauta(orden) ? (
                       canTarea ? (
-                        <PreventiveChecklistModal
-                          equipment={fleet}
-                          orden={orden}
-                        />
+                        <PreventiveChecklistModal equipment={fleet} orden={orden} />
                       ) : null
                     ) : canFinish ? (
                       <FinishTaskModal equipment={fleet} orden={orden} />
@@ -576,7 +464,7 @@ export function OrdenesTrabajoView({
               </BoardColumn>
             )}
 
-            {ver("finalizadas") && (
+            {ver('finalizadas') && (
               <BoardColumn
                 color="success"
                 conCabecera={tresColumnas}
@@ -589,30 +477,19 @@ export function OrdenesTrabajoView({
                     <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
                     <div className="flex items-start gap-2">
                       <TituloOrden>{orden.titulo}</TituloOrden>
-                      <MarcaPendiente
-                        marca={pendientes.marcaDe("orden", orden.id)}
-                      />
+                      <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
                     </div>
                     <HallazgoAssoc orden={orden} />
                     <ChipsRow>
-                      {orden.estado === "CANCELADA" ? (
-                        <Chip tono="danger">Cancelada</Chip>
-                      ) : null}
+                      {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
                       <TipoChip tipo={orden.tipo} />
                     </ChipsRow>
                     <CardMeta>
-                      {orden.estado === "CANCELADA"
-                        ? "Cancelada"
-                        : "Finalizada"}{" "}
-                      {formatDate(orden.updatedAt)} ·{" "}
-                      {orden.asignadoA?.nombre ?? "Sin asignar"}
+                      {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
+                      {orden.asignadoA?.nombre ?? 'Sin asignar'}
                     </CardMeta>
                     {esChecklistPauta(orden) ? (
-                      <PreventiveChecklistModal
-                        equipment={fleet}
-                        orden={orden}
-                        soloLectura
-                      />
+                      <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
                     ) : (
                       <ViewOperationModal equipment={fleet} orden={orden} />
                     )}

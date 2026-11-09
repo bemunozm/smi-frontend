@@ -1,21 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 
-import { EquiposView } from "./EquiposView";
+import { EquiposView } from './EquiposView';
 
 // La sesión real la resuelve Better Auth contra el backend; acá solo importa
 // qué rol ve la pantalla, que es lo que decide las acciones visibles.
-vi.mock("../hooks/useCurrentUser", () => ({
+vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
-    user: {
-      id: "u1",
-      name: "Admin SMI",
-      email: "admin@smi.local",
-      role: "ADMIN",
-    },
-    role: "ADMIN",
+    user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+    role: 'ADMIN',
     isPending: false,
     isAuthenticated: true,
   }),
@@ -23,29 +18,27 @@ vi.mock("../hooks/useCurrentUser", () => ({
 
 // Los formularios (create/edit) consultan sucursales para el selector
 // `homeBranch` — mockeada sin datos porque estos tests no abren esos modales.
-vi.mock("../hooks/useBranches", () => ({
-  useBranches: () => ({ data: [] }),
-}));
+vi.mock('../hooks/useBranches', () => ({ useBranches: () => ({ data: [] }) }));
 
 afterEach(cleanup);
 
 const EQUIPO = {
-  id: "eq_1",
-  internalCode: "EX-001",
+  id: 'eq_1',
+  internalCode: 'EX-001',
   licensePlate: null,
-  equipmentClass: "HEAVY" as const,
-  type: "Excavadora",
-  brand: "Caterpillar",
-  model: "336",
+  equipmentClass: 'HEAVY' as const,
+  type: 'Excavadora',
+  brand: 'Caterpillar',
+  model: '336',
   year: 2019,
-  controlUnit: "HOURS" as const,
+  controlUnit: 'HOURS' as const,
   currentHourmeter: 1200,
   currentMileage: null,
-  status: "OPERATIONAL" as const,
+  status: 'OPERATIONAL' as const,
   homeBranchId: null,
   photoUrl: null,
-  operator: { id: "u_op", name: "Pedro Soto" },
-  supervisor: { id: "u_sup", name: "Luis Vega" },
+  operator: { id: 'u_op', name: 'Pedro Soto' },
+  supervisor: { id: 'u_sup', name: 'Luis Vega' },
   inUse: true,
   currentFuelLevel: 72,
   openShift: null,
@@ -53,9 +46,9 @@ const EQUIPO = {
   // (equipo recién dado de alta, sin documentos vencidos/por vencer todavía);
   // los tests de `EquiposView — indicador de vencimientos` sobrescriben con
   // `'VENCIDO'`/`'POR_VENCER'`.
-  documentsAlert: null as "VENCIDO" | "POR_VENCER" | null,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
+  documentsAlert: null as 'VENCIDO' | 'POR_VENCER' | null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
 // Sin esto, el `QueryClient` por defecto (`staleTime: 0`) trata los datos
@@ -65,16 +58,10 @@ const EQUIPO = {
 // `CombustibleAPI`, que no están mockeadas en este archivo. `retry: false`
 // evita además que un fallo de red quede reintentando en segundo plano.
 function crearQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
-  });
+  return new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
 }
 
-function renderConDatos(
-  ui: React.ReactElement,
-  seed: (qc: QueryClient) => void,
-  ruta = "/",
-) {
+function renderConDatos(ui: React.ReactElement, seed: (qc: QueryClient) => void, ruta = '/') {
   const qc = crearQueryClient();
   seed(qc);
   return render(
@@ -84,11 +71,11 @@ function renderConDatos(
   );
 }
 
-describe("EquiposView", () => {
-  it("lista los equipos con su estado y uso", () => {
+describe('EquiposView', () => {
+  it('lista los equipos con su estado y uso', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(["equipment"], [EQUIPO]);
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
@@ -98,31 +85,28 @@ describe("EquiposView", () => {
     // El código y el uso aparecen dos veces: en la tabla (PC) y en la
     // tarjeta equivalente (tablet/celular) — ambas vistas conviven en el DOM,
     // la que se ve depende del breakpoint (CSS, no de jsdom).
-    expect(screen.getAllByText("EX-001").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Excavadora/).length).toBeGreaterThan(0);
     // El estado se muestra con la etiqueta en español, no con el valor del enum.
-    expect(screen.getAllByText("Operativo").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1.200 h").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Operativo').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1.200 h').length).toBeGreaterThan(0);
     // Columnas nuevas de fidelidad con el artefacto: combustible y "en uso por".
-    expect(screen.getAllByText("72%").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Pedro Soto").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('72%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pedro Soto').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Luis Vega/).length).toBeGreaterThan(0);
   });
 
   it('muestra "Disponible" cuando el equipo no tiene operador ni supervisor asignado', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, inUse: false, operator: null, supervisor: null }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, inUse: false, operator: null, supervisor: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getAllByText("Disponible").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Disponible').length).toBeGreaterThan(0);
   });
 
   // Antes esto se decidía leyendo `inUse` (que el backend deriva de
@@ -131,11 +115,8 @@ describe("EquiposView", () => {
   // aunque la asignación sí existía (Fix 4, review QA de fidelidad).
   it('muestra al supervisor aunque no haya operador asignado (no depende solo de "inUse")', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, inUse: false, operator: null }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, inUse: false, operator: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
@@ -143,50 +124,50 @@ describe("EquiposView", () => {
     });
 
     expect(screen.getAllByText(/Luis Vega/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Disponible")).toBeNull();
+    expect(screen.queryByText('Disponible')).toBeNull();
   });
 
   it('un LIVIANO con tarjeta abierta se muestra "En uso" con quién la abrió, aunque no tenga asignación', () => {
     renderConDatos(<EquiposView />, (qc) => {
       qc.setQueryData(
-        ["equipment"],
+        ['equipment'],
         [
           {
             ...EQUIPO,
-            equipmentClass: "LIGHT" as const,
-            type: "Camioneta",
+            equipmentClass: 'LIGHT' as const,
+            type: 'Camioneta',
             inUse: false,
             operator: null,
             supervisor: null,
             openShift: {
-              id: "h_kia",
+              id: 'h_kia',
               valorInicial: 15200,
-              operador: "",
+              operador: '',
               operatorId: null,
-              turno: "DIURNO",
-              fecha: "2026-11-09T08:00:00.000Z",
-              supervisorName: "Marcela Pizarro",
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
               shiftId: null,
             },
           },
         ],
       );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getAllByText("En uso").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('En uso').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Marcela Pizarro/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Disponible")).toBeNull();
+    expect(screen.queryByText('Disponible')).toBeNull();
   });
 
   it('un PESADO con tarjeta abierta se muestra "En uso" con el operador de la tarjeta', () => {
     renderConDatos(<EquiposView />, (qc) => {
       qc.setQueryData(
-        ["equipment"],
+        ['equipment'],
         [
           {
             ...EQUIPO,
@@ -194,59 +175,184 @@ describe("EquiposView", () => {
             operator: null,
             supervisor: null,
             openShift: {
-              id: "h_wa320",
+              id: 'h_wa320',
               valorInicial: 1200,
-              operador: "Carlos Núñez",
-              operatorId: "op_1",
-              turno: "DIURNO",
-              fecha: "2026-11-09T08:00:00.000Z",
-              supervisorName: "Marcela Pizarro",
+              operador: 'Carlos Núñez',
+              operatorId: 'op_1',
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
               shiftId: null,
             },
           },
         ],
       );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getAllByText("En uso").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('En uso').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Carlos Núñez/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Disponible")).toBeNull();
+    expect(screen.queryByText('Disponible')).toBeNull();
+  });
+
+  it('tocar el chip "En uso" abre el popup con desde cuándo, quién, lectura inicial y la última carga', async () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            equipmentClass: 'LIGHT' as const,
+            type: 'Camioneta',
+            controlUnit: 'KM' as const,
+            inUse: false,
+            operator: null,
+            supervisor: null,
+            openShift: {
+              id: 'h_kia',
+              valorInicial: 15200,
+              operador: '',
+              operatorId: null,
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
+              shiftId: null,
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+      qc.setQueryData(
+        ['combustible'],
+        [
+          {
+            id: 'c_vieja',
+            equipoId: 'eq_1',
+            litros: 20,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-01T10:00:00.000Z',
+            lectura: 15000,
+            realizadoPor: 'Otro Supervisor',
+          },
+          {
+            id: 'c_ultima',
+            equipoId: 'eq_1',
+            litros: 35.5,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-08T17:30:00.000Z',
+            lectura: 15180,
+            realizadoPor: 'Marcela Pizarro',
+          },
+          // De OTRO equipo: no debe colarse como "última carga".
+          {
+            id: 'c_ajena',
+            equipoId: 'eq_otro',
+            litros: 99,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-09T09:00:00.000Z',
+            lectura: 555,
+            realizadoPor: 'Nadie',
+          },
+        ],
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /uso en curso/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const { getByText, getAllByText, queryByText } = within(dialog);
+    // Desde cuándo está en uso (el registro que pedía el administrador).
+    expect(getByText('En uso desde')).toBeTruthy();
+    expect(getByText('Tiempo en uso')).toBeTruthy();
+    // Quién lo tiene (liviano: quien abrió la tarjeta).
+    expect(getAllByText(/Marcela Pizarro/).length).toBeGreaterThan(0);
+    // Lectura al abrir la tarjeta.
+    expect(getByText(/15\.200/)).toBeTruthy();
+    // La última carga del EQUIPO (no la vieja, no la de otro equipo).
+    expect(getByText(/35,5/)).toBeTruthy();
+    expect(getByText(/15\.180/)).toBeTruthy();
+    expect(queryByText(/555/)).toBeNull();
+  });
+
+  it('el popup dice cuando el equipo no tiene cargas de combustible registradas', async () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            inUse: false,
+            operator: null,
+            supervisor: null,
+            openShift: {
+              id: 'h_wa320',
+              valorInicial: 1200,
+              operador: 'Carlos Núñez',
+              operatorId: 'op_1',
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
+              shiftId: null,
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+      qc.setQueryData(['combustible'], []);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /uso en curso/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    // Pesado: el operador de la tarjeta y el turno.
+    expect(within(dialog).getAllByText(/Carlos Núñez/).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText(/Sin cargas registradas/)).toBeTruthy();
   });
 
   it('el filtro Estado ofrece "En uso" y deja solo los equipos con tarjeta abierta o asignación', async () => {
     renderConDatos(<EquiposView />, (qc) => {
       qc.setQueryData(
-        ["equipment"],
+        ['equipment'],
         [
           {
             ...EQUIPO,
-            id: "eq_kia",
-            internalCode: "KC-001",
-            equipmentClass: "LIGHT" as const,
-            type: "Camioneta",
+            id: 'eq_kia',
+            internalCode: 'KC-001',
+            equipmentClass: 'LIGHT' as const,
+            type: 'Camioneta',
             inUse: false,
             operator: null,
             supervisor: null,
             openShift: {
-              id: "h_kia",
+              id: 'h_kia',
               valorInicial: 15200,
-              operador: "",
+              operador: '',
               operatorId: null,
-              turno: "DIURNO",
-              fecha: "2026-11-09T08:00:00.000Z",
-              supervisorName: "Marcela Pizarro",
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
               shiftId: null,
             },
           },
           {
             ...EQUIPO,
-            id: "eq_libre",
-            internalCode: "EX-002",
+            id: 'eq_libre',
+            internalCode: 'EX-002',
             inUse: false,
             operator: null,
             supervisor: null,
@@ -254,33 +360,33 @@ describe("EquiposView", () => {
           },
         ],
       );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 2,
         disponibles: 2,
         porEstado: { OPERATIONAL: 2, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getAllByText("EX-002").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('EX-002').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /Estado/ }));
-    fireEvent.click(await screen.findByRole("option", { name: "En uso" }));
+    fireEvent.click(screen.getByRole('button', { name: /Estado/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'En uso' }));
 
-    expect(screen.getAllByText("KC-001").length).toBeGreaterThan(0);
-    expect(screen.queryByText("EX-002")).toBeNull();
+    expect(screen.getAllByText('KC-001').length).toBeGreaterThan(0);
+    expect(screen.queryByText('EX-002')).toBeNull();
   });
 
-  it("muestra el estado vacío cuando ningún equipo coincide", () => {
+  it('muestra el estado vacío cuando ningún equipo coincide', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(["equipment"], []);
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], []);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 0,
         disponibles: 0,
         porEstado: { OPERATIONAL: 0, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getByText("No hay equipos que coincidan")).toBeTruthy();
+    expect(screen.getByText('No hay equipos que coincidan')).toBeTruthy();
   });
 });
 
@@ -290,78 +396,63 @@ describe("EquiposView", () => {
 // `EquipoDetalleView.test.tsx — flujo de horómetro`). La tarjeta en sí no
 // tiene un rol/aria-label propio (solo envuelve el contenido visual), así
 // que se ubica por clase — no hay otro selector estable disponible acá.
-describe("EquiposView — hoja de acciones móvil (horómetro)", () => {
+describe('EquiposView — hoja de acciones móvil (horómetro)', () => {
   it('sin turno abierto, el tile de horómetro ofrece "Registrar entrada"', async () => {
     const { container } = renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(["equipment"], [EQUIPO]);
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    const trigger = container.querySelector(
-      "button.block.w-full",
-    ) as HTMLButtonElement;
+    const trigger = container.querySelector('button.block.w-full') as HTMLButtonElement;
     fireEvent.click(trigger);
 
-    expect(
-      await screen.findByRole("button", { name: "Registrar entrada" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Registrar salida" }),
-    ).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Registrar entrada' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar salida' })).toBeNull();
   });
 
   it('con turno abierto, el tile de horómetro ofrece "Registrar salida"', async () => {
     const equipoConTurno = {
       ...EQUIPO,
       openShift: {
-        id: "h_abierto",
+        id: 'h_abierto',
         valorInicial: 1200,
-        operador: "Carlos Núñez",
-        operatorId: "op_1",
-        turno: "DIURNO",
-        fecha: "2026-08-06T08:00:00.000Z",
-        supervisorName: "Marcela Pizarro",
+        operador: 'Carlos Núñez',
+        operatorId: 'op_1',
+        turno: 'DIURNO',
+        fecha: '2026-08-06T08:00:00.000Z',
+        supervisorName: 'Marcela Pizarro',
         shiftId: null,
       },
     };
     const { container } = renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(["equipment"], [equipoConTurno]);
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [equipoConTurno]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    const trigger = container.querySelector(
-      "button.block.w-full",
-    ) as HTMLButtonElement;
+    const trigger = container.querySelector('button.block.w-full') as HTMLButtonElement;
     fireEvent.click(trigger);
 
-    expect(
-      await screen.findByRole("button", { name: "Registrar salida" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Registrar entrada" }),
-    ).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Registrar salida' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Registrar entrada' })).toBeNull();
   });
 });
 
 // R3 — vista diferenciada por clase: un equipo PESADO se
 // identifica de un vistazo por su patente, y uno LIVIANO por
 // patente+marca+modelo (`equipoIdentidad`, `flota-colors.ts`).
-describe("EquiposView — R3 identidad por clase", () => {
-  it("equipo PESADO con patente: la muestra destacada (aparte de marca/modelo)", () => {
+describe('EquiposView — R3 identidad por clase', () => {
+  it('equipo PESADO con patente: la muestra destacada (aparte de marca/modelo)', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, equipmentClass: "HEAVY", licensePlate: "AB-CD-12" }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'HEAVY', licensePlate: 'AB-CD-12' }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
@@ -369,43 +460,31 @@ describe("EquiposView — R3 identidad por clase", () => {
     });
 
     // La patente aparece en la tabla (PC) y en la tarjeta (tablet/celular).
-    expect(screen.getAllByText("AB-CD-12").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AB-CD-12').length).toBeGreaterThan(0);
     // Marca/modelo se sigue mostrando aparte (la patente no los reemplaza).
     expect(screen.getAllByText(/Caterpillar 336/).length).toBeGreaterThan(0);
   });
 
-  it("equipo LIVIANO con patente: muestra patente + marca + modelo juntos", () => {
+  it('equipo LIVIANO con patente: muestra patente + marca + modelo juntos', () => {
     renderConDatos(<EquiposView />, (qc) => {
       qc.setQueryData(
-        ["equipment"],
-        [
-          {
-            ...EQUIPO,
-            equipmentClass: "LIGHT" as const,
-            licensePlate: "XY-12-34",
-            type: "Camioneta",
-          },
-        ],
+        ['equipment'],
+        [{ ...EQUIPO, equipmentClass: 'LIGHT' as const, licensePlate: 'XY-12-34', type: 'Camioneta' }],
       );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(
-      screen.getAllByText("XY-12-34 · Caterpillar 336").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('XY-12-34 · Caterpillar 336').length).toBeGreaterThan(0);
   });
 
-  it("equipo PESADO sin patente: no deja un hueco vacío — cae al código interno ya visible", () => {
+  it('equipo PESADO sin patente: no deja un hueco vacío — cae al código interno ya visible', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, equipmentClass: "HEAVY", licensePlate: null }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'HEAVY', licensePlate: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
@@ -414,24 +493,21 @@ describe("EquiposView — R3 identidad por clase", () => {
 
     // El código interno sigue siendo el identificador — sin duplicarlo como
     // "patente destacada" (esa línea extra no debe aparecer).
-    expect(screen.getAllByText("EX-001").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Caterpillar 336/).length).toBeGreaterThan(0);
   });
 
-  it("equipo LIVIANO sin patente: muestra marca y modelo a secas (sin patente inventada)", () => {
+  it('equipo LIVIANO sin patente: muestra marca y modelo a secas (sin patente inventada)', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, equipmentClass: "LIGHT" as const, licensePlate: null }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, equipmentClass: 'LIGHT' as const, licensePlate: null }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(screen.getAllByText("Caterpillar 336").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Caterpillar 336').length).toBeGreaterThan(0);
     expect(screen.queryByText(/· Caterpillar 336/)).toBeNull();
   });
 });
@@ -440,11 +516,11 @@ describe("EquiposView — R3 identidad por clase", () => {
 // de estado cuando `equipo.documentsAlert` viene informado (derivado on-read
 // por el backend a partir de los documentos de la unidad — dominio
 // "Documentos de equipo", ver `types/equipment-document.ts`).
-describe("EquiposView — indicador de documentos", () => {
-  it("no muestra el indicador cuando documentsAlert es null", () => {
+describe('EquiposView — indicador de documentos', () => {
+  it('no muestra el indicador cuando documentsAlert es null', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(["equipment"], [EQUIPO]);
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [EQUIPO]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
@@ -454,43 +530,31 @@ describe("EquiposView — indicador de documentos", () => {
     expect(screen.queryByLabelText(/Revisión técnica o seguro/)).toBeNull();
   });
 
-  it("muestra el indicador en tono ámbar cuando documentsAlert es POR_VENCER", () => {
+  it('muestra el indicador en tono ámbar cuando documentsAlert es POR_VENCER', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, documentsAlert: "POR_VENCER" as const }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, documentsAlert: 'POR_VENCER' as const }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(
-      screen.getAllByLabelText("Revisión técnica o seguro por vencer").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Revisión técnica o seguro por vencer').length).toBeGreaterThan(0);
   });
 
-  it("muestra el indicador en tono rojo cuando documentsAlert es VENCIDO", () => {
+  it('muestra el indicador en tono rojo cuando documentsAlert es VENCIDO', () => {
     renderConDatos(<EquiposView />, (qc) => {
-      qc.setQueryData(
-        ["equipment"],
-        [{ ...EQUIPO, documentsAlert: "VENCIDO" as const }],
-      );
-      qc.setQueryData(["equipment", "resumen"], {
+      qc.setQueryData(['equipment'], [{ ...EQUIPO, documentsAlert: 'VENCIDO' as const }]);
+      qc.setQueryData(['equipment', 'resumen'], {
         total: 1,
         disponibles: 1,
         porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
       });
     });
 
-    expect(
-      screen.getAllByLabelText("Revisión técnica o seguro vencidos").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.queryByLabelText("Revisión técnica o seguro por vencer"),
-    ).toBeNull();
+    expect(screen.getAllByLabelText('Revisión técnica o seguro vencidos').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Revisión técnica o seguro por vencer')).toBeNull();
   });
 });
 
