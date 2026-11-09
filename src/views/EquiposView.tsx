@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import {
   CalendarClock,
   ChevronRight,
+  Clock,
   Droplet,
   Eye,
   FileWarning,
@@ -45,6 +46,7 @@ import { EquipoThumb } from "../components/flota/EquipoThumb";
 import { FuelGauge } from "../components/flota/FuelGauge";
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from "../components/flota/modal-styles";
 import { RegistrarCargaCombustibleModal } from "../components/flota/RegistrarCargaCombustibleModal";
+import { UsoEnCursoModal } from "../components/flota/UsoEnCursoModal";
 import {
   registrarHorometroLabel,
   RegistrarHorometroModal,
@@ -203,12 +205,23 @@ function formatDesde(iso: string): string {
 function AsignacionCell({
   equipo,
   layout,
+  onVerUso,
 }: {
   equipo: Pick<
     Equipment,
-    "operator" | "supervisor" | "status" | "equipmentClass" | "openShift"
+    | "internalCode"
+    | "operator"
+    | "supervisor"
+    | "status"
+    | "equipmentClass"
+    | "openShift"
   >;
   layout: "stacked" | "inline";
+  /** Abre el popup «Uso en curso» al tocar el chip "En uso" — solo la tabla
+   * PC lo pasa: en la tarjeta tablet/celular el chip vive DENTRO del botón
+   * de la hoja de acciones (button anidado inválido), así que ahí el popup
+   * se ofrece como acción de la hoja. */
+  onVerUso?: () => void;
 }) {
   const { operator, supervisor, openShift } = equipo;
 
@@ -240,7 +253,19 @@ function AsignacionCell({
 
     return (
       <div className="flex flex-col items-start gap-0.5">
-        <StatusChip tone="success">En uso</StatusChip>
+        {onVerUso ? (
+          <button
+            aria-label={`Uso en curso de ${equipo.internalCode}`}
+            className="cursor-pointer rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+            onClick={onVerUso}
+            title="Ver uso en curso"
+            type="button"
+          >
+            <StatusChip tone="success">En uso</StatusChip>
+          </button>
+        ) : (
+          <StatusChip tone="success">En uso</StatusChip>
+        )}
         <span className="text-[12.5px] text-foreground">
           {prefijo} <strong className="font-semibold">{quien}</strong>
         </span>
@@ -687,6 +712,7 @@ function EquipoCardMobile({
   proxima,
   detalleBase = "/equipos",
   soloLectura = false,
+  onVerUso,
 }: {
   equipo: Equipment;
   marca: Marca | null;
@@ -697,6 +723,10 @@ function EquipoCardMobile({
   detalleBase?: string;
   /** Taller: tocar la tarjeta navega directo al detalle, sin hoja de acciones. */
   soloLectura?: boolean;
+  /** Popup «Uso en curso» — acción de la hoja cuando hay tarjeta abierta (el
+   * chip de la tarjeta no puede ser botón: viviría anidado en el botón que
+   * abre la hoja). */
+  onVerUso?: () => void;
 }) {
   const navigate = useNavigate();
   const { can, canAny } = usePermissions();
@@ -892,6 +922,16 @@ function EquipoCardMobile({
                         navigate(`/equipos/${equipo.id}`);
                       }}
                     />
+                    {onVerUso && equipo.openShift ? (
+                      <ActionTile
+                        icon={Clock}
+                        label="Uso en curso"
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          onVerUso();
+                        }}
+                      />
+                    ) : null}
                     {/* Un liviano no: su km va por la tarjeta del supervisor o del mantenedor. */}
                     {puedeRegistrarHorometro &&
                     equipo.equipmentClass !== "LIGHT" ? (
@@ -1043,6 +1083,10 @@ export function EquiposView({
   // Un solo modal de creación, dos triggers: el botón del header (PC, `xl:`)
   // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // Popup «Uso en curso»: se abre tocando el chip "En uso" (tabla PC) o la
+  // acción de la hoja (tablet/celular). Montado solo abierto, para que la
+  // consulta de cargas de combustible se dispare recién ahí.
+  const [usoDetalle, setUsoDetalle] = useState<Equipment | null>(null);
 
   const puedeCrear = !enTaller && can("equipment.create");
 
@@ -1386,6 +1430,11 @@ export function EquiposView({
                               <AsignacionCell
                                 equipo={equipo}
                                 layout="stacked"
+                                onVerUso={
+                                  equipo.openShift
+                                    ? () => setUsoDetalle(equipo)
+                                    : undefined
+                                }
                               />
                             </Table.Cell>
                             <Table.Cell>
@@ -1428,6 +1477,9 @@ export function EquiposView({
                 equipo={equipo}
                 key={equipo.id}
                 marca={pendientes.marcaDe("equipment", equipo.id)}
+                onVerUso={
+                  equipo.openShift ? () => setUsoDetalle(equipo) : undefined
+                }
                 proxima={proximaPorEquipo?.get(equipo.id)}
                 soloLectura={enTaller}
                 sucursalPorId={sucursalPorId}
@@ -1454,6 +1506,13 @@ export function EquiposView({
       ) : null}
 
       <CreateEquipoModal isOpen={isCreateOpen} onOpenChange={setIsCreateOpen} />
+
+      {usoDetalle ? (
+        <UsoEnCursoModal
+          equipo={usoDetalle}
+          onClose={() => setUsoDetalle(null)}
+        />
+      ) : null}
     </div>
   );
 }
