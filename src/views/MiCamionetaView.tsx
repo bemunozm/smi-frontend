@@ -30,6 +30,7 @@ import { useShiftProjection } from '../hooks/useShiftProjection';
 import type { TarjetaTurno } from '../hooks/shift-register-helpers';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros } from '../lib/format';
+import { tiempoEnUso } from '../lib/tiempo-en-uso';
 import { contextoTurno } from '../lib/turno';
 import type { OutboxOp } from '../offline/db';
 import { useOutboxOps } from '../offline/useOutboxOps';
@@ -37,16 +38,8 @@ import { useOutboxOps } from '../offline/useOutboxOps';
 const fmtKm = (n: number | undefined) =>
   n == null ? '—' : `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} km`;
 
-/** «45 min», «3 h 10 min», «1 día 4 h». */
-function tiempoEnUso(desdeIso: string | undefined, ahora: Date): string {
-  if (!desdeIso) return '—';
-  const min = Math.max(0, Math.floor((ahora.getTime() - new Date(desdeIso).getTime()) / 60000));
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return min % 60 ? `${h} h ${min % 60} min` : `${h} h`;
-  const d = Math.floor(h / 24);
-  return `${d} ${d === 1 ? 'día' : 'días'}${h % 24 ? ` ${h % 24} h` : ''}`;
-}
+// «45 min», «3 h 10 min», «1 día 4 h» — compartida con el popup «Uso en
+// curso» del listado de Equipos (`lib/tiempo-en-uso.ts`).
 
 /** «26-10 09:44» — corto, para que quepa en tablet y celular. */
 function desdeCorto(iso: string | undefined): string {

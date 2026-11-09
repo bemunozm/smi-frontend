@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -197,6 +197,131 @@ describe('EquiposView', () => {
     expect(screen.getAllByText('En uso').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Carlos Núñez/).length).toBeGreaterThan(0);
     expect(screen.queryByText('Disponible')).toBeNull();
+  });
+
+  it('tocar el chip "En uso" abre el popup con desde cuándo, quién, lectura inicial y la última carga', async () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            equipmentClass: 'LIGHT' as const,
+            type: 'Camioneta',
+            controlUnit: 'KM' as const,
+            inUse: false,
+            operator: null,
+            supervisor: null,
+            openShift: {
+              id: 'h_kia',
+              valorInicial: 15200,
+              operador: '',
+              operatorId: null,
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
+              shiftId: null,
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+      qc.setQueryData(
+        ['combustible'],
+        [
+          {
+            id: 'c_vieja',
+            equipoId: 'eq_1',
+            litros: 20,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-01T10:00:00.000Z',
+            lectura: 15000,
+            realizadoPor: 'Otro Supervisor',
+          },
+          {
+            id: 'c_ultima',
+            equipoId: 'eq_1',
+            litros: 35.5,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-08T17:30:00.000Z',
+            lectura: 15180,
+            realizadoPor: 'Marcela Pizarro',
+          },
+          // De OTRO equipo: no debe colarse como "última carga".
+          {
+            id: 'c_ajena',
+            equipoId: 'eq_otro',
+            litros: 99,
+            tipo: 'PETROLEO',
+            fotoUrl: null,
+            fecha: '2026-11-09T09:00:00.000Z',
+            lectura: 555,
+            realizadoPor: 'Nadie',
+          },
+        ],
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /uso en curso/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const { getByText, getAllByText, queryByText } = within(dialog);
+    // Desde cuándo está en uso (el registro que pedía el administrador).
+    expect(getByText('En uso desde')).toBeTruthy();
+    expect(getByText('Tiempo en uso')).toBeTruthy();
+    // Quién lo tiene (liviano: quien abrió la tarjeta).
+    expect(getAllByText(/Marcela Pizarro/).length).toBeGreaterThan(0);
+    // Lectura al abrir la tarjeta.
+    expect(getByText(/15\.200/)).toBeTruthy();
+    // La última carga del EQUIPO (no la vieja, no la de otro equipo).
+    expect(getByText(/35,5/)).toBeTruthy();
+    expect(getByText(/15\.180/)).toBeTruthy();
+    expect(queryByText(/555/)).toBeNull();
+  });
+
+  it('el popup dice cuando el equipo no tiene cargas de combustible registradas', async () => {
+    renderConDatos(<EquiposView />, (qc) => {
+      qc.setQueryData(
+        ['equipment'],
+        [
+          {
+            ...EQUIPO,
+            inUse: false,
+            operator: null,
+            supervisor: null,
+            openShift: {
+              id: 'h_wa320',
+              valorInicial: 1200,
+              operador: 'Carlos Núñez',
+              operatorId: 'op_1',
+              turno: 'DIURNO',
+              fecha: '2026-11-09T08:00:00.000Z',
+              supervisorName: 'Marcela Pizarro',
+              shiftId: null,
+            },
+          },
+        ],
+      );
+      qc.setQueryData(['equipment', 'resumen'], {
+        total: 1,
+        disponibles: 1,
+        porEstado: { OPERATIONAL: 1, IN_WORKSHOP: 0, OUT_OF_SERVICE: 0 },
+      });
+      qc.setQueryData(['combustible'], []);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /uso en curso/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    // Pesado: el operador de la tarjeta y el turno.
+    expect(within(dialog).getAllByText(/Carlos Núñez/).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText(/Sin cargas registradas/)).toBeTruthy();
   });
 
   it('el filtro Estado ofrece "En uso" y deja solo los equipos con tarjeta abierta o asignación', async () => {
