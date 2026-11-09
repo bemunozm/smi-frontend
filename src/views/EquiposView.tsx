@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import {
   CalendarClock,
   ChevronRight,
@@ -13,7 +13,7 @@ import {
   Plus,
   Trash2,
   Wrench,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   Button,
   Card,
@@ -27,43 +27,49 @@ import {
   Spinner,
   Table,
   TextField,
-} from '@heroui/react';
+} from "@heroui/react";
 
-import { ActionTile } from '../components/ActionTile';
-import { FechaEstimada } from '../components/mantenimiento/FechaEstimada';
-import { useCalendarioVencimientos } from '../hooks/useVencimientos';
-import { porRevisar } from '../lib/vencimientos';
-import { MantencionLivianoModal } from '../components/mantenimiento/MantencionLivianoModal';
-import { PautaMantencionModal } from '../components/mantenimiento/PautaMantencionModal';
+import { ActionTile } from "../components/ActionTile";
+import { FechaEstimada } from "../components/mantenimiento/FechaEstimada";
+import { useCalendarioVencimientos } from "../hooks/useVencimientos";
+import { porRevisar } from "../lib/vencimientos";
+import { MantencionLivianoModal } from "../components/mantenimiento/MantencionLivianoModal";
+import { PautaMantencionModal } from "../components/mantenimiento/PautaMantencionModal";
 import {
   CamposEquipo,
   DeleteEquipoAlertDialog,
   EditEquipoModal,
   EquipoPhotoBanner,
-} from '../components/flota/EquipoEditDelete';
-import { EquipoThumb } from '../components/flota/EquipoThumb';
-import { FuelGauge } from '../components/flota/FuelGauge';
-import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
-import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
-import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
-import { StatusChip } from '../components/flota/StatusChip';
-import { MarcaPendiente } from '../components/sync/MarcaPendiente';
-import { PendientesStrip } from '../components/sync/PendientesStrip';
-import { usePermissions } from '../hooks/usePermissions';
-import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
-import { fmtContador } from '../lib/maintenance-plan';
-import type { MaintenanceStatusRow } from '../types/maintenance-plan';
-import { ROLES } from '../types/roles';
-import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
-import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
-import { useBranches } from '../hooks/useBranches';
-import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
+} from "../components/flota/EquipoEditDelete";
+import { EquipoThumb } from "../components/flota/EquipoThumb";
+import { FuelGauge } from "../components/flota/FuelGauge";
+import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from "../components/flota/modal-styles";
+import { RegistrarCargaCombustibleModal } from "../components/flota/RegistrarCargaCombustibleModal";
+import {
+  registrarHorometroLabel,
+  RegistrarHorometroModal,
+} from "../components/flota/RegistrarHorometroModal";
+import { StatusChip } from "../components/flota/StatusChip";
+import { MarcaPendiente } from "../components/sync/MarcaPendiente";
+import { PendientesStrip } from "../components/sync/PendientesStrip";
+import { usePermissions } from "../hooks/usePermissions";
+import { useMaintenanceStatusByEquipment } from "../hooks/useMaintenancePlans";
+import { fmtContador } from "../lib/maintenance-plan";
+import type { MaintenanceStatusRow } from "../types/maintenance-plan";
+import { ROLES } from "../types/roles";
+import {
+  usePendingWrites,
+  type MarcaPendiente as Marca,
+} from "../hooks/usePendingWrites";
+import { idDesdeSentinel, SIN_ASIGNAR } from "../lib/equipment-assignment";
+import { useBranches } from "../hooks/useBranches";
+import { RECURSOS_DE_FLOTA } from "../lib/pending-resources";
 import {
   useCreateEquipment,
   useEquipment,
   useResumenFleet,
   useUpdateEquipmentStatus,
-} from '../hooks/useEquipment';
+} from "../hooks/useEquipment";
 import {
   EQUIPMENT_CLASS_OPTIONS,
   EQUIPMENT_STATUS_OPTIONS,
@@ -73,7 +79,7 @@ import {
   equipmentStatusSelectedClasses,
   equipoEstadoUsoLabel,
   equipoIdentidad,
-} from '../config/flota-colors';
+} from "../config/flota-colors";
 import {
   EquipmentFormSchema,
   EQUIPMENT_STATUS,
@@ -84,20 +90,26 @@ import {
   type EquipmentClass,
   type EquipmentFormValues,
   type EquipmentStatus,
-} from '../types/equipment';
+} from "../types/equipment";
 
-const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
+const NUMERO = new Intl.NumberFormat("es-CL", { maximumFractionDigits: 1 });
 
 /** Segunda línea de la celda "Horómetro / KM" (tabla PC) — unidad descriptiva
  * en minúsculas, calca `unit` de `FlotaClientePC.dc.html#uso`. */
 const USO_UNIDAD_LABEL: Record<ControlUnit, string> = {
-  HOURS: 'horómetro (h)',
-  KM: 'kilómetros (km)',
+  HOURS: "horómetro (h)",
+  KM: "kilómetros (km)",
 };
 
 function KebabIcon() {
   return (
-    <svg aria-hidden="true" fill="currentColor" height="15" viewBox="0 0 24 24" width="15">
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="15"
+      viewBox="0 0 24 24"
+      width="15"
+    >
       <circle cx="12" cy="5" r="1.9" />
       <circle cx="12" cy="12" r="1.9" />
       <circle cx="12" cy="19" r="1.9" />
@@ -115,20 +127,26 @@ function KebabIcon() {
  * fijo R1/R2 que ya no existe). No renderiza nada cuando `documentsAlert` es
  * `null` (ningún documento POR_VENCER/VENCIDO).
  */
-function DocumentAlertBadge({ equipo }: { equipo: Pick<Equipment, 'documentsAlert'> }) {
+function DocumentAlertBadge({
+  equipo,
+}: {
+  equipo: Pick<Equipment, "documentsAlert">;
+}) {
   const { documentsAlert } = equipo;
   if (!documentsAlert) return null;
 
   const label =
-    documentsAlert === 'VENCIDO' ? 'Revisión técnica o seguro vencidos' : 'Revisión técnica o seguro por vencer';
+    documentsAlert === "VENCIDO"
+      ? "Revisión técnica o seguro vencidos"
+      : "Revisión técnica o seguro por vencer";
 
   return (
     <span
       aria-label={label}
       className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-        documentsAlert === 'VENCIDO'
-          ? 'bg-danger-soft text-danger-soft-foreground'
-          : 'bg-warning-soft text-warning-soft-foreground'
+        documentsAlert === "VENCIDO"
+          ? "bg-danger-soft text-danger-soft-foreground"
+          : "bg-warning-soft text-warning-soft-foreground"
       }`}
       title={label}
     >
@@ -139,16 +157,27 @@ function DocumentAlertBadge({ equipo }: { equipo: Pick<Equipment, 'documentsAler
 
 /** Uso acumulado de la unidad — horómetro o kilometraje según `controlUnit`;
  * solo uno de los dos aplica (ver `types/equipment.ts`). */
-function formatearUso(equipo: Pick<Equipment, 'controlUnit' | 'currentHourmeter' | 'currentMileage'>): string {
-  if (equipo.controlUnit === 'HOURS') {
-    return equipo.currentHourmeter != null ? `${NUMERO.format(equipo.currentHourmeter)} h` : '—';
+function formatearUso(
+  equipo: Pick<
+    Equipment,
+    "controlUnit" | "currentHourmeter" | "currentMileage"
+  >,
+): string {
+  if (equipo.controlUnit === "HOURS") {
+    return equipo.currentHourmeter != null
+      ? `${NUMERO.format(equipo.currentHourmeter)} h`
+      : "—";
   }
-  return equipo.currentMileage != null ? `${NUMERO.format(equipo.currentMileage)} km` : '—';
+  return equipo.currentMileage != null
+    ? `${NUMERO.format(equipo.currentMileage)} km`
+    : "—";
 }
 
 /** Segunda línea de la celda "Equipo": "Liviano · Camioneta · 2022" — calca
  * `row.classType + row.yearSuffix` de `FlotaClientePC.dc.html`. */
-function claseTipoAnio(equipo: Pick<Equipment, 'equipmentClass' | 'type' | 'year'>): string {
+function claseTipoAnio(
+  equipo: Pick<Equipment, "equipmentClass" | "type" | "year">,
+): string {
   const base = `${equipmentClassLabel(equipo.equipmentClass)} · ${equipo.type}`;
   return equipo.year ? `${base} · ${equipo.year}` : base;
 }
@@ -159,16 +188,73 @@ function claseTipoAnio(equipo: Pick<Equipment, 'equipmentClass' | 'type' | 'year
  * artefacto). `stacked` = celda de tabla (PC); `inline` = tarjeta tablet/
  * celular, dentro de una barra `surface-secondary`.
  */
+const DESDE_FORMATO = new Intl.DateTimeFormat("es-CL", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatDesde(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : DESDE_FORMATO.format(date);
+}
+
 function AsignacionCell({
   equipo,
   layout,
 }: {
-  equipo: Pick<Equipment, 'operator' | 'supervisor' | 'status' | 'equipmentClass'>;
-  layout: 'stacked' | 'inline';
+  equipo: Pick<
+    Equipment,
+    "operator" | "supervisor" | "status" | "equipmentClass" | "openShift"
+  >;
+  layout: "stacked" | "inline";
 }) {
-  const { operator, supervisor } = equipo;
+  const { operator, supervisor, openShift } = equipo;
+
+  // USO REAL: tarjeta de turno abierta (Terreno, o «Mi camioneta» del
+  // mantenedor) — manda sobre la asignación manual, porque es lo que está
+  // pasando AHORA. Sin esta rama, un equipo usado vía tarjeta aparecía
+  // "Disponible" en el listado aunque su ficha ya mostraba el banner "En
+  // uso" (`TurnoEnCursoBanner`): en producción nadie llena la asignación
+  // manual, así que el listado nunca decía quién lo estaba ocupando.
+  if (openShift) {
+    const esLiviano = equipo.equipmentClass === "LIGHT";
+    const quien = esLiviano
+      ? (openShift.supervisorName ?? "—")
+      : openShift.operador;
+    const prefijo = esLiviano ? "A cargo:" : "Op.";
+    const desde = formatDesde(openShift.fecha);
+
+    if (layout === "inline") {
+      return (
+        <div className="flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5">
+          <StatusChip tone="success">En uso</StatusChip>
+          <span className="text-[13px] text-foreground">
+            {prefijo} <strong className="font-semibold">{quien}</strong>
+            <span className="text-(--muted)"> · desde {desde}</span>
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-start gap-0.5">
+        <StatusChip tone="success">En uso</StatusChip>
+        <span className="text-[12.5px] text-foreground">
+          {prefijo} <strong className="font-semibold">{quien}</strong>
+        </span>
+        <span className="text-xs text-(--muted)">
+          {!esLiviano && openShift.supervisorName
+            ? `Sup. ${openShift.supervisorName} · `
+            : ""}
+          Desde {desde}
+        </span>
+      </div>
+    );
+  }
   // En un liviano, el que está a cargo (supervisor o mantenedor), no «Sup.».
-  const prefijoACargo = equipo.equipmentClass === 'LIGHT' ? 'A cargo:' : 'Sup.';
+  const prefijoACargo = equipo.equipmentClass === "LIGHT" ? "A cargo:" : "Sup.";
   // Fuente única con `EstadoDeUso` de `EquipoDetalleView` — ver
   // `equipoEstadoUsoLabel` (`flota-colors.ts`): antes esta rama decidía
   // "Disponible"/"Detenido" con su propio branching inline, que había
@@ -184,7 +270,7 @@ function AsignacionCell({
     return <span className="text-sm text-(--muted)">{chipLabel}</span>;
   }
 
-  if (layout === 'inline') {
+  if (layout === "inline") {
     return (
       <div className="flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5">
         <StatusChip tone="success">{chipLabel}</StatusChip>
@@ -195,7 +281,8 @@ function AsignacionCell({
             </>
           ) : (
             <>
-              {prefijoACargo} <strong className="font-semibold">{supervisor?.name}</strong>
+              {prefijoACargo}{" "}
+              <strong className="font-semibold">{supervisor?.name}</strong>
             </>
           )}
           {operator && supervisor ? ` · Sup. ${supervisor.name}` : null}
@@ -218,23 +305,25 @@ function AsignacionCell({
           </>
         )}
       </span>
-      {operator && supervisor ? <span className="text-xs text-(--muted)">Sup. {supervisor.name}</span> : null}
+      {operator && supervisor ? (
+        <span className="text-xs text-(--muted)">Sup. {supervisor.name}</span>
+      ) : null}
     </div>
   );
 }
 
 const DEFAULT_FORM_VALUES: EquipmentFormValues = {
-  internalCode: '',
-  licensePlate: '',
-  equipmentClass: 'LIGHT',
-  type: '',
-  brand: '',
-  model: '',
-  year: '',
-  controlUnit: 'KM',
-  status: 'OPERATIONAL',
-  homeBranchId: '',
-  lecturaActual: '',
+  internalCode: "",
+  licensePlate: "",
+  equipmentClass: "LIGHT",
+  type: "",
+  brand: "",
+  model: "",
+  year: "",
+  controlUnit: "KM",
+  status: "OPERATIONAL",
+  homeBranchId: "",
+  lecturaActual: "",
 };
 
 interface CreateEquipoModalProps {
@@ -249,7 +338,10 @@ interface CreateEquipoModalProps {
  * `EditEquipoModal`/`DeleteEquipoAlertDialog`, que ya son controlados.
  */
 /** La asignación elegida al crear; `undefined` si no se eligió a nadie. */
-function asignacionInicial(operatorId: string, supervisorId: string): AssignEquipmentInput | undefined {
+function asignacionInicial(
+  operatorId: string,
+  supervisorId: string,
+): AssignEquipmentInput | undefined {
   const operator = idDesdeSentinel(operatorId);
   const supervisor = idDesdeSentinel(supervisorId);
   if (!operator && !supervisor) return undefined;
@@ -311,7 +403,11 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
             return (
               <>
                 <Modal.CloseTrigger />
-                <EquipoPhotoBanner key={photoResetKey} onPhotoChange={setPhoto} savedPhotoUrl={null} />
+                <EquipoPhotoBanner
+                  key={photoResetKey}
+                  onPhotoChange={setPhoto}
+                  savedPhotoUrl={null}
+                />
                 <Modal.Header>
                   <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
                     Nuevo equipo
@@ -340,9 +436,17 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
                   <Button variant="secondary" onPress={close}>
                     Cancelar
                   </Button>
-                  <Button form="create-equipo-form" isPending={createEquipment.isPending} type="submit">
+                  <Button
+                    form="create-equipo-form"
+                    isPending={createEquipment.isPending}
+                    type="submit"
+                  >
                     {({ isPending }) =>
-                      isPending ? <Spinner color="current" size="sm" /> : 'Crear equipo'
+                      isPending ? (
+                        <Spinner color="current" size="sm" />
+                      ) : (
+                        "Crear equipo"
+                      )
                     }
                   </Button>
                 </Modal.Footer>
@@ -365,8 +469,8 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
   // Los ítems "Marcar como…" solo se muestran a quien el backend le deja cambiar
   // el estado (ADMIN y SUPERVISOR); editar y eliminar, solo a ADMIN.
   const { can } = usePermissions();
-  const puedeCambiarEstado = can('equipment.status');
-  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
+  const puedeCambiarEstado = can("equipment.status");
+  const puedeEditarFicha = can("equipment.update") && can("equipment.delete");
   const { puedeVerPauta, puedeEditarPauta } = usePermisosPauta();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -380,21 +484,26 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
   return (
     <>
       <Dropdown>
-        <Button isIconOnly aria-label={`Acciones para ${equipo.internalCode}`} size="sm" variant="secondary">
+        <Button
+          isIconOnly
+          aria-label={`Acciones para ${equipo.internalCode}`}
+          size="sm"
+          variant="secondary"
+        >
           <KebabIcon />
         </Button>
         <Dropdown.Popover placement="bottom end">
           <Dropdown.Menu
-            disabledKeys={puedeEditarFicha ? [] : ['edit', 'delete']}
+            disabledKeys={puedeEditarFicha ? [] : ["edit", "delete"]}
             onAction={(key) => {
               const clave = String(key);
-              if (clave === 'edit') return setIsEditOpen(true);
-              if (clave === 'delete') return setIsDeleteOpen(true);
-              if (clave === 'pauta') return setIsPautaOpen(true);
-              if (clave.startsWith('status:')) {
+              if (clave === "edit") return setIsEditOpen(true);
+              if (clave === "delete") return setIsDeleteOpen(true);
+              if (clave === "pauta") return setIsPautaOpen(true);
+              if (clave.startsWith("status:")) {
                 updateStatus.mutate({
                   equipo,
-                  status: clave.slice('status:'.length) as EquipmentStatus,
+                  status: clave.slice("status:".length) as EquipmentStatus,
                 });
               }
             }}
@@ -423,12 +532,20 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
         </Dropdown.Popover>
       </Dropdown>
 
-      <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
-      <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
+      <EditEquipoModal
+        equipo={equipo}
+        isOpen={isEditOpen}
+        onOpenChange={setIsEditOpen}
+      />
+      <DeleteEquipoAlertDialog
+        equipo={equipo}
+        isOpen={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+      />
       {puedeVerPauta ? (
         // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
         // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
-        equipo.equipmentClass === 'LIGHT' ? (
+        equipo.equipmentClass === "LIGHT" ? (
           <MantencionLivianoModal
             equipo={equipo}
             isOpen={isPautaOpen}
@@ -456,8 +573,11 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
 function usePermisosPauta() {
   const { role, can } = usePermissions();
   return {
-    puedeVerPauta: role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR,
-    puedeEditarPauta: can('maintenancePlan.save'),
+    puedeVerPauta:
+      role === ROLES.ADMIN ||
+      role === ROLES.MANTENEDOR ||
+      role === ROLES.SUPERVISOR,
+    puedeEditarPauta: can("maintenancePlan.save"),
   };
 }
 
@@ -466,25 +586,31 @@ function usePermisosPauta() {
  * pauta del equipo no tiene «Avisar al mantenedor». Si lo tiene, se usa ese
  * margen: el mismo que crea la orden preventiva en el tablero del taller.
  */
-const AVISO_PROXIMA: Record<'h' | 'km', number> = { h: 25, km: 500 };
+const AVISO_PROXIMA: Record<"h" | "km", number> = { h: 25, km: 500 };
 
 /**
  * «Próx. mant. 250 h · faltan 150 h» bajo el contador del equipo. Se pone en
  * advertencia cuando falta poco y en peligro cuando ya toca.
  */
-function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined }) {
+function ProximaMantencion({
+  fila,
+}: {
+  fila: MaintenanceStatusRow | undefined;
+}) {
   const next = fila?.status.next;
   if (!fila || !next) return null;
   const tono =
     next.remaining === 0
-      ? 'text-danger'
+      ? "text-danger"
       : next.remaining <= (fila.alertBefore ?? AVISO_PROXIMA[fila.unit])
-        ? 'text-warning'
-        : 'text-muted-foreground';
+        ? "text-warning"
+        : "text-muted-foreground";
   return (
     <span className={`block text-xs tabular-nums ${tono}`}>
-      Próx. mant. {fmtContador(next.milestone, fila.unit)} ·{' '}
-      {next.remaining === 0 ? 'toca ahora' : `faltan ${fmtContador(next.remaining, fila.unit)}`}
+      Próx. mant. {fmtContador(next.milestone, fila.unit)} ·{" "}
+      {next.remaining === 0
+        ? "toca ahora"
+        : `faltan ${fmtContador(next.remaining, fila.unit)}`}
     </span>
   );
 }
@@ -496,20 +622,29 @@ function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined })
  */
 function BotonVencimientos({ to }: { to: string }) {
   const { data } = useCalendarioVencimientos();
-  const pendientes = (data?.equipment ?? []).reduce((n, e) => n + porRevisar(e) + (e.service?.due ? 1 : 0), 0);
+  const pendientes = (data?.equipment ?? []).reduce(
+    (n, e) => n + porRevisar(e) + (e.service?.due ? 1 : 0),
+    0,
+  );
   return (
     <Link
       className="inline-flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-[0_1px_2px_rgba(20,23,28,.05)] transition-colors hover:bg-default sm:w-auto"
       to={to}
     >
-      <CalendarClock className="size-[18px] shrink-0 text-(--accent)" aria-hidden />
+      <CalendarClock
+        className="size-[18px] shrink-0 text-(--accent)"
+        aria-hidden
+      />
       <span>Vencimientos de livianos</span>
       {pendientes > 0 ? (
         <span className="rounded-full bg-[var(--danger)] px-2 py-0.5 text-xs font-bold text-white tabular-nums">
           {pendientes} por revisar
         </span>
       ) : null}
-      <ChevronRight className="ml-auto size-4 shrink-0 text-(--muted) sm:hidden" aria-hidden />
+      <ChevronRight
+        className="ml-auto size-4 shrink-0 text-(--muted) sm:hidden"
+        aria-hidden
+      />
     </Link>
   );
 }
@@ -550,7 +685,7 @@ function EquipoCardMobile({
   sucursalPorId,
   marca,
   proxima,
-  detalleBase = '/equipos',
+  detalleBase = "/equipos",
   soloLectura = false,
 }: {
   equipo: Equipment;
@@ -565,10 +700,13 @@ function EquipoCardMobile({
 }) {
   const navigate = useNavigate();
   const { can, canAny } = usePermissions();
-  const puedeCambiarEstado = can('equipment.status');
-  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
-  const puedeRegistrarHorometro = canAny(['horometro.create', 'horometro.close']);
-  const puedeRegistrarCombustible = can('combustible.create');
+  const puedeCambiarEstado = can("equipment.status");
+  const puedeEditarFicha = can("equipment.update") && can("equipment.delete");
+  const puedeRegistrarHorometro = canAny([
+    "horometro.create",
+    "horometro.close",
+  ]);
+  const puedeRegistrarCombustible = can("combustible.create");
   const updateStatus = useUpdateEquipmentStatus();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -587,17 +725,25 @@ function EquipoCardMobile({
   return (
     <>
       <button
-        aria-label={soloLectura ? `Ver detalle de ${equipo.internalCode}` : undefined}
+        aria-label={
+          soloLectura ? `Ver detalle de ${equipo.internalCode}` : undefined
+        }
         className="block w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
         onClick={() =>
-          soloLectura ? void navigate(`${detalleBase}/${equipo.id}`) : setIsSheetOpen(true)
+          soloLectura
+            ? void navigate(`${detalleBase}/${equipo.id}`)
+            : setIsSheetOpen(true)
         }
         type="button"
       >
         <Card className="transition-colors active:bg-surface-secondary">
           <Card.Content className="flex flex-col gap-3 p-4">
             <div className="flex items-start gap-3">
-              <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="md" />
+              <EquipoThumb
+                alt={equipo.internalCode}
+                photoUrl={equipo.photoUrl}
+                size="md"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -617,10 +763,14 @@ function EquipoCardMobile({
                   </div>
                   <ChevronRight className="h-5 w-5 shrink-0 text-(--muted)" />
                 </div>
-                <p className="mt-1 text-sm text-foreground">{identidad.marcaModelo}</p>
+                <p className="mt-1 text-sm text-foreground">
+                  {identidad.marcaModelo}
+                </p>
                 <p className="mt-0.5 text-xs text-(--muted)">
-                  {claseTipoAnio(equipo)} ·{' '}
-                  {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
+                  {claseTipoAnio(equipo)} ·{" "}
+                  {equipo.homeBranchId
+                    ? (sucursalPorId.get(equipo.homeBranchId) ?? "—")
+                    : "Sin sucursal"}
                 </p>
               </div>
             </div>
@@ -634,7 +784,10 @@ function EquipoCardMobile({
                   {formatearUso(equipo)}
                 </span>
                 <ProximaMantencion fila={proxima} />
-                <FechaEstimada equipmentId={equipo.id} enabled={proxima != null || equipo.equipmentClass === 'LIGHT'} />
+                <FechaEstimada
+                  equipmentId={equipo.id}
+                  enabled={proxima != null || equipo.equipmentClass === "LIGHT"}
+                />
               </div>
               <div className="flex flex-1 flex-col gap-0.5">
                 <span className="text-[11px] font-bold tracking-wide text-(--muted) uppercase">
@@ -651,181 +804,208 @@ function EquipoCardMobile({
 
       {soloLectura ? null : (
         <>
-      <Drawer.Backdrop isOpen={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <Drawer.Content placement="bottom">
-          <Drawer.Dialog className="max-h-[85vh]">
-            <Drawer.Handle />
-            <Drawer.CloseTrigger />
-            <Drawer.Header>
-              <div className="flex items-center gap-3">
-                <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="md" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Drawer.Heading className="font-mono text-lg font-semibold text-(--accent)">
-                      {equipo.internalCode}
-                    </Drawer.Heading>
-                    {identidad.patenteDestacada ? (
-                      <span className="font-mono text-base font-semibold text-foreground">
-                        {identidad.patenteDestacada}
-                      </span>
-                    ) : null}
-                    <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
-                      {equipmentStatusLabel(equipo.status)}
-                    </StatusChip>
-                  </div>
-                  <p className="mt-0.5 text-sm text-(--muted)">
-                    {identidad.marcaModelo}
-                    {equipo.year ? ` · ${equipo.year}` : ''}
-                  </p>
-                </div>
-              </div>
-            </Drawer.Header>
-            <Drawer.Body className="flex flex-col gap-5">
-              {puedeCambiarEstado ? (
-                <div>
-                  <p className="mb-2.5 text-[12px] font-bold tracking-[0.08em] text-(--muted) uppercase">
-                    Cambiar estado
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {EQUIPMENT_STATUS.map((opcionEstado) => {
-                      const esActual = opcionEstado === equipo.status;
-                      return (
-                        <Button
-                          className={
-                            esActual
-                              ? `border ${equipmentStatusSelectedClasses(opcionEstado)}`
-                              : 'border border-border bg-surface text-foreground'
-                          }
-                          fullWidth
-                          isDisabled={esActual || updateStatus.isPending}
-                          key={opcionEstado}
-                          size="sm"
-                          // Los NO seleccionados quedan "outline" + blanco
-                          // explícito (`bg-surface`) — claramente clickeables
-                          // (borde + texto a contraste pleno), no apagados.
-                          // El actual se resalta en su color semántico
-                          // (`equipmentStatusSelectedClasses`, tokens
-                          // --success/--warning/--danger + su "-soft" — el
-                          // mismo look que ya usa `StatusChip`) y queda
-                          // disabled: marca dónde estás, no un botón más.
-                          variant="outline"
-                          onPress={() =>
-                            updateStatus.mutate(
-                              { equipo, status: opcionEstado },
-                              { onSuccess: () => setIsSheetOpen(false) },
-                            )
-                          }
+          <Drawer.Backdrop isOpen={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <Drawer.Content placement="bottom">
+              <Drawer.Dialog className="max-h-[85vh]">
+                <Drawer.Handle />
+                <Drawer.CloseTrigger />
+                <Drawer.Header>
+                  <div className="flex items-center gap-3">
+                    <EquipoThumb
+                      alt={equipo.internalCode}
+                      photoUrl={equipo.photoUrl}
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Drawer.Heading className="font-mono text-lg font-semibold text-(--accent)">
+                          {equipo.internalCode}
+                        </Drawer.Heading>
+                        {identidad.patenteDestacada ? (
+                          <span className="font-mono text-base font-semibold text-foreground">
+                            {identidad.patenteDestacada}
+                          </span>
+                        ) : null}
+                        <StatusChip
+                          tone={equipmentStatusChipColor(equipo.status)}
                         >
-                          {equipmentStatusLabel(opcionEstado)}
-                        </Button>
-                      );
-                    })}
+                          {equipmentStatusLabel(equipo.status)}
+                        </StatusChip>
+                      </div>
+                      <p className="mt-0.5 text-sm text-(--muted)">
+                        {identidad.marcaModelo}
+                        {equipo.year ? ` · ${equipo.year}` : ""}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                </Drawer.Header>
+                <Drawer.Body className="flex flex-col gap-5">
+                  {puedeCambiarEstado ? (
+                    <div>
+                      <p className="mb-2.5 text-[12px] font-bold tracking-[0.08em] text-(--muted) uppercase">
+                        Cambiar estado
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {EQUIPMENT_STATUS.map((opcionEstado) => {
+                          const esActual = opcionEstado === equipo.status;
+                          return (
+                            <Button
+                              className={
+                                esActual
+                                  ? `border ${equipmentStatusSelectedClasses(opcionEstado)}`
+                                  : "border border-border bg-surface text-foreground"
+                              }
+                              fullWidth
+                              isDisabled={esActual || updateStatus.isPending}
+                              key={opcionEstado}
+                              size="sm"
+                              // Los NO seleccionados quedan "outline" + blanco
+                              // explícito (`bg-surface`) — claramente clickeables
+                              // (borde + texto a contraste pleno), no apagados.
+                              // El actual se resalta en su color semántico
+                              // (`equipmentStatusSelectedClasses`, tokens
+                              // --success/--warning/--danger + su "-soft" — el
+                              // mismo look que ya usa `StatusChip`) y queda
+                              // disabled: marca dónde estás, no un botón más.
+                              variant="outline"
+                              onPress={() =>
+                                updateStatus.mutate(
+                                  { equipo, status: opcionEstado },
+                                  { onSuccess: () => setIsSheetOpen(false) },
+                                )
+                              }
+                            >
+                              {equipmentStatusLabel(opcionEstado)}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
 
-              <div className="flex flex-wrap justify-center gap-3">
-                <ActionTile
-                  icon={Eye}
-                  label="Ver ficha completa"
-                  onPress={() => {
-                    setIsSheetOpen(false);
-                    navigate(`/equipos/${equipo.id}`);
-                  }}
-                />
-                {/* Un liviano no: su km va por la tarjeta del supervisor o del mantenedor. */}
-                {puedeRegistrarHorometro && equipo.equipmentClass !== 'LIGHT' ? (
-                  <ActionTile
-                    icon={Gauge}
-                    label={registrarHorometroLabel(equipo)}
-                    onPress={() => {
-                      setIsSheetOpen(false);
-                      setIsShiftModalOpen(true);
-                    }}
-                  />
-                ) : null}
-                {puedeRegistrarCombustible && equipo.equipmentClass !== 'LIGHT' ? (
-                  <ActionTile
-                    icon={Droplet}
-                    label="Registrar combustible"
-                    onPress={() => {
-                      setIsSheetOpen(false);
-                      setIsCargaOpen(true);
-                    }}
-                  />
-                ) : null}
-                {puedeVerPauta ? (
-                  <ActionTile
-                    icon={Wrench}
-                    label="Asignar mantenciones"
-                    onPress={() => {
-                      setIsSheetOpen(false);
-                      setIsPautaOpen(true);
-                    }}
-                  />
-                ) : null}
-                {puedeEditarFicha ? (
-                  <ActionTile
-                    icon={Pencil}
-                    label="Editar equipo"
-                    onPress={() => {
-                      setIsSheetOpen(false);
-                      setIsEditOpen(true);
-                    }}
-                  />
-                ) : null}
-                {puedeEditarFicha ? (
-                  <ActionTile
-                    icon={Trash2}
-                    label="Eliminar equipo"
-                    onPress={() => {
-                      setIsSheetOpen(false);
-                      setIsDeleteOpen(true);
-                    }}
-                    tone="danger"
-                  />
-                ) : null}
-              </div>
-            </Drawer.Body>
-          </Drawer.Dialog>
-        </Drawer.Content>
-      </Drawer.Backdrop>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    <ActionTile
+                      icon={Eye}
+                      label="Ver ficha completa"
+                      onPress={() => {
+                        setIsSheetOpen(false);
+                        navigate(`/equipos/${equipo.id}`);
+                      }}
+                    />
+                    {/* Un liviano no: su km va por la tarjeta del supervisor o del mantenedor. */}
+                    {puedeRegistrarHorometro &&
+                    equipo.equipmentClass !== "LIGHT" ? (
+                      <ActionTile
+                        icon={Gauge}
+                        label={registrarHorometroLabel(equipo)}
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          setIsShiftModalOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    {puedeRegistrarCombustible &&
+                    equipo.equipmentClass !== "LIGHT" ? (
+                      <ActionTile
+                        icon={Droplet}
+                        label="Registrar combustible"
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          setIsCargaOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    {puedeVerPauta ? (
+                      <ActionTile
+                        icon={Wrench}
+                        label="Asignar mantenciones"
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          setIsPautaOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    {puedeEditarFicha ? (
+                      <ActionTile
+                        icon={Pencil}
+                        label="Editar equipo"
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          setIsEditOpen(true);
+                        }}
+                      />
+                    ) : null}
+                    {puedeEditarFicha ? (
+                      <ActionTile
+                        icon={Trash2}
+                        label="Eliminar equipo"
+                        onPress={() => {
+                          setIsSheetOpen(false);
+                          setIsDeleteOpen(true);
+                        }}
+                        tone="danger"
+                      />
+                    ) : null}
+                  </div>
+                </Drawer.Body>
+              </Drawer.Dialog>
+            </Drawer.Content>
+          </Drawer.Backdrop>
 
-      <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
-      <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
-      <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
-      {puedeVerPauta ? (
-        // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
-        // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
-        equipo.equipmentClass === 'LIGHT' ? (
-          <MantencionLivianoModal
+          <EditEquipoModal
             equipo={equipo}
-            isOpen={isPautaOpen}
-            onOpenChange={setIsPautaOpen}
-            soloLectura={!puedeEditarPauta}
+            isOpen={isEditOpen}
+            onOpenChange={setIsEditOpen}
           />
-        ) : (
-          <PautaMantencionModal
+          <DeleteEquipoAlertDialog
             equipo={equipo}
-            isOpen={isPautaOpen}
-            onOpenChange={setIsPautaOpen}
-            soloLectura={!puedeEditarPauta}
+            isOpen={isDeleteOpen}
+            onOpenChange={setIsDeleteOpen}
           />
-        )
-      ) : null}
-      <RegistrarCargaCombustibleModal
-        equipoId={equipo.id}
-        equipoLabel={equipo.internalCode}
-        isOpen={isCargaOpen}
-        onOpenChange={setIsCargaOpen}
-      />
+          <RegistrarHorometroModal
+            equipo={equipo}
+            isOpen={isShiftModalOpen}
+            onOpenChange={setIsShiftModalOpen}
+          />
+          {puedeVerPauta ? (
+            // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
+            // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
+            equipo.equipmentClass === "LIGHT" ? (
+              <MantencionLivianoModal
+                equipo={equipo}
+                isOpen={isPautaOpen}
+                onOpenChange={setIsPautaOpen}
+                soloLectura={!puedeEditarPauta}
+              />
+            ) : (
+              <PautaMantencionModal
+                equipo={equipo}
+                isOpen={isPautaOpen}
+                onOpenChange={setIsPautaOpen}
+                soloLectura={!puedeEditarPauta}
+              />
+            )
+          ) : null}
+          <RegistrarCargaCombustibleModal
+            equipoId={equipo.id}
+            equipoLabel={equipo.internalCode}
+            isOpen={isCargaOpen}
+            onOpenChange={setIsCargaOpen}
+          />
         </>
       )}
     </>
   );
 }
 
-const TODOS = '__todos__';
+const TODOS = "__todos__";
+
+/**
+ * Opción "En uso" del filtro Estado: NO es un `status` del backend (esos son
+ * Operativo/En taller/Fuera de servicio) — es uso real derivado: tarjeta de
+ * turno abierta, o asignación vigente. Se filtra en el cliente.
+ */
+const EN_USO = "__en_uso__";
 
 /**
  * Listado de la flota. Se monta en DOS lugares: en Flota (`/equipos`, chrome
@@ -834,27 +1014,37 @@ const TODOS = '__todos__';
  * editar, eliminar, cambiar estado ni registrar nada: el mantenedor consulta
  * la unidad y su detalle, y las escrituras de flota viven en Flota.
  */
-export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'taller' }) {
+export function EquiposView({
+  contexto = "flota",
+}: {
+  contexto?: "flota" | "taller";
+}) {
   const { can } = usePermissions();
-  const enTaller = contexto === 'taller';
+  const enTaller = contexto === "taller";
   // Módulo 4: el calendario lo ven los que reciben los avisos de vencimiento.
   const { role: rolActual } = usePermissions();
-  const puedeVerVencimientos = rolActual === ROLES.ADMIN || rolActual === ROLES.MANTENEDOR;
+  const puedeVerVencimientos =
+    rolActual === ROLES.ADMIN || rolActual === ROLES.MANTENEDOR;
   // Detalle en el MISMO shell: desde el taller la barra del módulo no cambia.
-  const detalleBase = enTaller ? '/mantenimiento/equipos' : '/equipos';
+  const detalleBase = enTaller ? "/mantenimiento/equipos" : "/equipos";
   // La próxima mantención de todos los equipos con pauta, en una sola llamada;
   // solo para los roles que pueden leer pautas (al resto el servidor le da 403).
   const { puedeVerPauta } = usePermisosPauta();
-  const { data: proximaPorEquipo } = useMaintenanceStatusByEquipment(puedeVerPauta);
-  const [status, setStatus] = useState<EquipmentStatus | typeof TODOS>(TODOS);
-  const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
+  const { data: proximaPorEquipo } =
+    useMaintenanceStatusByEquipment(puedeVerPauta);
+  const [status, setStatus] = useState<
+    EquipmentStatus | typeof TODOS | typeof EN_USO
+  >(TODOS);
+  const [equipmentClass, setEquipmentClass] = useState<
+    EquipmentClass | typeof TODOS
+  >(TODOS);
   const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState("");
   // Un solo modal de creación, dos triggers: el botón del header (PC, `xl:`)
   // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const puedeCrear = !enTaller && can('equipment.create');
+  const puedeCrear = !enTaller && can("equipment.create");
 
   const {
     data: equipos,
@@ -862,11 +1052,21 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
     isError,
     error,
   } = useEquipment({
-    ...(status === TODOS ? {} : { status }),
+    ...(status === TODOS || status === EN_USO ? {} : { status }),
     ...(equipmentClass === TODOS ? {} : { equipmentClass }),
     ...(homeBranchId === TODOS ? {} : { homeBranchId }),
     ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
   });
+
+  // "En uso" se resuelve acá (tarjeta abierta o asignación) porque el backend
+  // no lo tiene como `status` — misma regla que el chip de `AsignacionCell`.
+  const equiposVisibles = useMemo(
+    () =>
+      status === EN_USO
+        ? equipos?.filter((equipo) => equipo.openShift !== null || equipo.inUse)
+        : equipos,
+    [equipos, status],
+  );
 
   // Reusa la MISMA query que ya usa el formulario de creación/edición
   // (`CamposEquipo` → `useBranches({ isActive: true })`): alimenta tanto el
@@ -877,7 +1077,13 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
   const { data: sucursalesActivas } = useBranches({ isActive: true });
   const pendientes = usePendingWrites(RECURSOS_DE_FLOTA);
   const sucursalPorId = useMemo(
-    () => new Map((sucursalesActivas ?? []).map((sucursal) => [sucursal.id, sucursal.name])),
+    () =>
+      new Map(
+        (sucursalesActivas ?? []).map((sucursal) => [
+          sucursal.id,
+          sucursal.name,
+        ]),
+      ),
     [sucursalesActivas],
   );
 
@@ -892,7 +1098,8 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
               Equipos
             </h2>
             <p className="text-sm text-(--muted)">
-              Foto, horómetro, combustible, quién lo usa y su estado — en solo lectura.
+              Foto, horómetro, combustible, quién lo usa y su estado — en solo
+              lectura.
             </p>
           </div>
         ) : null}
@@ -908,7 +1115,8 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
               Equipos
             </h1>
             <p className="text-sm text-(--muted)">
-              Maquinaria y vehículos de la operación: foto, horómetro, combustible, quién lo usa y su estado.
+              Maquinaria y vehículos de la operación: foto, horómetro,
+              combustible, quién lo usa y su estado.
             </p>
           </div>
         )}
@@ -918,9 +1126,14 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
            FlotaClienteTablet/Phone.dc.html — y vencimientos ocupa el ancho. */}
         {!enTaller && (puedeVerVencimientos || puedeCrear) ? (
           <div className="flex w-full items-center gap-2 sm:w-auto">
-            {puedeVerVencimientos ? <BotonVencimientos to="/equipos/vencimientos" /> : null}
+            {puedeVerVencimientos ? (
+              <BotonVencimientos to="/equipos/vencimientos" />
+            ) : null}
             {puedeCrear ? (
-              <Button className="hidden min-h-11 xl:inline-flex" onPress={() => setIsCreateOpen(true)}>
+              <Button
+                className="hidden min-h-11 xl:inline-flex"
+                onPress={() => setIsCreateOpen(true)}
+              >
                 Nuevo equipo
               </Button>
             ) : null}
@@ -948,7 +1161,8 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
           aria-label="Filtrar por clase"
           value={equipmentClass}
           onChange={(value) => {
-            if (value) setEquipmentClass(value as EquipmentClass | typeof TODOS);
+            if (value)
+              setEquipmentClass(value as EquipmentClass | typeof TODOS);
           }}
         >
           <Label>Clase</Label>
@@ -963,7 +1177,11 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                 <ListBox.ItemIndicator />
               </ListBox.Item>
               {EQUIPMENT_CLASS_OPTIONS.map((option) => (
-                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                <ListBox.Item
+                  key={option.value}
+                  id={option.value}
+                  textValue={option.label}
+                >
                   {option.label}
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
@@ -977,7 +1195,10 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
           aria-label="Filtrar por estado"
           value={status}
           onChange={(value) => {
-            if (value) setStatus(value as EquipmentStatus | typeof TODOS);
+            if (value)
+              setStatus(
+                value as EquipmentStatus | typeof TODOS | typeof EN_USO,
+              );
           }}
         >
           <Label>Estado</Label>
@@ -991,8 +1212,16 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                 Todos los estados
                 <ListBox.ItemIndicator />
               </ListBox.Item>
+              <ListBox.Item id={EN_USO} textValue="En uso">
+                En uso
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
               {EQUIPMENT_STATUS_OPTIONS.map((option) => (
-                <ListBox.Item key={option.value} id={option.value} textValue={option.label}>
+                <ListBox.Item
+                  key={option.value}
+                  id={option.value}
+                  textValue={option.label}
+                >
                   {option.label}
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
@@ -1021,7 +1250,11 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                 <ListBox.ItemIndicator />
               </ListBox.Item>
               {(sucursalesActivas ?? []).map((sucursal) => (
-                <ListBox.Item key={sucursal.id} id={sucursal.id} textValue={sucursal.name}>
+                <ListBox.Item
+                  key={sucursal.id}
+                  id={sucursal.id}
+                  textValue={sucursal.name}
+                >
                   {sucursal.name}
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
@@ -1042,20 +1275,26 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
           className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
           role="alert"
         >
-          {error instanceof Error ? error.message : 'No se pudo cargar la lista de equipos.'}
+          {error instanceof Error
+            ? error.message
+            : "No se pudo cargar la lista de equipos."}
         </div>
       ) : null}
 
-      {!isPending && !isError && equipos.length === 0 ? (
+      {!isPending && !isError && (equiposVisibles ?? []).length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm font-medium text-foreground">No hay equipos que coincidan</p>
+          <p className="text-sm font-medium text-foreground">
+            No hay equipos que coincidan
+          </p>
           <p className="text-sm text-(--muted)">
-            {enTaller ? 'Ajusta los filtros.' : 'Ajusta los filtros o crea el primero.'}
+            {enTaller
+              ? "Ajusta los filtros."
+              : "Ajusta los filtros o crea el primero."}
           </p>
         </div>
       ) : null}
 
-      {!isPending && !isError && equipos.length > 0 ? (
+      {!isPending && !isError && (equiposVisibles ?? []).length > 0 ? (
         <>
           {/* PC: tabla completa (≥ md) — columnas calcan FlotaClientePC.dc.html:
              Foto · Equipo · Sucursal · Horómetro/KM · Combustible · En uso
@@ -1068,14 +1307,16 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                     <Table.Column>Foto</Table.Column>
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>Sucursal</Table.Column>
-                    <Table.Column className="text-right">Horómetro / KM</Table.Column>
+                    <Table.Column className="text-right">
+                      Horómetro / KM
+                    </Table.Column>
                     <Table.Column>Combustible</Table.Column>
                     <Table.Column>En uso por</Table.Column>
                     <Table.Column>Estado</Table.Column>
                     {enTaller ? null : <Table.Column>Acciones</Table.Column>}
                   </Table.Header>
                   <Table.Body>
-                    <Table.Collection items={equipos}>
+                    <Table.Collection items={equiposVisibles ?? []}>
                       {(equipo) => {
                         // R3 (vista diferenciada por clase): patente
                         // destacada en pesados, integrada en `marcaModelo`
@@ -1083,59 +1324,88 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
                         const identidad = equipoIdentidad(equipo);
                         return (
                           <Table.Row>
-                          <Table.Cell>
-                            <EquipoThumb alt={equipo.internalCode} photoUrl={equipo.photoUrl} size="sm" />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Link className="block" to={`${detalleBase}/${equipo.id}`}>
-                              <span className="block font-mono text-sm font-semibold text-(--accent) hover:underline">
-                                {equipo.internalCode}
-                              </span>
-                              {identidad.patenteDestacada ? (
-                                <span className="mt-0.5 block font-mono text-sm font-semibold text-foreground">
-                                  {identidad.patenteDestacada}
-                                </span>
-                              ) : null}
-                              <span className="mt-0.5 block text-sm text-foreground">{identidad.marcaModelo}</span>
-                              <span className="mt-0.5 block text-xs text-(--muted)">{claseTipoAnio(equipo)}</span>
-                              <MarcaPendiente marca={pendientes.marcaDe('equipment', equipo.id)} />
-                            </Link>
-                          </Table.Cell>
-                          <Table.Cell>
-                            {equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? '—') : 'Sin sucursal'}
-                          </Table.Cell>
-                          <Table.Cell className="text-right">
-                            <span className="block font-mono text-sm font-semibold text-foreground">
-                              {formatearUso(equipo)}
-                            </span>
-                            <span className="mt-0.5 block text-xs text-(--muted)">
-                              {USO_UNIDAD_LABEL[equipo.controlUnit]}
-                            </span>
-                            <ProximaMantencion fila={proximaPorEquipo?.get(equipo.id)} />
-                            <FechaEstimada equipmentId={equipo.id} enabled={puedeVerPauta} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <FuelGauge pct={equipo.currentFuelLevel} />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <AsignacionCell equipo={equipo} layout="stacked" />
-                          </Table.Cell>
-                          <Table.Cell>
-                            <div className="flex items-center gap-1.5">
-                              <StatusChip tone={equipmentStatusChipColor(equipo.status)}>
-                                {equipmentStatusLabel(equipo.status)}
-                              </StatusChip>
-                              <DocumentAlertBadge equipo={equipo} />
-                            </div>
-                          </Table.Cell>
-                          {enTaller ? null : (
                             <Table.Cell>
-                              <div className="flex justify-end">
-                                <EquipoActionsMenu equipo={equipo} />
+                              <EquipoThumb
+                                alt={equipo.internalCode}
+                                photoUrl={equipo.photoUrl}
+                                size="sm"
+                              />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <Link
+                                className="block"
+                                to={`${detalleBase}/${equipo.id}`}
+                              >
+                                <span className="block font-mono text-sm font-semibold text-(--accent) hover:underline">
+                                  {equipo.internalCode}
+                                </span>
+                                {identidad.patenteDestacada ? (
+                                  <span className="mt-0.5 block font-mono text-sm font-semibold text-foreground">
+                                    {identidad.patenteDestacada}
+                                  </span>
+                                ) : null}
+                                <span className="mt-0.5 block text-sm text-foreground">
+                                  {identidad.marcaModelo}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-(--muted)">
+                                  {claseTipoAnio(equipo)}
+                                </span>
+                                <MarcaPendiente
+                                  marca={pendientes.marcaDe(
+                                    "equipment",
+                                    equipo.id,
+                                  )}
+                                />
+                              </Link>
+                            </Table.Cell>
+                            <Table.Cell>
+                              {equipo.homeBranchId
+                                ? (sucursalPorId.get(equipo.homeBranchId) ??
+                                  "—")
+                                : "Sin sucursal"}
+                            </Table.Cell>
+                            <Table.Cell className="text-right">
+                              <span className="block font-mono text-sm font-semibold text-foreground">
+                                {formatearUso(equipo)}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-(--muted)">
+                                {USO_UNIDAD_LABEL[equipo.controlUnit]}
+                              </span>
+                              <ProximaMantencion
+                                fila={proximaPorEquipo?.get(equipo.id)}
+                              />
+                              <FechaEstimada
+                                equipmentId={equipo.id}
+                                enabled={puedeVerPauta}
+                              />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <FuelGauge pct={equipo.currentFuelLevel} />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <AsignacionCell
+                                equipo={equipo}
+                                layout="stacked"
+                              />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <div className="flex items-center gap-1.5">
+                                <StatusChip
+                                  tone={equipmentStatusChipColor(equipo.status)}
+                                >
+                                  {equipmentStatusLabel(equipo.status)}
+                                </StatusChip>
+                                <DocumentAlertBadge equipo={equipo} />
                               </div>
                             </Table.Cell>
-                          )}
-                        </Table.Row>
+                            {enTaller ? null : (
+                              <Table.Cell>
+                                <div className="flex justify-end">
+                                  <EquipoActionsMenu equipo={equipo} />
+                                </div>
+                              </Table.Cell>
+                            )}
+                          </Table.Row>
                         );
                       }}
                     </Table.Collection>
@@ -1152,12 +1422,12 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
              no navega directo a la ficha — ahí viven editar/eliminar/cambiar
              estado, que antes solo existían en el kebab de PC. */}
           <div className="flex flex-col gap-3 xl:hidden">
-            {equipos.map((equipo) => (
+            {(equiposVisibles ?? []).map((equipo) => (
               <EquipoCardMobile
                 detalleBase={detalleBase}
                 equipo={equipo}
                 key={equipo.id}
-                marca={pendientes.marcaDe('equipment', equipo.id)}
+                marca={pendientes.marcaDe("equipment", equipo.id)}
                 proxima={proximaPorEquipo?.get(equipo.id)}
                 soloLectura={enTaller}
                 sucursalPorId={sucursalPorId}
