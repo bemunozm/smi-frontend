@@ -131,6 +131,41 @@ describe('enqueueClosedCard', () => {
     expect(await db.blobs.count()).toBe(0);
     expect(requestSyncMock).not.toHaveBeenCalled();
   });
+
+  // La foto válida pasa `prepararArchivo`: la falla ocurre DENTRO de la
+  // transacción, después de que la apertura ya se escribió.
+  it('si falla una escritura dentro de la transacción, se revierte también la apertura', async () => {
+    const put = vi.spyOn(db.blobs, 'put').mockRejectedValueOnce(new Error('disco lleno'));
+
+    await expect(enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile())).rejects.toThrow('disco lleno');
+
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get('card-1')).toBeUndefined();
+    expect(await db.outbox.get('close-9')).toBeUndefined();
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
+    expect(requestSyncMock).not.toHaveBeenCalled();
+    put.mockRestore();
+  });
+
+  it('con operaciones ya en cola, la apertura va antes que el cierre y ambos después de las existentes', async () => {
+    await enqueueOpenCard('u1', { ...OPEN_INPUT, id: 'card-previa' });
+    await enqueueExitReport('u1', {
+      id: 'report-previo',
+      shiftDate: '2026-09-24',
+      shiftType: 'DIURNO',
+      cardIds: ['card-previa'],
+      requestedAt: '2026-09-24T20:00:00.000Z',
+    });
+    const existentes = await db.outbox.toArray();
+    const maxExistente = Math.max(...existentes.map((o) => o.seq));
+
+    await enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
+
+    const [apertura, cierre] = await Promise.all([db.outbox.get('card-1'), db.outbox.get('close-9')]);
+    expect(apertura!.seq).toBeGreaterThan(maxExistente);
+    expect(cierre!.seq).toBeGreaterThan(apertura!.seq);
+  });
 });
 
 describe('enqueueExitReport', () => {

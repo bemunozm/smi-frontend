@@ -29,6 +29,8 @@ interface FotoRespaldoFieldProps {
    * es un contador; un hallazgo no tiene display.
    */
   guia?: string;
+  /** Bloquea elegir, tomar o quitar la foto (p. ej. mientras se guarda). */
+  disabled?: boolean;
 }
 
 /**
@@ -57,6 +59,7 @@ export function FotoRespaldoField({
   staleQuestion,
   requerida = true,
   guia = 'Saca la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
+  disabled = false,
 }: FotoRespaldoFieldProps) {
   return (
     <div>
@@ -71,7 +74,7 @@ export function FotoRespaldoField({
       <p className="mb-2 text-xs text-(--muted)">{guia}</p>
       <PhotoCaptureField
         file={file}
-        isBusy={isReadingPhoto}
+        isBusy={isReadingPhoto || disabled}
         onClear={onClear}
         onSelect={onSelect}
         subtitle={subtitle}

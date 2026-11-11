@@ -21,11 +21,6 @@ export interface UseAperturaFormParams {
   userId: string | undefined;
   /** Camioneta: sin operador y con el kilometraje en vez del horómetro. */
   liviano?: boolean;
-  /** Modo "turno pasado": el campo vacío NO cae al contador ACTUAL del
-   * equipo (para un turno viejo ese valor es siempre incorrecto y un toque
-   * accidental crearía un dato verosímil pero falso) — la lectura histórica
-   * se tipea obligatoriamente. */
-  sinPrefill?: boolean;
 }
 
 export interface UseAperturaFormResult {
@@ -56,7 +51,6 @@ export function useAperturaForm({
   ctx,
   userId,
   liviano = false,
-  sinPrefill = false,
 }: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
   const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
@@ -66,11 +60,7 @@ export function useAperturaForm({
   const textoHorometro = apertura.horometro.trim();
   const horometroInvalido = textoHorometro !== '' && parseDecimal(textoHorometro) == null;
   const valorInicialApertura =
-    textoHorometro === ''
-      ? sinPrefill
-        ? null
-        : (lecturaEquipo ?? null)
-      : parseDecimal(textoHorometro);
+    textoHorometro === '' ? (lecturaEquipo ?? null) : parseDecimal(textoHorometro);
   const ultimaLectura = lecturaEquipo ?? null;
   const bajoUltimaLectura =
     valorInicialApertura != null && ultimaLectura != null && valorInicialApertura < ultimaLectura;

@@ -186,7 +186,6 @@ export function useShiftRegister(): UseShiftRegisterResult {
     disponibles: proyeccion.disponibles,
     ctx: turno.ctx,
     userId: user?.id,
-    sinPrefill: modoPasado,
   });
   const aperturaLiviano = useAperturaForm({
     disponibles: proyeccion.disponiblesLivianos,

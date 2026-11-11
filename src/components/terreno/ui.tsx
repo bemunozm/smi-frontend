@@ -447,6 +447,7 @@ export function Selector({
   etiqueta,
   placeholder = 'Seleccioná…',
   tituloTabular,
+  disabled,
   'aria-describedby': describedBy,
 }: {
   id?: string;
@@ -458,6 +459,8 @@ export function Selector({
   placeholder?: string;
   /** Títulos en cifra tabular — para códigos de equipo, no para nombres. */
   tituloTabular?: boolean;
+  /** Campo bloqueado (no abre la lista): p. ej. mientras se guarda. */
+  disabled?: boolean;
   'aria-describedby'?: string;
 }) {
   const elegida = opciones.find((o) => o.valor === valor);
@@ -502,6 +505,7 @@ export function Selector({
       aria-label={etiqueta}
       aria-describedby={describedBy}
       placeholder={placeholder}
+      isDisabled={disabled}
       selectedKey={elegida ? elegida.valor : null}
       onSelectionChange={(clave) => clave != null && onChange(String(clave))}
       disabledKeys={opciones.filter((o) => o.motivo).map((o) => o.valor)}

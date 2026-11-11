@@ -23,9 +23,9 @@ const EQUIPOS = [
   { id: 'e2', internalCode: 'SEM-04', type: 'Semirremolque', currentHourmeter: 3180 },
 ] as Equipment[];
 
-function hook() {
+function hook(checklistSinAceptar?: ReadonlyMap<string, string>) {
   return renderHook(() =>
-    usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1' }),
+    usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', checklistSinAceptar }),
   );
 }
 
@@ -158,6 +158,110 @@ describe('usePastShiftQuickEntry', () => {
     expect(openReintento).toMatchObject({ equipoId: 'e2' });
     const equiposEncolados = enqueueClosedCardMock.mock.calls.map(([, open]) => open.equipoId);
     expect(equiposEncolados.filter((id) => id === 'e1')).toHaveLength(1);
+  });
+
+  it('editar una fila ya encolada durante el guardado no la deja en la grilla ni se re-encola al reintentar', async () => {
+    let liberarPrimera!: () => void;
+    enqueueClosedCardMock
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (liberarPrimera = resolve)))
+      .mockRejectedValueOnce(new Error('Sin espacio'));
+    const { result } = hook();
+    const FOTO_2 = new File([new Uint8Array([4, 5])], 'carga2.jpg', { type: 'image/jpeg' });
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '5',
+        foto: FOTO,
+      });
+      result.current.agregarFila();
+    });
+    act(() => {
+      result.current.setFila(1, {
+        equipoId: 'e2',
+        operatorId: 'op_2',
+        inicial: '200',
+        final: '210',
+        litros: '',
+        foto: FOTO_2,
+      });
+    });
+
+    let guardado!: Promise<boolean>;
+    act(() => {
+      guardado = result.current.guardar();
+    });
+    // La fila 1 ya está en vuelo: editarla reemplaza su objeto.
+    act(() => {
+      result.current.setFila(0, { litros: '999' });
+    });
+    await act(async () => {
+      liberarPrimera();
+      expect(await guardado).toBe(false);
+    });
+
+    expect(result.current.filas).toHaveLength(1);
+    expect(result.current.filas[0].equipoId).toBe('e2');
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    const equiposEncolados = enqueueClosedCardMock.mock.calls.map(([, open]) => open.equipoId);
+    expect(equiposEncolados).toEqual(['e1', 'e2', 'e2']);
+  });
+
+  it('las filas nuevas no comparten identidad: cada una trae su propia key', () => {
+    const { result } = hook();
+
+    act(() => {
+      result.current.agregarFila();
+      result.current.agregarFila();
+    });
+
+    const keys = result.current.filas.map((f) => f.key);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('un equipo con el checklist sin aceptar bloquea la fila y dice por qué', () => {
+    const { result } = hook(new Map([['e1', 'Checklist por validar (Checklists)']]));
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '5',
+        foto: FOTO,
+      });
+    });
+
+    expect(result.current.errorDeFila(0)).toBe(
+      'No se puede registrar este equipo: Checklist por validar (Checklists).',
+    );
+    expect(result.current.puedeGuardar).toBe(false);
+  });
+
+  it('una fila válida con el checklist de OTRO equipo sin aceptar sigue guardable', () => {
+    const { result } = hook(new Map([['e2', 'Checklist rechazado: falta que lo corrijan']]));
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '5',
+        foto: FOTO,
+      });
+    });
+
+    expect(result.current.errorDeFila(0)).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
   });
 
   it('una fila sin foto no se puede guardar y lo dice — aun sin litros', () => {
