@@ -3,6 +3,7 @@ import { posNumber } from '../lib/forms';
 
 export const combustibleFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
+  // Texto: punto o coma sueltos son el decimal (ver `lib/forms.ts#leerNumero`).
   litros: posNumber('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
   fotoUrl: z.string().optional(), // legacy Terreno: ruta servida por el backend (/uploads/...)

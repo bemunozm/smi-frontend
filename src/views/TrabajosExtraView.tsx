@@ -38,6 +38,8 @@ import { useEquipment } from '../hooks/useEquipment';
 import { useOperators } from '../hooks/useOperators';
 import type { Operator } from '../types/operator';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { formatDecimalInput } from '../lib/decimal';
+import { leerNumero } from '../lib/forms';
 import { fmtDate, fmtNum } from '../lib/format';
 import { toDateOnly } from '../lib/turno';
 import { DateField } from '../components/terreno/DateField';
@@ -129,8 +131,15 @@ interface FilaDetalleInput {
   actividad: string;
   lugar: string;
   planta?: string;
-  horas?: number;
+  /** Texto tal como se escribe (`1,5`): el schema lo lee con `leerNumero`. */
+  horas?: string | number;
 }
+
+/** Número de un campo de texto (`12,5`, `12.5`); vacío o ilegible → `NaN`. */
+const numeroEscrito = (v: unknown): number => {
+  const n = leerNumero(v);
+  return typeof n === 'number' ? n : Number.NaN;
+};
 
 const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', planta: '', horas: undefined });
 
@@ -369,8 +378,8 @@ export function TrabajosExtraView() {
           operatorId: detalle.operatorId ?? '',
           faena: detalle.faena,
           turno: detalle.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
-          horometroInicial: detalle.horometroInicial,
-          horometroFinal: detalle.horometroFinal,
+          horometroInicial: formatDecimalInput(detalle.horometroInicial),
+          horometroFinal: formatDecimalInput(detalle.horometroFinal),
           // El desglose guardado; en un registro LEGACY (previo al desglose)
           // se parte de sus actividades y se completan lugar y horas acá.
           detalle: (detalle.detalleActividades?.length
@@ -378,7 +387,7 @@ export function TrabajosExtraView() {
                 actividad: f.actividad,
                 lugar: f.lugar,
                 planta: f.planta ?? '',
-                horas: f.horas,
+                horas: formatDecimalInput(f.horas),
               }))
             : detalle.actividades.map((a) => ({ ...filaVacia(), actividad: a }))) as unknown as TrabajoExtraFormInput['detalle'],
           otraActividad: detalle.otraActividad ?? '',
@@ -646,8 +655,8 @@ function FormularioTrabajo({
   const erroresDetalle = errors.detalle as
     | (Array<Partial<Record<keyof FilaDetalleInput, { message?: string }>> | undefined> & { message?: string })
     | undefined;
-  const ini = Number(watch('horometroInicial'));
-  const fin = Number(watch('horometroFinal'));
+  const ini = numeroEscrito(watch('horometroInicial'));
+  const fin = numeroEscrito(watch('horometroFinal'));
   // Con inicial y final iguales el trabajo igual se cobra (el mínimo): por
   // eso `>=` y no `>`. Si falta uno de los dos, todavía no hay nada que calcular.
   const totalHoras =
@@ -657,7 +666,7 @@ function FormularioTrabajo({
   // que marca el trabajo. Se compara contra las horas reales Y las cobrables
   // —con el mínimo de 1 h ambas son referencias legítimas— y solo cuando
   // todas las filas ya tienen horas, para no retar a quien va a mitad.
-  const horasFilas = filas.map((f) => Number(f.horas)).filter((h) => Number.isFinite(h) && h > 0);
+  const horasFilas = filas.map((f) => numeroEscrito(f.horas)).filter((h) => Number.isFinite(h) && h > 0);
   const sumaDetalle = horasDelDetalle(horasFilas.map((horas) => ({ horas })));
   const descuadre =
     totalHoras != null &&
@@ -762,10 +771,10 @@ function FormularioTrabajo({
 
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
-            <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroInicial', { valueAsNumber: true })} />
+            <Input numerico placeholder="0" {...register('horometroInicial')} />
           </Campo>
           <Campo label="Horómetro final" unidad="h" hint={errors.horometroFinal?.message}>
-            <Input numerico type="number" step="0.1" placeholder="0" {...register('horometroFinal', { valueAsNumber: true })} />
+            <Input numerico placeholder="0" {...register('horometroFinal')} />
           </Campo>
         </div>
         <Hint>Delimitan el trabajo, no el turno completo.</Hint>
@@ -836,13 +845,10 @@ function FormularioTrabajo({
                   <Campo label="HM" unidad="h" error={err?.horas?.message}>
                     <Input
                       numerico
-                      type="number"
-                      step="0.1"
-                      min="0"
                       aria-label={`Horas máquina de la actividad ${i + 1}`}
                       value={fila.horas ?? ''}
                       onChange={(e) =>
-                        cambiarFila(i, { horas: e.target.value === '' ? undefined : Number(e.target.value) })
+                        cambiarFila(i, { horas: e.target.value === '' ? undefined : e.target.value })
                       }
                     />
                   </Campo>
