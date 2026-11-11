@@ -187,6 +187,19 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     expect(result.current.puedeGuardar).toBe(true);
   });
 
+  it('cerrada: litros sobre 100.000 impiden guardar; 100.000 sí', () => {
+    const { result } = render(cerrada);
+    act(() => result.current.abrirEdicion('c1'));
+
+    act(() => result.current.setForm((f) => ({ ...f, litros: '100001' })));
+    expect(result.current.faltante).toMatch(/0 a 100.000/);
+    expect(result.current.puedeGuardar).toBe(false);
+
+    act(() => result.current.setForm((f) => ({ ...f, litros: '100000' })));
+    expect(result.current.faltante).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+  });
+
   it('el historial se pide solo con señal y para una tarjeta que el servidor conoce', async () => {
     const { result } = render(abierta);
     act(() => result.current.abrirEdicion('c1'));

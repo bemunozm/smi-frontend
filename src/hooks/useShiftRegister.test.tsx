@@ -440,6 +440,16 @@ describe('useShiftRegister', () => {
       expect('adBlueLiters' in input).toBe(false);
     });
 
+    it('litros: 100.000 cierra, 100.001 lo bloquea con el tope', async () => {
+      const { result } = await prepararCierre();
+      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '100000' })));
+      await waitFor(() => expect(result.current.finalNum).toBe(130));
+      expect(result.current.litrosError).toBeNull();
+
+      act(() => result.current.setCierre((c) => ({ ...c, litros: '100001' })));
+      await waitFor(() => expect(result.current.litrosError).toMatch(/0 a 100.000/));
+    });
+
     it('con AdBlue: manda adBlue:true y los litros', async () => {
       const { result } = await prepararCierre();
       act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '12,5' })));
