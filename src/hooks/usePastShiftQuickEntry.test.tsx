@@ -281,6 +281,19 @@ describe('usePastShiftQuickEntry', () => {
     expect(result.current.puedeGuardar).toBe(false);
   });
 
+  it('litros: 100.000 se acepta, 100.001 se rechaza con el tope', () => {
+    const { result } = hook();
+    const base = { equipoId: 'e1', operatorId: 'op_1', inicial: '100', final: '110', foto: FOTO };
+
+    act(() => result.current.setFila(0, { ...base, litros: '100000' }));
+    expect(result.current.errorDeFila(0)).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+
+    act(() => result.current.setFila(0, { ...base, litros: '100001' }));
+    expect(result.current.errorDeFila(0)).toMatch(/0 a 100.000/);
+    expect(result.current.puedeGuardar).toBe(false);
+  });
+
   it('una fila incompleta bloquea el guardado y lo dice', () => {
     const { result } = hook();
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { useCambiosTarjeta } from './useShiftCards';
+import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedMutation } from './useQueuedMutation';
 import type { TarjetaTurno } from './shift-register-helpers';
@@ -135,7 +136,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
-    (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0)) ||
+    (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0 || litrosNum > LITROS_MAX)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
   const faltante = !esCerrada
     ? null
@@ -145,7 +146,9 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
         : 'Faltan los horómetros.'
       : litrosNum == null || litrosNum < 0
         ? 'Indica los litros de combustible (cero si no cargó).'
-        : null;
+        : litrosNum > LITROS_MAX
+          ? LITROS_FUERA_DE_RANGO
+          : null;
   const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
 
   const abrirEdicion = (id: string) => {

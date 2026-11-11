@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from '@heroui/react';
 
 import { parseDecimal } from '../lib/decimal';
+import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
@@ -111,6 +112,8 @@ export function usePastShiftQuickEntry({
     if (f.litros.trim() !== '' && parseDecimal(f.litros) == null) {
       return 'Litros inválidos (vacío = sin carga).';
     }
+    const litros = parseDecimal(f.litros);
+    if (litros != null && (litros < 0 || litros > LITROS_MAX)) return LITROS_FUERA_DE_RANGO;
     if (!f.foto) return 'Agrega la foto del combustible de esta carga.';
     return null;
   };

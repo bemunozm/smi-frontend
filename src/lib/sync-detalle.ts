@@ -53,7 +53,7 @@ const CAMPOS: Record<string, string> = {
 
 /**
  * El mensaje del servidor, en español. La validación de NestJS responde en
- * inglés («fuelLiters must not be greater than 10000») cuando el DTO no trae
+ * inglés («fuelLiters must not be greater than 100000») cuando el DTO no trae
  * su propio mensaje; acá se traducen esos casos y el resto pasa tal cual.
  */
 export function mensajeLegible(mensaje: string): string {

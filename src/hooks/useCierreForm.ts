@@ -19,7 +19,11 @@ export interface CierreState {
 }
 
 /** Tope del servidor (`CloseShiftCardDto.fuelLiters`): más es casi seguro el km u horómetro en el campo equivocado. */
-export const LITROS_MAX = 10_000;
+export const LITROS_MAX = 100_000;
+
+/** Mismo texto en el cierre normal y en el registro de un turno pasado. */
+export const LITROS_FUERA_DE_RANGO =
+  'Los litros van de 0 a 100.000. Revisa que no sea el kilometraje u horómetro.';
 /** Sobre esto, en una camioneta, se pide revisar (no bloquea). */
 const LITROS_AVISO_LIVIANO = 150;
 
@@ -42,7 +46,7 @@ export interface UseCierreFormResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
-  /** Texto que no es número o litros fuera de 0–10.000: no se puede cerrar
+  /** Texto que no es número o litros fuera de 0–100.000: no se puede cerrar
    * (el servidor lo rechazaría y la tarjeta quedaría trabada en la cola). */
   litrosError: string | null;
   /** Muchos litros para una camioneta: se avisa, no bloquea. */
@@ -86,7 +90,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     textoLitros !== '' && litrosNum == null
       ? 'Escribe un número, por ejemplo 45,5.'
       : litrosNum != null && (litrosNum < 0 || litrosNum > LITROS_MAX)
-        ? 'Los litros van de 0 a 10.000. Revisa que no sea el kilometraje u horómetro.'
+        ? LITROS_FUERA_DE_RANGO
         : null;
   const litrosAviso =
     !litrosError && cerrando?.liviano && litrosNum != null && litrosNum > LITROS_AVISO_LIVIANO
