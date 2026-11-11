@@ -19,13 +19,20 @@ export function PastShiftQuickEntry({
   ctx,
   disponibles,
   operadores,
+  checklistSinAceptar,
+  esDiaPasado,
 }: {
   ctx: ContextoTurno;
   disponibles: Equipment[];
   operadores: Operator[];
+  /** equipoId → motivo por el que su checklist del día no está aceptado. */
+  checklistSinAceptar: ReadonlyMap<string, string>;
+  /** El día elegido es estrictamente anterior a hoy: ahí el backend deja
+   * registrar equipos no operativos. */
+  esDiaPasado: boolean;
 }) {
   const { user } = useCurrentUser();
-  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id });
+  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar });
 
   return (
     <Card>
@@ -35,7 +42,7 @@ export function PastShiftQuickEntry({
       />
       <Form>
         {q.filas.map((fila, i) => (
-          <div key={i} className="flex flex-col gap-2.5 rounded-2xl border border-border p-3">
+          <div key={fila.key} className="flex flex-col gap-2.5 rounded-2xl border border-border p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] font-bold tracking-[0.06em] text-muted-foreground uppercase">
                 Fila {i + 1}
@@ -43,8 +50,9 @@ export function PastShiftQuickEntry({
               <button
                 type="button"
                 aria-label={`Quitar fila ${i + 1}`}
+                disabled={q.isGuardando}
                 onClick={() => q.quitarFila(i)}
-                className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
+                className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl bg-[#eef0f2] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
@@ -54,12 +62,15 @@ export function PastShiftQuickEntry({
               <Selector
                 etiqueta={`Equipo de la fila ${i + 1}`}
                 tituloTabular
+                disabled={q.isGuardando}
                 valor={fila.equipoId}
                 onChange={(equipoId) => q.setFila(i, { equipoId })}
                 opciones={q.equiposDeFila(i).map((e) => ({
                   valor: e.id,
                   titulo: e.internalCode,
                   detalle: e.type,
+                  ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
+                  ...(esDiaPasado && e.status !== 'OPERATIONAL' ? { aviso: 'No operativo hoy' } : {}),
                 }))}
               />
             </Campo>
@@ -68,6 +79,7 @@ export function PastShiftQuickEntry({
               <Selector
                 etiqueta={`Operador de la fila ${i + 1}`}
                 valor={fila.operatorId}
+                disabled={q.isGuardando}
                 onChange={(operatorId) => q.setFila(i, { operatorId })}
                 opciones={opcionesOperador(operadores, user?.id)}
               />
@@ -79,6 +91,7 @@ export function PastShiftQuickEntry({
                   numerico
                   aria-label={`Horómetro inicial de la fila ${i + 1}`}
                   value={fila.inicial}
+                  disabled={q.isGuardando}
                   className="!pr-3.5"
                   onChange={(e) => q.setFila(i, { inicial: e.target.value })}
                 />
@@ -88,6 +101,7 @@ export function PastShiftQuickEntry({
                   numerico
                   aria-label={`Horómetro final de la fila ${i + 1}`}
                   value={fila.final}
+                  disabled={q.isGuardando}
                   className="!pr-3.5"
                   onChange={(e) => q.setFila(i, { final: e.target.value })}
                 />
@@ -97,6 +111,7 @@ export function PastShiftQuickEntry({
                   numerico
                   aria-label={`Litros de la fila ${i + 1}`}
                   value={fila.litros}
+                  disabled={q.isGuardando}
                   className="!pr-3.5"
                   onChange={(e) => q.setFila(i, { litros: e.target.value })}
                 />
@@ -108,6 +123,7 @@ export function PastShiftQuickEntry({
                 guardado sin ella). */}
             <FotoRespaldoField
               file={fila.foto}
+              disabled={q.isGuardando}
               isReadingPhoto={false}
               captureDate={null}
               onSelect={(foto) => q.setFila(i, { foto })}
@@ -122,7 +138,7 @@ export function PastShiftQuickEntry({
           </div>
         ))}
 
-        <Boton variante="contorno" onClick={q.agregarFila}>
+        <Boton variante="contorno" disabled={q.isGuardando} onClick={q.agregarFila}>
           <Plus className="h-[18px] w-[18px]" aria-hidden /> Agregar fila
         </Boton>
 

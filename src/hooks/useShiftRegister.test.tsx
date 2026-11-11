@@ -304,23 +304,6 @@ describe('useShiftRegister', () => {
       expect(result.current.esDiaPasado).toBe(false);
       expect(result.current.disponibles).toHaveLength(1);
     });
-
-    it('en modo pasado no hay prefill del contador actual: sin horómetro tipeado no se puede abrir', async () => {
-      mockApis();
-      const { Wrapper } = withQueryClient();
-      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
-      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
-      // En modo normal, con el campo vacío propone el contador actual.
-      expect(result.current.valorInicialApertura).toBe(4218.7);
-
-      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
-      expect(result.current.valorInicialApertura).toBeNull();
-
-      act(() => {
-        result.current.setApertura((a) => ({ ...a, horometro: '4100' }));
-      });
-      expect(result.current.valorInicialApertura).toBe(4100);
-    });
   });
 
   it('abrir() SIEMPRE encola vía enqueueOpenCard (online u offline, un único camino) con un uuid nuevo', async () => {

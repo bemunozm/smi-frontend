@@ -12,6 +12,9 @@ import type { ShiftType } from '../types/shift';
 /** Una fila de la planilla: equipo · operador · horómetros · litros · foto.
  * Los números en texto crudo del input; se parsean recién al validar/guardar. */
 export interface QuickEntryRow {
+  /** Identidad estable de la fila: `setFila` reemplaza el objeto, así que el
+   * rastreo de las ya encoladas no puede apoyarse en la referencia. */
+  key: string;
   equipoId: string;
   operatorId: string;
   inicial: string;
@@ -22,17 +25,20 @@ export interface QuickEntryRow {
   foto: File | null;
 }
 
-const FILA_VACIA: QuickEntryRow = {
+const filaVacia = (): QuickEntryRow => ({
+  key: generateUuid(),
   equipoId: '',
   operatorId: '',
   inicial: '',
   final: '',
   litros: '',
   foto: null,
-};
+});
 
 const esVacia = (f: QuickEntryRow) =>
   !f.equipoId && !f.operatorId && !f.inicial.trim() && !f.final.trim() && !f.litros.trim() && !f.foto;
+
+const SIN_CHECKLISTS_PENDIENTES: ReadonlyMap<string, string> = new Map();
 
 export interface UsePastShiftQuickEntryParams {
   /** El turno pasado elegido — `guardar()` abre y cierra las tarjetas en él. */
@@ -40,6 +46,10 @@ export interface UsePastShiftQuickEntryParams {
   /** Pesados elegibles (la proyección ya excluye ocupados y livianos). */
   disponibles: Equipment[];
   userId: string | undefined;
+  /** equipoId → motivo por el que su checklist del día no está aceptado. El
+   * backend rechaza abrir un equipo así, y la fila fallaría recién al
+   * reproducir el outbox: se frena antes de guardar. */
+  checklistSinAceptar?: ReadonlyMap<string, string>;
 }
 
 export interface UsePastShiftQuickEntryResult {
@@ -70,15 +80,16 @@ export function usePastShiftQuickEntry({
   ctx,
   disponibles,
   userId,
+  checklistSinAceptar = SIN_CHECKLISTS_PENDIENTES,
 }: UsePastShiftQuickEntryParams): UsePastShiftQuickEntryResult {
-  const [filas, setFilas] = useState<QuickEntryRow[]>([FILA_VACIA]);
+  const [filas, setFilas] = useState<QuickEntryRow[]>(() => [filaVacia()]);
   const [isGuardando, setIsGuardando] = useState(false);
 
   const setFila = (i: number, patch: Partial<QuickEntryRow>) =>
     setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
-  const agregarFila = () => setFilas((fs) => [...fs, FILA_VACIA]);
+  const agregarFila = () => setFilas((fs) => [...fs, filaVacia()]);
   const quitarFila = (i: number) =>
-    setFilas((fs) => (fs.length === 1 ? [FILA_VACIA] : fs.filter((_, j) => j !== i)));
+    setFilas((fs) => (fs.length === 1 ? [filaVacia()] : fs.filter((_, j) => j !== i)));
 
   const equiposDeFila = (i: number) => {
     const tomados = new Set(filas.filter((_, j) => j !== i).map((f) => f.equipoId));
@@ -89,6 +100,8 @@ export function usePastShiftQuickEntry({
     const f = filas[i];
     if (!f || esVacia(f)) return null;
     if (!f.equipoId) return 'Elige el equipo.';
+    const motivoChecklist = checklistSinAceptar.get(f.equipoId);
+    if (motivoChecklist) return `No se puede registrar este equipo: ${motivoChecklist}.`;
     if (!f.operatorId) return 'Elige el operador.';
     const inicial = parseDecimal(f.inicial);
     if (inicial == null) return 'Escribe el horómetro inicial.';
@@ -113,7 +126,7 @@ export function usePastShiftQuickEntry({
       return false;
     }
     setIsGuardando(true);
-    const guardadas = new Set<QuickEntryRow>();
+    const guardadas = new Set<string>();
     try {
       for (const f of completas) {
         const id = generateUuid();
@@ -140,17 +153,17 @@ export function usePastShiftQuickEntry({
           },
           f.foto!,
         );
-        guardadas.add(f);
+        guardadas.add(f.key);
       }
       avisarGuardadoEnCola();
-      setFilas([FILA_VACIA]);
+      setFilas([filaVacia()]);
       return true;
     } catch (error: unknown) {
       // Las filas ya guardadas salen de la grilla: reintentar no las duplica.
       if (guardadas.size > 0) {
         setFilas((fs) => {
-          const restantes = fs.filter((f) => !guardadas.has(f));
-          return restantes.length > 0 ? restantes : [FILA_VACIA];
+          const restantes = fs.filter((f) => !guardadas.has(f.key));
+          return restantes.length > 0 ? restantes : [filaVacia()];
         });
         avisarGuardadoEnCola();
       }

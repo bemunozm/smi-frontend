@@ -206,9 +206,7 @@ export function RegistroEquipoView() {
                 setApertura((a) => ({
                   ...a,
                   equipoId: id,
-                  // En modo pasado NO se precarga la lectura actual: para un
-                  // turno viejo siempre estaría mal (ver `sinPrefill`).
-                  horometro: modoPasado ? '' : formatDecimalInput(eq?.currentHourmeter, 1),
+                  horometro: formatDecimalInput(eq?.currentHourmeter, 1),
                 }));
               }}
               opciones={disponibles.map((e) => ({
@@ -216,9 +214,6 @@ export function RegistroEquipoView() {
                 titulo: e.internalCode,
                 detalle: e.type,
                 ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
-                // Elegible solo porque el día elegido es pasado (el backend
-                // relaja la misma regla); el aviso evita la sorpresa.
-                ...(esDiaPasado && e.status !== 'OPERATIONAL' ? { aviso: 'No operativo hoy' } : {}),
               }))}
             />
           </Campo>
@@ -238,9 +233,7 @@ export function RegistroEquipoView() {
             error={horometroInvalido ? 'Escribe un número, por ejemplo 2120,5.' : undefined}
             aviso={
               bajoUltimaLectura && equipoElegido?.currentHourmeter != null
-                ? modoPasado
-                  ? `Es menor que la lectura actual (${fmt(equipoElegido.currentHourmeter)} h): esperado al cargar un día pasado.`
-                  : `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisa que esté bien; puedes agregarlo igual.`
+                ? `Es menor que la última lectura registrada (${fmt(equipoElegido.currentHourmeter)} h). Revisa que esté bien; puedes agregarlo igual.`
                 : undefined
             }
             hint={
@@ -257,11 +250,7 @@ export function RegistroEquipoView() {
               numerico
               value={apertura.horometro}
               placeholder={
-                modoPasado
-                  ? ' '
-                  : equipoElegido?.currentHourmeter != null
-                    ? formatDecimalInput(equipoElegido.currentHourmeter, 1)
-                    : '0'
+                equipoElegido?.currentHourmeter != null ? formatDecimalInput(equipoElegido.currentHourmeter, 1) : '0'
               }
               onChange={(e) => setApertura((a) => ({ ...a, horometro: e.target.value }))}
             />
@@ -274,7 +263,6 @@ export function RegistroEquipoView() {
           <Hint>
             Se agrega al turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>, a nombre de{' '}
             <b>{supervisor}</b>.
-            {modoPasado && <> Escribe la lectura que el equipo tenía ese día: acá no se propone la actual.</>}
           </Hint>
 
           <Boton
@@ -1179,7 +1167,13 @@ export function RegistroEquipoView() {
                     vía de alta en modo pasado (una tarjeta suelta es una
                     planilla de una fila): abrir sin cerrar dejaría «En curso»
                     un turno que ya terminó y bloquearía al equipo. */}
-                <PastShiftQuickEntry ctx={ctx} disponibles={disponibles} operadores={operadores} />
+                <PastShiftQuickEntry
+                  ctx={ctx}
+                  disponibles={disponibles}
+                  operadores={operadores}
+                  checklistSinAceptar={checklistSinAceptar}
+                  esDiaPasado={esDiaPasado}
+                />
               </>
             ) : (
               selectorClase

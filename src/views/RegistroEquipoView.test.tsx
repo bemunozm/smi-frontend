@@ -667,6 +667,19 @@ describe('RegistroEquipoView', () => {
       expect(inputs.some((input) => !input.hasAttribute('capture'))).toBe(true);
     });
 
+    it('en la carga rápida, un equipo con el checklist sin aceptar sale apagado y dice por qué', () => {
+      checklistsDelDia = [{ equipment: { id: 'e1' }, status: 'REJECTED' }];
+      renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
+
+      fireEvent.click(screen.getByLabelText('Equipo de la fila 1'));
+
+      const lista = within(screen.getByRole('listbox'));
+      const ex = lista.getByRole('option', { name: /EX-005/ });
+      expect(ex.getAttribute('aria-disabled')).toBe('true');
+      expect(ex.textContent).toMatch(/Checklist rechazado/);
+      expect(lista.getByRole('option', { name: /PE-009/ }).getAttribute('aria-disabled')).not.toBe('true');
+    });
+
     it('el botón de la carga rápida guarda vía el hook', () => {
       renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
 
