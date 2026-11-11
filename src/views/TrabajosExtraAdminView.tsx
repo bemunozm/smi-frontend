@@ -37,6 +37,7 @@ import {
   pistaFolio,
   textoPistaFolio,
 } from '../lib/trabajos-extra';
+import { parseDecimal } from '../lib/decimal';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
 import { ACTIVIDADES, DESTINOS, actividadLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
@@ -266,15 +267,16 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     setFilas((previas) => previas.map((f, j) => (j === i ? { ...f, ...cambios } : f)));
   };
 
-  // El schema espera números (inputs `valueAsNumber` en Terreno); acá los
-  // campos son de texto — vacío queda NaN, que el schema trata como requerido.
-  const aNumero = (texto: string) => (texto.trim() === '' ? Number.NaN : Number(texto));
+  // Los campos son texto y el schema los lee igual (`lib/forms.ts#leerNumero`:
+  // punto o coma sueltos son el decimal). `aNumero` es para las cuentas de la
+  // vista: vacío o ilegible queda NaN.
+  const aNumero = (texto: string) => parseDecimal(texto) ?? Number.NaN;
 
   const detalleEntrada = filas.map((f) => ({
     actividad: f.actividad,
     lugar: f.lugar,
     planta: f.planta || undefined,
-    horas: aNumero(f.horas),
+    horas: f.horas,
   }));
 
   const entrada = {
@@ -282,8 +284,8 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     operatorId,
     faena,
     turno,
-    horometroInicial: aNumero(horometroInicial),
-    horometroFinal: aNumero(horometroFinal),
+    horometroInicial,
+    horometroFinal,
     otraActividad: otraActividad.trim() || undefined,
     descripcion,
     observaciones: observaciones.trim() || undefined,

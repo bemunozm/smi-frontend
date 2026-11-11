@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonNegNumber } from '../lib/forms';
+import { leerNumero, nonNegNumber, NUMERO_INVALIDO } from '../lib/forms';
 
 export const ACTIVIDADES = [
   { value: 'REGULACION_CARGA', label: 'Regulación y carga' },
@@ -53,10 +53,14 @@ const actividadDetalleSchema = z.object({
    * `null` es la forma canónica de «no aplica» (la misma que guarda el
    * servidor): así el payload normalizado sigue siendo de esta forma. */
   planta: z.string().nullable().optional(),
-  horas: z
-    .number({ message: 'Indicá las horas' })
-    .positive('Las horas deben ser mayores a 0')
-    .max(24, 'Máximo 24 h por actividad'),
+  // Texto o número: punto o coma sueltos son el decimal (`lib/forms.ts#leerNumero`).
+  horas: z.preprocess(
+    leerNumero,
+    z
+      .number({ error: (iss) => (iss.input === undefined ? 'Indicá las horas' : NUMERO_INVALIDO) })
+      .positive('Las horas deben ser mayores a 0')
+      .max(24, 'Máximo 24 h por actividad'),
+  ),
 });
 
 export type ActividadDetalle = z.infer<typeof actividadDetalleSchema>;

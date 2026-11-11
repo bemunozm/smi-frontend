@@ -150,3 +150,26 @@ describe('trabajoExtraEdicionSchema (trabajos legacy)', () => {
     ).toBe(false);
   });
 });
+
+describe('números escritos en los campos de texto', () => {
+  it('lee horómetros y horas con coma o punto decimal', () => {
+    const r = trabajoExtraFormSchema.safeParse({
+      ...base,
+      horometroInicial: '1200,5',
+      horometroFinal: '1212.5',
+      detalle: [fila({ horas: '1,5' })],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.horometroInicial).toBe(1200.5);
+      expect(r.data.horometroFinal).toBe(1212.5);
+      expect(r.data.detalle[0]?.horas).toBe(1.5);
+    }
+  });
+
+  it('avisa cómo escribir las horas si no son número', () => {
+    const r = trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ horas: 'dos' })] });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toMatch(/coma o punto/);
+  });
+});

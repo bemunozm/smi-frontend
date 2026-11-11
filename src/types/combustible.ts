@@ -1,17 +1,10 @@
 import { z } from 'zod';
-import { parseDecimal } from '../lib/decimal';
 import { posNumber } from '../lib/forms';
-
-/** El campo es texto: un `.` o una `,` sueltos son el decimal (`12.5` y `12,5`
- * valen 12,5) y sin separador es entero (`100000`). Lo mismo que el resto de
- * los formularios (`lib/decimal.ts#parseDecimal`). Texto que no es número →
- * `NaN`, que `posNumber` rechaza. */
-const litrosDeTexto = (v: unknown) =>
-  typeof v === 'string' ? (v.trim() === '' ? undefined : (parseDecimal(v) ?? Number.NaN)) : v;
 
 export const combustibleFormSchema = z.object({
   equipoId: z.string().min(1, 'Seleccioná un equipo'),
-  litros: z.preprocess(litrosDeTexto, posNumber('Litros debe ser mayor a 0')),
+  // Texto: punto o coma sueltos son el decimal (ver `lib/forms.ts#leerNumero`).
+  litros: posNumber('Litros debe ser mayor a 0'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
   fotoUrl: z.string().optional(), // legacy Terreno: ruta servida por el backend (/uploads/...)
   /** Key `tmp/<userId>/<uuid>.<ext>` de la foto, que escribe el replay al
