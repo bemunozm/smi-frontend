@@ -5,6 +5,7 @@ import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput 
 import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
+import { formatDecimalInput } from '../lib/decimal';
 import { fmtDate, fmtLitros, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
@@ -47,9 +48,10 @@ export function CombustibleView() {
   const tipo = (watch('tipo') as CombustibleForm['tipo']) ?? 'PETROLEO';
 
   /** El OCR prellena los litros y el campo queda editable: el supervisor
-   *  confirma en vez de tipear el totalizador a mano. */
+   *  confirma en vez de tipear el totalizador a mano. Va con coma decimal
+   *  (`183,089`): el punto del surtidor (`183.089`) se leía como miles. */
   const foto = usePhotoCaptureFlow((litros) =>
-    setValue('litros', litros, { shouldValidate: true }),
+    setValue('litros', formatDecimalInput(litros, 3), { shouldValidate: true }),
   );
 
   const onSubmit = (values: CombustibleForm) => {
@@ -83,12 +85,11 @@ export function CombustibleView() {
         <Field
           label="Litros"
           unit="L"
-          type="number"
-          step="0.1"
+          type="text"
           inputMode="decimal"
           placeholder="0"
           error={errors.litros?.message}
-          {...register('litros', { valueAsNumber: true })}
+          {...register('litros')}
         />
 
         <div>

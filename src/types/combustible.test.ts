@@ -13,4 +13,21 @@ describe('combustibleFormSchema', () => {
   it('rechaza tipo inválido', () => {
     expect(combustibleFormSchema.safeParse({ equipoId: 'e1', litros: 50, tipo: 'GAS' }).success).toBe(false);
   });
+
+  // El campo es texto: un punto o una coma sueltos son el decimal, y sin
+  // separador el número es entero.
+  it.each([
+    ['12.5', 12.5],
+    ['12,5', 12.5],
+    ['183.089', 183.089],
+    ['100000', 100000],
+    [' 40 ', 40],
+  ])('lee los litros escritos %j como %d', (texto, litros) => {
+    const r = combustibleFormSchema.safeParse({ equipoId: 'e1', litros: texto, tipo: 'PETROLEO' });
+    expect(r.success && r.data.litros).toBe(litros);
+  });
+
+  it.each(['', 'abc', '1.234.567'])('rechaza los litros escritos %j', (texto) => {
+    expect(combustibleFormSchema.safeParse({ equipoId: 'e1', litros: texto, tipo: 'PETROLEO' }).success).toBe(false);
+  });
 });

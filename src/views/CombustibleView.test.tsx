@@ -84,6 +84,41 @@ describe('CombustibleView', () => {
     expect(input.body).not.toHaveProperty('fotoUrl');
   });
 
+  it('escribe con coma los litros leídos de la foto y los guarda como decimal', async () => {
+    fuelReadingOcrMock.mockResolvedValue({ value: '183.089', status: 'CONFIRMED', confidence: 0.9 });
+    submitWriteMock.mockResolvedValue(encolado());
+
+    renderView();
+
+    fireEvent.change(document.querySelector('select') as HTMLSelectElement, { target: { value: 'e1' } });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'surtidor.jpg', { type: 'image/jpeg' })] } });
+
+    const litros = screen.getByPlaceholderText('0') as HTMLInputElement;
+    await waitFor(() => expect(litros.value).toBe('183,089'));
+
+    fireEvent.click(screen.getByText('Registrar carga'));
+    await waitFor(() => expect(submitWriteMock).toHaveBeenCalledTimes(1));
+    expect(ultimaEscritura().input.body).toMatchObject({ litros: 183.089 });
+  });
+
+  it('lee el punto escrito a mano como decimal', async () => {
+    fuelReadingOcrMock.mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 });
+    submitWriteMock.mockResolvedValue(encolado());
+
+    renderView();
+
+    fireEvent.change(document.querySelector('select') as HTMLSelectElement, { target: { value: 'e1' } });
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '100.5' } });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'surtidor.jpg', { type: 'image/jpeg' })] } });
+
+    await waitFor(() => expect(screen.getByText('Registrar carga')).not.toHaveProperty('disabled', true));
+    fireEvent.click(screen.getByText('Registrar carga'));
+    await waitFor(() => expect(submitWriteMock).toHaveBeenCalledTimes(1));
+    expect(ultimaEscritura().input.body).toMatchObject({ litros: 100.5 });
+  });
+
   /**
    * El label siempre dijo «Requerida» pero nada lo exigía: una carga se podía
    * guardar sin respaldo fotográfico, que es justo lo que el cliente pidió
