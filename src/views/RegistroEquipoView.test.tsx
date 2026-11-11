@@ -675,20 +675,27 @@ describe('RegistroEquipoView', () => {
       expect(guardarRapidoMock).toHaveBeenCalledTimes(1);
     });
 
-    it('en modo pasado, elegir un equipo NO precarga el horómetro actual', () => {
+    it('en modo pasado no se ofrece el formulario de apertura suelta: solo la carga rápida', () => {
       renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
 
-      fireEvent.click(screen.getByLabelText('Equipo'));
-      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /PE-009/ }));
+      expect(screen.queryByText('Abrir equipo')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Agregar equipo/ })).toBeNull();
+      expect(screen.queryByText('Abrir camioneta')).toBeNull();
+      expect(screen.getByText('Carga rápida del turno')).toBeTruthy();
+    });
 
-      const updater = setApertura.mock.calls.at(-1)![0] as (a: {
-        equipoId: string;
-        operatorId: string;
-        horometro: string;
-      }) => { horometro: string };
-      expect(updater({ equipoId: '', operatorId: '', horometro: '4218,7' })).toMatchObject({
-        horometro: '',
+    it('en modo pasado se puede cerrar una tarjeta abierta del listado (escritorio)', () => {
+      renderView('desktop', {
+        turnoSeleccion: 'pasado',
+        ctx: CTX_PASADO,
+        esDiaPasado: true,
+        cerrandoId: 'c1',
+        cerrando: TARJETA_ABIERTA,
       });
+
+      expect(screen.getByText('Carga rápida del turno')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/i })).toBeTruthy();
+      expect(screen.queryByText('Abrir equipo')).toBeNull();
     });
 
     it('el diálogo avisa qué tiene ya registrado el turno elegido', () => {

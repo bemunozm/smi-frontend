@@ -12,8 +12,8 @@ import { Boton, Card, CardHead, Campo, Form, Hint, Input, Selector } from './ui'
 /**
  * Carga rápida del turno pasado: la planilla de papel en pantalla — una fila
  * por equipo (operador, horómetro inicial/final, litros) que al guardar
- * encola la apertura y el cierre de cada tarjeta en el turno elegido. Los
- * cierres van SIN foto (carga histórica: el backend los acepta así).
+ * encola la apertura y el cierre de cada tarjeta en el turno elegido. Cada
+ * cierre lleva la foto del combustible de su fila (obligatoria).
  */
 export function PastShiftQuickEntry({
   ctx,
