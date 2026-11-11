@@ -5,7 +5,7 @@ import { parseDecimal } from '../lib/decimal';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
-import { enqueueCloseCard, enqueueOpenCard } from '../offline/outbox';
+import { enqueueClosedCard } from '../offline/outbox';
 import type { Equipment } from '../types/equipment';
 import type { ShiftType } from '../types/shift';
 
@@ -53,9 +53,10 @@ export interface UsePastShiftQuickEntryResult {
   errorDeFila: (i: number) => string | null;
   /** Al menos una fila completa y ninguna a medias o con error. */
   puedeGuardar: boolean;
-  /** Encola apertura + cierre (SIN foto: carga histórica) por cada fila, en
-   * orden, por el outbox — un único camino online u offline. `true` si todo
-   * quedó guardado; las filas vuelven a una vacía. */
+  /** Encola apertura + cierre (con su foto) por cada fila, en orden, por el
+   * outbox — un único camino online u offline. `true` si todo quedó guardado
+   * y la grilla vuelve a una fila vacía; si una fila falla quedan en la grilla
+   * solo ella y las pendientes. */
   guardar: () => Promise<boolean>;
   isGuardando: boolean;
 }
@@ -112,25 +113,25 @@ export function usePastShiftQuickEntry({
       return false;
     }
     setIsGuardando(true);
+    const guardadas = new Set<QuickEntryRow>();
     try {
       for (const f of completas) {
         const id = generateUuid();
         const capturedAt = new Date().toISOString();
-        await enqueueOpenCard(userId, {
-          id,
-          equipoId: f.equipoId,
-          operatorId: f.operatorId,
-          valorInicial: parseDecimal(f.inicial)!,
-          shiftDate: toDateOnly(ctx.fecha),
-          shiftType: ctx.turno as ShiftType,
-          capturedAt,
-        });
-        // Cada cierre viaja con SU foto (obligatoria — la validación de la
-        // fila no deja llegar acá sin ella), por el pipeline normal del
-        // outbox: se sube y se reclama igual que un cierre vivo.
-        await enqueueCloseCard(
+        // Apertura y cierre (con SU foto, obligatoria) se guardan juntos y
+        // atómicos: una tarjeta de turno terminado nunca queda abierta sin
+        // su cierre, aunque la foto falle o no haya espacio.
+        await enqueueClosedCard(
           userId,
-          id,
+          {
+            id,
+            equipoId: f.equipoId,
+            operatorId: f.operatorId,
+            valorInicial: parseDecimal(f.inicial)!,
+            shiftDate: toDateOnly(ctx.fecha),
+            shiftType: ctx.turno as ShiftType,
+            capturedAt,
+          },
           {
             closeClientId: generateUuid(),
             valorFinal: parseDecimal(f.final)!,
@@ -139,11 +140,20 @@ export function usePastShiftQuickEntry({
           },
           f.foto!,
         );
+        guardadas.add(f);
       }
       avisarGuardadoEnCola();
       setFilas([FILA_VACIA]);
       return true;
     } catch (error: unknown) {
+      // Las filas ya guardadas salen de la grilla: reintentar no las duplica.
+      if (guardadas.size > 0) {
+        setFilas((fs) => {
+          const restantes = fs.filter((f) => !guardadas.has(f));
+          return restantes.length > 0 ? restantes : [FILA_VACIA];
+        });
+        avisarGuardadoEnCola();
+      }
       toast.danger(
         error instanceof Error ? error.message : 'No se pudo guardar el turno en el equipo.',
       );

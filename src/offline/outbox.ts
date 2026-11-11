@@ -93,22 +93,48 @@ async function putOp(build: (seq: number, timestamp: number) => OutboxOp): Promi
  * `hooks/useShiftRegister.ts#abrir`, con o sin señal — un único camino.
  */
 export async function enqueueOpenCard(userId: string, input: OpenShiftCardInput): Promise<void> {
-  await putOp(
-    (seq, timestamp): OpenCardOp => ({
-      id: input.id,
-      type: 'openCard',
-      v: 1,
-      userId,
-      payload: input,
-      status: 'pending',
-      attempts: 0,
-      seq,
-      entityKey: shiftCardEntity(input.id),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }),
-  );
+  await putOp((seq, timestamp) => buildOpenCardOp(userId, input, seq, timestamp));
   requestSync();
+}
+
+function buildOpenCardOp(userId: string, input: OpenShiftCardInput, seq: number, timestamp: number): OpenCardOp {
+  return {
+    id: input.id,
+    type: 'openCard',
+    v: 1,
+    userId,
+    payload: input,
+    status: 'pending',
+    attempts: 0,
+    seq,
+    entityKey: shiftCardEntity(input.id),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function buildCloseCardOp(
+  userId: string,
+  cardId: string,
+  input: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
+  seq: number,
+  timestamp: number,
+): CloseCardOp {
+  return {
+    id: input.closeClientId,
+    type: 'closeCard',
+    v: 1,
+    userId,
+    payload: { cardId, input },
+    status: 'pending_upload',
+    attempts: 0,
+    photoId: input.closeClientId,
+    seq,
+    entityKey: shiftCardEntity(cardId),
+    dependsOn: [cardId],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 }
 
 /**
@@ -138,34 +164,53 @@ export async function enqueueCloseCard(
   photo: File,
 ): Promise<void> {
   const compressed = await prepararArchivo(photo);
-  const photoId = input.closeClientId;
 
   await conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
       await db.blobs.put({
-        id: photoId,
+        id: input.closeClientId,
         data: compressed.data,
         mime: compressed.mime,
         name: compressed.name,
         createdAt: timestamp,
       });
-      const op: CloseCardOp = {
-        id: input.closeClientId,
-        type: 'closeCard',
-        v: 1,
-        userId,
-        payload: { cardId, input },
-        status: 'pending_upload',
-        attempts: 0,
-        photoId,
-        seq: await nextSeq(),
-        entityKey: shiftCardEntity(cardId),
-        dependsOn: [cardId],
+      await db.outbox.put(buildCloseCardOp(userId, cardId, input, await nextSeq(), timestamp));
+    }),
+  );
+  requestSync();
+}
+
+/**
+ * Encola la apertura Y el cierre (con su foto) de una tarjeta en UNA sola
+ * transacción: o quedan guardadas las dos operaciones y la foto, o ninguna.
+ * Sirve a la carga de un turno ya terminado, donde una apertura sin su cierre
+ * dejaría la tarjeta «En curso» y bloquearía al equipo. La foto se prepara
+ * antes de abrir la transacción, así un archivo inválido ni siquiera llega a
+ * escribir la apertura; hacerlo en una sola transacción evita además que el
+ * replay despache la apertura antes de que exista el cierre.
+ */
+export async function enqueueClosedCard(
+  userId: string,
+  open: OpenShiftCardInput,
+  close: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
+  photo: File,
+): Promise<void> {
+  const compressed = await prepararArchivo(photo);
+
+  await conCuota(() =>
+    db.transaction('rw', db.outbox, db.blobs, async () => {
+      const timestamp = now();
+      const seqApertura = await nextSeq();
+      await db.outbox.put(buildOpenCardOp(userId, open, seqApertura, timestamp));
+      await db.blobs.put({
+        id: close.closeClientId,
+        data: compressed.data,
+        mime: compressed.mime,
+        name: compressed.name,
         createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      await db.outbox.put(op);
+      });
+      await db.outbox.put(buildCloseCardOp(userId, open.id, close, seqApertura + 1, timestamp));
     }),
   );
   requestSync();

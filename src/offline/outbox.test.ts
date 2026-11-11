@@ -8,6 +8,7 @@ import { db } from './db';
 import {
   countPending,
   discardOp,
+  enqueueClosedCard,
   enqueueCloseCard,
   enqueueCreateHallazgo,
   enqueueCreateTrabajoExtra,
@@ -95,6 +96,40 @@ describe('enqueueCloseCard', () => {
     const [op, photo] = await Promise.all([db.outbox.get('close-2'), db.blobs.get('close-2')]);
     expect(op).toBeTruthy();
     expect(photo).toBeTruthy();
+  });
+});
+
+describe('enqueueClosedCard', () => {
+  const CLOSE_INPUT = {
+    closeClientId: 'close-9',
+    valorFinal: 130,
+    fuelLiters: 20,
+    capturedAt: '2026-09-24T16:00:00.000Z',
+  };
+
+  it('guarda apertura, cierre y foto juntos, con el cierre dependiendo de la apertura', async () => {
+    await enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
+
+    const [apertura, cierre, foto] = await Promise.all([
+      db.outbox.get('card-1'),
+      db.outbox.get('close-9'),
+      db.blobs.get('close-9'),
+    ]);
+    expect(apertura).toMatchObject({ type: 'openCard', status: 'pending' });
+    expect(cierre).toMatchObject({ type: 'closeCard', status: 'pending_upload', dependsOn: ['card-1'] });
+    expect(foto).toBeTruthy();
+    expect(cierre!.seq).toBeGreaterThan(apertura!.seq);
+    expect(requestSyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('con una foto inválida no queda nada en el equipo (ni la apertura)', async () => {
+    const pdf = new File([new Uint8Array([1])], 'x.exe', { type: 'application/x-msdownload' });
+
+    await expect(enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, pdf)).rejects.toThrow();
+
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
+    expect(requestSyncMock).not.toHaveBeenCalled();
   });
 });
 

@@ -1175,8 +1175,10 @@ export function RegistroEquipoView() {
               <>
                 <Hint>Las camionetas no se cargan para días pasados.</Hint>
                 {/* La planilla de papel en pantalla: N filas → N tarjetas
-                    abiertas y cerradas de este turno, de una vez. El form
-                    clásico de abajo sigue para la tarjeta suelta. */}
+                    abiertas y cerradas de este turno, de una vez. Es la única
+                    vía de alta en modo pasado (una tarjeta suelta es una
+                    planilla de una fila): abrir sin cerrar dejaría «En curso»
+                    un turno que ya terminó y bloquearía al equipo. */}
                 <PastShiftQuickEntry ctx={ctx} disponibles={disponibles} operadores={operadores} />
               </>
             ) : (
@@ -1208,7 +1210,7 @@ export function RegistroEquipoView() {
                 />
                 <Form>{formularioCierre}</Form>
               </Card>
-            ) : claseVista === 'livianos' ? (
+            ) : modoPasado ? null : claseVista === 'livianos' ? (
               formAperturaLiviano
             ) : (
               formApertura

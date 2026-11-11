@@ -1,14 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { enqueueOpenCardMock, enqueueCloseCardMock, toastDangerMock } = vi.hoisted(() => ({
-  enqueueOpenCardMock: vi.fn(),
-  enqueueCloseCardMock: vi.fn(),
+const { enqueueClosedCardMock, toastDangerMock } = vi.hoisted(() => ({
+  enqueueClosedCardMock: vi.fn(),
   toastDangerMock: vi.fn(),
 }));
 vi.mock('../offline/outbox', () => ({
-  enqueueOpenCard: enqueueOpenCardMock,
-  enqueueCloseCard: enqueueCloseCardMock,
+  enqueueClosedCard: enqueueClosedCardMock,
 }));
 vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
 vi.mock('../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: vi.fn() }));
@@ -65,10 +63,9 @@ describe('usePastShiftQuickEntry', () => {
       expect(await result.current.guardar()).toBe(true);
     });
 
-    expect(enqueueOpenCardMock).toHaveBeenCalledTimes(2);
-    expect(enqueueCloseCardMock).toHaveBeenCalledTimes(2);
+    expect(enqueueClosedCardMock).toHaveBeenCalledTimes(2);
 
-    const [, open1] = enqueueOpenCardMock.mock.calls[0]!;
+    const [, open1, close1, foto1] = enqueueClosedCardMock.mock.calls[0]!;
     expect(open1).toMatchObject({
       equipoId: 'e1',
       operatorId: 'op_1',
@@ -76,19 +73,91 @@ describe('usePastShiftQuickEntry', () => {
       shiftDate: '2026-10-20',
       shiftType: 'DIURNO',
     });
-    const [, cardId1, close1, foto1] = enqueueCloseCardMock.mock.calls[0]!;
-    expect(cardId1).toBe(open1.id); // el cierre apunta a la apertura de SU fila
     expect(close1).toMatchObject({ valorFinal: 4533.7, fuelLiters: 167 });
     expect(foto1).toBe(FOTO); // cada fila viaja con SU foto
 
     // Litros vacío = turno sin carga (0 L) — la foto va igual (obligatoria).
-    const [, , close2, foto2] = enqueueCloseCardMock.mock.calls[1]!;
+    const [, , close2, foto2] = enqueueClosedCardMock.mock.calls[1]!;
     expect(close2).toMatchObject({ valorFinal: 3069.1, fuelLiters: 0 });
     expect(foto2).toBe(FOTO_2);
 
     // Tras guardar, la grilla vuelve a una fila vacía.
     expect(result.current.filas).toHaveLength(1);
     expect(result.current.filas[0].equipoId).toBe('');
+  });
+
+  it('si el encolado de una fila falla, guardar() devuelve false, avisa y no deja la fila a medias', async () => {
+    enqueueClosedCardMock.mockRejectedValueOnce(new Error('Foto inválida'));
+    const { result } = hook();
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '5',
+        foto: FOTO,
+      });
+    });
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(false);
+    });
+
+    expect(toastDangerMock).toHaveBeenCalledWith('Foto inválida');
+    // Una sola operación atómica por fila: no hay apertura suelta que limpiar.
+    expect(enqueueClosedCardMock).toHaveBeenCalledTimes(1);
+    // La fila fallida sigue en la grilla para corregirla y reintentar.
+    expect(result.current.filas).toHaveLength(1);
+    expect(result.current.filas[0].equipoId).toBe('e1');
+  });
+
+  it('si falla la 2ª fila, la 1ª no se vuelve a encolar al reintentar', async () => {
+    enqueueClosedCardMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Sin espacio'));
+    const { result } = hook();
+    const FOTO_2 = new File([new Uint8Array([4, 5])], 'carga2.jpg', { type: 'image/jpeg' });
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '5',
+        foto: FOTO,
+      });
+      result.current.agregarFila();
+    });
+    act(() => {
+      result.current.setFila(1, {
+        equipoId: 'e2',
+        operatorId: 'op_2',
+        inicial: '200',
+        final: '210',
+        litros: '',
+        foto: FOTO_2,
+      });
+    });
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(false);
+    });
+
+    expect(enqueueClosedCardMock).toHaveBeenCalledTimes(2);
+    // Solo queda la fila que falló.
+    expect(result.current.filas).toHaveLength(1);
+    expect(result.current.filas[0].equipoId).toBe('e2');
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    expect(enqueueClosedCardMock).toHaveBeenCalledTimes(3);
+    const [, openReintento] = enqueueClosedCardMock.mock.calls[2]!;
+    expect(openReintento).toMatchObject({ equipoId: 'e2' });
+    const equiposEncolados = enqueueClosedCardMock.mock.calls.map(([, open]) => open.equipoId);
+    expect(equiposEncolados.filter((id) => id === 'e1')).toHaveLength(1);
   });
 
   it('una fila sin foto no se puede guardar y lo dice — aun sin litros', () => {
