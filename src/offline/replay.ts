@@ -226,10 +226,7 @@ async function releaseWaitersOfQueuedOps(userId: string): Promise<void> {
  * que lo espera. Al vencer el plazo (o al cancelar) resuelve `queued` — la
  * operación sigue en la cola, esperar solo era una cortesía para el que mira.
  */
-export function waitForOutcome(
-  opId: string,
-  waitMs: number,
-): { promise: Promise<WriteOutcome>; cancel: () => void } {
+export function waitForOutcome(opId: string, waitMs: number): { promise: Promise<WriteOutcome>; cancel: () => void } {
   ensureCrossTab();
   const promise = new Promise<WriteOutcome>((resolve) => {
     const timer = setTimeout(() => settleWaiter(opId, { kind: 'queued' }), waitMs);
@@ -980,9 +977,9 @@ function finishLegacy(outcome: ProcessOutcome): ProcessOutcome {
  * dependen de una retenida (ver el recorrido abajo). `deferred` son las que ya
  * fallaron por algo transitorio en ESTE run. */
 async function nextPendingOp(userId: string, deferred: ReadonlySet<string>): Promise<OutboxOp | undefined> {
-  const ops = (
-    await db.outbox.where('[userId+seq]').between([userId, -Infinity], [userId, Infinity]).toArray()
-  ).sort(bySeq);
+  const ops = (await db.outbox.where('[userId+seq]').between([userId, -Infinity], [userId, Infinity]).toArray()).sort(
+    bySeq,
+  );
   // Recorrido FIFO con dos conjuntos de "retenidos": las operaciones que
   // esperan una acción humana (`needs_attention`), las que fallaron por algo
   // transitorio en este run (`deferred`) o que están bloqueadas por otra, y las
@@ -1034,9 +1031,7 @@ async function resetStuckSyncingOps(userId: string): Promise<void> {
     .between([userId, -Infinity], [userId, Infinity])
     .and((op) => op.status === 'syncing')
     .toArray();
-  await Promise.all(
-    stuck.map((op) => db.outbox.put({ ...op, status: pendingStatusFor(op), updatedAt: Date.now() })),
-  );
+  await Promise.all(stuck.map((op) => db.outbox.put({ ...op, status: pendingStatusFor(op), updatedAt: Date.now() })));
 }
 
 /** Al terminar un run con conexión: las listas que cambiaron por lo enviado se

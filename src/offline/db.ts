@@ -31,6 +31,7 @@ import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 export type OutboxOpType =
   | 'openCard'
   | 'closeCard'
+  | 'registerClosedCard'
   | 'sendExitReport'
   | 'createHallazgo'
   | 'createTrabajoExtra'
@@ -261,10 +262,7 @@ class SmiOfflineDatabase extends Dexie {
 
   constructor() {
     super('smi-offline');
-    this.version(1).stores({
-      outbox: 'id, [userId+createdAt], status',
-      photos: 'id',
-    });
+    this.version(1).stores({ outbox: 'id, [userId+createdAt], status', photos: 'id' });
     this.version(2)
       .stores({
         // `[userId+seq]`: el índice compuesto que usa el replay para recorrer

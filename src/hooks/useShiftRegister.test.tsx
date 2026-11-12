@@ -18,9 +18,7 @@ let mockUser: { id: string; name: string; email: string } | null = {
 };
 let mockRole: (typeof ROLES)[keyof typeof ROLES] | null = ROLES.SUPERVISOR;
 
-vi.mock('./useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: mockUser, role: mockRole }),
-}));
+vi.mock('./useCurrentUser', () => ({ useCurrentUser: () => ({ user: mockUser, role: mockRole }) }));
 
 const {
   equipmentListMock,
@@ -55,9 +53,7 @@ vi.mock('../offline/outbox', () => ({
 // El outbox EN VIVO se controla con esta variable de módulo — cada test la
 // puebla con los `OutboxOp` que necesite antes de renderizar el hook.
 let mockOps: OutboxOp[] = [];
-vi.mock('../offline/useOutboxOps', () => ({
-  useOutboxOps: () => mockOps,
-}));
+vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => mockOps }));
 
 // El flujo foto→OCR→subida ya tiene sus propios tests (Flota) — acá se
 // mockea entero para controlar `file`/`captureDate` sin simular una
@@ -188,12 +184,35 @@ function closeOp(cardId: string, overrides: Partial<OutboxOp> = {}): OutboxOp {
     updatedAt: Date.now(),
     payload: {
       cardId,
-      input: {
-        closeClientId: 'pend-close-1',
-        valorFinal: 130,
-        fuelLiters: 20,
-        capturedAt: '2026-09-24T16:00:00.000Z',
-      },
+      input: { closeClientId: 'pend-close-1', valorFinal: 130, fuelLiters: 20, capturedAt: '2026-09-24T16:00:00.000Z' },
+    },
+    ...overrides,
+  } as OutboxOp;
+}
+
+function registerClosedOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
+  return {
+    id: 'pend-closed-1',
+    type: 'registerClosedCard',
+    v: 1,
+    userId: 'u1',
+    status: 'pending_upload',
+    attempts: 0,
+    photoId: 'pend-closed-1',
+    createdAt: Date.now(),
+    seq: Date.now(),
+    updatedAt: Date.now(),
+    payload: {
+      id: 'pend-closed-1',
+      equipoId: 'eq_1',
+      operatorId: 'op_1',
+      valorInicial: 1000,
+      valorFinal: 1010,
+      shiftDate: '2026-09-22',
+      shiftType: 'DIURNO',
+      capturedAt: '2026-09-24T09:30:00.000Z',
+      closeClientId: 'pend-closed-1-cc',
+      fuelLiters: 60,
     },
     ...overrides,
   } as OutboxOp;
@@ -245,12 +264,7 @@ describe('useShiftRegister', () => {
   });
 
   describe('modo "registrar un turno pasado"', () => {
-    const EQUIPO_TALLER = {
-      ...EQUIPO,
-      id: 'eq_2',
-      internalCode: 'BD-001',
-      status: 'IN_WORKSHOP',
-    };
+    const EQUIPO_TALLER = { ...EQUIPO, id: 'eq_2', internalCode: 'BD-001', status: 'IN_WORKSHOP' };
 
     it('elegirTurnoPasado fija el ctx al par elegido y volverTurnoActual lo limpia', async () => {
       mockApis();
@@ -289,6 +303,59 @@ describe('useShiftRegister', () => {
 
       await waitFor(() => expect(result.current.disponibles).toHaveLength(2));
       expect(result.current.esDiaPasado).toBe(true);
+    });
+
+    it('en un día pasado, un equipo con tarjeta abierta HOY también entra en disponibles', async () => {
+      const EQUIPO_EN_USO = {
+        ...EQUIPO,
+        id: 'eq_3',
+        internalCode: 'CF-002',
+        openShift: { supervisorName: 'Otro Supervisor' },
+      };
+      mockApis({ equipos: [EQUIPO, EQUIPO_EN_USO] });
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      // Hoy: el equipo en uso queda fuera, como siempre.
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(2));
+      expect(result.current.disponibles.map((e) => e.id)).toContain('eq_3');
+    });
+
+    it('una op registerClosedCard pendiente de un día pasado NO altera los disponibles de hoy', async () => {
+      mockOps = [registerClosedOp()];
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+      expect(result.current.disponibles[0]!.id).toBe('eq_1');
+    });
+
+    it('una op registerClosedCard pendiente aparece como tarjeta cerrada en el ctx de su día', async () => {
+      mockOps = [registerClosedOp()];
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+
+      await waitFor(() => {
+        const cerrada = result.current.cerradas.find((t) => t.id === 'pend-closed-1');
+        expect(cerrada).toBeTruthy();
+        expect(cerrada).toMatchObject({
+          estado: 'cerrada',
+          sinSincronizar: true,
+          grupo: 'actual',
+          inicial: 1000,
+          final: 1010,
+          litros: 60,
+          equipo: 'EX-005',
+        });
+      });
     });
 
     it('en el DIURNO de hoy ya pasado (reloj NOCTURNO), los no operativos siguen fuera', async () => {
@@ -452,7 +519,9 @@ describe('useShiftRegister', () => {
 
     it('con AdBlue: manda adBlue:true y los litros', async () => {
       const { result } = await prepararCierre();
-      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '12,5' })));
+      act(() =>
+        result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '12,5' })),
+      );
       await waitFor(() => expect(result.current.adBlueCierre.litros).toBe(12.5));
 
       await act(async () => {
@@ -468,7 +537,9 @@ describe('useShiftRegister', () => {
       const { result } = await prepararCierre();
 
       for (const litros of ['', '0', '1001']) {
-        act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: litros })));
+        act(() =>
+          result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: litros })),
+        );
         await waitFor(() => expect(result.current.adBlueIncompletoCierre).toBe(true));
         await act(async () => {
           await result.current.cerrar();
@@ -480,7 +551,9 @@ describe('useShiftRegister', () => {
 
     it('más de 30 L avisa pero NO bloquea el cierre', async () => {
       const { result } = await prepararCierre();
-      act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '45' })));
+      act(() =>
+        result.current.setCierre((c) => ({ ...c, final: '130', litros: '20', adBlue: true, adBlueLitros: '45' })),
+      );
       await waitFor(() => expect(result.current.adBlueCierre.aviso).toContain('30 L'));
       expect(result.current.adBlueIncompletoCierre).toBe(false);
 
@@ -801,7 +874,21 @@ describe('useShiftRegister — AdBlue y ediciones pendientes en la proyección',
 
   it('un cierre pendiente superpone su AdBlue sobre la tarjeta', async () => {
     mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
-    mockOps = [closeOp('c1', { payload: { cardId: 'c1', input: { closeClientId: 'x', valorFinal: 130, fuelLiters: 20, adBlue: true, adBlueLiters: 8, capturedAt: '2026-09-24T16:00:00.000Z' } } } as Partial<OutboxOp>)];
+    mockOps = [
+      closeOp('c1', {
+        payload: {
+          cardId: 'c1',
+          input: {
+            closeClientId: 'x',
+            valorFinal: 130,
+            fuelLiters: 20,
+            adBlue: true,
+            adBlueLiters: 8,
+            capturedAt: '2026-09-24T16:00:00.000Z',
+          },
+        },
+      } as Partial<OutboxOp>),
+    ];
     const { Wrapper } = withQueryClient();
 
     const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });

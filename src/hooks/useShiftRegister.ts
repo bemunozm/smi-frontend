@@ -180,13 +180,9 @@ export function useShiftRegister(): UseShiftRegisterResult {
     ops,
     supervisor,
     userId: user?.id,
-    incluirNoOperativos: esDiaPasado,
+    modoDiaPasado: esDiaPasado,
   });
-  const apertura = useAperturaForm({
-    disponibles: proyeccion.disponibles,
-    ctx: turno.ctx,
-    userId: user?.id,
-  });
+  const apertura = useAperturaForm({ disponibles: proyeccion.disponibles, ctx: turno.ctx, userId: user?.id });
   const aperturaLiviano = useAperturaForm({
     disponibles: proyeccion.disponiblesLivianos,
     ctx: turno.ctx,

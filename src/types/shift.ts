@@ -82,10 +82,7 @@ export type ShiftCardResponse = z.infer<typeof ShiftCardResponseSchema>;
 // --- Envolturas `{ data, message }` ---------------------------------------
 
 export const ShiftCardWrapperSchema = z.object({ data: ShiftCardResponseSchema, message: z.string() });
-export const ShiftCardListResponseSchema = z.object({
-  data: z.array(ShiftCardResponseSchema),
-  message: z.string(),
-});
+export const ShiftCardListResponseSchema = z.object({ data: z.array(ShiftCardResponseSchema), message: z.string() });
 
 // --- Resumen de un turno (`GET /api/shifts?date&type`) ---------------------
 
@@ -122,16 +119,11 @@ export const ShiftSummarySchema = z.object({
       fechaSalida: z.string().nullable(),
     }),
   ),
-  exitReports: z.array(
-    z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() }),
-  ),
+  exitReports: z.array(z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() })),
 });
 export type ShiftSummary = z.infer<typeof ShiftSummarySchema>;
 
-export const ShiftSummaryListResponseSchema = z.object({
-  data: z.array(ShiftSummarySchema),
-  message: z.string(),
-});
+export const ShiftSummaryListResponseSchema = z.object({ data: z.array(ShiftSummarySchema), message: z.string() });
 
 // --- Bodies de request -------------------------------------------------------
 

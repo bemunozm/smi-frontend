@@ -289,11 +289,7 @@ export async function enqueueExitReport(userId: string, input: SendExitReportInp
  * sin operación ni una operación `pending_upload` sin foto. El id de la foto
  * es el del hallazgo (relación 1:1). Sin foto, la operación nace `pending`.
  */
-export async function enqueueCreateHallazgo(
-  userId: string,
-  input: CreateHallazgoInput,
-  photo?: File,
-): Promise<void> {
+export async function enqueueCreateHallazgo(userId: string, input: CreateHallazgoInput, photo?: File): Promise<void> {
   const compressed = photo ? await prepararArchivo(photo) : undefined;
 
   await conCuota(() =>
@@ -404,7 +400,9 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
   if (archivos.length > 0 && !def.carriesFiles) {
     throw new DomainError('Este endpoint no admite archivos.', { code: 'ENDPOINT_NOT_QUEUEABLE' });
   }
-  const guardables = await Promise.all(archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })));
+  const guardables = await Promise.all(
+    archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })),
+  );
 
   const entityKey = spec.entityKey ?? def.entity?.(spec.params, spec.body);
   const claves = [...(entityKey ? [entityKey] : []), ...(def.parents?.(spec.params, spec.body) ?? [])];
@@ -616,9 +614,7 @@ export function patchOpenCardOp(
 export function patchCloseCardOp(
   id: string,
   userId: string,
-  patch: Partial<
-    Pick<CloseShiftCardInput, 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'>
-  >,
+  patch: Partial<Pick<CloseShiftCardInput, 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'>>,
 ): Promise<PatchOutcome> {
   return patchOp<CloseCardOp>(id, userId, 'closeCard', (op) => ({
     ...op,
@@ -649,13 +645,7 @@ export async function retryOp(id: string, userId: string): Promise<void> {
   // acepta las claves comunes a todos los tipos de operación, y acá hace
   // falta tocar `lastError`, que si vive en un miembro le sobra a los otros.
   // Con `put()` y el objeto completo (`...op`) no hay ese problema.
-  await db.outbox.put({
-    ...op,
-    status: pendingStatusFor(op),
-    lastError: undefined,
-    serverErrors: 0,
-    updatedAt: now(),
-  });
+  await db.outbox.put({ ...op, status: pendingStatusFor(op), lastError: undefined, serverErrors: 0, updatedAt: now() });
   requestSync();
 }
 

@@ -3,14 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShiftCardAPI } from './ShiftCardAPI';
 import { DomainError } from '../lib/api-error';
 
-const { getMock, postMock } = vi.hoisted(() => ({
-  getMock: vi.fn(),
-  postMock: vi.fn(),
-}));
+const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }));
 
-vi.mock('../lib/axios', () => ({
-  axiosInstance: { get: getMock, post: postMock },
-}));
+vi.mock('../lib/axios', () => ({ axiosInstance: { get: getMock, post: postMock } }));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -24,12 +19,7 @@ const CARD = {
   operatorName: 'Patricio Rojas',
   supervisorId: 'u1',
   supervisorName: 'Ana Soto',
-  shift: {
-    id: 'sh_1',
-    date: '2026-09-24',
-    type: 'DIURNO',
-    exitReports: [],
-  },
+  shift: { id: 'sh_1', date: '2026-09-24', type: 'DIURNO', exitReports: [] },
   valorInicial: 100,
   valorFinal: null,
   horasMaquina: null,
@@ -221,9 +211,7 @@ describe('ShiftCardAPI.listShiftsByDate', () => {
 
     const shifts = await ShiftCardAPI.listShiftsByDate('2026-10-20', 'DIURNO');
 
-    expect(getMock).toHaveBeenCalledWith('/api/shifts', {
-      params: { date: '2026-10-20', type: 'DIURNO' },
-    });
+    expect(getMock).toHaveBeenCalledWith('/api/shifts', { params: { date: '2026-10-20', type: 'DIURNO' } });
     expect(shifts).toHaveLength(1);
     expect(shifts[0].cards[0].equipo.internalCode).toBe('EX-005');
     expect(shifts[0].exitReports[0].cardCount).toBe(4);

@@ -58,12 +58,7 @@ describe('enqueueCloseCard', () => {
     await enqueueCloseCard(
       'u1',
       'card-1',
-      {
-        closeClientId: 'close-1',
-        valorFinal: 130,
-        fuelLiters: 20,
-        capturedAt: '2026-09-24T16:00:00.000Z',
-      },
+      { closeClientId: 'close-1', valorFinal: 130, fuelLiters: 20, capturedAt: '2026-09-24T16:00:00.000Z' },
       photoFile(),
     );
 

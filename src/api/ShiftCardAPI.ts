@@ -113,11 +113,4 @@ async function listShiftsByDate(date: string, type: ShiftType): Promise<ShiftSum
   }
 }
 
-export const ShiftCardAPI = {
-  listChanges,
-  openCard,
-  closeCard,
-  registerClosedCard,
-  listMine,
-  listShiftsByDate,
-};
+export const ShiftCardAPI = { listChanges, openCard, closeCard, registerClosedCard, listMine, listShiftsByDate };
