@@ -55,13 +55,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
     formState: { errors },
   } = useForm<CargaManualValues>({
     resolver: zodResolver(CargaManualSchema),
-    defaultValues: {
-      equipoId: '',
-      litros: 0,
-      lectura: 0,
-      tipo: 'PETROLEO',
-      fecha: toDateTimeLocal(new Date()),
-    },
+    defaultValues: { equipoId: '', litros: 0, lectura: 0, tipo: 'PETROLEO', fecha: toDateTimeLocal(new Date()) },
   });
 
   const equipos = (catalogo ?? [])
@@ -239,7 +233,13 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                     label="Litros"
                     labelAddon={
                       ocrLeido ? (
-                        ocrLeido.status === 'CONFIRMED' ? (
+                        ocrLeido.fueraDeRango ? (
+                          // Mismo criterio que `RegistrarCargaCombustibleModal`:
+                          // sobre `OCR_AUTOFILL_MAX_LITROS` no se autollena.
+                          <Chip color="danger" size="sm" variant="soft">
+                            ⚠️ Lectura inusual de la foto: escribí los litros a mano
+                          </Chip>
+                        ) : ocrLeido.status === 'CONFIRMED' ? (
                           <Chip color="success" size="sm" variant="soft">
                             Leído de la foto
                           </Chip>

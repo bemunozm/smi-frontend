@@ -6,23 +6,16 @@ import { RegistrarCargaCombustibleModal } from './RegistrarCargaCombustibleModal
 
 const mutateMock = vi.fn();
 let isPending = false;
-vi.mock('../../hooks/useCombustible', () => ({
-  useCreateCombustible: () => ({ mutate: mutateMock, isPending }),
-}));
+vi.mock('../../hooks/useCombustible', () => ({ useCreateCombustible: () => ({ mutate: mutateMock, isPending }) }));
 
 const readCaptureDateMock = vi.fn();
 vi.mock('../../lib/photo-reading', async () => {
   const actual = await vi.importActual<typeof import('../../lib/photo-reading')>('../../lib/photo-reading');
-  return {
-    ...actual,
-    readCaptureDate: (...args: unknown[]) => readCaptureDateMock(...args),
-  };
+  return { ...actual, readCaptureDate: (...args: unknown[]) => readCaptureDateMock(...args) };
 });
 
 const fuelReadingOcrMock = vi.fn();
-vi.mock('../../api/OcrAPI', () => ({
-  fuelReadingOcr: (...args: unknown[]) => fuelReadingOcrMock(...args),
-}));
+vi.mock('../../api/OcrAPI', () => ({ fuelReadingOcr: (...args: unknown[]) => fuelReadingOcrMock(...args) }));
 
 afterEach(cleanup);
 
@@ -72,6 +65,23 @@ describe('RegistrarCargaCombustibleModal', () => {
     // No se muestran los avisos de REVIEW/UNREADABLE.
     expect(screen.queryByText(/Verificá el valor/)).toBeNull();
     expect(screen.queryByText(/No se pudo leer/)).toBeNull();
+  });
+
+  it('una lectura inusual (punto decimal perdido) NO autorrellena y pide tipear a mano', async () => {
+    // El caso real: el display decía «100.000» (cien litros) y el OCR entregó
+    // "100000" como CONFIRMED — cien mil litros.
+    fuelReadingOcrMock.mockResolvedValue({ value: '100000', status: 'CONFIRMED', confidence: 0.95 });
+    readCaptureDateMock.mockResolvedValue(new Date());
+
+    renderModal();
+    subirFoto();
+
+    await waitFor(() => expect(screen.getByText(/Lectura inusual de la foto/)).toBeTruthy());
+    expect(screen.queryByText(/^Leído de la foto/)).toBeNull();
+    // No autollenó: los litros siguen en el 0 inicial del formulario (no en
+    // los cien mil leídos) y Guardar sigue deshabilitado.
+    expect((screen.getByLabelText('Litros') as HTMLInputElement).value).toBe('0');
+    expect(screen.getByRole('button', { name: 'Registrar carga' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('REVIEW: autorrellena igual con la sugerencia, pero muestra el aviso de verificar en vez del chip positivo', async () => {

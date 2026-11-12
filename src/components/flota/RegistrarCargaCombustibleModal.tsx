@@ -69,10 +69,7 @@ export function RegistrarCargaCombustibleModal({
     watch,
     setValue,
     formState: { errors },
-  } = useForm<CargaFormValues>({
-    resolver: zodResolver(CargaSchema),
-    defaultValues: DEFAULT_VALUES,
-  });
+  } = useForm<CargaFormValues>({ resolver: zodResolver(CargaSchema), defaultValues: DEFAULT_VALUES });
 
   // Orquestación foto→OCR→EXIF+subida compartida con `RegistrarEntradaModal`/
   // `RegistrarSalidaModal` — ver `usePhotoCaptureFlow`. La lectura sugerida
@@ -113,23 +110,14 @@ export function RegistrarCargaCombustibleModal({
 
   const litros = watch('litros');
   const puedeGuardar =
-    !!photoFlow.file &&
-    !photoFlow.isReadingPhoto &&
-    !crear.isPending &&
-    Number.isFinite(litros) &&
-    litros > 0;
+    !!photoFlow.file && !photoFlow.isReadingPhoto && !crear.isPending && Number.isFinite(litros) && litros > 0;
 
   const onSubmit = (values: CargaFormValues) => {
     if (!photoFlow.file) return;
     // La foto viaja con el registro y se sube al sincronizar.
     crear.mutate(
       {
-        input: {
-          equipoId,
-          litros: values.litros,
-          tipo: values.tipo,
-          fecha: new Date(values.fecha).toISOString(),
-        },
+        input: { equipoId, litros: values.litros, tipo: values.tipo, fecha: new Date(values.fecha).toISOString() },
         foto: photoFlow.file,
       },
       { onSuccess: cerrar },
@@ -181,7 +169,14 @@ export function RegistrarCargaCombustibleModal({
                     label="Litros"
                     labelAddon={
                       ocrLeido ? (
-                        ocrLeido.status === 'CONFIRMED' ? (
+                        ocrLeido.fueraDeRango ? (
+                          // El OCR puede saltarse el punto decimal del display
+                          // («100.000» leído como cien mil): sobre el umbral no
+                          // se autollena nada — ver `OCR_AUTOFILL_MAX_LITROS`.
+                          <Chip color="danger" size="sm" variant="soft">
+                            ⚠️ Lectura inusual de la foto: escribí los litros a mano
+                          </Chip>
+                        ) : ocrLeido.status === 'CONFIRMED' ? (
                           <Chip color="success" size="sm" variant="soft">
                             Leído de la foto
                           </Chip>
@@ -260,12 +255,7 @@ export function RegistrarCargaCombustibleModal({
             <Button isDisabled={crear.isPending} onPress={cerrar} variant="secondary">
               Cancelar
             </Button>
-            <Button
-              form="registrar-carga-form"
-              isDisabled={!puedeGuardar}
-              isPending={crear.isPending}
-              type="submit"
-            >
+            <Button form="registrar-carga-form" isDisabled={!puedeGuardar} isPending={crear.isPending} type="submit">
               {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Registrar carga')}
             </Button>
           </Modal.Footer>
