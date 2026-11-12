@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ROLES } from '../types/roles';
-import { NAV_ITEMS, NAV_SECCIONES } from './nav-items';
+import { NAV_ITEMS, NAV_SECCIONES, navItemsDe } from './nav-items';
 
 describe('NAV_ITEMS', () => {
   it('el menú se agrupa en Administración → Reportes → Usuarios, en ese orden', () => {
@@ -56,5 +56,18 @@ describe('NAV_ITEMS', () => {
   it('Terreno y Mantenimiento no van en el menú: son los home de sus roles', () => {
     expect(NAV_ITEMS.find((item) => item.to === '/terreno')).toBeUndefined();
     expect(NAV_ITEMS.find((item) => item.to === '/mantenimiento')).toBeUndefined();
+  });
+});
+
+describe('navItemsDe', () => {
+  it('«Mi camioneta» solo le aparece al administrador que usa camioneta', () => {
+    const labels = (usa: boolean) => navItemsDe(ROLES.ADMIN, usa).map((i) => i.label);
+    expect(labels(true)).toContain('Mi camioneta');
+    expect(labels(false)).not.toContain('Mi camioneta');
+    expect(labels(false)).toContain('Inventario');
+  });
+
+  it('sin rol no hay menú', () => {
+    expect(navItemsDe(null, true)).toEqual([]);
   });
 });

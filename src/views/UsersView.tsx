@@ -13,6 +13,7 @@ import {
   Modal,
   Select,
   Spinner,
+  Switch,
   Table,
   TextField,
 } from '@heroui/react';
@@ -21,6 +22,7 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCreateUser, useDeleteUser, useUpdateUser, useUsers } from '../hooks/useUsers';
 import { ROLE_OPTIONS, roleChipColor } from '../config/role-colors';
+import { ROLES } from '../types/roles';
 import {
   CreateUserFormSchema,
   UpdateUserSchema,
@@ -257,11 +259,12 @@ function EditUserModal({ user, isOpen, onOpenChange }: UserModalProps) {
   const updateUser = useUpdateUser();
   const {
     control,
+    watch,
     handleSubmit,
     formState: { errors },
   } = useForm<UpdateUserInput>({
     resolver: zodResolver(UpdateUserSchema),
-    values: { name: user.name, email: user.email, role: user.role },
+    values: { name: user.name, email: user.email, role: user.role, usesLightVehicle: user.usesLightVehicle },
   });
 
   return (
@@ -359,6 +362,30 @@ function EditUserModal({ user, isOpen, onOpenChange }: UserModalProps) {
                         </Select>
                       )}
                     />
+
+                    {/* Solo para administradores: de ellos, quien se mueve en camioneta
+                        (RFC-camioneta-administradores). El resto de los roles no cambia. */}
+                    {watch('role') === ROLES.ADMIN ? (
+                      <Controller
+                        control={control}
+                        name="usesLightVehicle"
+                        render={({ field }) => (
+                          <Switch isSelected={field.value} onChange={field.onChange}>
+                            <Switch.Content>
+                              <Switch.Control>
+                                <Switch.Thumb />
+                              </Switch.Control>
+                              <span className="flex flex-col">
+                                <span className="text-sm font-medium text-foreground">Usa camioneta</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Puede quedar asignado a un liviano y ve «Mi camioneta» en el menú.
+                                </span>
+                              </span>
+                            </Switch.Content>
+                          </Switch>
+                        )}
+                      />
+                    ) : null}
                   </form>
                 </Modal.Body>
                 <Modal.Footer>

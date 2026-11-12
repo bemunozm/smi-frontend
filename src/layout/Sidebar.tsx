@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom';
 
 import { useUiStore } from '../store/ui';
-import { NAV_ITEMS, NAV_SECCIONES } from '../config/nav-items';
+import { NAV_SECCIONES, navItemsDe } from '../config/nav-items';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usaCamioneta } from '../lib/usa-camioneta';
 import type { Role } from '../types/roles';
 
 export interface SidebarProps {
@@ -12,7 +14,8 @@ export function Sidebar({ role }: SidebarProps) {
   const isSidebarOpen = useUiStore((state) => state.isSidebarOpen);
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
-  const visibleItems = role ? NAV_ITEMS.filter((item) => item.roles.includes(role)) : [];
+  const { user } = useCurrentUser();
+  const visibleItems = navItemsDe(role, usaCamioneta(user));
 
   return (
     <>
