@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { createCombustible, listCombustible, updateCombustible } from '../api/CombustibleAPI';
+import { createCombustible, deleteCombustible, listCombustible, updateCombustible } from '../api/CombustibleAPI';
 import type { CreateCombustibleBody, UpdateCombustibleBody } from '../api/CombustibleAPI';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { uploadFile } from '../api/UploadsAPI';
@@ -111,6 +111,25 @@ export function useEditarCargaCombustible() {
     },
     onError: (error: unknown) => {
       toast.danger(mensajeErrorOperacion(error, 'No se pudo corregir la carga.'));
+    },
+  });
+}
+
+/**
+ * Eliminación definitiva de una carga (solo ADMIN): para el registro basura
+ * confirmado. El backend deja la traza en el historial; una carga nacida de
+ * una tarjeta deja además esa tarjeta sin litros declarados.
+ */
+export function useEliminarCargaCombustible() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCombustible(id),
+    onSuccess: () => {
+      toast.success('Carga eliminada');
+      void queryClient.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo eliminar la carga.'));
     },
   });
 }
