@@ -51,6 +51,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
     seccion: 'Administración',
   },
+  // Para registrar el uso de la camioneta que tenga asignada (km de salida y
+  // carga de combustible). El mantenedor y el prevencionista la tienen en su
+  // propio shell; el administrador no entra al taller, así que va acá.
+  { label: 'Mi camioneta', to: '/mi-camioneta', roles: [ROLES.ADMIN], seccion: 'Administración' },
   // --- Reportes (vistas del administrador, no las de Terreno) ---------------
   // Reportes de salida de turno (equipos usados en el día, por supervisor).
   { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },

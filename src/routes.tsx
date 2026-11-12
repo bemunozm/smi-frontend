@@ -130,6 +130,13 @@ export const router = createBrowserRouter([
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR]} />,
                 children: [{ path: '/operadores', element: <OperadoresView /> }],
               },
+              // La camioneta del administrador (km de salida y carga), dentro
+              // del panel: el admin no entra al shell del taller, donde vive
+              // la del mantenedor (`/mantenimiento/camioneta`).
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                children: [{ path: '/mi-camioneta', element: <MiCamionetaView /> }],
+              },
               // Lo que la SECRETARIA completa o corrige cuando un supervisor se
               // olvida (pedido del cliente). Lo que no puede —eliminar, cambiar
               // el estado de un hallazgo— lo ocultan las vistas y lo rechaza el
