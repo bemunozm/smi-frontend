@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
+import { Controller, useController, useForm, useWatch, type Control } from 'react-hook-form';
 import {
   Button,
   FieldError,
@@ -14,21 +15,24 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCategories } from '../../hooks/useCategories';
+import { useCategories, useCreateCategory } from '../../hooks/useCategories';
 import { useCreateItem, useSaveItemWithMinimums } from '../../hooks/useInventory';
 import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
 import {
-  CONTENT_UNITS,
   ITEM_TYPES,
+  PACKAGED_UNITS,
+  UNIT_SINGULAR,
+  contentUnitsFor,
+  type UnitOfMeasure,
   ITEM_TYPE_LABELS,
   ItemEditFormSchema,
   ItemFormSchema,
   UNITS_OF_MEASURE,
   UNIT_LABELS,
   contenidoDe,
-  equivalencia,
+  resumenExistencia,
   stockAt,
   toCreateItemPayload,
   toItemEditValues,
@@ -40,6 +44,24 @@ import {
   type ItemType,
 } from '../../types/inventory';
 import { SectionLabel } from './shared';
+
+/** Ejemplo del contenido según en qué se cuenta el suministro. */
+const EJEMPLO_CONTENIDO: Partial<Record<UnitOfMeasure, string>> = {
+  UNIT: 'Ej.: 10 (bidón de 10 L)',
+  PAIL: 'Ej.: 19 (tineta de 19 L)',
+  CAN: 'Ej.: 20 (bidón de 20 L)',
+  DRUM: 'Ej.: 208 (tambor de 208 L)',
+  BOX: 'Ej.: 12 (caja de 12 unidades)',
+};
+
+/** El ejemplo de total de la ayuda de «Contenido», según el envase. */
+const EJEMPLO_TOTAL: Partial<Record<UnitOfMeasure, string>> = {
+  UNIT: '12 unidades de 10 L = 120 L',
+  PAIL: '3 tinetas de 19 L = 57 L',
+  CAN: '4 bidones de 20 L = 80 L',
+  DRUM: '2 tambores de 208 L = 416 L',
+  BOX: '5 cajas de 12 unidades = 60 unidades',
+};
 
 /** Opción del selector de categoría para "no clasificado". */
 const NO_CATEGORY = '__none__';
@@ -55,7 +77,7 @@ const EMPTY_ITEM: ItemFormValues = {
   partNumber: '',
   defaultSupplier: '',
   isCritical: false,
-  initialQuantity: '0',
+  initialQuantity: '',
 };
 
 /**
@@ -82,11 +104,41 @@ function ItemCardFields({
   categories: ItemCategory[];
   errors: { name?: { message?: string }; contentPerUnit?: { message?: string } };
 }) {
-  // El contenido por unidad solo tiene sentido si el ítem se cuenta en unidades.
-  const porUnidad = useWatch({ control, name: 'unit' }) === 'UNIT';
-  // «Medido en» solo acompaña a un contenido escrito: un select de unidad de
-  // medida suelto, sin cantidad, no significa nada y confunde.
+  const unidad = useWatch({ control, name: 'unit' });
+  const tipo = useWatch({ control, name: 'type' });
+  const { field: unitField } = useController({ control, name: 'unit' });
+  const { field: contentField } = useController({ control, name: 'contentPerUnit' });
+  const { field: contentUnitField } = useController({ control, name: 'contentUnit' });
+  const { field: categoryField } = useController({ control, name: 'categoryId' });
+  // Crear una categoría sin salir del formulario cuando no está la que hace falta.
+  const createCategory = useCreateCategory();
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const agregarCategoria = () => {
+    const nombre = nuevaCategoria.trim();
+    if (!nombre || createCategory.isPending) return;
+    createCategory.mutate(nombre, {
+      onSuccess: (result) => {
+        // Confirmada por el servidor: queda elegida en el ítem. Sin señal se
+        // crea al sincronizar y se elige después.
+        if (result.status === 'sent' && result.data) categoryField.onChange(result.data.id);
+        setNuevaCategoria('');
+        setCreandoCategoria(false);
+      },
+    });
+  };
+  // Un repuesto es una pieza que se monta entera (un filtro, una correa): se
+  // cuenta en unidades y no tiene contenido. Las unidades de medida y los
+  // envases son de los suministros. Si un repuesto viejo quedó en otra unidad
+  // se muestra el selector igual, para poder corregirlo.
+  const repuestoEnUnidades = tipo === 'PART' && unidad === 'UNIT';
+  // El contenido solo tiene sentido en lo que se cuenta por pieza: la unidad
+  // y los envases (una tineta de 19 L, una caja de 12 unidades).
+  const porPieza = PACKAGED_UNITS.includes(unidad) && !repuestoEnUnidades;
+  // El contenido se pide solo si se activa (o si el ítem ya lo trae, al editar).
   const conContenido = (useWatch({ control, name: 'contentPerUnit' }) ?? '').trim() !== '';
+  const [indicarContenido, setIndicarContenido] = useState(false);
+  const mostrarContenido = indicarContenido || conContenido;
   return (
     <>
       <Controller
@@ -117,7 +169,13 @@ function ItemCardFields({
               fullWidth
               name={field.name}
               onChange={(value) => {
-                if (value) field.onChange(value);
+                if (!value) return;
+                field.onChange(value);
+                // Pasar a repuesto lo deja en unidades y sin contenido.
+                if (value === 'PART') {
+                  unitField.onChange('UNIT');
+                  contentField.onChange('');
+                }
               }}
               value={field.value}
             >
@@ -144,6 +202,14 @@ function ItemCardFields({
           )}
         />
 
+        {repuestoEnUnidades ? (
+          // Fijo y a la vista: el repuesto se cuenta en unidades, sin envases ni
+          // medidas que elegir (ver `repuestoEnUnidades`).
+          <TextField fullWidth isDisabled value={UNIT_LABELS.UNIT}>
+            <Label>Se cuenta en</Label>
+            <Input />
+          </TextField>
+        ) : (
         <Controller
           control={control}
           name="unit"
@@ -152,7 +218,18 @@ function ItemCardFields({
               fullWidth
               name={field.name}
               onChange={(value) => {
-                if (value) field.onChange(value);
+                if (!value) return;
+                field.onChange(value);
+                // Si la medida elegida no calza con la nueva forma de contar
+                // (una caja en litros, una tineta en unidades) se propone la
+                // que corresponde: unidades para la caja, litros para el resto.
+                const validas = contentUnitsFor(value as UnitOfMeasure);
+                if (validas.length && !validas.includes(contentUnitField.value)) {
+                  contentUnitField.onChange(validas[0]);
+                }
+                // Un envase casi siempre se quiere con su contenido (la tineta
+                // de 19 L): se abre de una. La unidad suelta queda apagada.
+                setIndicarContenido(value !== 'UNIT' && PACKAGED_UNITS.includes(value as UnitOfMeasure));
               }}
               value={field.value}
             >
@@ -178,11 +255,38 @@ function ItemCardFields({
             </Select>
           )}
         />
+        )}
       </div>
 
-      {porUnidad ? (
-        // Mismo grid de dos columnas que el resto: cada campo con su etiqueta,
-        // así el número y la medida quedan a la misma altura.
+      {porPieza ? (
+        // El contenido es opcional: se pregunta con un interruptor en vez de
+        // dejar un campo vacío que no se entiende. Apagado, el ítem es «una
+        // unidad» y nada más (un filtro, una bolsa de huaipe).
+        <div className="flex flex-col gap-3">
+        <Switch
+          isSelected={mostrarContenido}
+          onChange={(on) => {
+            setIndicarContenido(on);
+            if (!on) contentField.onChange('');
+          }}
+        >
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-foreground">
+                {unidad === 'UNIT' ? 'Cada unidad trae una cantidad (litros, kilos o metros)' : `Indicar cuánto trae cada ${UNIT_SINGULAR[unidad]}`}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {unidad === 'UNIT'
+                  ? 'Por ejemplo, un bidón de 20 L o un cartucho de 0,4 kg. Si se usa entero, como un filtro, déjalo apagado.'
+                  : `Así el inventario también muestra el total (${EJEMPLO_TOTAL[unidad] ?? ''}).`}
+              </span>
+            </span>
+          </Switch.Content>
+        </Switch>
+        {mostrarContenido ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Controller
             control={control}
@@ -196,13 +300,13 @@ function ItemCardFields({
                 onChange={field.onChange}
                 value={field.value}
               >
-                <Label>Cada unidad contiene (opcional)</Label>
-                <Input inputMode="decimal" placeholder="Ej.: 10 (bidón de 10 L)" />
+                <Label>Cada {UNIT_SINGULAR[unidad]} trae</Label>
+                <Input inputMode="decimal" placeholder={EJEMPLO_CONTENIDO[unidad] ?? 'Ej.: 10'} />
                 {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
               </TextField>
             )}
           />
-          {conContenido ? (
+          {mostrarContenido ? (
             <Controller
               control={control}
               name="contentUnit"
@@ -222,7 +326,7 @@ function ItemCardFields({
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
-                      {CONTENT_UNITS.map((unit) => (
+                      {contentUnitsFor(unidad).map((unit) => (
                         <ListBox.Item id={unit} key={unit} textValue={UNIT_LABELS[unit]}>
                           {UNIT_LABELS[unit]}
                           <ListBox.ItemIndicator />
@@ -234,6 +338,8 @@ function ItemCardFields({
               )}
             />
           ) : null}
+        </div>
+        ) : null}
         </div>
       ) : null}
 
@@ -278,6 +384,57 @@ function ItemCardFields({
         )}
       />
 
+      {/* Fuera del menú y siempre a la vista: dentro de la lista quedaba al
+          fondo (o desteñida por el difuminado del borde) y no se encontraba. */}
+      {!creandoCategoria ? (
+        <Button
+          className="-mt-2 self-start bg-accent-soft font-semibold text-accent-soft-foreground hover:bg-accent-soft-hover"
+          size="sm"
+          variant="ghost"
+          onPress={() => setCreandoCategoria(true)}
+        >
+          <Plus className="h-4 w-4" /> ¿No está la categoría? Crear una nueva
+        </Button>
+      ) : null}
+
+      {creandoCategoria ? (
+        <div className="flex items-start gap-2">
+          <TextField
+            fullWidth
+            value={nuevaCategoria}
+            onChange={setNuevaCategoria}
+            autoFocus
+            // Enter agrega la categoría; sin esto enviaba el formulario del ítem.
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                agregarCategoria();
+              }
+            }}
+          >
+            <Label>Nombre de la nueva categoría</Label>
+            <Input placeholder="Ej.: Filtros" />
+          </TextField>
+          <Button
+            className="h-12 shrink-0"
+            isDisabled={!nuevaCategoria.trim() || createCategory.isPending}
+            onPress={agregarCategoria}
+          >
+            {createCategory.isPending ? <Spinner color="current" size="sm" /> : 'Agregar'}
+          </Button>
+          <Button
+            className="h-12 shrink-0"
+            variant="secondary"
+            onPress={() => {
+              setNuevaCategoria('');
+              setCreandoCategoria(false);
+            }}
+          >
+            Cancelar
+          </Button>
+        </div>
+      ) : null}
+
       <Controller
         control={control}
         name="defaultSupplier"
@@ -299,8 +456,20 @@ function ItemCardFields({
         control={control}
         name="isCritical"
         render={({ field }) => (
+          // Sin `Switch.Control` solo se veía el texto, sin interruptor: parecía
+          // un aviso fijo y no una opción que se activa.
           <Switch isSelected={field.value} onChange={field.onChange}>
-            Crítico: su falta detiene la máquina
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <span className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">Marcar como crítico</span>
+                <span className="text-xs text-muted-foreground">
+                  Si falta, la máquina se detiene. Se destaca en el inventario y se prioriza al comprar.
+                </span>
+              </span>
+            </Switch.Content>
           </Switch>
         )}
       />
@@ -344,8 +513,9 @@ export function NewItemModal({
   const existenciaNum = parseDecimal(existencia);
   const totalEquivalente =
     existenciaNum != null && existenciaNum > 0
-      ? equivalencia(
+      ? resumenExistencia(
           existenciaNum,
+          unidad,
           contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
         )
       : null;
@@ -406,7 +576,7 @@ export function NewItemModal({
                           </Label>
                           <Input inputMode="decimal" placeholder="0" />
                           {totalEquivalente ? (
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                            <span className="mt-1 rounded-xl bg-muted px-3 py-2 text-sm font-semibold text-foreground tabular-nums">
                               {totalEquivalente}
                             </span>
                           ) : null}
@@ -428,9 +598,9 @@ export function NewItemModal({
                     ) : null}
 
                     <p className="text-xs text-muted-foreground">
-                      Se escribe en la unidad del ítem: con «Litros», 120 son
-                      120 L; con «Unidades» y 10 L por unidad, 12 son 120 L. Queda
-                      registrada como una entrada por compra
+                      Se escribe en lo que se cuenta el ítem (unidades,
+                      tinetas, litros…). Queda registrada como una entrada por
+                      compra
                       {branchName ? ` en ${branchName}` : ''}. El SKU se genera
                       solo y el mínimo se fija después, desde las acciones del
                       ítem.
@@ -593,7 +763,12 @@ export function EditItemModal({
                           isSelected={field.value}
                           onChange={field.onChange}
                         >
-                          Activo en los selectores
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                            Activo en los selectores
+                          </Switch.Content>
                         </Switch>
                       )}
                     />

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ItemFormSchema,
   ItemListResponseSchema,
   isBelowMinimumAt,
   quantityAt,
   contenidoDe,
+  contentUnitsFor,
   equivalencia,
+  resumenExistencia,
   toCreateItemPayload,
   toItemEditValues,
   toUpdateItemPayload,
@@ -169,6 +172,48 @@ describe('contenido por unidad', () => {
       initialQuantity: 12,
     });
     expect(equivalencia(12, contenidoDe(values))).toBe('12 u × 10 L = 120 L');
+  });
+
+  it('en tinetas de 19 L: viaja el contenido y se lee «3 tin. × 19 L = 57 L»', () => {
+    const values = { ...base, unit: 'PAIL' as const, contentPerUnit: '19', contentUnit: 'LITER' as const, initialQuantity: '3' };
+    expect(toCreateItemPayload(values, 'b1')).toMatchObject({ unit: 'PAIL', contentPerUnit: 19, contentUnit: 'LITER' });
+    expect(equivalencia(3, contenidoDe(values), 'PAIL')).toBe('3 tin. × 19 L = 57 L');
+  });
+
+  it('una caja puede contener unidades; una unidad no', () => {
+    const caja = { ...base, unit: 'BOX' as const, contentPerUnit: '12', contentUnit: 'UNIT' as const };
+    expect(contenidoDe(caja)).toEqual({ contentPerUnit: 12, contentUnit: 'UNIT' });
+    expect(contenidoDe({ ...caja, unit: 'UNIT' })).toBeNull();
+    expect(contentUnitsFor('BOX')).toContain('UNIT');
+    expect(contentUnitsFor('UNIT')).not.toContain('UNIT');
+  });
+
+  it('la existencia inicial vacía vale 0: no viaja y el formulario la acepta', () => {
+    const values = { ...base, unit: 'UNIT' as const, contentPerUnit: '', contentUnit: 'LITER' as const, initialQuantity: '' };
+    expect(ItemFormSchema.safeParse(values).success).toBe(true);
+    expect(toCreateItemPayload(values, 'b1')).not.toHaveProperty('initialQuantity');
+    expect(ItemFormSchema.safeParse({ ...values, initialQuantity: 'abc' }).success).toBe(false);
+  });
+
+  it('la existencia se dice como frase, con el total si hay contenido', () => {
+    expect(resumenExistencia(3, 'PAIL', { contentPerUnit: 19, contentUnit: 'LITER' })).toBe(
+      'Vas a ingresar 3 tinetas de 19 L: 57 L en total.',
+    );
+    expect(resumenExistencia(5, 'BOX', { contentPerUnit: 12, contentUnit: 'UNIT' })).toBe(
+      'Vas a ingresar 5 cajas de 12 unidades: 60 unidades en total.',
+    );
+    expect(resumenExistencia(1, 'CAN', null)).toBe('Vas a ingresar 1 bidón.');
+    expect(resumenExistencia(12, 'UNIT', null)).toBe('Vas a ingresar 12 unidades.');
+  });
+
+  it('cada envase ofrece solo las medidas que tienen sentido', () => {
+    expect(contentUnitsFor('PAIL')).toEqual(['LITER', 'KILOGRAM']);
+    expect(contentUnitsFor('DRUM')).toEqual(['LITER', 'KILOGRAM']);
+    expect(contentUnitsFor('BOX')).toEqual(['UNIT', 'KILOGRAM']);
+    expect(contentUnitsFor('LITER')).toEqual([]);
+    // Una tineta «en metros» no viaja.
+    const tineta = { ...base, unit: 'PAIL' as const, contentPerUnit: '19', contentUnit: 'METER' as const };
+    expect(contenidoDe(tineta)).toBeNull();
   });
 
   it('en litros no viaja contenido: 120 son 120 L', () => {

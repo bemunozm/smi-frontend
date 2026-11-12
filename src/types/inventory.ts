@@ -11,10 +11,39 @@ import { parseDecimal } from '../lib/decimal';
  * el consolidado se calcula sumándolas. No hay dos números que puedan
  * discrepar.
  */
-export const UNITS_OF_MEASURE = ['UNIT', 'LITER', 'KILOGRAM', 'METER'] as const;
-/** En qué se mide el contenido de cada unidad (un bidón de 10 L): nunca «unidades». */
-export const CONTENT_UNITS = ['LITER', 'KILOGRAM', 'METER'] as const;
+export const UNITS_OF_MEASURE = ['UNIT', 'LITER', 'KILOGRAM', 'METER', 'PAIL', 'CAN', 'DRUM', 'BOX'] as const;
 export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
+
+/** Se cuentan por pieza y pueden decir cuánto traen: la unidad y los envases
+ * (tineta, bidón, tambor, caja). Litros, kilos y metros no. */
+export const PACKAGED_UNITS: readonly UnitOfMeasure[] = ['UNIT', 'PAIL', 'CAN', 'DRUM', 'BOX'];
+
+/** En qué se mide ese contenido: una tineta de 19 L, una caja de 12 unidades. */
+export const CONTENT_UNITS = ['LITER', 'KILOGRAM', 'METER', 'UNIT'] as const;
+
+type ContentUnit = (typeof CONTENT_UNITS)[number];
+
+/**
+ * Las medidas que tienen sentido para cada forma de contar, la primera es la
+ * que se propone:
+ * - unidad: litros, kilos o metros (un cartucho de 0,4 kg, un rollo de 100 m);
+ * - tineta, bidón, tambor: traen líquido o grasa → litros o kilos;
+ * - caja: trae piezas o algo a granel → unidades o kilos (12 filtros, 5 kg de
+ *   electrodos).
+ * Una unidad que «contiene unidades» o una tineta medida en metros no dicen nada.
+ */
+const CONTENT_UNITS_BY_UNIT: Partial<Record<UnitOfMeasure, ContentUnit[]>> = {
+  UNIT: ['LITER', 'KILOGRAM', 'METER'],
+  PAIL: ['LITER', 'KILOGRAM'],
+  CAN: ['LITER', 'KILOGRAM'],
+  DRUM: ['LITER', 'KILOGRAM'],
+  BOX: ['UNIT', 'KILOGRAM'],
+};
+
+/** Las medidas que ofrece «Medido en» para esa unidad (vacío si no aplica). */
+export function contentUnitsFor(unit: UnitOfMeasure): ContentUnit[] {
+  return CONTENT_UNITS_BY_UNIT[unit] ?? [];
+}
 
 /** Gobierna las pestañas de la pantalla: suministros vs. repuestos. */
 export const ITEM_TYPES = ['SUPPLY', 'PART'] as const;
@@ -179,6 +208,22 @@ export const UNIT_LABELS: Record<UnitOfMeasure, string> = {
   LITER: 'Litros',
   KILOGRAM: 'Kilogramos',
   METER: 'Metros',
+  PAIL: 'Tinetas',
+  CAN: 'Bidones',
+  DRUM: 'Tambores',
+  BOX: 'Cajas',
+};
+
+/** Una pieza de esa unidad, para «Cada tineta contiene». */
+export const UNIT_SINGULAR: Record<UnitOfMeasure, string> = {
+  UNIT: 'unidad',
+  LITER: 'litro',
+  KILOGRAM: 'kilo',
+  METER: 'metro',
+  PAIL: 'tineta',
+  CAN: 'bidón',
+  DRUM: 'tambor',
+  BOX: 'caja',
 };
 
 export const UNIT_SYMBOLS: Record<UnitOfMeasure, string> = {
@@ -186,6 +231,10 @@ export const UNIT_SYMBOLS: Record<UnitOfMeasure, string> = {
   LITER: 'L',
   KILOGRAM: 'kg',
   METER: 'm',
+  PAIL: 'tin.',
+  CAN: 'bid.',
+  DRUM: 'tamb.',
+  BOX: 'cj.',
 };
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
@@ -280,15 +329,6 @@ export interface AdjustStockInput {
 
 // --- Formularios (RHF + zodResolver) --------------------------------------
 
-/** Campo numérico de formulario: string en el input, número al enviar. */
-const quantityField = (message: string) =>
-  z
-    .string()
-    .min(1, message)
-    .refine((value) => (parseDecimal(value) ?? -1) >= 0, {
-      message: 'Ingresa un número válido',
-    });
-
 /**
  * Ficha del ítem. `categoryId` es un string vacío cuando no se eligió
  * categoría: el `Select` no sabe de `null`, y la conversión a "campo ausente"
@@ -314,7 +354,11 @@ export type ItemCardValues = z.infer<typeof ItemCardSchema>;
 
 /** Alta: el SKU ya no se pide, lo genera el servidor. */
 export const ItemFormSchema = ItemCardSchema.extend({
-  initialQuantity: quantityField('La existencia inicial es obligatoria'),
+  // Arranca vacía (el «0» es solo el ejemplo gris del campo) y vacía vale 0:
+  // un 0 escrito de antemano había que borrarlo antes de tipear la cantidad.
+  initialQuantity: z.string().refine((value) => value.trim() === '' || (parseDecimal(value) ?? -1) >= 0, {
+    message: 'Ingresa un número válido',
+  }),
 });
 export type ItemFormValues = z.infer<typeof ItemFormSchema>;
 
@@ -359,7 +403,8 @@ export function contenidoDe(values: Pick<ItemCardValues, 'unit' | 'contentPerUni
   contentPerUnit: number;
   contentUnit: UnitOfMeasure;
 } | null {
-  if (values.unit !== 'UNIT') return null;
+  if (!PACKAGED_UNITS.includes(values.unit)) return null;
+  if (!contentUnitsFor(values.unit).includes(values.contentUnit)) return null;
   const n = parseDecimal(values.contentPerUnit);
   return n != null && n > 0 ? { contentPerUnit: n, contentUnit: values.contentUnit } : null;
 }
@@ -368,7 +413,7 @@ export function contenidoDe(values: Pick<ItemCardValues, 'unit' | 'contentPerUni
 export function contenidoDeItem(
   item: Pick<InventoryItem, 'unit' | 'contentPerUnit' | 'contentUnit'>,
 ): { contentPerUnit: number; contentUnit: UnitOfMeasure } | null {
-  if (item.unit !== 'UNIT' || item.contentPerUnit == null || item.contentPerUnit <= 0) return null;
+  if (!PACKAGED_UNITS.includes(item.unit) || item.contentPerUnit == null || item.contentPerUnit <= 0) return null;
   return { contentPerUnit: item.contentPerUnit, contentUnit: item.contentUnit ?? 'LITER' };
 }
 
@@ -382,12 +427,37 @@ export function totalEnContenido(
   return `${total} ${UNIT_SYMBOLS[contenido.contentUnit]}`;
 }
 
-/** «12 u × 10 L = 120 L»; `null` si el ítem no tiene contenido por unidad. */
-export function equivalencia(cantidad: number, contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null): string | null {
+/**
+ * La existencia dicha como frase, para que se entienda qué se está cargando:
+ * «Vas a ingresar 3 tinetas de 19 L: 57 L en total.» o, sin contenido,
+ * «Vas a ingresar 12 unidades.».
+ */
+export function resumenExistencia(
+  cantidad: number,
+  unidad: UnitOfMeasure,
+  contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null,
+): string {
+  const fmt = (n: number) => n.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+  const nombre = cantidad === 1 ? UNIT_SINGULAR[unidad] : UNIT_LABELS[unidad].toLowerCase();
+  if (!contenido) return `Vas a ingresar ${fmt(cantidad)} ${nombre}.`;
+  const medida = (n: number) =>
+    contenido.contentUnit === 'UNIT'
+      ? `${fmt(n)} ${n === 1 ? 'unidad' : 'unidades'}`
+      : `${fmt(n)} ${UNIT_SYMBOLS[contenido.contentUnit]}`;
+  return `Vas a ingresar ${fmt(cantidad)} ${nombre} de ${medida(contenido.contentPerUnit)}: ${medida(cantidad * contenido.contentPerUnit)} en total.`;
+}
+
+/** «12 u × 10 L = 120 L» («3 tin. × 19 L = 57 L» en tinetas); `null` si el
+ * ítem no tiene contenido por unidad. */
+export function equivalencia(
+  cantidad: number,
+  contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null,
+  unidad: UnitOfMeasure = 'UNIT',
+): string | null {
   if (!contenido) return null;
   const fmt = (n: number) => n.toLocaleString('es-CL', { maximumFractionDigits: 2 });
   const simbolo = UNIT_SYMBOLS[contenido.contentUnit];
-  return `${fmt(cantidad)} u × ${fmt(contenido.contentPerUnit)} ${simbolo} = ${fmt(cantidad * contenido.contentPerUnit)} ${simbolo}`;
+  return `${fmt(cantidad)} ${UNIT_SYMBOLS[unidad]} × ${fmt(contenido.contentPerUnit)} ${simbolo} = ${fmt(cantidad * contenido.contentPerUnit)} ${simbolo}`;
 }
 
 export function toCreateItemPayload(
@@ -427,7 +497,10 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     description: item.description ?? '',
     unit: item.unit,
     contentPerUnit: item.contentPerUnit != null ? String(item.contentPerUnit).replace('.', ',') : '',
-    contentUnit: item.contentUnit && item.contentUnit !== 'UNIT' ? item.contentUnit : 'LITER',
+    contentUnit:
+      item.contentUnit && contentUnitsFor(item.unit).includes(item.contentUnit as (typeof CONTENT_UNITS)[number])
+        ? (item.contentUnit as (typeof CONTENT_UNITS)[number])
+        : (contentUnitsFor(item.unit)[0] ?? 'LITER'),
     type: item.type,
     categoryId: item.categoryId ?? '',
     partNumber: item.partNumber ?? '',
