@@ -152,6 +152,35 @@ export interface OpenShiftCardInput {
   capturedAt: string;
 }
 
+/** Body de `POST /api/shift-cards/closed` — backfill de un turno YA
+ * terminado: la tarjeta nace CERRADA en el servidor (apertura + cierre +
+ * combustible en una transacción), así nunca ocupa el "slot" de tarjeta
+ * abierta del equipo ni choca con una tarjeta abierta HOY. Une los campos de
+ * `OpenShiftCardInput` y del cierre; idempotente por `id` (y
+ * `closeClientId` ante carreras). */
+export interface RegisterClosedShiftCardInput {
+  id: string;
+  equipoId: string;
+  /** Obligatorio en pesados — mismo criterio que la apertura. */
+  operatorId?: string;
+  valorInicial: number;
+  valorFinal: number;
+  /** `YYYY-MM-DD` del día de negocio HISTÓRICO (ver `lib/turno.ts#toDateOnly`). */
+  shiftDate: string;
+  shiftType: ShiftType;
+  /** Hora del DISPOSITIVO al registrar (solo auditoría de desfase). */
+  capturedAt: string;
+  closeClientId: string;
+  /** Litros cargados ese turno — 0 permitido. */
+  fuelLiters: number;
+  /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` — obligatoria aun
+   * con 0 litros. */
+  tmpPhotoKey: string;
+  adBlue?: boolean;
+  adBlueLiters?: number;
+  observaciones?: string;
+}
+
 /** Body de `POST /api/shift-cards/:id/close`. `closeClientId` es la clave
  * de idempotencia del CIERRE (distinta de `id`, ver `lib/uuid.ts`). */
 export interface CloseShiftCardInput {
