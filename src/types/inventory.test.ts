@@ -5,6 +5,7 @@ import {
   isBelowMinimumAt,
   quantityAt,
   contenidoDe,
+  contentUnitsFor,
   equivalencia,
   toCreateItemPayload,
   toItemEditValues,
@@ -169,6 +170,20 @@ describe('contenido por unidad', () => {
       initialQuantity: 12,
     });
     expect(equivalencia(12, contenidoDe(values))).toBe('12 u × 10 L = 120 L');
+  });
+
+  it('en tinetas de 19 L: viaja el contenido y se lee «3 tin. × 19 L = 57 L»', () => {
+    const values = { ...base, unit: 'PAIL' as const, contentPerUnit: '19', contentUnit: 'LITER' as const, initialQuantity: '3' };
+    expect(toCreateItemPayload(values, 'b1')).toMatchObject({ unit: 'PAIL', contentPerUnit: 19, contentUnit: 'LITER' });
+    expect(equivalencia(3, contenidoDe(values), 'PAIL')).toBe('3 tin. × 19 L = 57 L');
+  });
+
+  it('una caja puede contener unidades; una unidad no', () => {
+    const caja = { ...base, unit: 'BOX' as const, contentPerUnit: '12', contentUnit: 'UNIT' as const };
+    expect(contenidoDe(caja)).toEqual({ contentPerUnit: 12, contentUnit: 'UNIT' });
+    expect(contenidoDe({ ...caja, unit: 'UNIT' })).toBeNull();
+    expect(contentUnitsFor('BOX')).toContain('UNIT');
+    expect(contentUnitsFor('UNIT')).not.toContain('UNIT');
   });
 
   it('en litros no viaja contenido: 120 son 120 L', () => {

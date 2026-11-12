@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
+import { Controller, useController, useForm, useWatch, type Control } from 'react-hook-form';
 import {
   Button,
   FieldError,
@@ -20,8 +20,11 @@ import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
 import {
-  CONTENT_UNITS,
   ITEM_TYPES,
+  PACKAGED_UNITS,
+  UNIT_SINGULAR,
+  contentUnitsFor,
+  type UnitOfMeasure,
   ITEM_TYPE_LABELS,
   ItemEditFormSchema,
   ItemFormSchema,
@@ -40,6 +43,15 @@ import {
   type ItemType,
 } from '../../types/inventory';
 import { SectionLabel } from './shared';
+
+/** Ejemplo del contenido según en qué se cuenta el suministro. */
+const EJEMPLO_CONTENIDO: Partial<Record<UnitOfMeasure, string>> = {
+  UNIT: 'Ej.: 10 (bidón de 10 L)',
+  PAIL: 'Ej.: 19 (tineta de 19 L)',
+  CAN: 'Ej.: 20 (bidón de 20 L)',
+  DRUM: 'Ej.: 208 (tambor de 208 L)',
+  BOX: 'Ej.: 12 (caja de 12 unidades)',
+};
 
 /** Opción del selector de categoría para "no clasificado". */
 const NO_CATEGORY = '__none__';
@@ -82,8 +94,19 @@ function ItemCardFields({
   categories: ItemCategory[];
   errors: { name?: { message?: string }; contentPerUnit?: { message?: string } };
 }) {
-  // El contenido por unidad solo tiene sentido si el ítem se cuenta en unidades.
-  const porUnidad = useWatch({ control, name: 'unit' }) === 'UNIT';
+  const unidad = useWatch({ control, name: 'unit' });
+  const tipo = useWatch({ control, name: 'type' });
+  const { field: unitField } = useController({ control, name: 'unit' });
+  const { field: contentField } = useController({ control, name: 'contentPerUnit' });
+  const { field: contentUnitField } = useController({ control, name: 'contentUnit' });
+  // Un repuesto es una pieza que se monta entera (un filtro, una correa): se
+  // cuenta en unidades y no tiene contenido. Las unidades de medida y los
+  // envases son de los suministros. Si un repuesto viejo quedó en otra unidad
+  // se muestra el selector igual, para poder corregirlo.
+  const repuestoEnUnidades = tipo === 'PART' && unidad === 'UNIT';
+  // El contenido solo tiene sentido en lo que se cuenta por pieza: la unidad
+  // y los envases (una tineta de 19 L, una caja de 12 unidades).
+  const porPieza = PACKAGED_UNITS.includes(unidad) && !repuestoEnUnidades;
   // «Medido en» solo acompaña a un contenido escrito: un select de unidad de
   // medida suelto, sin cantidad, no significa nada y confunde.
   const conContenido = (useWatch({ control, name: 'contentPerUnit' }) ?? '').trim() !== '';
@@ -117,7 +140,13 @@ function ItemCardFields({
               fullWidth
               name={field.name}
               onChange={(value) => {
-                if (value) field.onChange(value);
+                if (!value) return;
+                field.onChange(value);
+                // Pasar a repuesto lo deja en unidades y sin contenido.
+                if (value === 'PART') {
+                  unitField.onChange('UNIT');
+                  contentField.onChange('');
+                }
               }}
               value={field.value}
             >
@@ -144,6 +173,14 @@ function ItemCardFields({
           )}
         />
 
+        {repuestoEnUnidades ? (
+          // Fijo y a la vista: el repuesto se cuenta en unidades, sin envases ni
+          // medidas que elegir (ver `repuestoEnUnidades`).
+          <TextField fullWidth isDisabled value={UNIT_LABELS.UNIT}>
+            <Label>Se cuenta en</Label>
+            <Input />
+          </TextField>
+        ) : (
         <Controller
           control={control}
           name="unit"
@@ -152,7 +189,10 @@ function ItemCardFields({
               fullWidth
               name={field.name}
               onChange={(value) => {
-                if (value) field.onChange(value);
+                if (!value) return;
+                field.onChange(value);
+                // «Unidades» no se mide en unidades: vuelve a litros.
+                if (value === 'UNIT' && contentUnitField.value === 'UNIT') contentUnitField.onChange('LITER');
               }}
               value={field.value}
             >
@@ -178,9 +218,10 @@ function ItemCardFields({
             </Select>
           )}
         />
+        )}
       </div>
 
-      {porUnidad ? (
+      {porPieza ? (
         // Mismo grid de dos columnas que el resto: cada campo con su etiqueta,
         // así el número y la medida quedan a la misma altura.
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -196,8 +237,8 @@ function ItemCardFields({
                 onChange={field.onChange}
                 value={field.value}
               >
-                <Label>Cada unidad contiene (opcional)</Label>
-                <Input inputMode="decimal" placeholder="Ej.: 10 (bidón de 10 L)" />
+                <Label>Cada {UNIT_SINGULAR[unidad]} contiene (opcional)</Label>
+                <Input inputMode="decimal" placeholder={EJEMPLO_CONTENIDO[unidad] ?? 'Ej.: 10'} />
                 {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
               </TextField>
             )}
@@ -222,7 +263,7 @@ function ItemCardFields({
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
-                      {CONTENT_UNITS.map((unit) => (
+                      {contentUnitsFor(unidad).map((unit) => (
                         <ListBox.Item id={unit} key={unit} textValue={UNIT_LABELS[unit]}>
                           {UNIT_LABELS[unit]}
                           <ListBox.ItemIndicator />
@@ -347,6 +388,7 @@ export function NewItemModal({
       ? equivalencia(
           existenciaNum,
           contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
+          unidad,
         )
       : null;
   // Sin bodega activa la existencia inicial no tiene dónde entrar: se avisa en
@@ -429,7 +471,7 @@ export function NewItemModal({
 
                     <p className="text-xs text-muted-foreground">
                       Se escribe en la unidad del ítem: con «Litros», 120 son
-                      120 L; con «Unidades» y 10 L por unidad, 12 son 120 L. Queda
+                      120 L; con «Tinetas» de 19 L, 3 son 57 L. Queda
                       registrada como una entrada por compra
                       {branchName ? ` en ${branchName}` : ''}. El SKU se genera
                       solo y el mínimo se fija después, desde las acciones del
