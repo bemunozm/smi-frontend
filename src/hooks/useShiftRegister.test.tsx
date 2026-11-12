@@ -24,6 +24,7 @@ const {
   equipmentListMock,
   operatorListMock,
   listMineMock,
+  listShiftsByDateMock,
   enqueueOpenCardMock,
   enqueueCloseCardMock,
   enqueueExitReportMock,
@@ -32,6 +33,7 @@ const {
   equipmentListMock: vi.fn(),
   operatorListMock: vi.fn(),
   listMineMock: vi.fn(),
+  listShiftsByDateMock: vi.fn(),
   enqueueOpenCardMock: vi.fn(),
   enqueueCloseCardMock: vi.fn(),
   enqueueExitReportMock: vi.fn(),
@@ -40,7 +42,9 @@ const {
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
 vi.mock('../api/OperatorAPI', () => ({ OperatorAPI: { list: operatorListMock } }));
-vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
+vi.mock('../api/ShiftCardAPI', () => ({
+  ShiftCardAPI: { listMine: listMineMock, listShiftsByDate: listShiftsByDateMock },
+}));
 vi.mock('../api/ShiftReportAPI', () => ({
   ShiftReportAPI: { fileUrl: (id: string) => `/api/shift-reports/${id}/file` },
 }));
@@ -144,6 +148,9 @@ function mockApis({
   equipmentListMock.mockResolvedValue(equipos);
   operatorListMock.mockResolvedValue(operadores);
   listMineMock.mockResolvedValue(tarjetas);
+  // El resumen del turno pasado (`usePastShiftSummary`) parte vacío; un test
+  // que necesite reportes previos lo re-mockea antes de renderizar.
+  listShiftsByDateMock.mockResolvedValue([]);
 }
 
 function openOp(overrides: Partial<OutboxOp> = {}): OutboxOp {
@@ -356,6 +363,57 @@ describe('useShiftRegister', () => {
           equipo: 'EX-005',
         });
       });
+    });
+
+    it('en modo pasado, enviarReporte() encola el reporte del turno pasado con sus tarjetas cerradas', async () => {
+      mockOps = [registerClosedOp()];
+      mockApis();
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+      await waitFor(() => expect(result.current.cerradas.some((t) => t.id === 'pend-closed-1')).toBe(true));
+
+      enqueueExitReportMock.mockResolvedValueOnce(undefined);
+      act(() => result.current.enviarReporte());
+
+      await waitFor(() => expect(enqueueExitReportMock).toHaveBeenCalledTimes(1));
+      const [userId, payload] = enqueueExitReportMock.mock.calls[0]!;
+      expect(userId).toBe('u1');
+      expect(payload).toMatchObject({ shiftDate: '2026-09-22', shiftType: 'DIURNO', cardIds: ['pend-closed-1'] });
+    });
+
+    it('un turno pasado cuyo reporte ya se envió parte en estado "enviado"', async () => {
+      listShiftsByDateMock.mockResolvedValue([
+        {
+          id: 'sh-p',
+          date: '2026-09-22',
+          type: 'DIURNO',
+          supervisorId: 'u1',
+          cards: [],
+          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-23T09:00:00.000Z', cardCount: 2, emailStatus: 'SENT' }],
+        },
+      ]);
+      mockApis();
+      listShiftsByDateMock.mockResolvedValue([
+        {
+          id: 'sh-p',
+          date: '2026-09-22',
+          type: 'DIURNO',
+          supervisorId: 'u1',
+          cards: [],
+          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-23T09:00:00.000Z', cardCount: 2, emailStatus: 'SENT' }],
+        },
+      ]);
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+
+      await waitFor(() => expect(result.current.reporteEstado).toBe('enviado'));
+      expect(result.current.reporteUltimo?.id).toBe('rep-1');
     });
 
     it('en el DIURNO de hoy ya pasado (reloj NOCTURNO), los no operativos siguen fuera', async () => {

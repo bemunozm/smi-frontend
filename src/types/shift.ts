@@ -119,7 +119,16 @@ export const ShiftSummarySchema = z.object({
       fechaSalida: z.string().nullable(),
     }),
   ),
-  exitReports: z.array(z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() })),
+  exitReports: z.array(
+    z.object({
+      id: z.string(),
+      requestedAt: z.string(),
+      cardCount: z.number(),
+      /** `.default`: un backend sin el campo (despliegue desfasado) degrada a
+       * la línea neutra de `lineaEstadoCorreo`, no rompe el parse. */
+      emailStatus: z.string().default('UNKNOWN'),
+    }),
+  ),
 });
 export type ShiftSummary = z.infer<typeof ShiftSummarySchema>;
 

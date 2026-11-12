@@ -13,9 +13,15 @@ export interface UseExitReportStateParams {
   tarjetasServidor: ShiftCardResponse[];
   ctx: ContextoTurno;
   ops: OutboxOp[];
-  /** = `abiertasActual` de `useShiftProjection` — las que entran en el
-   * reporte de salida. */
+  /** Las tarjetas que entran en el reporte de salida: `abiertasActual` (más
+   * livianos cerrados por mí) en el flujo vivo, o las CERRADAS del turno
+   * elegido en el modo "registrar un turno pasado" (un turno terminado no
+   * tiene nada en curso). */
   enCurso: TarjetaTurno[];
+  /** Reportes YA enviados del turno (resumen `GET /api/shifts?date&type`,
+   * modo pasado) — "mis tarjetas" solo baja lo cerrado en 48 h, así que un
+   * turno backfilleado hace días no traería su reporte por `tarjetasServidor`. */
+  reportesPrevios?: ShiftCardExitReport[];
   userId: string | undefined;
 }
 
@@ -52,6 +58,7 @@ export function useExitReportState({
   ctx,
   ops,
   enCurso,
+  reportesPrevios,
   userId,
 }: UseExitReportStateParams): UseExitReportStateResult {
   const opsReporte = useMemo(() => ops.filter((op): op is SendExitReportOp => op.type === 'sendExitReport'), [ops]);
@@ -61,10 +68,14 @@ export function useExitReportState({
     [tarjetasServidor, ctx],
   );
   const reporteUltimo = useMemo(() => {
-    const reports = shiftActualServidor?.exitReports ?? [];
+    // Dedupe por id: el mismo reporte puede venir por las dos fuentes.
+    const porId = new Map(
+      [...(shiftActualServidor?.exitReports ?? []), ...(reportesPrevios ?? [])].map((r) => [r.id, r]),
+    );
+    const reports = [...porId.values()];
     if (reports.length === 0) return null;
     return reports.reduce((latest, r) => (r.requestedAt > latest.requestedAt ? r : latest));
-  }, [shiftActualServidor]);
+  }, [shiftActualServidor, reportesPrevios]);
 
   const opReporteActual = useMemo(
     () => opsReporte.find((op) => op.payload.shiftDate === toDateOnly(ctx.fecha) && op.payload.shiftType === ctx.turno),

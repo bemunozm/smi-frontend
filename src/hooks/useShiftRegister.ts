@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useEquipment } from './useEquipment';
@@ -9,6 +9,7 @@ import { useAperturaForm, type AperturaState, type UseAperturaFormResult } from 
 import { useCierreForm, type CierreState } from './useCierreForm';
 import { useEditarTarjeta, type UseEditarTarjetaResult } from './useEditarTarjeta';
 import { useExitReportState } from './useExitReportState';
+import { usePastShiftSummary } from './usePastShiftSummary';
 import { useShiftProjection } from './useShiftProjection';
 import { useTurnoSelector } from './useTurnoSelector';
 import type { EstadoReporte, TarjetaTurno } from './shift-register-helpers';
@@ -191,11 +192,25 @@ export function useShiftRegister(): UseShiftRegisterResult {
   });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx: turno.ctx, userId: user?.id });
   const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id });
+  // En modo pasado el reporte de salida cubre las CERRADAS del turno elegido
+  // (un turno terminado no tiene nada "en curso") — así el informe de ese día
+  // también le llega a la administración. Los reportes YA enviados del turno
+  // vienen del resumen por fecha (misma query/caché que usa la vista).
+  const resumenPasado = usePastShiftSummary(modoPasado ? { fecha: turno.ctx.fecha, turno: turno.ctx.turno } : null);
+  const reportesPrevios = useMemo(
+    () => (modoPasado ? (resumenPasado.data ?? []).flatMap((t) => t.exitReports) : undefined),
+    [modoPasado, resumenPasado.data],
+  );
+  const paraReporte = useMemo(
+    () => (modoPasado ? proyeccion.cerradas.filter((t) => t.grupo === 'actual') : proyeccion.enCurso),
+    [modoPasado, proyeccion.cerradas, proyeccion.enCurso],
+  );
   const reporte = useExitReportState({
     tarjetasServidor,
     ctx: turno.ctx,
     ops,
-    enCurso: proyeccion.enCurso,
+    enCurso: paraReporte,
+    reportesPrevios,
     userId: user?.id,
   });
 
@@ -220,7 +235,9 @@ export function useShiftRegister(): UseShiftRegisterResult {
     abiertasActual: proyeccion.abiertasActual,
     abiertasAnterior: proyeccion.abiertasAnterior,
     cerradas: proyeccion.cerradas,
-    enCurso: proyeccion.enCurso,
+    // "Las del reporte de salida": en vivo las en curso; en modo pasado las
+    // cerradas del turno elegido (todos los usos de la vista son del reporte).
+    enCurso: paraReporte,
     livianosAbiertos: proyeccion.livianosAbiertos,
     livianosCerrados: proyeccion.livianosCerrados,
     disponiblesLivianos: proyeccion.disponiblesLivianos,
