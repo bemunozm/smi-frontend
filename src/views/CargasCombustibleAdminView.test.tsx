@@ -13,12 +13,17 @@ vi.mock('../api/OcrAPI', () => ({
   fuelReadingOcr: vi.fn().mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 }),
 }));
 
-const { listHook, crearMock } = vi.hoisted(() => ({ listHook: vi.fn(), crearMock: vi.fn() }));
+const { listHook, crearMock, editarMock } = vi.hoisted(() => ({
+  listHook: vi.fn(),
+  crearMock: vi.fn(),
+  editarMock: vi.fn(),
+}));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
 vi.mock('../hooks/useCombustible', () => ({
   useCombustibleList: () => listHook(),
   useCrearCargaCombustible: () => ({ mutate: crearMock, isPending: false }),
+  useEditarCargaCombustible: () => ({ mutate: editarMock, isPending: false }),
 }));
 
 vi.mock('../hooks/usePermissions', async () => {
@@ -414,5 +419,67 @@ describe('alta manual («Nueva carga»)', () => {
     fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '' } });
     expect(guardar.hasAttribute('disabled')).toBe(true);
     expect(crearMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('edición de una carga (solo ADMIN)', () => {
+  it('ADMIN ve «Editar carga» en el detalle; SECRETARIA no', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c1'));
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar carga' })).toBeTruthy();
+    cleanup();
+
+    rol.value = 'SECRETARIA';
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c1'));
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Editar carga' })).toBeNull();
+  });
+
+  it('una carga MANUAL edita litros/tipo/fecha/lectura y guarda los cambios (coma decimal incluida)', async () => {
+    const manual = carga({
+      id: 'm1',
+      registroHorometroId: null,
+      origen: 'MANUAL',
+      litros: 100000,
+      lectura: 1000,
+      fecha: local(2026, 11, 10, 10, 0),
+    });
+    listHook.mockReturnValue(ok([manual]));
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-m1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar carga' }));
+
+    const dialog = screen.getByRole('dialog');
+    const litros = within(dialog).getByLabelText('Litros') as HTMLInputElement;
+    expect(litros.value).toBe('100000');
+    fireEvent.change(litros, { target: { value: '100,4' } });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), { target: { value: '1200' } });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(editarMock).toHaveBeenCalledTimes(1));
+    const [vars] = editarMock.mock.calls[0]!;
+    expect(vars.carga.id).toBe('m1');
+    expect(vars.cambios).toMatchObject({ litros: 100.4, lectura: 1200 });
+  });
+
+  it('una carga de TARJETA solo permite corregir los litros, con la nota de la tarjeta', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar carga' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Litros')).toBeTruthy();
+    expect(within(dialog).queryByText('Tipo de combustible')).toBeNull();
+    expect(within(dialog).queryByLabelText('Fecha de carga')).toBeNull();
+    expect(within(dialog).getByText(/cierre de una tarjeta/i)).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '164,5' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(editarMock).toHaveBeenCalledTimes(1));
+    const [vars] = editarMock.mock.calls[0]!;
+    expect(vars.carga.id).toBe('c1');
+    expect(vars.cambios).toEqual({ litros: 164.5 });
   });
 });
