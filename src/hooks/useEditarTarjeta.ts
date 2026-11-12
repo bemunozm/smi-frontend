@@ -11,7 +11,7 @@ import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/ad
 import { mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import type { OutboxOp } from '../offline/db';
-import { patchCloseCardOp, patchOpenCardOp } from '../offline/outbox';
+import { patchCloseCardOp, patchOpenCardOp, patchRegisterClosedCardOp } from '../offline/outbox';
 import type { EntradaCambios } from '../types/cambios';
 import type { EditShiftCardBody } from '../types/shift';
 
@@ -88,7 +88,6 @@ function sinUndefined<T extends object>(obj: T): T {
   return Object.fromEntries(Object.entries(obj).filter(([, valor]) => valor !== undefined)) as T;
 }
 
-
 /**
  * Editar una tarjeta de turno (operador, horómetros, litros, AdBlue,
  * observaciones) — sub-hook de `useShiftRegister`.
@@ -122,7 +121,10 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   // (administrador, supervisor, mantenedor…). Solo el pesado lo exige.
   const pideOperador = editando != null && !editando.liviano;
   const opApertura = ops.find((o) => o.type === 'openCard' && o.id === editandoId);
-  const soloEnElEquipo = opApertura != null;
+  // Backfill (`registerClosedCard`): la tarjeta COMPLETA todavía vive en la
+  // cola — mismo trato que una apertura pendiente.
+  const opRegistroCerrado = ops.find((o) => o.type === 'registerClosedCard' && o.id === editandoId);
+  const soloEnElEquipo = opApertura != null || opRegistroCerrado != null;
 
   const historialDisponible = editando != null && !soloEnElEquipo && enLinea;
   const cambios = useCambiosTarjeta(editandoId, historialDisponible);
@@ -201,8 +203,9 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
 
     const aperturaId = opApertura?.id;
     const cierreId = ops.find((o) => o.type === 'closeCard' && o.payload.cardId === editando.id)?.id;
+    const registroCerradoId = opRegistroCerrado?.id;
     try {
-      await edicion.mutateAsync({ tarjetaId: editando.id, userId, diff, aperturaId, cierreId });
+      await edicion.mutateAsync({ tarjetaId: editando.id, userId, diff, aperturaId, cierreId, registroCerradoId });
       setGuardado(true);
     } catch {
       // `useQueuedMutation` ya avisó el error; la hoja queda abierta.
@@ -239,6 +242,8 @@ interface GuardarTarjetaVars {
   aperturaId: string | undefined;
   /** Operación `closeCard` de esta tarjeta que todavía está en la cola. */
   cierreId: string | undefined;
+  /** Operación `registerClosedCard` (backfill) de esta tarjeta aún en la cola. */
+  registroCerradoId: string | undefined;
 }
 
 /**
@@ -247,7 +252,28 @@ interface GuardarTarjetaVars {
  * con solo los campos tocados y su precondición. La cola ya lo pone detrás de lo
  * que siga pendiente para esta tarjeta.
  */
-async function armarPatchDeTarjeta({ tarjetaId, userId, diff, aperturaId, cierreId }: GuardarTarjetaVars) {
+async function armarPatchDeTarjeta({
+  tarjetaId,
+  userId,
+  diff,
+  aperturaId,
+  cierreId,
+  registroCerradoId,
+}: GuardarTarjetaVars) {
+  // Backfill aún en cola: la tarjeta COMPLETA vive en una sola operación, así
+  // que TODOS los campos tocados se corrigen ahí; si el replay ya la tiene en
+  // vuelo (`maybe-sent`/`missing`), cae al PATCH normal de abajo.
+  if (registroCerradoId) {
+    const { adBlue: conAdBlue, adBlueLiters: litrosAdBlue, observaciones, ...resto } = diff.cambios;
+    const resultado = await patchRegisterClosedCardOp(registroCerradoId, userId, {
+      ...resto,
+      ...(conAdBlue !== undefined ? { adBlue: conAdBlue, adBlueLiters: conAdBlue ? litrosAdBlue : undefined } : {}),
+      ...(conAdBlue === undefined && litrosAdBlue !== undefined ? { adBlueLiters: litrosAdBlue } : {}),
+      ...(observaciones !== undefined ? { observaciones: observaciones || undefined } : {}),
+    });
+    if (resultado === 'updated') return null;
+  }
+
   const { operatorId, valorInicial, ...deCierre } = diff.cambios;
 
   let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial });

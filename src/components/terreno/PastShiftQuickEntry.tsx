@@ -44,7 +44,7 @@ export function PastShiftQuickEntry({
   esDiaPasado: boolean;
 }) {
   const { user } = useCurrentUser();
-  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar });
+  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar, esDiaPasado });
 
   return (
     <Card>

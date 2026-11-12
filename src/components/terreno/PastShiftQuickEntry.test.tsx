@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-const { enqueueClosedCardMock } = vi.hoisted(() => ({ enqueueClosedCardMock: vi.fn() }));
-vi.mock('../../offline/outbox', () => ({ enqueueClosedCard: enqueueClosedCardMock }));
+const { enqueueClosedCardMock, enqueueClosedCardPairMock } = vi.hoisted(() => ({
+  enqueueClosedCardMock: vi.fn(),
+  enqueueClosedCardPairMock: vi.fn(),
+}));
+vi.mock('../../offline/outbox', () => ({
+  enqueueClosedCard: enqueueClosedCardMock,
+  enqueueClosedCardPair: enqueueClosedCardPairMock,
+}));
 vi.mock('../../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: vi.fn() }));
 vi.mock('../../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { id: 'u1' }, role: null, isOfflineSnapshot: false }),
@@ -94,7 +100,9 @@ describe('PastShiftQuickEntry', () => {
 
   it('mientras guarda, bloquea los campos, la foto y las acciones de fila', async () => {
     let liberar!: () => void;
-    enqueueClosedCardMock.mockImplementationOnce(() => new Promise<void>((resolve) => (liberar = resolve)));
+    // `renderEntry()` sin `esDiaPasado` es el turno terminado de HOY → el
+    // guardado va por el par legacy (ver usePastShiftQuickEntry#esDiaPasado).
+    enqueueClosedCardPairMock.mockImplementationOnce(() => new Promise<void>((resolve) => (liberar = resolve)));
     renderEntry();
 
     fireEvent.click(screen.getByLabelText('Equipo de la fila 1'));

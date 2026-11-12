@@ -1,12 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { enqueueClosedCardMock, toastDangerMock } = vi.hoisted(() => ({
+const { enqueueClosedCardMock, enqueueClosedCardPairMock, toastDangerMock } = vi.hoisted(() => ({
   enqueueClosedCardMock: vi.fn(),
+  enqueueClosedCardPairMock: vi.fn(),
   toastDangerMock: vi.fn(),
 }));
 vi.mock('../offline/outbox', () => ({
   enqueueClosedCard: enqueueClosedCardMock,
+  enqueueClosedCardPair: enqueueClosedCardPairMock,
 }));
 vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
 vi.mock('../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: vi.fn() }));
@@ -23,9 +25,9 @@ const EQUIPOS = [
   { id: 'e2', internalCode: 'SEM-04', type: 'Semirremolque', currentHourmeter: 3180 },
 ] as Equipment[];
 
-function hook(checklistSinAceptar?: ReadonlyMap<string, string>) {
+function hook(checklistSinAceptar?: ReadonlyMap<string, string>, esDiaPasado = true) {
   return renderHook(() =>
-    usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', checklistSinAceptar }),
+    usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', checklistSinAceptar, esDiaPasado }),
   );
 }
 
@@ -214,6 +216,49 @@ describe('usePastShiftQuickEntry', () => {
     expect(equiposEncolados).toEqual(['e1', 'e2', 'e2']);
   });
 
+  it('el turno terminado de HOY (esDiaPasado=false) va por el par legacy apertura+cierre, nunca por /closed', async () => {
+    const { result } = hook(undefined, false);
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '4526',
+        final: '4533',
+        litros: '100',
+        foto: FOTO,
+      });
+    });
+    await act(() => result.current.guardar());
+
+    expect(enqueueClosedCardMock).not.toHaveBeenCalled();
+    expect(enqueueClosedCardPairMock).toHaveBeenCalledTimes(1);
+    const [userId, open, close, foto] = enqueueClosedCardPairMock.mock.calls[0]!;
+    expect(userId).toBe('u1');
+    expect(open).toMatchObject({ equipoId: 'e1', operatorId: 'op_1', valorInicial: 4526, shiftDate: '2026-10-20' });
+    expect(close).toMatchObject({ valorFinal: 4533, fuelLiters: 100 });
+    expect(foto).toBe(FOTO);
+  });
+
+  it('un día estrictamente pasado (esDiaPasado=true) va como tarjeta que nace cerrada', async () => {
+    const { result } = hook();
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '',
+        foto: FOTO,
+      });
+    });
+    await act(() => result.current.guardar());
+
+    expect(enqueueClosedCardPairMock).not.toHaveBeenCalled();
+    expect(enqueueClosedCardMock).toHaveBeenCalledTimes(1);
+  });
+
   it('las filas nuevas no comparten identidad: cada una trae su propia key', () => {
     const { result } = hook();
 
@@ -268,13 +313,7 @@ describe('usePastShiftQuickEntry', () => {
     const { result } = hook();
 
     act(() => {
-      result.current.setFila(0, {
-        equipoId: 'e1',
-        operatorId: 'op_1',
-        inicial: '100',
-        final: '110',
-        litros: '',
-      });
+      result.current.setFila(0, { equipoId: 'e1', operatorId: 'op_1', inicial: '100', final: '110', litros: '' });
     });
 
     expect(result.current.errorDeFila(0)).toMatch(/foto/i);
@@ -309,13 +348,7 @@ describe('usePastShiftQuickEntry', () => {
     const { result } = hook();
 
     act(() => {
-      result.current.setFila(0, {
-        equipoId: 'e1',
-        operatorId: 'op_1',
-        inicial: '200',
-        final: '150',
-        litros: '10',
-      });
+      result.current.setFila(0, { equipoId: 'e1', operatorId: 'op_1', inicial: '200', final: '150', litros: '10' });
     });
 
     expect(result.current.errorDeFila(0)).toMatch(/final/i);

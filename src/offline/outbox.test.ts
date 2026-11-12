@@ -9,6 +9,7 @@ import {
   countPending,
   discardOp,
   enqueueClosedCard,
+  enqueueClosedCardPair,
   enqueueCloseCard,
   enqueueCreateHallazgo,
   enqueueCreateTrabajoExtra,
@@ -185,6 +186,45 @@ describe('enqueueClosedCard', () => {
 
     expect(await db.outbox.get('card-1')).toBeUndefined();
     expect(await db.blobs.get('card-1')).toBeUndefined();
+  });
+});
+
+// El turno terminado de HOY (p. ej. el DIURNO registrado esa misma noche) NO es
+// un día de negocio pasado: `POST /shift-cards/closed` lo rechazaría
+// (SHIFT_NOT_FINISHED), así que ese caso sigue viajando como el par legacy
+// apertura+cierre — atómico en Dexie, igual que antes.
+describe('enqueueClosedCardPair', () => {
+  const CLOSE_INPUT = {
+    closeClientId: 'close-9',
+    valorFinal: 130,
+    fuelLiters: 20,
+    capturedAt: '2026-09-24T16:00:00.000Z',
+  };
+
+  it('guarda apertura, cierre y foto juntos, con el cierre dependiendo de la apertura', async () => {
+    await enqueueClosedCardPair('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
+
+    const [apertura, cierre, foto] = await Promise.all([
+      db.outbox.get('card-1'),
+      db.outbox.get('close-9'),
+      db.blobs.get('close-9'),
+    ]);
+    expect(apertura).toMatchObject({ type: 'openCard', status: 'pending' });
+    expect(cierre).toMatchObject({ type: 'closeCard', status: 'pending_upload', dependsOn: ['card-1'] });
+    expect(foto).toBeTruthy();
+    expect(cierre!.seq).toBeGreaterThan(apertura!.seq);
+    expect(requestSyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('si falla una escritura dentro de la transacción, se revierte también la apertura', async () => {
+    const put = vi.spyOn(db.blobs, 'put').mockRejectedValueOnce(new Error('disco lleno'));
+
+    await expect(enqueueClosedCardPair('u1', OPEN_INPUT, CLOSE_INPUT, photoFile())).rejects.toThrow('disco lleno');
+
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
+    expect(requestSyncMock).not.toHaveBeenCalled();
+    put.mockRestore();
   });
 });
 

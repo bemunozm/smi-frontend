@@ -4,10 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { toastDangerMock, listChangesMock } = vi.hoisted(() => ({
-  toastDangerMock: vi.fn(),
-  listChangesMock: vi.fn(),
-}));
+const { toastDangerMock, listChangesMock } = vi.hoisted(() => ({ toastDangerMock: vi.fn(), listChangesMock: vi.fn() }));
 
 vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
 vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listChanges: listChangesMock } }));
@@ -57,19 +54,83 @@ function render(tarjeta: TarjetaTurno, ops: OutboxOp[] = []) {
 
 function openOp(): OutboxOp {
   return {
-    id: 'c1', type: 'openCard', v: 1, userId: 'u1', status: 'pending', attempts: 0, seq: 1, createdAt: 1, updatedAt: 1,
+    id: 'c1',
+    type: 'openCard',
+    v: 1,
+    userId: 'u1',
+    status: 'pending',
+    attempts: 0,
+    seq: 1,
+    createdAt: 1,
+    updatedAt: 1,
     entityKey: 'shift-card:c1',
-    payload: { id: 'c1', equipoId: 'e1', operatorId: 'op-1', valorInicial: 100, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' },
+    payload: {
+      id: 'c1',
+      equipoId: 'e1',
+      operatorId: 'op-1',
+      valorInicial: 100,
+      shiftDate: '2026-09-24',
+      shiftType: 'DIURNO',
+      capturedAt: 't',
+    },
   };
 }
 
 function closeOp(status: OutboxOp['status'] = 'pending_upload'): OutboxOp {
   return {
-    id: 'close-1', type: 'closeCard', v: 1, userId: 'u1', status, attempts: 0, photoId: 'close-1', seq: 2, createdAt: 2, updatedAt: 2,
-    entityKey: 'shift-card:c1', dependsOn: ['c1'],
+    id: 'close-1',
+    type: 'closeCard',
+    v: 1,
+    userId: 'u1',
+    status,
+    attempts: 0,
+    photoId: 'close-1',
+    seq: 2,
+    createdAt: 2,
+    updatedAt: 2,
+    entityKey: 'shift-card:c1',
+    dependsOn: ['c1'],
     payload: { cardId: 'c1', input: { closeClientId: 'close-1', valorFinal: 130, fuelLiters: 20, capturedAt: 't' } },
   };
 }
+
+function registerClosedOp(status: OutboxOp['status'] = 'pending_upload'): OutboxOp {
+  return {
+    id: 'c1',
+    type: 'registerClosedCard',
+    v: 1,
+    userId: 'u1',
+    status,
+    attempts: 0,
+    photoId: 'c1',
+    seq: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    entityKey: 'shift-card:c1',
+    payload: {
+      id: 'c1',
+      equipoId: 'e1',
+      operatorId: 'op-1',
+      valorInicial: 100,
+      valorFinal: 130,
+      shiftDate: '2026-09-22',
+      shiftType: 'DIURNO',
+      capturedAt: 't',
+      closeClientId: 'cc-1',
+      fuelLiters: 20,
+    },
+  };
+}
+
+/** La tarjeta sintética que proyecta esa op (backfill aún sin sincronizar). */
+const cerradaBackfill: TarjetaTurno = {
+  ...abierta,
+  estado: 'cerrada',
+  final: 130,
+  litros: 20,
+  adBlue: false,
+  sinSincronizar: true,
+};
 
 beforeEach(async () => {
   enLinea = true;
@@ -117,7 +178,16 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
   it('una tarjeta abierta no edita ni horómetro final, ni litros, ni AdBlue', async () => {
     const { result } = render(abierta);
     act(() => result.current.abrirEdicion('c1'));
-    act(() => result.current.setForm((f) => ({ ...f, final: '999', litros: '99', adBlue: true, adBlueLitros: '5', inicial: '101' })));
+    act(() =>
+      result.current.setForm((f) => ({
+        ...f,
+        final: '999',
+        litros: '99',
+        adBlue: true,
+        adBlueLitros: '5',
+        inicial: '101',
+      })),
+    );
 
     await act(async () => {
       await result.current.guardar();
@@ -224,6 +294,36 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
   });
 });
 
+describe('useEditarTarjeta — backfill (registerClosedCard) todavía en el outbox', () => {
+  it('la reconoce como "solo en el equipo": sin aviso al administrador ni historial', () => {
+    const { result } = render(cerradaBackfill, [registerClosedOp()]);
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.soloEnElEquipo).toBe(true);
+    expect(result.current.historialDisponible).toBe(false);
+    expect(listChangesMock).not.toHaveBeenCalled();
+  });
+
+  it('edita la operación EN la cola — sin encolar un PATCH al servidor', async () => {
+    await db.outbox.put(registerClosedOp());
+    const { result } = render(cerradaBackfill, [registerClosedOp()]);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, operatorId: 'op-2', final: '140', litros: '35' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const ops = await opsActuales();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      type: 'registerClosedCard',
+      payload: { operatorId: 'op-2', valorInicial: 100, valorFinal: 140, fuelLiters: 35, equipoId: 'e1' },
+    });
+    expect(result.current.guardado).toBe(true);
+  });
+});
+
 describe('useEditarTarjeta — operación que pudo haber llegado al servidor', () => {
   it('apertura con error transitorio tras el envío: la edición va como PATCH con dependsOn y el payload queda igual', async () => {
     const enviada: OutboxOp = { ...openOp(), dispatched: true };
@@ -263,7 +363,10 @@ describe('useEditarTarjeta — tarjeta que todavía vive en el outbox', () => {
 
     const ops = await opsActuales();
     expect(ops).toHaveLength(1);
-    expect(ops[0]).toMatchObject({ type: 'openCard', payload: { operatorId: 'op-2', valorInicial: 105, equipoId: 'e1' } });
+    expect(ops[0]).toMatchObject({
+      type: 'openCard',
+      payload: { operatorId: 'op-2', valorInicial: 105, equipoId: 'e1' },
+    });
     expect(listChangesMock).not.toHaveBeenCalled();
   });
 
@@ -292,7 +395,16 @@ describe('useEditarTarjeta — tarjeta que todavía vive en el outbox', () => {
     const pendiente = { ...cerrada, adBlue: false, adBlueLitros: undefined, sinSincronizar: true };
     const { result } = render(pendiente, [closeOp()]);
     act(() => result.current.abrirEdicion('c1'));
-    act(() => result.current.setForm((f) => ({ ...f, final: '135', litros: '25', adBlue: true, adBlueLitros: '10', operatorId: 'op-2' })));
+    act(() =>
+      result.current.setForm((f) => ({
+        ...f,
+        final: '135',
+        litros: '25',
+        adBlue: true,
+        adBlueLitros: '10',
+        operatorId: 'op-2',
+      })),
+    );
 
     await act(async () => {
       await result.current.guardar();

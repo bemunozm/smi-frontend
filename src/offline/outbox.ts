@@ -31,7 +31,12 @@ import {
 import { generateUuid } from '../lib/uuid';
 import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { JsonObject } from '../types/json';
-import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
+import type {
+  CloseShiftCardInput,
+  OpenShiftCardInput,
+  RegisterClosedShiftCardInput,
+  SendExitReportInput,
+} from '../types/shift';
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 function now(): number {
@@ -244,6 +249,42 @@ export async function enqueueClosedCard(
         updatedAt: timestamp,
       };
       await db.outbox.put(op);
+    }),
+  );
+  requestSync();
+}
+
+/**
+ * Variante LEGACY de `enqueueClosedCard` para el turno terminado del MISMO
+ * día de negocio (p. ej. el DIURNO de hoy registrado esa misma noche): ese
+ * caso NO es un día pasado y `POST /shift-cards/closed` lo rechaza
+ * (`SHIFT_NOT_FINISHED`), así que viaja como el par apertura+cierre de
+ * siempre — las dos operaciones y la foto en UNA transacción Dexie, con el
+ * cierre `dependsOn` la apertura: nunca queda una apertura encolada sin su
+ * cierre. Rigen las reglas normales del flujo vivo (equipo operativo y
+ * libre), igual que antes de la op única.
+ */
+export async function enqueueClosedCardPair(
+  userId: string,
+  open: OpenShiftCardInput,
+  close: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
+  photo: File,
+): Promise<void> {
+  const compressed = await prepararArchivo(photo);
+
+  await conCuota(() =>
+    db.transaction('rw', db.outbox, db.blobs, async () => {
+      const timestamp = now();
+      const seqApertura = await nextSeq();
+      await db.outbox.put(buildOpenCardOp(userId, open, seqApertura, timestamp));
+      await db.blobs.put({
+        id: close.closeClientId,
+        data: compressed.data,
+        mime: compressed.mime,
+        name: compressed.name,
+        createdAt: timestamp,
+      });
+      await db.outbox.put(buildCloseCardOp(userId, open.id, close, seqApertura + 1, timestamp));
     }),
   );
   requestSync();
@@ -619,6 +660,25 @@ export function patchCloseCardOp(
   return patchOp<CloseCardOp>(id, userId, 'closeCard', (op) => ({
     ...op,
     payload: { ...op.payload, input: { ...op.payload.input, ...patch } },
+  }));
+}
+
+/** Cambia operador / horómetros / litros / AdBlue / observaciones de un
+ * backfill (`registerClosedCard`) todavía pendiente — la tarjeta completa vive
+ * en UNA operación, así que todos los campos editables se corrigen acá. */
+export function patchRegisterClosedCardOp(
+  id: string,
+  userId: string,
+  patch: Partial<
+    Pick<
+      RegisterClosedShiftCardInput,
+      'operatorId' | 'valorInicial' | 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'
+    >
+  >,
+): Promise<PatchOutcome> {
+  return patchOp<RegisterClosedCardOp>(id, userId, 'registerClosedCard', (op) => ({
+    ...op,
+    payload: { ...op.payload, ...patch },
   }));
 }
 
