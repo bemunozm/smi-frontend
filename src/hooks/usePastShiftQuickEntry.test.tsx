@@ -259,6 +259,65 @@ describe('usePastShiftQuickEntry', () => {
     expect(enqueueClosedCardMock).toHaveBeenCalledTimes(1);
   });
 
+  it('guardar() avisa por onGuardado los ids de las tarjetas encoladas (para el informe automático)', async () => {
+    const onGuardado = vi.fn();
+    const { result } = renderHook(() =>
+      usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', esDiaPasado: true, onGuardado }),
+    );
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '20',
+        foto: FOTO,
+      });
+    });
+    await act(() => result.current.guardar());
+
+    expect(onGuardado).toHaveBeenCalledTimes(1);
+    const [ids] = onGuardado.mock.calls[0]!;
+    expect(ids).toHaveLength(1);
+    const [, open] = enqueueClosedCardMock.mock.calls[0]!;
+    expect(ids[0]).toBe(open.id);
+  });
+
+  it('si una fila falla, onGuardado avisa igual las que SÍ se encolaron', async () => {
+    const onGuardado = vi.fn();
+    enqueueClosedCardMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('sin espacio'));
+    const { result } = renderHook(() =>
+      usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', esDiaPasado: true, onGuardado }),
+    );
+
+    act(() => {
+      result.current.setFila(0, {
+        equipoId: 'e1',
+        operatorId: 'op_1',
+        inicial: '100',
+        final: '110',
+        litros: '',
+        foto: FOTO,
+      });
+      result.current.agregarFila();
+    });
+    act(() => {
+      result.current.setFila(1, {
+        equipoId: 'e2',
+        operatorId: 'op_1',
+        inicial: '200',
+        final: '210',
+        litros: '',
+        foto: FOTO,
+      });
+    });
+    await act(() => result.current.guardar());
+
+    expect(onGuardado).toHaveBeenCalledTimes(1);
+    expect(onGuardado.mock.calls[0]![0]).toHaveLength(1);
+  });
+
   it('las filas nuevas no comparten identidad: cada una trae su propia key', () => {
     const { result } = hook();
 

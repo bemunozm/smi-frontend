@@ -269,6 +269,7 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     reporteError: null,
     reportePuedeReenviar: false,
     enviarReporte: enviarReporteMock,
+    enviarReporteAutomatico: vi.fn(),
     isEnviandoReporte: false,
     reporteUrl: reporteUrlMock,
     ...overrides,
@@ -314,24 +315,41 @@ describe('RegistroEquipoView', () => {
 
   describe('horómetro inicial: avisos y errores', () => {
     it('un texto que no es un número se marca como error', () => {
-      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130.5' }, horometroInvalido: true, valorInicialApertura: null });
+      renderView('phone', {
+        apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130.5' },
+        horometroInvalido: true,
+        valorInicialApertura: null,
+      });
 
       expect(screen.getByRole('alert').textContent).toMatch(/Escribe un número/);
       expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(true);
     });
 
     it('menor que la última lectura: avisa mostrando esa lectura, sin bloquear', () => {
-      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, bajoUltimaLectura: true, valorInicialApertura: 2.13 });
+      renderView('phone', {
+        apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' },
+        bajoUltimaLectura: true,
+        valorInicialApertura: 2.13,
+      });
 
-      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      const aviso = screen
+        .getAllByRole('status')
+        .map((n) => n.textContent ?? '')
+        .join(' ');
       expect(aviso).toMatch(/Es menor que la última lectura registrada \(4\.218,7 h\)/);
       expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(false);
     });
 
     it('un valor con aspecto de miles ("2.130") avisa cómo se leerá', () => {
-      renderView('phone', { apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' }, valorInicialApertura: 2.13 });
+      renderView('phone', {
+        apertura: { equipoId: 'e1', operatorId: 'op_1', horometro: '2.130' },
+        valorInicialApertura: 2.13,
+      });
 
-      const aviso = screen.getAllByRole('status').map((n) => n.textContent ?? '').join(' ');
+      const aviso = screen
+        .getAllByRole('status')
+        .map((n) => n.textContent ?? '')
+        .join(' ');
       expect(aviso).toContain('Se guardará 2,13. Si querías 2130, escribilo sin punto ni coma.');
     });
 
@@ -419,7 +437,7 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-          captureDate: null,
+        captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
@@ -451,12 +469,7 @@ describe('RegistroEquipoView', () => {
   });
 
   it('avisa si el horómetro final es menor que el inicial', () => {
-    renderView('desktop', {
-      cerrandoId: 'c1',
-      cerrando: TARJETA_ABIERTA,
-      finalNum: 1,
-      finalInvalido: true,
-    });
+    renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, finalNum: 1, finalInvalido: true });
 
     expect(screen.getByText('No puede ser menor que el horómetro inicial.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
@@ -476,7 +489,7 @@ describe('RegistroEquipoView', () => {
       foto: {
         file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }),
         isReadingPhoto: false,
-          captureDate: null,
+        captureDate: null,
         ocr: null,
         handleSelectPhoto: vi.fn(),
         handleClearPhoto: vi.fn(),
@@ -819,12 +832,18 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '' },
-        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.' },
+        adBlueCierre: {
+          litros: 45,
+          error: null,
+          aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.',
+        },
         finalNum: 12500,
         foto: { ...baseResult().foto, file: new File(['x'], 'foto.jpg', { type: 'image/jpeg' }) },
       });
 
-      expect(screen.getByRole('status').textContent).toMatch(/Es más de lo que cabe en un estanque de 30 L: revisa el dato/);
+      expect(screen.getByRole('status').textContent).toMatch(
+        /Es más de lo que cabe en un estanque de 30 L: revisa el dato/,
+      );
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
     });
 
@@ -840,7 +859,11 @@ describe('RegistroEquipoView', () => {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
         cierre: { ...conAdBlue, adBlueLitros: '45' },
-        adBlueCierre: { litros: 45, error: null, aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.' },
+        adBlueCierre: {
+          litros: 45,
+          error: null,
+          aviso: 'Es más de lo que cabe en un estanque de 30 L: revisa el dato.',
+        },
       });
       expect(screen.queryByText(/gastan cerca de 1 L por hora/)).toBeNull();
     });
@@ -978,9 +1001,22 @@ describe('RegistroEquipoView', () => {
           esCerrada: true,
           historialDisponible: true,
           cambios: [
-            { id: 'k1', userName: 'José Pérez', createdAt: '2026-10-01T22:10:00.000Z', changes: [{ field: 'fuelLiters', label: 'Litros', before: '20', after: '25' }] },
+            {
+              id: 'k1',
+              userName: 'José Pérez',
+              createdAt: '2026-10-01T22:10:00.000Z',
+              changes: [{ field: 'fuelLiters', label: 'Litros', before: '20', after: '25' }],
+            },
           ],
-          form: { operatorId: 'op_1', inicial: '12487,3', final: '12500', litros: '20', adBlue: false, adBlueLitros: '', observaciones: '' },
+          form: {
+            operatorId: 'op_1',
+            inicial: '12487,3',
+            final: '12500',
+            litros: '20',
+            adBlue: false,
+            adBlueLitros: '',
+            observaciones: '',
+          },
         },
       });
 
@@ -991,9 +1027,7 @@ describe('RegistroEquipoView', () => {
     });
 
     it('una tarjeta que solo vive en el equipo no ofrece historial y avisa que no genera aviso', () => {
-      renderView('desktop', {
-        edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA, soloEnElEquipo: true },
-      });
+      renderView('desktop', { edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA, soloEnElEquipo: true } });
 
       const ventana = within(screen.getByRole('dialog'));
       expect(ventana.getByText(/todavía no se envió/)).toBeTruthy();
@@ -1015,12 +1049,22 @@ describe('RegistroEquipoView', () => {
           esCerrada: true,
           finalInvalido: true,
           faltante: 'Indica los litros de combustible (cero si no cargó).',
-          form: { operatorId: 'op_1', inicial: '12487,3', final: '12480', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+          form: {
+            operatorId: 'op_1',
+            inicial: '12487,3',
+            final: '12480',
+            litros: '',
+            adBlue: false,
+            adBlueLitros: '',
+            observaciones: '',
+          },
         },
       });
 
       const ventana = within(screen.getByRole('dialog'));
-      expect(ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.')).toBeTruthy();
+      expect(
+        ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.'),
+      ).toBeTruthy();
       expect(ventana.getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
       expect(ventana.getByText('Indica los litros de combustible (cero si no cargó).')).toBeTruthy();
       expect(ventana.getByText('Cero si no cargó en el turno.')).toBeTruthy();

@@ -148,6 +148,9 @@ export interface UseShiftRegisterResult {
    * entonces (se agregaron equipos) — habilita "Reenviar". */
   reportePuedeReenviar: boolean;
   enviarReporte: () => void;
+  /** Informe automático al guardar la planilla del turno pasado — ver
+   * `useExitReportState#enviarReporteAutomatico`. */
+  enviarReporteAutomatico: (idsNuevas: string[]) => void;
   /** Cubre solo el encolado (mismo criterio que `isAbriendo`/`isCerrando`) —
    * protección anti-doble-toque mientras `liveQuery` no alcanzó a reflejar
    * la operación recién guardada. */

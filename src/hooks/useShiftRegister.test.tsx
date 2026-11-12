@@ -28,6 +28,7 @@ const {
   enqueueOpenCardMock,
   enqueueCloseCardMock,
   enqueueExitReportMock,
+  discardOpMock,
   resetPhotoMock,
 } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
@@ -37,6 +38,7 @@ const {
   enqueueOpenCardMock: vi.fn(),
   enqueueCloseCardMock: vi.fn(),
   enqueueExitReportMock: vi.fn(),
+  discardOpMock: vi.fn(),
   resetPhotoMock: vi.fn(),
 }));
 
@@ -52,6 +54,7 @@ vi.mock('../offline/outbox', () => ({
   enqueueOpenCard: enqueueOpenCardMock,
   enqueueCloseCard: enqueueCloseCardMock,
   enqueueExitReport: enqueueExitReportMock,
+  discardOp: discardOpMock,
 }));
 
 // El outbox EN VIVO se controla con esta variable de módulo — cada test la
@@ -382,6 +385,63 @@ describe('useShiftRegister', () => {
       const [userId, payload] = enqueueExitReportMock.mock.calls[0]!;
       expect(userId).toBe('u1');
       expect(payload).toMatchObject({ shiftDate: '2026-09-22', shiftType: 'DIURNO', cardIds: ['pend-closed-1'] });
+    });
+
+    it('enviarReporteAutomatico() une las recién guardadas con las cerradas del turno y encola el reporte', async () => {
+      mockOps = [registerClosedOp()];
+      mockApis();
+      enqueueExitReportMock.mockResolvedValueOnce(undefined);
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+      await waitFor(() => expect(result.current.cerradas.some((t) => t.id === 'pend-closed-1')).toBe(true));
+
+      act(() => result.current.enviarReporteAutomatico(['nueva-1']));
+
+      await waitFor(() => expect(enqueueExitReportMock).toHaveBeenCalledTimes(1));
+      const [, payload] = enqueueExitReportMock.mock.calls[0]!;
+      expect(payload).toMatchObject({ shiftDate: '2026-09-22', shiftType: 'DIURNO' });
+      expect(payload.cardIds).toEqual(expect.arrayContaining(['pend-closed-1', 'nueva-1']));
+    });
+
+    it('enviarReporteAutomatico() reemplaza un reporte aún en cola por uno con TODAS las tarjetas', async () => {
+      const reporteEnCola: OutboxOp = {
+        id: 'rep-encolado',
+        type: 'sendExitReport',
+        v: 1,
+        userId: 'u1',
+        status: 'pending',
+        attempts: 0,
+        createdAt: Date.now(),
+        seq: Date.now(),
+        updatedAt: Date.now(),
+        payload: {
+          id: 'rep-encolado',
+          shiftDate: '2026-09-22',
+          shiftType: 'DIURNO',
+          cardIds: ['vieja-1'],
+          requestedAt: '2026-09-22T20:00:00.000Z',
+        },
+      } as OutboxOp;
+      mockOps = [registerClosedOp(), reporteEnCola];
+      mockApis();
+      discardOpMock.mockResolvedValueOnce(undefined);
+      enqueueExitReportMock.mockResolvedValueOnce(undefined);
+      const { Wrapper } = withQueryClient();
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+
+      act(() => result.current.elegirTurnoPasado(new Date(2026, 8, 22), 'DIURNO'));
+      await waitFor(() => expect(result.current.cerradas.some((t) => t.id === 'pend-closed-1')).toBe(true));
+
+      act(() => result.current.enviarReporteAutomatico(['nueva-1']));
+
+      await waitFor(() => expect(enqueueExitReportMock).toHaveBeenCalledTimes(1));
+      expect(discardOpMock).toHaveBeenCalledWith('rep-encolado', 'u1');
+      const [, payload] = enqueueExitReportMock.mock.calls[0]!;
+      expect(payload.cardIds).toEqual(expect.arrayContaining(['pend-closed-1', 'vieja-1', 'nueva-1']));
     });
 
     it('un turno pasado cuyo reporte ya se envió parte en estado "enviado"', async () => {

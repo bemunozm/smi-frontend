@@ -33,6 +33,7 @@ export function PastShiftQuickEntry({
   operadores,
   checklistSinAceptar,
   esDiaPasado,
+  onGuardado,
 }: {
   ctx: ContextoTurno;
   disponibles: Equipment[];
@@ -42,9 +43,19 @@ export function PastShiftQuickEntry({
   /** El día elegido es estrictamente anterior a hoy: ahí el backend deja
    * registrar equipos no operativos. */
   esDiaPasado: boolean;
+  /** Ids recién encolados al guardar — la vista manda con ellos el informe
+   * diario del turno automáticamente. */
+  onGuardado?: (cardIds: string[]) => void;
 }) {
   const { user } = useCurrentUser();
-  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar, esDiaPasado });
+  const q = usePastShiftQuickEntry({
+    ctx,
+    disponibles,
+    userId: user?.id,
+    checklistSinAceptar,
+    esDiaPasado,
+    onGuardado,
+  });
 
   return (
     <Card>

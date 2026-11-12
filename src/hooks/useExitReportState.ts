@@ -4,7 +4,7 @@ import { toast } from '@heroui/react';
 import { esActual, type EstadoReporte, type TarjetaTurno } from './shift-register-helpers';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import type { OutboxLastError, SendExitReportOp, OutboxOp } from '../offline/db';
-import { enqueueExitReport } from '../offline/outbox';
+import { discardOp, enqueueExitReport } from '../offline/outbox';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
 import type { ShiftCardExitReport, ShiftCardResponse } from '../types/shift';
@@ -40,6 +40,13 @@ export interface UseExitReportStateResult {
    * entonces (se agregaron equipos) — habilita "Reenviar". */
   reportePuedeReenviar: boolean;
   enviarReporte: () => void;
+  /** Informe automático del modo "registrar un turno pasado": al guardar la
+   * planilla se encola el reporte del turno SIN botón, cubriendo las
+   * tarjetas del turno (`enCurso`) MÁS las recién encoladas (`idsNuevas` —
+   * la proyección puede no reflejarlas todavía). Si ya hay un reporte del
+   * turno esperando en la cola, se reemplaza por uno con el conjunto
+   * completo (un solo PDF/correo); si ya viajó, se encola otro (reenvío). */
+  enviarReporteAutomatico: (idsNuevas: string[]) => void;
   /** Cubre solo el encolado (mismo criterio que `isAbriendo`/`isCerrando`) —
    * protección anti-doble-toque mientras `liveQuery` no alcanzó a reflejar
    * la operación recién guardada. */
@@ -126,12 +133,44 @@ export function useExitReportState({
       .finally(() => setIsEnviandoReporte(false));
   };
 
+  const enviarReporteAutomatico = (idsNuevas: string[]) => {
+    if (!userId) return;
+    const ids = new Set([...enCurso.map((t) => t.id), ...idsNuevas]);
+    if (ids.size === 0) return;
+
+    const encolar = (cardIds: string[]) =>
+      enqueueExitReport(userId, {
+        id: generateUuid(),
+        shiftDate: toDateOnly(ctx.fecha),
+        shiftType: ctx.turno,
+        cardIds,
+        requestedAt: new Date().toISOString(),
+      }).catch((error: unknown) => {
+        toast.danger(error instanceof Error ? error.message : 'No se pudo poner en cola el informe del turno.');
+      });
+
+    // Un reporte del MISMO turno que todavía espera en la cola se reemplaza
+    // (descartar + encolar con la unión): un solo PDF y una sola ronda de
+    // correo aunque la planilla se guarde en tandas. Uno ya en vuelo o
+    // posiblemente aplicado (`dispatched`/`syncing`) no se toca: se encola
+    // otro con todo — el registro admite más de un envío por turno.
+    const pendiente = opReporteActual;
+    if (pendiente && pendiente.status !== 'syncing' && !pendiente.dispatched) {
+      pendiente.payload.cardIds.forEach((id) => ids.add(id));
+      void discardOp(pendiente.id, userId).then(() => encolar([...ids]));
+      return;
+    }
+    if (pendiente) pendiente.payload.cardIds.forEach((id) => ids.add(id));
+    void encolar([...ids]);
+  };
+
   return {
     reporteEstado,
     reporteUltimo,
     reporteError,
     reportePuedeReenviar,
     enviarReporte,
+    enviarReporteAutomatico,
     isEnviandoReporte,
     reporteUrl: ShiftReportAPI.fileUrl,
   };
