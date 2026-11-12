@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShiftCardAPI } from './ShiftCardAPI';
 import { DomainError } from '../lib/api-error';
 
-const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }));
+const { getMock, postMock, patchMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+  patchMock: vi.fn(),
+}));
 
-vi.mock('../lib/axios', () => ({ axiosInstance: { get: getMock, post: postMock } }));
+vi.mock('../lib/axios', () => ({ axiosInstance: { get: getMock, post: postMock, patch: patchMock } }));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -275,5 +279,41 @@ describe('ShiftCardAPI.registerClosedCard', () => {
     );
     expect(error).toBeInstanceOf(DomainError);
     expect((error as DomainError).code).toBe('SHIFT_NOT_FINISHED');
+  });
+});
+
+describe('ShiftCardAPI.updateCard', () => {
+  it('parchea la tarjeta con X-Expected codificado (precondición por campo)', async () => {
+    const closedCard = { ...CARD, valorFinal: 100.4, closedAt: '2026-11-10T16:00:00.000Z' };
+    patchMock.mockResolvedValueOnce({ data: { data: closedCard, message: 'ok' } });
+
+    const result = await ShiftCardAPI.updateCard('c1', { fuelLiters: 100.4 }, { fuelLiters: 100000 });
+
+    expect(patchMock).toHaveBeenCalledTimes(1);
+    const [url, body, config] = patchMock.mock.calls[0]!;
+    expect(url).toBe('/api/shift-cards/c1');
+    expect(body).toEqual({ fuelLiters: 100.4 });
+    expect(JSON.parse(decodeURIComponent(config.headers['X-Expected']))).toEqual({ fuelLiters: 100000 });
+    expect(result).toEqual(closedCard);
+  });
+
+  it('sin precondición no manda el header', async () => {
+    patchMock.mockResolvedValueOnce({ data: { data: CARD, message: 'ok' } });
+
+    await ShiftCardAPI.updateCard('c1', { fuelLiters: 10 });
+
+    const [, , config] = patchMock.mock.calls[0]!;
+    expect(config?.headers?.['X-Expected']).toBeUndefined();
+  });
+
+  it('convierte el error del backend en DomainError con su code', async () => {
+    patchMock.mockRejectedValueOnce(axiosError(409, 'Otra persona cambió el mismo dato', 'STALE_UPDATE'));
+
+    const error = await ShiftCardAPI.updateCard('c1', { fuelLiters: 10 }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(DomainError);
+    expect((error as DomainError).code).toBe('STALE_UPDATE');
   });
 });

@@ -58,6 +58,35 @@ async function closeCard(
 }
 
 /**
+ * Corrige una tarjeta ya enviada (`PATCH /api/shift-cards/:id`) — versión
+ * ONLINE directa para el panel admin (p. ej. corregir los litros de una carga
+ * nacida del cierre, desde Cargas de combustible). El flujo de Terreno edita
+ * por el outbox (`shiftCard.edit`), no por acá. `expected` viaja como
+ * `X-Expected` (precondición por campo, mismo contrato que el outbox:
+ * JSON `encodeURIComponent`-eado para tolerar texto no Latin-1) — sin él, el
+ * backend aplica sin chequear pisadas.
+ */
+async function updateCard(
+  id: string,
+  body: Partial<
+    Pick<
+      ShiftCardResponse,
+      'operatorId' | 'valorInicial' | 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'
+    >
+  >,
+  expected?: Record<string, unknown>,
+): Promise<ShiftCardResponse> {
+  try {
+    const response = await axiosInstance.patch(`/api/shift-cards/${encodeURIComponent(id)}`, body, {
+      ...(expected ? { headers: { 'X-Expected': encodeURIComponent(JSON.stringify(expected)) } } : {}),
+    });
+    return ShiftCardWrapperSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo guardar el cambio de la tarjeta.');
+  }
+}
+
+/**
  * Registra un turno PASADO como tarjeta que nace cerrada (backfill, ver
  * `offline/outbox.ts#enqueueClosedCard`). Idempotente por `input.id`.
  * Errores de negocio: `SHIFT_NOT_FINISHED` (el turno aún no termina),
@@ -113,4 +142,12 @@ async function listShiftsByDate(date: string, type: ShiftType): Promise<ShiftSum
   }
 }
 
-export const ShiftCardAPI = { listChanges, openCard, closeCard, registerClosedCard, listMine, listShiftsByDate };
+export const ShiftCardAPI = {
+  listChanges,
+  openCard,
+  closeCard,
+  registerClosedCard,
+  updateCard,
+  listMine,
+  listShiftsByDate,
+};
