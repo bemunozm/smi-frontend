@@ -6,8 +6,9 @@ import { ROLES } from '../../types/roles';
 
 /**
  * A cargo de quién está el equipo. En un pesado es el supervisor; un liviano
- * no lleva operador y se asigna a un supervisor o, a veces, a un mantenedor
- * (`PATCH /equipment/:id/assignment` admite los dos roles en livianos).
+ * no lleva operador y lo usa cualquiera que se mueva en faena: supervisor,
+ * mantenedor, administrador o prevencionista (`PATCH /equipment/:id/assignment`
+ * admite esos cuatro roles en livianos).
  */
 export function ResponsableSelect({
   liviano,
@@ -20,9 +21,13 @@ export function ResponsableSelect({
 }) {
   const { data: supervisores } = useUsers({ role: ROLES.SUPERVISOR });
   const { data: mantenedores } = useUsers({ role: ROLES.MANTENEDOR }, liviano);
+  const { data: administradores } = useUsers({ role: ROLES.ADMIN }, liviano);
+  const { data: prevencionistas } = useUsers({ role: ROLES.PREVENCIONISTA }, liviano);
   const opciones = [
     ...(supervisores ?? []).map((u) => ({ ...u, rol: 'Supervisor' })),
     ...(liviano ? (mantenedores ?? []) : []).map((u) => ({ ...u, rol: 'Mantenedor' })),
+    ...(liviano ? (administradores ?? []) : []).map((u) => ({ ...u, rol: 'Administrador' })),
+    ...(liviano ? (prevencionistas ?? []) : []).map((u) => ({ ...u, rol: 'Prevencionista' })),
   ];
 
   return (
