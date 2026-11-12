@@ -21,10 +21,28 @@ export const PACKAGED_UNITS: readonly UnitOfMeasure[] = ['UNIT', 'PAIL', 'CAN', 
 /** En qué se mide ese contenido: una tineta de 19 L, una caja de 12 unidades. */
 export const CONTENT_UNITS = ['LITER', 'KILOGRAM', 'METER', 'UNIT'] as const;
 
-/** Las medidas que ofrece «Medido en» para cada unidad: «unidades» solo para
- * un envase (una unidad que contiene unidades no dice nada). */
-export function contentUnitsFor(unit: UnitOfMeasure): (typeof CONTENT_UNITS)[number][] {
-  return CONTENT_UNITS.filter((c) => !(unit === 'UNIT' && c === 'UNIT'));
+type ContentUnit = (typeof CONTENT_UNITS)[number];
+
+/**
+ * Las medidas que tienen sentido para cada forma de contar, la primera es la
+ * que se propone:
+ * - unidad: litros, kilos o metros (un cartucho de 0,4 kg, un rollo de 100 m);
+ * - tineta, bidón, tambor: traen líquido o grasa → litros o kilos;
+ * - caja: trae piezas o algo a granel → unidades o kilos (12 filtros, 5 kg de
+ *   electrodos).
+ * Una unidad que «contiene unidades» o una tineta medida en metros no dicen nada.
+ */
+const CONTENT_UNITS_BY_UNIT: Partial<Record<UnitOfMeasure, ContentUnit[]>> = {
+  UNIT: ['LITER', 'KILOGRAM', 'METER'],
+  PAIL: ['LITER', 'KILOGRAM'],
+  CAN: ['LITER', 'KILOGRAM'],
+  DRUM: ['LITER', 'KILOGRAM'],
+  BOX: ['UNIT', 'KILOGRAM'],
+};
+
+/** Las medidas que ofrece «Medido en» para esa unidad (vacío si no aplica). */
+export function contentUnitsFor(unit: UnitOfMeasure): ContentUnit[] {
+  return CONTENT_UNITS_BY_UNIT[unit] ?? [];
 }
 
 /** Gobierna las pestañas de la pantalla: suministros vs. repuestos. */
@@ -467,7 +485,7 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     contentUnit:
       item.contentUnit && contentUnitsFor(item.unit).includes(item.contentUnit as (typeof CONTENT_UNITS)[number])
         ? (item.contentUnit as (typeof CONTENT_UNITS)[number])
-        : 'LITER',
+        : (contentUnitsFor(item.unit)[0] ?? 'LITER'),
     type: item.type,
     categoryId: item.categoryId ?? '',
     partNumber: item.partNumber ?? '',

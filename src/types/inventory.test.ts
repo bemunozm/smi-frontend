@@ -186,6 +186,16 @@ describe('contenido por unidad', () => {
     expect(contentUnitsFor('UNIT')).not.toContain('UNIT');
   });
 
+  it('cada envase ofrece solo las medidas que tienen sentido', () => {
+    expect(contentUnitsFor('PAIL')).toEqual(['LITER', 'KILOGRAM']);
+    expect(contentUnitsFor('DRUM')).toEqual(['LITER', 'KILOGRAM']);
+    expect(contentUnitsFor('BOX')).toEqual(['UNIT', 'KILOGRAM']);
+    expect(contentUnitsFor('LITER')).toEqual([]);
+    // Una tineta «en metros» no viaja.
+    const tineta = { ...base, unit: 'PAIL' as const, contentPerUnit: '19', contentUnit: 'METER' as const };
+    expect(contenidoDe(tineta)).toBeNull();
+  });
+
   it('en litros no viaja contenido: 120 son 120 L', () => {
     const values = { ...base, unit: 'LITER' as const, contentPerUnit: '10', contentUnit: 'LITER' as const, initialQuantity: '120' };
     const payload = toCreateItemPayload(values, 'b1');

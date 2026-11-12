@@ -14,7 +14,7 @@ import {
   TextField,
 } from '@heroui/react';
 
-import { useCategories } from '../../hooks/useCategories';
+import { useCategories, useCreateCategory } from '../../hooks/useCategories';
 import { useCreateItem, useSaveItemWithMinimums } from '../../hooks/useInventory';
 import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
@@ -53,8 +53,19 @@ const EJEMPLO_CONTENIDO: Partial<Record<UnitOfMeasure, string>> = {
   BOX: 'Ej.: 12 (caja de 12 unidades)',
 };
 
+/** El ejemplo de total de la ayuda de «Contenido», según el envase. */
+const EJEMPLO_TOTAL: Partial<Record<UnitOfMeasure, string>> = {
+  UNIT: '12 unidades de 10 L = 120 L',
+  PAIL: '3 tinetas de 19 L = 57 L',
+  CAN: '4 bidones de 20 L = 80 L',
+  DRUM: '2 tambores de 208 L = 416 L',
+  BOX: '5 cajas de 12 unidades = 60 unidades',
+};
+
 /** Opción del selector de categoría para "no clasificado". */
 const NO_CATEGORY = '__none__';
+/** Opción del selector que abre el campo para crear una categoría. */
+const NEW_CATEGORY = '__new__';
 
 const EMPTY_ITEM: ItemFormValues = {
   name: '',
@@ -99,6 +110,24 @@ function ItemCardFields({
   const { field: unitField } = useController({ control, name: 'unit' });
   const { field: contentField } = useController({ control, name: 'contentPerUnit' });
   const { field: contentUnitField } = useController({ control, name: 'contentUnit' });
+  const { field: categoryField } = useController({ control, name: 'categoryId' });
+  // Crear una categoría sin salir del formulario cuando no está la que hace falta.
+  const createCategory = useCreateCategory();
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const agregarCategoria = () => {
+    const nombre = nuevaCategoria.trim();
+    if (!nombre || createCategory.isPending) return;
+    createCategory.mutate(nombre, {
+      onSuccess: (result) => {
+        // Confirmada por el servidor: queda elegida en el ítem. Sin señal se
+        // crea al sincronizar y se elige después.
+        if (result.status === 'sent' && result.data) categoryField.onChange(result.data.id);
+        setNuevaCategoria('');
+        setCreandoCategoria(false);
+      },
+    });
+  };
   // Un repuesto es una pieza que se monta entera (un filtro, una correa): se
   // cuenta en unidades y no tiene contenido. Las unidades de medida y los
   // envases son de los suministros. Si un repuesto viejo quedó en otra unidad
@@ -191,8 +220,13 @@ function ItemCardFields({
               onChange={(value) => {
                 if (!value) return;
                 field.onChange(value);
-                // «Unidades» no se mide en unidades: vuelve a litros.
-                if (value === 'UNIT' && contentUnitField.value === 'UNIT') contentUnitField.onChange('LITER');
+                // Si la medida elegida no calza con la nueva forma de contar
+                // (una caja en litros, una tineta en unidades) se propone la
+                // que corresponde: unidades para la caja, litros para el resto.
+                const validas = contentUnitsFor(value as UnitOfMeasure);
+                if (validas.length && !validas.includes(contentUnitField.value)) {
+                  contentUnitField.onChange(validas[0]);
+                }
               }}
               value={field.value}
             >
@@ -223,7 +257,9 @@ function ItemCardFields({
 
       {porPieza ? (
         // Mismo grid de dos columnas que el resto: cada campo con su etiqueta,
-        // así el número y la medida quedan a la misma altura.
+        // así el número y la medida quedan a la misma altura. La aclaración de
+        // que es opcional va abajo, entera: dentro del label se cortaba.
+        <div className="flex flex-col gap-1.5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Controller
             control={control}
@@ -237,7 +273,7 @@ function ItemCardFields({
                 onChange={field.onChange}
                 value={field.value}
               >
-                <Label>Cada {UNIT_SINGULAR[unidad]} contiene (opcional)</Label>
+                <Label>Contenido de cada {UNIT_SINGULAR[unidad]}</Label>
                 <Input inputMode="decimal" placeholder={EJEMPLO_CONTENIDO[unidad] ?? 'Ej.: 10'} />
                 {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
               </TextField>
@@ -276,6 +312,11 @@ function ItemCardFields({
             />
           ) : null}
         </div>
+        <p className="m-0 text-xs text-muted-foreground">
+          Opcional. Cuánto trae cada {UNIT_SINGULAR[unidad]}, para ver el total (
+          {EJEMPLO_TOTAL[unidad] ?? '3 × 19 L = 57 L'}). Déjalo vacío si se usa entero.
+        </p>
+        </div>
       ) : null}
 
       <Controller
@@ -286,6 +327,11 @@ function ItemCardFields({
             fullWidth
             name={field.name}
             onChange={(value) => {
+              // «Nueva categoría» no es una selección: abre el campo para crearla.
+              if (value === NEW_CATEGORY) {
+                setCreandoCategoria(true);
+                return;
+              }
               field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
             }}
             // El `Select` no maneja `''` como selección: se usa un centinela
@@ -313,11 +359,52 @@ function ItemCardFields({
                     <ListBox.ItemIndicator />
                   </ListBox.Item>
                 ))}
+                <ListBox.Item id={NEW_CATEGORY} textValue="Nueva categoría" className="font-semibold text-accent">
+                  + Nueva categoría…
+                </ListBox.Item>
               </ListBox>
             </Select.Popover>
           </Select>
         )}
       />
+
+      {creandoCategoria ? (
+        <div className="flex items-start gap-2">
+          <TextField
+            fullWidth
+            value={nuevaCategoria}
+            onChange={setNuevaCategoria}
+            autoFocus
+            // Enter agrega la categoría; sin esto enviaba el formulario del ítem.
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                agregarCategoria();
+              }
+            }}
+          >
+            <Label>Nombre de la nueva categoría</Label>
+            <Input placeholder="Ej.: Filtros" />
+          </TextField>
+          <Button
+            className="h-12 shrink-0"
+            isDisabled={!nuevaCategoria.trim() || createCategory.isPending}
+            onPress={agregarCategoria}
+          >
+            {createCategory.isPending ? <Spinner color="current" size="sm" /> : 'Agregar'}
+          </Button>
+          <Button
+            className="h-12 shrink-0"
+            variant="secondary"
+            onPress={() => {
+              setNuevaCategoria('');
+              setCreandoCategoria(false);
+            }}
+          >
+            Cancelar
+          </Button>
+        </div>
+      ) : null}
 
       <Controller
         control={control}
@@ -340,8 +427,20 @@ function ItemCardFields({
         control={control}
         name="isCritical"
         render={({ field }) => (
+          // Sin `Switch.Control` solo se veía el texto, sin interruptor: parecía
+          // un aviso fijo y no una opción que se activa.
           <Switch isSelected={field.value} onChange={field.onChange}>
-            Crítico: su falta detiene la máquina
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <span className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">Marcar como crítico</span>
+                <span className="text-xs text-muted-foreground">
+                  Si falta, la máquina se detiene. Se destaca en el inventario y se prioriza al comprar.
+                </span>
+              </span>
+            </Switch.Content>
           </Switch>
         )}
       />
@@ -635,7 +734,12 @@ export function EditItemModal({
                           isSelected={field.value}
                           onChange={field.onChange}
                         >
-                          Activo en los selectores
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                            Activo en los selectores
+                          </Switch.Content>
                         </Switch>
                       )}
                     />
