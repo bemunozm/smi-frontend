@@ -57,6 +57,10 @@ export interface UsePastShiftQuickEntryParams {
    * noche): `/closed` lo rechazaría (`SHIFT_NOT_FINISHED`), así que va por el
    * par legacy apertura+cierre, con las reglas normales del flujo vivo. */
   esDiaPasado: boolean;
+  /** Ids de las tarjetas que `guardar()` alcanzó a encolar — también en un
+   * fallo parcial. La vista lo usa para mandar el informe diario del turno
+   * automáticamente (sin botón aparte). */
+  onGuardado?: (cardIds: string[]) => void;
 }
 
 export interface UsePastShiftQuickEntryResult {
@@ -89,6 +93,7 @@ export function usePastShiftQuickEntry({
   userId,
   checklistSinAceptar = SIN_CHECKLISTS_PENDIENTES,
   esDiaPasado,
+  onGuardado,
 }: UsePastShiftQuickEntryParams): UsePastShiftQuickEntryResult {
   const [filas, setFilas] = useState<QuickEntryRow[]>(() => [filaVacia()]);
   const [isGuardando, setIsGuardando] = useState(false);
@@ -135,6 +140,7 @@ export function usePastShiftQuickEntry({
     }
     setIsGuardando(true);
     const guardadas = new Set<string>();
+    const idsEncoladas: string[] = [];
     try {
       // Día estrictamente pasado → tarjeta que NACE cerrada (una sola op,
       // sin ventana abierta ni dependencia del estado presente del equipo).
@@ -164,12 +170,17 @@ export function usePastShiftQuickEntry({
           f.foto!,
         );
         guardadas.add(f.key);
+        idsEncoladas.push(id);
       }
       avisarGuardadoEnCola();
       setFilas([filaVacia()]);
+      onGuardado?.(idsEncoladas);
       return true;
     } catch (error: unknown) {
       // Las filas ya guardadas salen de la grilla: reintentar no las duplica.
+      // El informe diario igual se avisa con ellas: el reintento de las
+      // restantes lo reemplaza/reenvía con el conjunto completo.
+      if (idsEncoladas.length > 0) onGuardado?.(idsEncoladas);
       if (guardadas.size > 0) {
         setFilas((fs) => {
           const restantes = fs.filter((f) => !guardadas.has(f.key));

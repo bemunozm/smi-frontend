@@ -1,16 +1,5 @@
 import { useMemo, useState } from 'react';
-import {
-  Button,
-  Card,
-  Chip,
-  Label,
-  ListBox,
-  Modal,
-  RangeCalendar,
-  Select,
-  Spinner,
-  Table,
-} from '@heroui/react';
+import { Button, Card, Chip, Label, ListBox, Modal, RangeCalendar, Select, Spinner, Table } from '@heroui/react';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
@@ -41,10 +30,7 @@ function origenDe(carga: RegistroCombustible): string {
 
 /** Unidad de la lectura del contador al cargar: por el `controlUnit` del
  * equipo, con fallback a la clase (liviano → km, pesado → h). */
-function unidadLectura(
-  carga: RegistroCombustible,
-  clase: EquipmentClass | undefined,
-): 'h' | 'km' {
+function unidadLectura(carga: RegistroCombustible, clase: EquipmentClass | undefined): 'h' | 'km' {
   if (carga.equipo?.controlUnit) {
     return carga.equipo.controlUnit === 'KM' ? 'km' : 'h';
   }
@@ -56,9 +42,7 @@ function nombreLectura(carga: RegistroCombustible, clase: EquipmentClass | undef
 }
 
 function lecturaTexto(carga: RegistroCombustible, clase: EquipmentClass | undefined): string {
-  return carga.lectura != null
-    ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}`
-    : '—';
+  return carga.lectura != null ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}` : '—';
 }
 
 function formatFecha(iso: string): string {
@@ -71,6 +55,13 @@ function formatFecha(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+/** Carga registrada en un DÍA distinto al de la carga misma (backfill de un
+ * turno pasado, o alta manual con fecha pasada): la lista le agrega cuándo se
+ * registró de verdad; una carga del mismo día no lo repite. */
+function registradaOtroDia(c: RegistroCombustible): boolean {
+  return Boolean(c.createdAt) && diaLocal(c.createdAt!) !== diaLocal(c.fecha);
 }
 
 /** Día local (YYYY-MM-DD) de un timestamp — para comparar contra los inputs
@@ -123,6 +114,7 @@ function DetalleCargaModal({
               <div className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
                   <Dato label="Fecha" value={formatFecha(carga.fecha)} />
+                  <Dato label="Registrada el" value={carga.createdAt ? formatFecha(carga.createdAt) : '—'} />
                   <Dato
                     label="Equipo"
                     value={`${carga.equipo?.internalCode ?? '—'}${carga.equipo?.type ? ` · ${carga.equipo.type}` : ''}`}
@@ -130,10 +122,7 @@ function DetalleCargaModal({
                   <Dato label="Clase" value={clase ? equipmentClassLabel(clase) : '—'} />
                   <Dato label="Litros" value={`${NUM_CL_1.format(carga.litros)} L`} />
                   <Dato label="Combustible" value={tipoDe(carga)} />
-                  <Dato
-                    label={`${nombreLectura(carga, clase)} al cargar`}
-                    value={lecturaTexto(carga, clase)}
-                  />
+                  <Dato label={`${nombreLectura(carga, clase)} al cargar`} value={lecturaTexto(carga, clase)} />
                   <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
                   <Dato label="Origen" value={origenDe(carga)} />
                 </div>
@@ -238,10 +227,7 @@ export function CargasCombustibleAdminView() {
   const [creando, setCreando] = useState(false);
   const puedeCrear = usePermissions().can('combustible.create');
 
-  const cargas = useMemo(
-    () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
-    [data],
-  );
+  const cargas = useMemo(() => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data]);
 
   // Clase por equipo del catálogo: fallback para cargas de un backend que aún
   // no manda `equipo.equipmentClass` (lo que trae la carga manda).
@@ -258,7 +244,9 @@ export function CargasCombustibleAdminView() {
   const equipos = useMemo(() => {
     const porId = new Map<string, string>();
     for (const c of cargas) porId.set(c.equipoId, c.equipo?.internalCode ?? c.equipoId);
-    return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
+    return [...porId.entries()]
+      .map(([id, codigo]) => ({ id, codigo }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo));
   }, [cargas]);
 
   const supervisores = useMemo(
@@ -306,8 +294,7 @@ export function CargasCombustibleAdminView() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-            {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)}{' '}
-            {lista.length === 1 ? 'carga' : 'cargas'}
+            {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)} {lista.length === 1 ? 'carga' : 'cargas'}
           </Chip>
           {puedeCrear ? <Button onPress={() => setCreando(true)}>Nueva carga</Button> : null}
         </div>
@@ -318,7 +305,9 @@ export function CargasCombustibleAdminView() {
           <div className="flex flex-col gap-4">
             <div>
               <Card.Title>Listado</Card.Title>
-              <Card.Description>De la más reciente a la más antigua. El total de arriba sigue al filtro.</Card.Description>
+              <Card.Description>
+                De la más reciente a la más antigua. El total de arriba sigue al filtro.
+              </Card.Description>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="filtros-cargas">
               <SelectFiltro
@@ -410,9 +399,7 @@ export function CargasCombustibleAdminView() {
 
           {!isPending && !isError && lista.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
-              {cargas.length === 0
-                ? 'No hay cargas de combustible registradas.'
-                : 'Ninguna carga calza con el filtro.'}
+              {cargas.length === 0 ? 'No hay cargas de combustible registradas.' : 'Ninguna carga calza con el filtro.'}
             </p>
           ) : null}
 
@@ -431,6 +418,11 @@ export function CargasCombustibleAdminView() {
                       <div className="flex w-full items-start justify-between gap-2">
                         <span className="text-[15px] font-semibold text-foreground">
                           {formatFecha(c.fecha)} · <span className="font-mono">{c.equipo?.internalCode ?? '—'}</span>
+                          {registradaOtroDia(c) && (
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              registrada el {formatFecha(c.createdAt!)}
+                            </span>
+                          )}
                         </span>
                         <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
                           {NUM_CL_1.format(c.litros)} L
@@ -502,6 +494,11 @@ export function CargasCombustibleAdminView() {
                         >
                           <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
                             {formatFecha(c.fecha)}
+                            {registradaOtroDia(c) && (
+                              <span className="block text-xs text-muted-foreground/80">
+                                registrada el {formatFecha(c.createdAt!)}
+                              </span>
+                            )}
                           </Table.Cell>
                           <Table.Cell className="font-mono text-sm whitespace-nowrap">
                             {c.equipo?.internalCode ?? '—'}

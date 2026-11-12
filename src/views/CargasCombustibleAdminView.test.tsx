@@ -13,10 +13,7 @@ vi.mock('../api/OcrAPI', () => ({
   fuelReadingOcr: vi.fn().mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 }),
 }));
 
-const { listHook, crearMock } = vi.hoisted(() => ({
-  listHook: vi.fn(),
-  crearMock: vi.fn(),
-}));
+const { listHook, crearMock } = vi.hoisted(() => ({ listHook: vi.fn(), crearMock: vi.fn() }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
 vi.mock('../hooks/useCombustible', () => ({
@@ -203,12 +200,7 @@ describe('CargasCombustibleAdminView', () => {
     // Las opciones del select salen de los datos: sin opción vacía para null.
     fireEvent.click(filtros().getByRole('button', { name: /Supervisor/ }));
     const opciones = await screen.findAllByRole('option');
-    expect(opciones.map((o) => o.textContent)).toEqual([
-      'Todos',
-      'Admin SMI',
-      'Juan Pérez',
-      'Pedro Soto',
-    ]);
+    expect(opciones.map((o) => o.textContent)).toEqual(['Todos', 'Admin SMI', 'Juan Pérez', 'Pedro Soto']);
   });
 
   it('clic en una fila abre el detalle; sin foto dice «Sin foto adjunta.»', () => {
@@ -236,6 +228,34 @@ describe('CargasCombustibleAdminView', () => {
     const vieja = screen.getByTestId('carga-fila-c4');
     expect(within(vieja).getByText('Horómetro')).toBeTruthy();
     expect(within(vieja).getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('una carga histórica dice cuándo se registró; una del mismo día no lo repite', () => {
+    listHook.mockReturnValue(
+      ok([
+        carga({ id: 'c-hist', fecha: local(2026, 11, 1, 12, 0), createdAt: local(2026, 11, 11, 21, 0) }),
+        carga({ id: 'c-hoy', fecha: local(2026, 11, 5, 10, 0), createdAt: local(2026, 11, 5, 10, 5) }),
+      ]),
+    );
+    render(<CargasCombustibleAdminView />);
+
+    const historica = screen.getByTestId('carga-fila-c-hist');
+    expect(within(historica).getByText(/registrada el/i)).toBeTruthy();
+    const delDia = screen.getByTestId('carga-fila-c-hoy');
+    expect(within(delDia).queryByText(/registrada el/i)).toBeNull();
+  });
+
+  it('el detalle siempre muestra cuándo se registró la carga', () => {
+    listHook.mockReturnValue(
+      ok([carga({ id: 'c-hist', fecha: local(2026, 11, 1, 12, 0), createdAt: local(2026, 11, 11, 21, 0) })]),
+    );
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c-hist'));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Registrada el')).toBeTruthy();
+    // La fecha de REGISTRO (11-11), distinta de la fecha de la carga (01-11).
+    expect(within(dialog).getByText(/11 nov/i)).toBeTruthy();
   });
 
   it('una foto legacy (/uploads/...) se sirve vía assetUrl, nunca con la ruta cruda', () => {
@@ -276,7 +296,12 @@ describe('CargasCombustibleAdminView', () => {
     expect(screen.getByText('No hay cargas de combustible registradas.')).toBeTruthy();
     cleanup();
 
-    listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló el listado') });
+    listHook.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error('Falló el listado'),
+    });
     render(<CargasCombustibleAdminView />);
     expect(screen.getByRole('alert').textContent).toBe('Falló el listado');
   });
@@ -322,13 +347,9 @@ describe('alta manual («Nueva carga»)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: /CM-02/ }));
 
-    fireEvent.change(within(dialog).getByLabelText('Kilometraje al cargar (km)'), {
-      target: { value: '45600' },
-    });
+    fireEvent.change(within(dialog).getByLabelText('Kilometraje al cargar (km)'), { target: { value: '45600' } });
     fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
-    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), {
-      target: { value: '2026-11-04T10:30' },
-    });
+    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '2026-11-04T10:30' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar carga' }));
 
@@ -354,9 +375,7 @@ describe('alta manual («Nueva carga»)', () => {
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
-    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), {
-      target: { value: '1600' },
-    });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), { target: { value: '1600' } });
     fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '40' } });
 
     const guardar = within(dialog).getByRole('button', { name: 'Registrar carga' });
@@ -391,9 +410,7 @@ describe('alta manual («Nueva carga»)', () => {
     expect(guardar.hasAttribute('disabled')).toBe(true);
 
     // Con lectura pero la fecha borrada, tampoco.
-    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), {
-      target: { value: '1600' },
-    });
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), { target: { value: '1600' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '' } });
     expect(guardar.hasAttribute('disabled')).toBe(true);
     expect(crearMock).not.toHaveBeenCalled();

@@ -28,18 +28,17 @@ export interface RegistroCombustible {
   tipo: string;
   fotoUrl: string | null;
   fecha: string;
+  /** Cuándo se REGISTRÓ la carga — distinto de `fecha` (el día de la carga)
+   * en una carga histórica (backfill de turno pasado o alta manual con fecha
+   * pasada). Null/ausente en respuestas del backend anterior. */
+  createdAt?: string | null;
   /** Tarjeta de turno que originó la carga (cierre con litros); null/ausente
    * en cargas manuales. */
   registroHorometroId?: string | null;
   /** `type`/`equipmentClass`/`controlUnit` los agrega el backend para la
    * vista admin de cargas; opcionales para tolerar respuestas del backend
    * anterior. */
-  equipo?: {
-    internalCode: string;
-    type?: string;
-    equipmentClass?: 'LIGHT' | 'HEAVY';
-    controlUnit?: 'KM' | 'HOURS';
-  };
+  equipo?: { internalCode: string; type?: string; equipmentClass?: 'LIGHT' | 'HEAVY'; controlUnit?: 'KM' | 'HOURS' };
   /** Lectura del contador del equipo AL CARGAR (horómetro en pesados, km en
    * livianos): la propia de la carga manual, o el valorFinal de la tarjeta
    * que la originó — resuelta por el backend. Null en filas viejas. */
