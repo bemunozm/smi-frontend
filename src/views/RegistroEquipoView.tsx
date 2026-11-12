@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { lineaEstadoCorreo, useShiftRegister, type EstadoReporte, type TarjetaTurno } from '../hooks/useShiftRegister';
+import { agruparPorTurno, registradaDespues, rotuloTurno } from '../hooks/shift-register-helpers';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
@@ -30,7 +31,7 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros, fmtTime, plural } from '../lib/format';
-import { fechaCorta, toDateOnly, type Turno } from '../lib/turno';
+import { fechaCorta, fromDateOnly, toDateOnly, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
   Boton,
@@ -622,11 +623,11 @@ export function RegistroEquipoView() {
   const bajadaCierre = cerrando?.liviano
     ? `Abierta por ${cerrando.supervisor} · ${cerrando.abiertaEl ?? ''}`
     : cerrando
-    ? `${cerrando.operador} · Turno ${
-        cerrando.grupo === 'actual'
-          ? `${ctx.turno} ${ctx.fechaCorta}`
-          : `${anterior.turno} ${fechaAnterior}`
-      }`
+    ? `${cerrando.operador} · Turno ${rotuloTurno(
+        cerrando,
+        `${ctx.turno} ${ctx.fechaCorta}`,
+        `${anterior.turno} ${fechaAnterior}`,
+      )}`
     : '';
 
   /**
@@ -815,7 +816,7 @@ export function RegistroEquipoView() {
 
   /** A qué turno pertenece una tarjeta, con su fecha: `DIURNO lun 28-09`. */
   const turnoDe = (t: TarjetaTurno) =>
-    t.grupo === 'actual' ? `${ctx.turno} ${ctx.fechaCorta}` : `${anterior.turno} ${fechaAnterior}`;
+    rotuloTurno(t, `${ctx.turno} ${ctx.fechaCorta}`, `${anterior.turno} ${fechaAnterior}`);
 
   const listaCerradas =
     cerradas.length === 0 ? (
@@ -823,16 +824,17 @@ export function RegistroEquipoView() {
         Todavía no cerraste ninguna tarjeta.
       </p>
     ) : (
-      [
-        { turno: ctx.turno, fecha: ctx.fechaCorta, grupo: 'actual' as const },
-        { turno: anterior.turno, fecha: fechaAnterior, grupo: 'anterior' as const },
-      ]
-        .map((g) => ({ ...g, ts: cerradas.filter((t) => t.grupo === g.grupo) }))
-        .filter((g) => g.ts.length > 0)
+      // Por el turno REAL de cada tarjeta: una carga del 03-11 hecha hoy va
+      // bajo «TURNO DIURNO · lun 03-11», no bajo el turno anterior.
+      agruparPorTurno(
+        cerradas,
+        { tipo: ctx.turno, fecha: toDateOnly(ctx.fecha) },
+        { tipo: anterior.turno, fecha: toDateOnly(anterior.fecha) },
+      )
         .map((g) => (
-          <div key={g.grupo} className="flex flex-col gap-2.5">
+          <div key={g.clave} className="flex flex-col gap-2.5">
             <GrupoHead
-              titulo={`TURNO ${g.turno} · ${g.fecha}`}
+              titulo={`TURNO ${g.tipo} · ${fechaCorta(fromDateOnly(g.fecha))}`}
               detalle={plural(g.ts.length, 'tarjeta', 'tarjetas')}
             />
             {g.ts.map((t) => (
@@ -861,7 +863,15 @@ export function RegistroEquipoView() {
                 )}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[13px] text-muted-foreground">
-                    Cerrada a las <span className="tabular">{t.cerradaA}</span>
+                    {registradaDespues(t) ? (
+                      <>
+                        Turno pasado · cargada el <span className="tabular">{registradaDespues(t)}</span>
+                      </>
+                    ) : (
+                      <>
+                        Cerrada a las <span className="tabular">{t.cerradaA}</span>
+                      </>
+                    )}
                   </span>
                   <div className="flex gap-2">
                     {botonEditar(t, false)}
@@ -907,7 +917,9 @@ export function RegistroEquipoView() {
             ['Operador', detalleCerrada.operador],
             ['Turno', turnoDe(detalleCerrada)],
             ['Supervisor', detalleCerrada.supervisor],
-            ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
+            registradaDespues(detalleCerrada)
+              ? ['Cargada el', `${registradaDespues(detalleCerrada)} (turno pasado)`]
+              : ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
             ['AdBlue', detalleCerrada.adBlue ? `${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No se cargó'],
             [
               'Foto del surtidor',
@@ -1239,8 +1251,12 @@ export function RegistroEquipoView() {
         }
         detalle={
           detalleCerrada
-            ? `Turno ${turnoDe(detalleCerrada)} · cerrada a las ${detalleCerrada.cerradaA ?? '—'}`
-            : `${plural(cerradas.length, 'tarjeta cerrada', 'tarjetas cerradas')} · este turno y el anterior`
+            ? `Turno ${turnoDe(detalleCerrada)} · ${
+                registradaDespues(detalleCerrada)
+                  ? `cargada el ${registradaDespues(detalleCerrada)}`
+                  : `cerrada a las ${detalleCerrada.cerradaA ?? '—'}`
+              }`
+            : `${plural(cerradas.length, 'tarjeta cerrada', 'tarjetas cerradas')} · últimas 48 h`
         }
       >
         {vistaDetalleCerrada || listaCerradas}
