@@ -46,3 +46,10 @@ export async function updateCombustible(id: string, body: UpdateCombustibleBody)
   const res = await api.patch<ApiResponse<RegistroCombustible>>(`/api/combustible/${encodeURIComponent(id)}`, body);
   return res.data.data;
 }
+
+/** Eliminación definitiva (solo ADMIN): para el registro basura confirmado
+ * (duplicado, carga de prueba). El backend deja la traza en el historial y,
+ * si la carga nació de una tarjeta, la tarjeta queda sin litros declarados. */
+export async function deleteCombustible(id: string): Promise<void> {
+  await api.delete(`/api/combustible/${encodeURIComponent(id)}`);
+}

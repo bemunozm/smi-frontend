@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  AlertDialog,
   Button,
   Card,
   Chip,
@@ -20,11 +21,11 @@ import { EditarCargaCombustibleModal } from '../components/flota/EditarCargaComb
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { EQUIPMENT_CLASS_OPTIONS, equipmentClassLabel } from '../config/flota-colors';
-import { useCombustibleList } from '../hooks/useCombustible';
+import { useCombustibleList, useEliminarCargaCombustible } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
-import { canEditCombustible } from '../lib/permissions';
+import { canDeleteCombustible, canEditCombustible } from '../lib/permissions';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import type { RegistroCombustible } from '../types/combustible';
 import type { EquipmentClass } from '../types/equipment';
@@ -43,10 +44,7 @@ function origenDe(carga: RegistroCombustible): string {
 
 /** Unidad de la lectura del contador al cargar: por el `controlUnit` del
  * equipo, con fallback a la clase (liviano → km, pesado → h). */
-function unidadLectura(
-  carga: RegistroCombustible,
-  clase: EquipmentClass | undefined,
-): 'h' | 'km' {
+function unidadLectura(carga: RegistroCombustible, clase: EquipmentClass | undefined): 'h' | 'km' {
   if (carga.equipo?.controlUnit) {
     return carga.equipo.controlUnit === 'KM' ? 'km' : 'h';
   }
@@ -58,9 +56,7 @@ function nombreLectura(carga: RegistroCombustible, clase: EquipmentClass | undef
 }
 
 function lecturaTexto(carga: RegistroCombustible, clase: EquipmentClass | undefined): string {
-  return carga.lectura != null
-    ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}`
-    : '—';
+  return carga.lectura != null ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}` : '—';
 }
 
 function formatFecha(iso: string): string {
@@ -100,12 +96,15 @@ function DetalleCargaModal({
   clase,
   onClose,
   onEditar,
+  onEliminar,
 }: {
   carga: RegistroCombustible | null;
   clase: EquipmentClass | undefined;
   onClose: () => void;
   /** Presente solo cuando el rol puede corregir la carga (ADMIN). */
   onEditar?: () => void;
+  /** Presente solo cuando el rol puede eliminarla (ADMIN). */
+  onEliminar?: () => void;
 }) {
   return (
     <Modal.Backdrop
@@ -135,10 +134,7 @@ function DetalleCargaModal({
                   <Dato label="Clase" value={clase ? equipmentClassLabel(clase) : '—'} />
                   <Dato label="Litros" value={`${NUM_CL_1.format(carga.litros)} L`} />
                   <Dato label="Combustible" value={tipoDe(carga)} />
-                  <Dato
-                    label={`${nombreLectura(carga, clase)} al cargar`}
-                    value={lecturaTexto(carga, clase)}
-                  />
+                  <Dato label={`${nombreLectura(carga, clase)} al cargar`} value={lecturaTexto(carga, clase)} />
                   <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
                   <Dato label="Origen" value={origenDe(carga)} />
                 </div>
@@ -167,11 +163,18 @@ function DetalleCargaModal({
               </div>
             ) : null}
           </Modal.Body>
-          {onEditar ? (
+          {onEditar || onEliminar ? (
             <Modal.Footer>
-              <Button onPress={onEditar} variant="secondary">
-                Editar carga
-              </Button>
+              {onEliminar ? (
+                <Button onPress={onEliminar} variant="danger">
+                  Eliminar carga
+                </Button>
+              ) : null}
+              {onEditar ? (
+                <Button onPress={onEditar} variant="secondary">
+                  Editar carga
+                </Button>
+              ) : null}
             </Modal.Footer>
           ) : null}
         </Modal.Dialog>
@@ -248,15 +251,15 @@ export function CargasCombustibleAdminView() {
   const hasta = range?.end.toString() ?? '';
   const [detalle, setDetalle] = useState<RegistroCombustible | null>(null);
   const [editando, setEditando] = useState<RegistroCombustible | null>(null);
+  const [eliminando, setEliminando] = useState<RegistroCombustible | null>(null);
   const [creando, setCreando] = useState(false);
   const permisos = usePermissions();
   const puedeCrear = permisos.can('combustible.create');
   const puedeEditar = canEditCombustible(permisos.role);
+  const puedeEliminar = canDeleteCombustible(permisos.role);
+  const eliminar = useEliminarCargaCombustible();
 
-  const cargas = useMemo(
-    () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
-    [data],
-  );
+  const cargas = useMemo(() => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data]);
 
   // Clase por equipo del catálogo: fallback para cargas de un backend que aún
   // no manda `equipo.equipmentClass` (lo que trae la carga manda).
@@ -273,7 +276,9 @@ export function CargasCombustibleAdminView() {
   const equipos = useMemo(() => {
     const porId = new Map<string, string>();
     for (const c of cargas) porId.set(c.equipoId, c.equipo?.internalCode ?? c.equipoId);
-    return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
+    return [...porId.entries()]
+      .map(([id, codigo]) => ({ id, codigo }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo));
   }, [cargas]);
 
   const supervisores = useMemo(
@@ -321,8 +326,7 @@ export function CargasCombustibleAdminView() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-            {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)}{' '}
-            {lista.length === 1 ? 'carga' : 'cargas'}
+            {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)} {lista.length === 1 ? 'carga' : 'cargas'}
           </Chip>
           {puedeCrear ? <Button onPress={() => setCreando(true)}>Nueva carga</Button> : null}
         </div>
@@ -333,7 +337,9 @@ export function CargasCombustibleAdminView() {
           <div className="flex flex-col gap-4">
             <div>
               <Card.Title>Listado</Card.Title>
-              <Card.Description>De la más reciente a la más antigua. El total de arriba sigue al filtro.</Card.Description>
+              <Card.Description>
+                De la más reciente a la más antigua. El total de arriba sigue al filtro.
+              </Card.Description>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="filtros-cargas">
               <SelectFiltro
@@ -425,9 +431,7 @@ export function CargasCombustibleAdminView() {
 
           {!isPending && !isError && lista.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
-              {cargas.length === 0
-                ? 'No hay cargas de combustible registradas.'
-                : 'Ninguna carga calza con el filtro.'}
+              {cargas.length === 0 ? 'No hay cargas de combustible registradas.' : 'Ninguna carga calza con el filtro.'}
             </p>
           ) : null}
 
@@ -557,11 +561,72 @@ export function CargasCombustibleAdminView() {
               }
             : undefined
         }
+        onEliminar={
+          puedeEliminar && detalle
+            ? () => {
+                setEliminando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
       />
 
       {editando ? <EditarCargaCombustibleModal carga={editando} onClose={() => setEditando(null)} /> : null}
 
       {creando ? <NuevaCargaCombustibleModal onClose={() => setCreando(false)} /> : null}
+
+      <AlertDialog.Backdrop
+        isOpen={eliminando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar carga?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    La carga de {eliminando?.equipo?.internalCode ?? 'este equipo'} del{' '}
+                    {eliminando ? formatFecha(eliminando.fecha) : ''} (
+                    {eliminando ? NUM_CL_1.format(eliminando.litros) : ''} L) se eliminará definitivamente y el borrado
+                    quedará anotado en el Registro de actividad.{' '}
+                    {eliminando?.registroHorometroId
+                      ? 'Como nació del cierre de una tarjeta de turno, esa tarjeta quedará sin litros declarados; su foto se conserva.'
+                      : 'Su foto se eliminará también.'}{' '}
+                    Esta acción no se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button onPress={close} variant="tertiary">
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={eliminar.isPending}
+                    onPress={() => {
+                      if (!eliminando) return;
+                      eliminar.mutate(eliminando.id, {
+                        onSuccess: () => {
+                          close();
+                          setEliminando(null);
+                        },
+                      });
+                    }}
+                    variant="danger"
+                  >
+                    {eliminar.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }

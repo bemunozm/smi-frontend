@@ -118,6 +118,12 @@ export function canEditCombustible(role: Role | null | undefined): boolean {
   return role === ADMIN;
 }
 
+/** Eliminar una carga (registro basura confirmado — duplicado, prueba):
+ * `DELETE /api/combustible/:id` es solo ADMIN y deja traza en el historial. */
+export function canDeleteCombustible(role: Role | null | undefined): boolean {
+  return role === ADMIN;
+}
+
 /**
  * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
  * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un
