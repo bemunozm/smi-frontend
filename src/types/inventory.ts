@@ -432,6 +432,26 @@ export function totalEnContenido(
   return `${total} ${UNIT_SYMBOLS[contenido.contentUnit]}`;
 }
 
+/**
+ * La existencia dicha como frase, para que se entienda qué se está cargando:
+ * «Vas a ingresar 3 tinetas de 19 L: 57 L en total.» o, sin contenido,
+ * «Vas a ingresar 12 unidades.».
+ */
+export function resumenExistencia(
+  cantidad: number,
+  unidad: UnitOfMeasure,
+  contenido: { contentPerUnit: number; contentUnit: UnitOfMeasure } | null,
+): string {
+  const fmt = (n: number) => n.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+  const nombre = cantidad === 1 ? UNIT_SINGULAR[unidad] : UNIT_LABELS[unidad].toLowerCase();
+  if (!contenido) return `Vas a ingresar ${fmt(cantidad)} ${nombre}.`;
+  const medida = (n: number) =>
+    contenido.contentUnit === 'UNIT'
+      ? `${fmt(n)} ${n === 1 ? 'unidad' : 'unidades'}`
+      : `${fmt(n)} ${UNIT_SYMBOLS[contenido.contentUnit]}`;
+  return `Vas a ingresar ${fmt(cantidad)} ${nombre} de ${medida(contenido.contentPerUnit)}: ${medida(cantidad * contenido.contentPerUnit)} en total.`;
+}
+
 /** «12 u × 10 L = 120 L» («3 tin. × 19 L = 57 L» en tinetas); `null` si el
  * ítem no tiene contenido por unidad. */
 export function equivalencia(

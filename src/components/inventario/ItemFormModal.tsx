@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useController, useForm, useWatch, type Control } from 'react-hook-form';
 import {
@@ -31,7 +32,7 @@ import {
   UNITS_OF_MEASURE,
   UNIT_LABELS,
   contenidoDe,
-  equivalencia,
+  resumenExistencia,
   stockAt,
   toCreateItemPayload,
   toItemEditValues,
@@ -64,8 +65,6 @@ const EJEMPLO_TOTAL: Partial<Record<UnitOfMeasure, string>> = {
 
 /** Opción del selector de categoría para "no clasificado". */
 const NO_CATEGORY = '__none__';
-/** Opción del selector que abre el campo para crear una categoría. */
-const NEW_CATEGORY = '__new__';
 
 const EMPTY_ITEM: ItemFormValues = {
   name: '',
@@ -136,9 +135,10 @@ function ItemCardFields({
   // El contenido solo tiene sentido en lo que se cuenta por pieza: la unidad
   // y los envases (una tineta de 19 L, una caja de 12 unidades).
   const porPieza = PACKAGED_UNITS.includes(unidad) && !repuestoEnUnidades;
-  // «Medido en» solo acompaña a un contenido escrito: un select de unidad de
-  // medida suelto, sin cantidad, no significa nada y confunde.
+  // El contenido se pide solo si se activa (o si el ítem ya lo trae, al editar).
   const conContenido = (useWatch({ control, name: 'contentPerUnit' }) ?? '').trim() !== '';
+  const [indicarContenido, setIndicarContenido] = useState(false);
+  const mostrarContenido = indicarContenido || conContenido;
   return (
     <>
       <Controller
@@ -227,6 +227,9 @@ function ItemCardFields({
                 if (validas.length && !validas.includes(contentUnitField.value)) {
                   contentUnitField.onChange(validas[0]);
                 }
+                // Un envase casi siempre se quiere con su contenido (la tineta
+                // de 19 L): se abre de una. La unidad suelta queda apagada.
+                setIndicarContenido(value !== 'UNIT' && PACKAGED_UNITS.includes(value as UnitOfMeasure));
               }}
               value={field.value}
             >
@@ -256,10 +259,34 @@ function ItemCardFields({
       </div>
 
       {porPieza ? (
-        // Mismo grid de dos columnas que el resto: cada campo con su etiqueta,
-        // así el número y la medida quedan a la misma altura. La aclaración de
-        // que es opcional va abajo, entera: dentro del label se cortaba.
-        <div className="flex flex-col gap-1.5">
+        // El contenido es opcional: se pregunta con un interruptor en vez de
+        // dejar un campo vacío que no se entiende. Apagado, el ítem es «una
+        // unidad» y nada más (un filtro, una bolsa de huaipe).
+        <div className="flex flex-col gap-3">
+        <Switch
+          isSelected={mostrarContenido}
+          onChange={(on) => {
+            setIndicarContenido(on);
+            if (!on) contentField.onChange('');
+          }}
+        >
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-foreground">
+                {unidad === 'UNIT' ? 'Cada unidad trae una cantidad (litros, kilos o metros)' : `Indicar cuánto trae cada ${UNIT_SINGULAR[unidad]}`}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {unidad === 'UNIT'
+                  ? 'Por ejemplo, un bidón de 20 L o un cartucho de 0,4 kg. Si se usa entero, como un filtro, déjalo apagado.'
+                  : `Así el inventario también muestra el total (${EJEMPLO_TOTAL[unidad] ?? ''}).`}
+              </span>
+            </span>
+          </Switch.Content>
+        </Switch>
+        {mostrarContenido ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Controller
             control={control}
@@ -273,13 +300,13 @@ function ItemCardFields({
                 onChange={field.onChange}
                 value={field.value}
               >
-                <Label>Contenido de cada {UNIT_SINGULAR[unidad]}</Label>
+                <Label>Cada {UNIT_SINGULAR[unidad]} trae</Label>
                 <Input inputMode="decimal" placeholder={EJEMPLO_CONTENIDO[unidad] ?? 'Ej.: 10'} />
                 {errors.contentPerUnit ? <FieldError>{errors.contentPerUnit.message}</FieldError> : null}
               </TextField>
             )}
           />
-          {conContenido ? (
+          {mostrarContenido ? (
             <Controller
               control={control}
               name="contentUnit"
@@ -312,10 +339,7 @@ function ItemCardFields({
             />
           ) : null}
         </div>
-        <p className="m-0 text-xs text-muted-foreground">
-          Opcional. Cuánto trae cada {UNIT_SINGULAR[unidad]}, para ver el total (
-          {EJEMPLO_TOTAL[unidad] ?? '3 × 19 L = 57 L'}). Déjalo vacío si se usa entero.
-        </p>
+        ) : null}
         </div>
       ) : null}
 
@@ -327,11 +351,6 @@ function ItemCardFields({
             fullWidth
             name={field.name}
             onChange={(value) => {
-              // «Nueva categoría» no es una selección: abre el campo para crearla.
-              if (value === NEW_CATEGORY) {
-                setCreandoCategoria(true);
-                return;
-              }
               field.onChange(value === NO_CATEGORY ? '' : String(value ?? ''));
             }}
             // El `Select` no maneja `''` como selección: se usa un centinela
@@ -359,14 +378,24 @@ function ItemCardFields({
                     <ListBox.ItemIndicator />
                   </ListBox.Item>
                 ))}
-                <ListBox.Item id={NEW_CATEGORY} textValue="Nueva categoría" className="font-semibold text-accent">
-                  + Nueva categoría…
-                </ListBox.Item>
               </ListBox>
             </Select.Popover>
           </Select>
         )}
       />
+
+      {/* Fuera del menú y siempre a la vista: dentro de la lista quedaba al
+          fondo (o desteñida por el difuminado del borde) y no se encontraba. */}
+      {!creandoCategoria ? (
+        <Button
+          className="-mt-2 self-start font-semibold text-accent"
+          size="sm"
+          variant="ghost"
+          onPress={() => setCreandoCategoria(true)}
+        >
+          <Plus className="h-4 w-4" /> ¿No está la categoría? Crear una nueva
+        </Button>
+      ) : null}
 
       {creandoCategoria ? (
         <div className="flex items-start gap-2">
@@ -484,10 +513,10 @@ export function NewItemModal({
   const existenciaNum = parseDecimal(existencia);
   const totalEquivalente =
     existenciaNum != null && existenciaNum > 0
-      ? equivalencia(
+      ? resumenExistencia(
           existenciaNum,
-          contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
           unidad,
+          contenidoDe({ unit: unidad, contentPerUnit: contenidoPorUnidad, contentUnit: unidadContenido }),
         )
       : null;
   // Sin bodega activa la existencia inicial no tiene dónde entrar: se avisa en
@@ -547,7 +576,7 @@ export function NewItemModal({
                           </Label>
                           <Input inputMode="decimal" placeholder="0" />
                           {totalEquivalente ? (
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                            <span className="mt-1 rounded-xl bg-muted px-3 py-2 text-sm font-semibold text-foreground tabular-nums">
                               {totalEquivalente}
                             </span>
                           ) : null}
@@ -569,9 +598,9 @@ export function NewItemModal({
                     ) : null}
 
                     <p className="text-xs text-muted-foreground">
-                      Se escribe en la unidad del ítem: con «Litros», 120 son
-                      120 L; con «Tinetas» de 19 L, 3 son 57 L. Queda
-                      registrada como una entrada por compra
+                      Se escribe en lo que se cuenta el ítem (unidades,
+                      tinetas, litros…). Queda registrada como una entrada por
+                      compra
                       {branchName ? ` en ${branchName}` : ''}. El SKU se genera
                       solo y el mínimo se fija después, desde las acciones del
                       ítem.

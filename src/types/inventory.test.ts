@@ -7,6 +7,7 @@ import {
   contenidoDe,
   contentUnitsFor,
   equivalencia,
+  resumenExistencia,
   toCreateItemPayload,
   toItemEditValues,
   toUpdateItemPayload,
@@ -184,6 +185,17 @@ describe('contenido por unidad', () => {
     expect(contenidoDe({ ...caja, unit: 'UNIT' })).toBeNull();
     expect(contentUnitsFor('BOX')).toContain('UNIT');
     expect(contentUnitsFor('UNIT')).not.toContain('UNIT');
+  });
+
+  it('la existencia se dice como frase, con el total si hay contenido', () => {
+    expect(resumenExistencia(3, 'PAIL', { contentPerUnit: 19, contentUnit: 'LITER' })).toBe(
+      'Vas a ingresar 3 tinetas de 19 L: 57 L en total.',
+    );
+    expect(resumenExistencia(5, 'BOX', { contentPerUnit: 12, contentUnit: 'UNIT' })).toBe(
+      'Vas a ingresar 5 cajas de 12 unidades: 60 unidades en total.',
+    );
+    expect(resumenExistencia(1, 'CAN', null)).toBe('Vas a ingresar 1 bidón.');
+    expect(resumenExistencia(12, 'UNIT', null)).toBe('Vas a ingresar 12 unidades.');
   });
 
   it('cada envase ofrece solo las medidas que tienen sentido', () => {
