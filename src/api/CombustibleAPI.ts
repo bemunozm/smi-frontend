@@ -30,3 +30,19 @@ export async function createCombustible(body: CreateCombustibleBody): Promise<Re
   return res.data.data;
 }
 
+export interface UpdateCombustibleBody {
+  litros?: number;
+  tipo?: 'PETROLEO' | 'BENCINA';
+  /** ISO datetime. */
+  fecha?: string;
+  lectura?: number;
+}
+
+/** Corrección de una carga MANUAL desde el panel (solo ADMIN). Una carga
+ * nacida de un cierre de tarjeta el backend la rechaza (`FUEL_LOAD_FROM_CARD`):
+ * se corrige editando la tarjeta (`ShiftCardAPI.updateCard`), que sincroniza
+ * la carga vinculada. */
+export async function updateCombustible(id: string, body: UpdateCombustibleBody): Promise<RegistroCombustible> {
+  const res = await api.patch<ApiResponse<RegistroCombustible>>(`/api/combustible/${encodeURIComponent(id)}`, body);
+  return res.data.data;
+}

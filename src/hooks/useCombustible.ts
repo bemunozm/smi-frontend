@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { createCombustible, listCombustible } from '../api/CombustibleAPI';
-import type { CreateCombustibleBody } from '../api/CombustibleAPI';
+import { createCombustible, listCombustible, updateCombustible } from '../api/CombustibleAPI';
+import type { CreateCombustibleBody, UpdateCombustibleBody } from '../api/CombustibleAPI';
+import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { mensajeErrorOperacion } from '../lib/error-messages';
-import { COMBUSTIBLE_KEY as KEY } from '../lib/query-keys';
+import { COMBUSTIBLE_KEY as KEY, EQUIPMENT_KEY } from '../lib/query-keys';
+import type { RegistroCombustible } from '../types/combustible';
 import { generateUuid } from '../lib/uuid';
 import type { CombustibleForm } from '../types/combustible';
 import { useQueuedCreate } from './useQueuedMutation';
@@ -30,11 +32,7 @@ export interface CreateCombustibleVars {
 export function useCreateCombustible() {
   return useQueuedCreate<'combustible.create', CreateCombustibleVars>({
     endpoint: 'combustible.create',
-    build: ({ input, foto }, id) => ({
-      params: {},
-      body: { ...input, id },
-      files: [{ field: 'fotoKey', file: foto }],
-    }),
+    build: ({ input, foto }, id) => ({ params: {}, body: { ...input, id }, files: [{ field: 'fotoKey', file: foto }] }),
     onSent: () => {
       toast.success('Carga de combustible registrada');
     },
@@ -60,20 +58,59 @@ export function useCrearCargaCombustible() {
   return useMutation({
     mutationFn: async ({ values, foto }: CrearCargaCombustibleVars) => {
       const fotoKey = foto ? (await uploadFile(foto)).key : undefined;
-      return createCombustible({
-        ...values,
-        ...(fotoKey ? { fotoKey } : {}),
-        id: generateUuid(),
-      });
+      return createCombustible({ ...values, ...(fotoKey ? { fotoKey } : {}), id: generateUuid() });
     },
     onSuccess: () => {
       toast.success('Carga de combustible registrada');
       void queryClient.invalidateQueries({ queryKey: KEY });
     },
     onError: (error: unknown) => {
-      toast.danger(
-        mensajeErrorOperacion(error, 'No se pudo registrar la carga de combustible.'),
-      );
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo registrar la carga de combustible.'));
+    },
+  });
+}
+
+export interface EditarCargaVars {
+  carga: RegistroCombustible;
+  cambios: UpdateCombustibleBody;
+}
+
+/**
+ * Corrección de una carga desde el panel admin (online, solo ADMIN). El caso
+ * real que motiva esto: el OCR del surtidor leyó «100.000» del display como
+ * cien mil litros y la carga quedó registrada así.
+ *
+ * Dos caminos según el origen:
+ * - MANUAL → `PATCH /combustible/:id` (litros/tipo/fecha/lectura).
+ * - TARJETA → se corrige LA TARJETA (`PATCH /shift-cards/:id` con
+ *   `fuelLiters`), que sincroniza la carga vinculada y deja el cambio en su
+ *   historial; los litros actuales de la carga viajan como precondición
+ *   (`X-Expected`) contra pisadas concurrentes. Por eso en este camino solo
+ *   los litros son editables.
+ */
+export function useEditarCargaCombustible() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ carga, cambios }: EditarCargaVars) => {
+      if (carga.registroHorometroId) {
+        if (cambios.litros === undefined) return;
+        await ShiftCardAPI.updateCard(
+          carga.registroHorometroId,
+          { fuelLiters: cambios.litros },
+          { fuelLiters: carga.litros },
+        );
+        return;
+      }
+      await updateCombustible(carga.id, cambios);
+    },
+    onSuccess: () => {
+      toast.success('Carga corregida');
+      void queryClient.invalidateQueries({ queryKey: KEY });
+      // La lectura corregida puede haber adelantado el contador del equipo.
+      void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo corregir la carga.'));
     },
   });
 }
