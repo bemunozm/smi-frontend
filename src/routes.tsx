@@ -35,6 +35,7 @@ import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
 import { CargasCombustibleAdminView } from './views/CargasCombustibleAdminView';
 import { AsistenciaView } from './views/AsistenciaView';
+import { ActivityLogView } from './views/ActivityLogView';
 import { MantencionesAdminView } from './views/MantencionesAdminView';
 import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ReportesView } from './views/ReportesView';
@@ -161,6 +162,11 @@ export const router = createBrowserRouter([
                   // Grilla mensual de días trabajados (la hoja «DIAS TRABAJO
                   // MES» de la secretaria), derivada de tarjetas y Reports.
                   { path: '/asistencia', element: <AsistenciaView /> },
+                  // Registro de actividad: todo lo que se registra en la
+                  // plataforma en una línea de tiempo, con el día en que se
+                  // hizo y el día al que corresponde el dato (retroactivos
+                  // marcados), más ediciones y eliminaciones.
+                  { path: '/registro-actividad', element: <ActivityLogView /> },
                 ],
               },
               {

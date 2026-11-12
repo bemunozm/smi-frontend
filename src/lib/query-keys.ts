@@ -70,6 +70,8 @@ export const EQUIPMENT_DOCUMENTS_KEY = ['equipment-documents'] as const;
 export const COMBUSTIBLE_KEY = ['combustible'] as const;
 /** Asistencia mensual: `[...ASISTENCIA_KEY, 'YYYY-MM']`. */
 export const ASISTENCIA_KEY = ['asistencia'] as const;
+/** Registro de actividad del admin: `[...ACTIVITY_LOG_KEY, from, to]`. */
+export const ACTIVITY_LOG_KEY = ['activity-log'] as const;
 export const ORDENES_KEY = ['ordenes'] as const;
 /** Bitácora por orden: `[...INTERVENCIONES_KEY, ordenId]`. */
 export const INTERVENCIONES_KEY = ['intervenciones'] as const;
