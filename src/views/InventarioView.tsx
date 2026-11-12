@@ -662,6 +662,7 @@ export function InventarioView() {
           branchName={
             branchId === ALL_BRANCHES ? (branches?.[0]?.name ?? '') : branchLabel
           }
+          branches={branches ?? []}
           defaultType={tab}
           isOpen
           onOpenChange={setIsCreating}

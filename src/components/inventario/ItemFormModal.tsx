@@ -16,7 +16,7 @@ import {
 } from '@heroui/react';
 
 import { useCategories, useCreateCategory } from '../../hooks/useCategories';
-import { useCreateItem, useSaveItemWithMinimums } from '../../hooks/useInventory';
+import { useCreateItemWithMinimums, useSaveItemWithMinimums } from '../../hooks/useInventory';
 import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
@@ -482,17 +482,23 @@ function ItemCardFields({
 export function NewItemModal({
   branchId,
   branchName,
+  branches,
   defaultType,
   isOpen,
   onOpenChange,
 }: {
   branchId: string;
   branchName: string;
+  /** Las bodegas donde se puede fijar el stock mínimo desde el alta. */
+  branches: Branch[];
   defaultType: ItemType;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const createItem = useCreateItem();
+  const createItem = useCreateItemWithMinimums();
+  // El mínimo por bodega se fija al crear, igual que en la edición: antes había
+  // que crear el ítem y volver a abrirlo para ponerle el umbral. Vacío = sin mínimo.
+  const [minimums, setMinimums] = useState<Record<string, string>>({});
   const { data: categories } = useCategories();
   const {
     control,
@@ -529,12 +535,16 @@ export function NewItemModal({
         <Modal.Dialog className="sm:max-w-lg">
           {({ close }) => {
             const onSubmit = (values: ItemFormValues): void => {
-              createItem.mutate(toCreateItemPayload(values, branchId), {
-                onSuccess: () => {
-                  reset({ ...EMPTY_ITEM, type: defaultType });
-                  close();
+              createItem.mutate(
+                { input: toCreateItemPayload(values, branchId), minimums },
+                {
+                  onSuccess: () => {
+                    reset({ ...EMPTY_ITEM, type: defaultType });
+                    setMinimums({});
+                    close();
+                  },
                 },
-              });
+              );
             };
 
             return (
@@ -589,6 +599,33 @@ export function NewItemModal({
                       )}
                     />
 
+                    {branches.length > 0 ? (
+                      <>
+                        <SectionLabel>Stock mínimo por sucursal (opcional)</SectionLabel>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {branches.map((branch) => (
+                            <TextField
+                              fullWidth
+                              key={branch.id}
+                              onChange={(value) =>
+                                setMinimums((current) => ({ ...current, [branch.id]: value }))
+                              }
+                              value={minimums[branch.id] ?? ''}
+                            >
+                              <Label>
+                                {branch.name} ({UNIT_LABELS[unidad].toLowerCase()})
+                              </Label>
+                              <Input inputMode="decimal" placeholder="0" />
+                            </TextField>
+                          ))}
+                        </div>
+                        <p className="-mt-2 text-xs text-muted-foreground">
+                          Cuando la existencia de esa bodega baje de este número, el inventario
+                          avisa. Vacío o en <strong>0</strong>, esa bodega no alerta por este ítem.
+                        </p>
+                      </>
+                    ) : null}
+
                     {sinBodega ? (
                       <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
                         No hay ninguna bodega activa donde dejar la existencia.
@@ -598,12 +635,11 @@ export function NewItemModal({
                     ) : null}
 
                     <p className="text-xs text-muted-foreground">
-                      Se escribe en lo que se cuenta el ítem (unidades,
-                      tinetas, litros…). Queda registrada como una entrada por
-                      compra
+                      La existencia y los mínimos se escriben en lo que se
+                      cuenta el ítem (unidades, tinetas, litros…). La existencia
+                      queda registrada como una entrada por compra
                       {branchName ? ` en ${branchName}` : ''}. El SKU se genera
-                      solo y el mínimo se fija después, desde las acciones del
-                      ítem.
+                      solo.
                     </p>
                   </form>
                 </Modal.Body>
