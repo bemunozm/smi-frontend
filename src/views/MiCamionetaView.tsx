@@ -148,6 +148,11 @@ export function MiCamionetaView({
     userId,
   });
   const mia = proyeccion.livianosAbiertos.find((t) => t.supervisorId === userId);
+  // Las que abrió otra persona y siguen abiertas: quien la está usando ahora
+  // (otro supervisor, el mantenedor, el administrador…) la cierra al cargar
+  // combustible, no necesariamente quien la abrió. Antes esta pantalla solo
+  // mostraba la propia, y solo el supervisor podía cerrar las ajenas.
+  const deOtros = proyeccion.livianosAbiertos.filter((t) => t.supervisorId !== userId);
   // Las que usé o cerré yo (el servidor trae las cerradas de las últimas 48 h).
   const misUsos = proyeccion.livianosCerrados.filter((t) => t.supervisorId === userId || t.cerradaPorId === userId);
 
@@ -156,6 +161,9 @@ export function MiCamionetaView({
   const camioneta = apertura.equipoElegido;
   const equipoEnUso = mia ? equipos.find((e) => e.internalCode === mia.equipo) : undefined;
   const cerrandoMia = mia != null && cierre.cerrandoId === mia.id;
+  // La camioneta que se está cerrando: la propia o una abierta por otro.
+  const cerrandoLiviano = proyeccion.livianosAbiertos.find((t) => t.id === cierre.cerrandoId);
+  const cerrandoAjena = cerrandoLiviano != null && cerrandoLiviano.supervisorId !== userId;
 
   const enUso = mia && (
     <Card>
@@ -207,11 +215,15 @@ export function MiCamionetaView({
     </Card>
   );
 
-  const formCierre = cerrandoMia && cierre.cerrando && (
+  const formCierre = cerrandoLiviano && cierre.cerrando && (
     <Card>
       <CardHead
-        titulo="Cargar combustible y cerrar"
-        bajada="Kilometraje final, litros y la foto del surtidor."
+        titulo={cerrandoAjena ? `Cerrar ${cerrandoLiviano.equipo}` : 'Cargar combustible y cerrar'}
+        bajada={
+          cerrandoAjena
+            ? `La abrió ${cerrandoLiviano.supervisor}. Kilometraje final, litros y la foto del surtidor.`
+            : 'Kilometraje final, litros y la foto del surtidor.'
+        }
         extra={
           <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.setCerrandoId(null)}>
             Cancelar
@@ -359,6 +371,35 @@ export function MiCamionetaView({
     </Card>
   );
 
+  // Abiertas por otros, sin la que ya se está cerrando (esa muestra el formulario).
+  const otrasVisibles = deOtros.filter((t) => t.id !== cierre.cerrandoId);
+  const abiertasPorOtros = otrasVisibles.length > 0 && (
+    <Card>
+      <CardHead
+        titulo="Abiertas por otros"
+        bajada="Si estás usando una y le cargas combustible, ciérrala tú: no hace falta que la cierre quien la abrió."
+      />
+      <div className="flex flex-col gap-3">
+        {otrasVisibles.map((t) => (
+          <div
+            key={t.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border px-3.5 py-3"
+          >
+            <div className="flex min-w-0 flex-col">
+              <span className="tabular text-[17px] font-bold text-foreground">{t.equipo}</span>
+              <span className="text-[13px] text-[var(--label-color)]">
+                Abierta por {t.supervisor} · {desdeCorto(t.abiertaIso)} · Km inicial {fmtKm(t.inicial)}
+              </span>
+            </div>
+            <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.abrirCierre(t.id)}>
+              <Fuel className="size-4" aria-hidden /> Cargar combustible y cerrar
+            </Boton>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+
   const historial = (
     <>
       <h2 className="m-0 text-[17px] font-bold">Mis últimos usos</h2>
@@ -380,7 +421,8 @@ export function MiCamionetaView({
           <>
             {enUso}
             {formCierre}
-            {formApertura}
+            {!cerrandoAjena && formApertura}
+            {abiertasPorOtros}
           </>
         }
         historial={historial}
