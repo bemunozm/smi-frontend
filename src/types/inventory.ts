@@ -329,15 +329,6 @@ export interface AdjustStockInput {
 
 // --- Formularios (RHF + zodResolver) --------------------------------------
 
-/** Campo numérico de formulario: string en el input, número al enviar. */
-const quantityField = (message: string) =>
-  z
-    .string()
-    .min(1, message)
-    .refine((value) => (parseDecimal(value) ?? -1) >= 0, {
-      message: 'Ingresa un número válido',
-    });
-
 /**
  * Ficha del ítem. `categoryId` es un string vacío cuando no se eligió
  * categoría: el `Select` no sabe de `null`, y la conversión a "campo ausente"
@@ -363,7 +354,11 @@ export type ItemCardValues = z.infer<typeof ItemCardSchema>;
 
 /** Alta: el SKU ya no se pide, lo genera el servidor. */
 export const ItemFormSchema = ItemCardSchema.extend({
-  initialQuantity: quantityField('La existencia inicial es obligatoria'),
+  // Arranca vacía (el «0» es solo el ejemplo gris del campo) y vacía vale 0:
+  // un 0 escrito de antemano había que borrarlo antes de tipear la cantidad.
+  initialQuantity: z.string().refine((value) => value.trim() === '' || (parseDecimal(value) ?? -1) >= 0, {
+    message: 'Ingresa un número válido',
+  }),
 });
 export type ItemFormValues = z.infer<typeof ItemFormSchema>;
 

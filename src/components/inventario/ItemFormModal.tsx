@@ -77,7 +77,7 @@ const EMPTY_ITEM: ItemFormValues = {
   partNumber: '',
   defaultSupplier: '',
   isCritical: false,
-  initialQuantity: '0',
+  initialQuantity: '',
 };
 
 /**
@@ -388,7 +388,7 @@ function ItemCardFields({
           fondo (o desteñida por el difuminado del borde) y no se encontraba. */}
       {!creandoCategoria ? (
         <Button
-          className="-mt-2 self-start font-semibold text-accent"
+          className="-mt-2 self-start bg-accent-soft font-semibold text-accent-soft-foreground hover:bg-accent-soft-hover"
           size="sm"
           variant="ghost"
           onPress={() => setCreandoCategoria(true)}

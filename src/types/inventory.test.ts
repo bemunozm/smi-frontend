@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ItemFormSchema,
   ItemListResponseSchema,
   isBelowMinimumAt,
   quantityAt,
@@ -185,6 +186,13 @@ describe('contenido por unidad', () => {
     expect(contenidoDe({ ...caja, unit: 'UNIT' })).toBeNull();
     expect(contentUnitsFor('BOX')).toContain('UNIT');
     expect(contentUnitsFor('UNIT')).not.toContain('UNIT');
+  });
+
+  it('la existencia inicial vacía vale 0: no viaja y el formulario la acepta', () => {
+    const values = { ...base, unit: 'UNIT' as const, contentPerUnit: '', contentUnit: 'LITER' as const, initialQuantity: '' };
+    expect(ItemFormSchema.safeParse(values).success).toBe(true);
+    expect(toCreateItemPayload(values, 'b1')).not.toHaveProperty('initialQuantity');
+    expect(ItemFormSchema.safeParse({ ...values, initialQuantity: 'abc' }).success).toBe(false);
   });
 
   it('la existencia se dice como frase, con el total si hay contenido', () => {
