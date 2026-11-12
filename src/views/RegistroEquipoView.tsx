@@ -698,14 +698,19 @@ export function RegistroEquipoView() {
         <span className="tabular font-medium text-muted-foreground">· {cerradas.length}</span>
       </Boton>
 
-      {bloque(
-        ctx.turno,
-        ctx.fechaCorta,
-        abiertasActual,
-        veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tienes tarjetas abiertas en este turno.',
-      )}
+      {/* En modo pasado la columna termina acá: el backfill nace cerrado (no
+          hay "abiertas de este turno") y las tarjetas vivas de HOY no
+          corresponden al día que se está registrando — mostrarlas bajo los
+          rótulos TURNO DIURNO/NOCTURNO solo confunde. */}
+      {!modoPasado &&
+        bloque(
+          ctx.turno,
+          ctx.fechaCorta,
+          abiertasActual,
+          veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tienes tarjetas abiertas en este turno.',
+        )}
 
-      {abiertasAnterior.length > 0 && bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
+      {!modoPasado && abiertasAnterior.length > 0 && bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
     </>
   );
 

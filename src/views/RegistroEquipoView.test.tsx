@@ -660,6 +660,29 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Las camionetas no se cargan para días pasados.')).toBeTruthy();
     });
 
+    it('en modo pasado la columna llega hasta «Ver historial de cerradas»: sin bloques TURNO del flujo vivo', () => {
+      renderView('phone', {
+        turnoSeleccion: 'pasado',
+        ctx: CTX_PASADO,
+        esDiaPasado: true,
+        abiertasActual: [TARJETA_ABIERTA],
+        abiertasAnterior: [{ ...TARJETA_ABIERTA, id: 'c-ant', grupo: 'anterior' }],
+      });
+
+      expect(screen.getByRole('button', { name: /historial de cerradas/i })).toBeTruthy();
+      // Los títulos de bloque son `TURNO X · fecha` — la cabecera grande del
+      // turno (sin « · ») sí se queda.
+      expect(screen.queryAllByText(/TURNO DIURNO ·/)).toHaveLength(0);
+      expect(screen.queryAllByText(/TURNO NOCTURNO ·/)).toHaveLength(0);
+    });
+
+    it('en modo normal los bloques TURNO siguen (regresión del recorte del modo pasado)', () => {
+      renderView('phone', { abiertasAnterior: [{ ...TARJETA_ABIERTA, id: 'c-ant', grupo: 'anterior' }] });
+
+      expect(screen.getAllByText(/TURNO DIURNO ·/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/TURNO NOCTURNO ·/).length).toBeGreaterThan(0);
+    });
+
     it('en modo pasado ofrece la carga rápida del turno; en modo normal no', () => {
       renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
       expect(screen.getByText('Carga rápida del turno')).toBeTruthy();
