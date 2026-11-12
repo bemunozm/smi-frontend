@@ -12,7 +12,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { NAV_ITEMS } from '../config/nav-items';
+import { navItemsDe } from '../config/nav-items';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usaCamioneta } from '../lib/usa-camioneta';
 import { useUiStore } from '../store/ui';
 import { ROLES, type Role } from '../types/roles';
 
@@ -88,13 +90,8 @@ const SHELLS = new Set([TERRENO.to, MANTENCION.to]);
 export function BottomNav({ role }: { role: Role | null }) {
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
-  const allowed = new Set(
-    role
-      ? NAV_ITEMS.filter((item) => item.roles.includes(role)).map(
-          (item) => item.to,
-        )
-      : [],
-  );
+  const { user } = useCurrentUser();
+  const allowed = new Set(navItemsDe(role, usaCamioneta(user)).map((item) => item.to));
   const primary = role ? PRIMARY_BY_ROLE[role] : [];
   const visible = primary.filter((item) => SHELLS.has(item.to) || allowed.has(item.to));
 

@@ -35,7 +35,12 @@ export function ResponsableSelect({
     ...(liviano
       ? [
           { titulo: 'Mantenedores', rol: 'Mantenedor', usuarios: mantenedores ?? [] },
-          { titulo: 'Administración', rol: 'Administrador', usuarios: administradores ?? [] },
+          // Solo los administradores con «Usa camioneta» marcado en Usuarios.
+          {
+            titulo: 'Administración',
+            rol: 'Administrador',
+            usuarios: (administradores ?? []).filter((u) => u.usesLightVehicle),
+          },
           { titulo: 'Prevención de riesgos', rol: 'Prevencionista', usuarios: prevencionistas ?? [] },
         ]
       : []),

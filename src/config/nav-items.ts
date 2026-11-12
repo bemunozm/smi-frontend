@@ -12,6 +12,14 @@ export interface NavItem {
   /** Grupo bajo cuyo título aparece en el `Sidebar`. Una sección sin items
    * visibles para el rol no muestra su título. */
   seccion: NavSeccion;
+  /** Además del rol, solo si el usuario tiene «Usa camioneta» marcado. */
+  soloSiUsaCamioneta?: boolean;
+}
+
+/** Los ítems del menú que ve este usuario: por rol y, en «Mi camioneta», si la usa. */
+export function navItemsDe(role: Role | null, usaCamioneta: boolean): NavItem[] {
+  if (!role) return [];
+  return NAV_ITEMS.filter((item) => item.roles.includes(role) && (!item.soloSiUsaCamioneta || usaCamioneta));
 }
 
 /**
@@ -54,7 +62,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Para registrar el uso de la camioneta que tenga asignada (km de salida y
   // carga de combustible). El mantenedor y el prevencionista la tienen en su
   // propio shell; el administrador no entra al taller, así que va acá.
-  { label: 'Mi camioneta', to: '/mi-camioneta', roles: [ROLES.ADMIN], seccion: 'Administración' },
+  // Solo el administrador con «Usa camioneta» marcado en Usuarios.
+  {
+    label: 'Mi camioneta',
+    to: '/mi-camioneta',
+    roles: [ROLES.ADMIN],
+    seccion: 'Administración',
+    soloSiUsaCamioneta: true,
+  },
   // --- Reportes (vistas del administrador, no las de Terreno) ---------------
   // Reportes de salida de turno (equipos usados en el día, por supervisor).
   { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },

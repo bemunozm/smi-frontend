@@ -15,6 +15,9 @@ export const UserSchema = z.object({
   image: z.string().nullable(),
   role: z.enum(ROLES),
   banned: z.boolean().nullable(),
+  /** Un ADMIN que usa camioneta: aparece en «Asignado a» de los livianos y ve
+   * «Mi camioneta». Falta en respuestas anteriores al campo: . */
+  usesLightVehicle: z.boolean().optional().default(false),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -93,6 +96,8 @@ export const UpdateUserSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio'),
   email: z.string().min(1, 'El email es obligatorio').email('Ingresa un email válido'),
   role: z.enum(ROLES),
+  /** Solo cuenta para un ADMIN; el formulario la muestra únicamente ahí. */
+  usesLightVehicle: z.boolean(),
 });
 
 export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
