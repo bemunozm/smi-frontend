@@ -69,6 +69,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Grilla mensual de días trabajados (supervisores + operadores), derivada
   // de tarjetas y Reports — la hoja «DIAS TRABAJO MES» de la secretaria.
   { label: 'Asistencia', to: '/asistencia', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Línea de tiempo de TODO lo que se registra (cargas, tarjetas, reportes,
+  // Reports, hallazgos, mantenimiento, ediciones y eliminaciones), con el día
+  // en que se hizo y el día al que corresponde el dato.
+  { label: 'Registro de actividad', to: '/registro-actividad', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // --- Usuarios --------------------------------------------------------------
   { label: 'Operadores', to: '/operadores', roles: [ROLES.ADMIN, ROLES.SUPERVISOR], seccion: 'Usuarios' },
   { label: 'Usuarios', to: '/usuarios', roles: [ROLES.ADMIN], seccion: 'Usuarios' },

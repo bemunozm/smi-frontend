@@ -27,6 +27,7 @@ describe('NAV_ITEMS', () => {
       'Cargas de combustible',
       'Mantenciones',
       'Asistencia',
+      'Registro de actividad',
     ]);
     expect(labelsDe('Usuarios')).toEqual(['Operadores', 'Usuarios', 'Notificaciones']);
   });
@@ -36,7 +37,7 @@ describe('NAV_ITEMS', () => {
     expect(dashboard?.roles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
   });
 
-  it('SECRETARIA ve el dashboard, los siete reportes del administrador y notificaciones', () => {
+  it('SECRETARIA ve el dashboard, los ocho reportes del administrador y notificaciones', () => {
     const suyos = NAV_ITEMS.filter((item) => item.roles.includes(ROLES.SECRETARIA)).map((item) => item.to);
     expect(suyos).toEqual([
       '/',
@@ -47,6 +48,7 @@ describe('NAV_ITEMS', () => {
       '/cargas-combustible',
       '/mantenciones',
       '/asistencia',
+      '/registro-actividad',
       '/notificaciones',
     ]);
   });
