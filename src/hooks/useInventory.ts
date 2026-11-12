@@ -8,6 +8,7 @@ import {
 } from '../api/InventoryAPI';
 import { DomainError } from '../lib/api-error';
 import { parseDecimal } from '../lib/decimal';
+import { generateUuid } from '../lib/uuid';
 import { pickFields } from '../lib/edit-diff';
 import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
@@ -68,6 +69,61 @@ export function useCreateItem() {
       toast.success('Ítem creado', { description: item ? `${item.sku} · ${item.name}` : input.name });
     },
     errorFallback: 'No se pudo crear el ítem.',
+  });
+}
+
+export interface CreateItemWithMinimumsVars {
+  input: CreateItemInput;
+  /** Lo escrito en cada bodega (`branchId` → texto del campo); vacío o 0 = sin mínimo. */
+  minimums: Record<string, string>;
+}
+
+/**
+ * Alta del ítem con su stock mínimo por bodega, en el mismo formulario. Igual
+ * que la edición (`useSaveItemWithMinimums`) son escrituras distintas — el alta
+ * y un PUT de mínimo por bodega — pero el `id` del ítem lo genera el cliente,
+ * así que los mínimos se encolan detrás del alta apuntando a ese id y el replay
+ * (FIFO) los manda después, con o sin señal. Si el alta falla, los mínimos ni se
+ * intentan; si falla un mínimo, el ítem ya quedó creado y el aviso lo dice.
+ */
+export function useCreateItemWithMinimums() {
+  return useMutation<
+    { sku?: string; guardadoEnCola: boolean; fallos: unknown[] },
+    Error,
+    CreateItemWithMinimumsVars
+  >({
+    mutationFn: async ({ input, minimums }) => {
+      const id = generateUuid();
+      const alta = await writeQueued('item.create', { params: {}, body: { ...input, id } });
+      const minimos = Object.entries(minimums).flatMap(([branchId, texto]) => {
+        const valor = parseDecimal(texto);
+        return valor != null && valor > 0 ? [{ branchId, minimumQuantity: valor }] : [];
+      });
+      const resultados = await Promise.allSettled(
+        minimos.map((minimo) => writeQueued('item.setMinimum', { params: {}, body: { itemId: id, ...minimo } })),
+      );
+      const fallos = resultados.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []));
+      const estados = [alta, ...resultados.map((r) => (r.status === 'fulfilled' ? r.value : null))];
+      return {
+        sku: alta.status === 'sent' ? alta.data?.sku : undefined,
+        guardadoEnCola: estados.some((e) => e?.status === 'queued'),
+        fallos,
+      };
+    },
+    onSuccess: ({ sku, guardadoEnCola, fallos }, { input }) => {
+      if (fallos.length > 0) {
+        toast.warning('Ítem creado, pero no se guardó el stock mínimo', {
+          description: mensajeErrorFormulario(fallos[0], 'No se pudo guardar el mínimo.'),
+        });
+      } else if (guardadoEnCola) {
+        avisarGuardadoEnCola();
+      } else {
+        toast.success('Ítem creado', { description: sku ? `${sku} · ${input.name}` : input.name });
+      }
+    },
+    onError: (error) => {
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo crear el ítem.'));
+    },
   });
 }
 

@@ -2,19 +2,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import type { Branch } from '../../types/branch';
 import { NewItemModal } from './ItemFormModal';
 
 vi.mock('../../api/CategoryAPI', () => ({ CategoryAPI: { list: vi.fn().mockResolvedValue([]) } }));
 
 afterEach(cleanup);
 
-function renderModal(branchId: string, branchName: string) {
+function renderModal(branchId: string, branchName: string, branches: Branch[] = []) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <NewItemModal
         branchId={branchId}
         branchName={branchName}
+        branches={branches}
         defaultType="SUPPLY"
         isOpen
         onOpenChange={() => {}}
@@ -52,5 +54,17 @@ describe('NewItemModal sin bodega activa', () => {
 
     expect(screen.queryByText(/No hay ninguna bodega activa/)).toBeNull();
     expect(screen.getByText(/Existencia inicial en Casa Matriz/)).toBeTruthy();
+  });
+});
+
+describe('NewItemModal stock mínimo', () => {
+  it('ofrece el mínimo de cada bodega al crear, vacío (el 0 es solo el ejemplo)', () => {
+    renderModal('b1', 'Casa Matriz', [
+      { id: 'b1', name: 'Casa Matriz' } as Branch,
+      { id: 'b2', name: 'Faena' } as Branch,
+    ]);
+    expect(screen.getByText(/Stock mínimo por sucursal/)).toBeTruthy();
+    expect(screen.getByLabelText(/^Faena/)).toBeTruthy();
+    expect((screen.getByLabelText(/^Faena/) as HTMLInputElement).value).toBe('');
   });
 });
