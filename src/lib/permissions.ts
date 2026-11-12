@@ -108,6 +108,17 @@ export function canDeleteHallazgo(role: Role | null | undefined): boolean {
 }
 
 /**
+ * Corregir una carga de combustible ya registrada (típico: litros mal leídos
+ * del display del surtidor): `PATCH /api/combustible/:id` es solo ADMIN, y la
+ * corrección de una carga de tarjeta edita la tarjeta, también de ADMIN en el
+ * panel. No vive en `WRITE_ROLES` porque esta escritura es online directa, no
+ * una clave del registro del outbox.
+ */
+export function canEditCombustible(role: Role | null | undefined): boolean {
+  return role === ADMIN;
+}
+
+/**
  * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
  * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un
  * equipo) para no llevarla a una pantalla que la rebota a `/forbidden`.
@@ -145,4 +156,8 @@ export const MOVEMENT_MODE_ACTIONS = {
 
 /** Las escrituras de stock de un ítem: la pantalla ofrece "Registrar movimiento"
  * si el rol puede hacer al menos una (cada modo exige la suya). */
-export const MOVEMENT_ACTIONS = ['movement.create', 'stock.transfer', 'item.adjust'] as const satisfies readonly EndpointKey[];
+export const MOVEMENT_ACTIONS = [
+  'movement.create',
+  'stock.transfer',
+  'item.adjust',
+] as const satisfies readonly EndpointKey[];

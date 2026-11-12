@@ -16,6 +16,7 @@ import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
 
 import { assetUrl } from '../api/UploadsAPI';
+import { EditarCargaCombustibleModal } from '../components/flota/EditarCargaCombustibleModal';
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { EQUIPMENT_CLASS_OPTIONS, equipmentClassLabel } from '../config/flota-colors';
@@ -23,6 +24,7 @@ import { useCombustibleList } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
+import { canEditCombustible } from '../lib/permissions';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import type { RegistroCombustible } from '../types/combustible';
 import type { EquipmentClass } from '../types/equipment';
@@ -97,10 +99,13 @@ function DetalleCargaModal({
   carga,
   clase,
   onClose,
+  onEditar,
 }: {
   carga: RegistroCombustible | null;
   clase: EquipmentClass | undefined;
   onClose: () => void;
+  /** Presente solo cuando el rol puede corregir la carga (ADMIN). */
+  onEditar?: () => void;
 }) {
   return (
     <Modal.Backdrop
@@ -162,6 +167,13 @@ function DetalleCargaModal({
               </div>
             ) : null}
           </Modal.Body>
+          {onEditar ? (
+            <Modal.Footer>
+              <Button onPress={onEditar} variant="secondary">
+                Editar carga
+              </Button>
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
@@ -235,8 +247,11 @@ export function CargasCombustibleAdminView() {
   const desde = range?.start.toString() ?? '';
   const hasta = range?.end.toString() ?? '';
   const [detalle, setDetalle] = useState<RegistroCombustible | null>(null);
+  const [editando, setEditando] = useState<RegistroCombustible | null>(null);
   const [creando, setCreando] = useState(false);
-  const puedeCrear = usePermissions().can('combustible.create');
+  const permisos = usePermissions();
+  const puedeCrear = permisos.can('combustible.create');
+  const puedeEditar = canEditCombustible(permisos.role);
 
   const cargas = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
@@ -534,7 +549,17 @@ export function CargasCombustibleAdminView() {
         carga={detalle}
         clase={detalle ? claseDe(detalle) : undefined}
         onClose={() => setDetalle(null)}
+        onEditar={
+          puedeEditar && detalle
+            ? () => {
+                setEditando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
       />
+
+      {editando ? <EditarCargaCombustibleModal carga={editando} onClose={() => setEditando(null)} /> : null}
 
       {creando ? <NuevaCargaCombustibleModal onClose={() => setCreando(false)} /> : null}
     </div>
