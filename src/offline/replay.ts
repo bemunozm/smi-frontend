@@ -13,6 +13,7 @@ import {
   type OutboxLastError,
   type OutboxOp,
   type PhotoOp,
+  type RegisterClosedCardOp,
 } from './db';
 import { purgeApiCacheFor } from './api-cache';
 import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache } from './cache-upserts';
@@ -724,6 +725,22 @@ function processCloseCard(op: CloseCardOp): Promise<ProcessOutcome> {
   );
 }
 
+function processRegisterClosedCard(op: RegisterClosedCardOp): Promise<ProcessOutcome> {
+  return processPhotoOp(
+    op,
+    'Falta la foto guardada de este turno pasado — descartalo y volvé a registrarlo.',
+    async (current, tmpKey) => {
+      // El backfill siempre lleva foto (`photoId` es obligatorio).
+      if (!tmpKey) throw new DomainError('Falta la foto del turno pasado.', { code: 'PHOTO_MISSING' });
+      const card = await ShiftCardAPI.registerClosedCard(
+        { ...current.payload, tmpPhotoKey: tmpKey },
+        replayConfig(JSON_TIMEOUT_MS),
+      );
+      afterServerAccepted('el turno pasado', () => applyCardToCache(card));
+    },
+  );
+}
+
 function processCreateHallazgo(op: CreateHallazgoOp): Promise<ProcessOutcome> {
   return processPhotoOp(
     op,
@@ -922,6 +939,7 @@ async function processOp(userId: string, candidate: OutboxOp): Promise<ProcessOu
   if (!op) return 'skipped';
 
   if (op.type === 'closeCard') return finishLegacy(await processCloseCard(op));
+  if (op.type === 'registerClosedCard') return finishLegacy(await processRegisterClosedCard(op));
   if (op.type === 'createHallazgo') return finishLegacy(await processCreateHallazgo(op));
   if (op.type === 'createTrabajoExtra') return finishLegacy(await processCreateTrabajoExtra(op));
   if (op.type === 'httpWrite') return processHttpWrite(op);

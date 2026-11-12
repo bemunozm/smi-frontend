@@ -5,6 +5,7 @@ import { waitFor } from '@testing-library/react';
 const {
   openCardMock,
   closeCardMock,
+  registerClosedCardMock,
   sendExitReportMock,
   uploadFileMock,
   toastMock,
@@ -13,6 +14,7 @@ const {
 } = vi.hoisted(() => ({
   openCardMock: vi.fn(),
   closeCardMock: vi.fn(),
+  registerClosedCardMock: vi.fn(),
   sendExitReportMock: vi.fn(),
   uploadFileMock: vi.fn(),
   toastMock: vi.fn(),
@@ -24,7 +26,12 @@ vi.mock('../api/HallazgosAPI', () => ({ createHallazgo: createHallazgoMock, list
 vi.mock('../api/TrabajosExtraAPI', () => ({ createTrabajoExtra: createTrabajoExtraMock, listTrabajosExtra: vi.fn() }));
 
 vi.mock('../api/ShiftCardAPI', () => ({
-  ShiftCardAPI: { openCard: openCardMock, closeCard: closeCardMock, listMine: vi.fn() },
+  ShiftCardAPI: {
+    openCard: openCardMock,
+    closeCard: closeCardMock,
+    registerClosedCard: registerClosedCardMock,
+    listMine: vi.fn(),
+  },
 }));
 vi.mock('../api/ShiftReportAPI', () => ({
   ShiftReportAPI: { sendExitReport: sendExitReportMock, fileUrl: (id: string) => `/reports/${id}` },
@@ -38,6 +45,7 @@ import {
   type CreateHallazgoOp,
   type CreateTrabajoExtraOp,
   type OpenCardOp,
+  type RegisterClosedCardOp,
   type SendExitReportOp,
 } from './db';
 import { countPending, retryOp } from './outbox';
@@ -117,6 +125,35 @@ function putCloseOp(overrides: Partial<CloseCardOp> = {}): Promise<string> {
     payload: {
       cardId: 'card-1',
       input: { closeClientId: 'close-1', valorFinal: 130, fuelLiters: 20, capturedAt: '2026-09-24T16:00:00.000Z' },
+    },
+    ...overrides,
+  };
+  return db.outbox.put(base);
+}
+
+function putRegisterClosedOp(overrides: Partial<RegisterClosedCardOp> = {}): Promise<string> {
+  const base: RegisterClosedCardOp = {
+    id: 'card-9',
+    type: 'registerClosedCard',
+    v: 1,
+    userId: 'u1',
+    status: 'pending_upload',
+    attempts: 0,
+    photoId: 'card-9',
+    createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
+    updatedAt: Date.now(),
+    payload: {
+      id: 'card-9',
+      equipoId: 'eq-1',
+      operatorId: 'op-1',
+      valorInicial: 1000,
+      valorFinal: 1010,
+      shiftDate: '2026-11-01',
+      shiftType: 'DIURNO',
+      capturedAt: '2026-11-11T09:00:00.000Z',
+      closeClientId: 'close-9',
+      fuelLiters: 60,
     },
     ...overrides,
   };
@@ -319,6 +356,69 @@ describe('replay — errores de negocio (4xx que no es 401)', () => {
     // Sigue con la siguiente — no se corta el run.
     expect(openCardMock).toHaveBeenCalledTimes(2);
     expect(await db.outbox.get('c-2')).toBeUndefined();
+  });
+});
+
+describe('replay — turno pasado (registerClosedCard)', () => {
+  it('sube la foto y manda el body con tmpPhotoKey a registerClosedCard; borra operación y foto', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
+    registerClosedCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-9', valorFinal: 1010, closedAt: '2026-11-11T09:00:00.000Z' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(1);
+    expect(registerClosedCardMock).toHaveBeenCalledTimes(1);
+    const [body] = registerClosedCardMock.mock.calls[0]!;
+    expect(body).toMatchObject({
+      id: 'card-9',
+      equipoId: 'eq-1',
+      valorInicial: 1000,
+      valorFinal: 1010,
+      shiftDate: '2026-11-01',
+      closeClientId: 'close-9',
+      fuelLiters: 60,
+      tmpPhotoKey: 'tmp/u1/foto.jpg',
+    });
+    expect(await db.outbox.get('card-9')).toBeUndefined();
+    expect(await db.blobs.get('card-9')).toBeUndefined();
+  });
+
+  it('con TMP_KEY_EXPIRED resube la foto UNA vez y reintenta en el mismo run', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/vencida.jpg', url: 'https://x' });
+    registerClosedCardMock.mockRejectedValueOnce(new DomainError('expiró', { status: 400, code: 'TMP_KEY_EXPIRED' }));
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/nueva.jpg', url: 'https://x' });
+    registerClosedCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-9', valorFinal: 1010, closedAt: '2026-11-11T09:00:00.000Z' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(2);
+    expect(registerClosedCardMock).toHaveBeenCalledTimes(2);
+    const [secondBody] = registerClosedCardMock.mock.calls[1]!;
+    expect(secondBody).toMatchObject({ tmpPhotoKey: 'tmp/nueva.jpg' });
+    expect(await db.outbox.get('card-9')).toBeUndefined();
+  });
+
+  it('un error de negocio la deja en needs_attention sin perder la foto', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
+    registerClosedCardMock.mockRejectedValueOnce(
+      new DomainError('El checklist de hoy está por validar', { status: 409, code: 'CHECKLIST_NOT_ACCEPTED' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('card-9');
+    expect(op).toMatchObject({ status: 'needs_attention', tmpKey: 'tmp/u1/foto.jpg' });
+    expect(await db.blobs.get('card-9')).toBeTruthy();
   });
 });
 
