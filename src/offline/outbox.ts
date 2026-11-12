@@ -14,6 +14,7 @@ import {
   type OpenCardOp,
   opsDeCreacion,
   type OutboxOp,
+  type RegisterClosedCardOp,
   type SendExitReportOp,
 } from './db';
 import { ENDPOINTS, isEndpointKey, type EndpointKey, type HttpParams } from './endpoints';
@@ -182,13 +183,17 @@ export async function enqueueCloseCard(
 }
 
 /**
- * Encola la apertura Y el cierre (con su foto) de una tarjeta en UNA sola
- * transacción: o quedan guardadas las dos operaciones y la foto, o ninguna.
- * Sirve a la carga de un turno ya terminado, donde una apertura sin su cierre
- * dejaría la tarjeta «En curso» y bloquearía al equipo. La foto se prepara
- * antes de abrir la transacción, así un archivo inválido ni siquiera llega a
- * escribir la apertura; hacerlo en una sola transacción evita además que el
- * replay despache la apertura antes de que exista el cierre.
+ * Encola el backfill de un turno YA terminado como UNA sola operación
+ * `registerClosedCard` (+ su foto, en la misma transacción Dexie): la tarjeta
+ * nace cerrada en el servidor (`POST /shift-cards/closed`), así nunca existe
+ * abierta — ni en la cola ni en la base — y no choca con una tarjeta abierta
+ * HOY del mismo equipo ni la afecta. La foto se prepara antes de abrir la
+ * transacción, así un archivo inválido no llega a escribir nada.
+ *
+ * La firma conserva el par (apertura, cierre) de la planilla; acá se funden
+ * en el body único del endpoint (sin `tmpPhotoKey`, que nace al subir la
+ * foto en el replay). El id de la operación y de la foto es `open.id` — la
+ * PK de la tarjeta, relación 1:1.
  */
 export async function enqueueClosedCard(
   userId: string,
@@ -198,19 +203,47 @@ export async function enqueueClosedCard(
 ): Promise<void> {
   const compressed = await prepararArchivo(photo);
 
+  const payload: RegisterClosedCardOp['payload'] = {
+    id: open.id,
+    equipoId: open.equipoId,
+    ...(open.operatorId ? { operatorId: open.operatorId } : {}),
+    valorInicial: open.valorInicial,
+    valorFinal: close.valorFinal,
+    shiftDate: open.shiftDate,
+    shiftType: open.shiftType,
+    capturedAt: close.capturedAt,
+    closeClientId: close.closeClientId,
+    fuelLiters: close.fuelLiters,
+    ...(close.adBlue !== undefined ? { adBlue: close.adBlue } : {}),
+    ...(close.adBlueLiters !== undefined ? { adBlueLiters: close.adBlueLiters } : {}),
+    ...(close.observaciones !== undefined ? { observaciones: close.observaciones } : {}),
+  };
+
   await conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
-      const seqApertura = await nextSeq();
-      await db.outbox.put(buildOpenCardOp(userId, open, seqApertura, timestamp));
       await db.blobs.put({
-        id: close.closeClientId,
+        id: open.id,
         data: compressed.data,
         mime: compressed.mime,
         name: compressed.name,
         createdAt: timestamp,
       });
-      await db.outbox.put(buildCloseCardOp(userId, open.id, close, seqApertura + 1, timestamp));
+      const op: RegisterClosedCardOp = {
+        id: open.id,
+        type: 'registerClosedCard',
+        v: 1,
+        userId,
+        payload,
+        status: 'pending_upload',
+        attempts: 0,
+        photoId: open.id,
+        seq: await nextSeq(),
+        entityKey: shiftCardEntity(open.id),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await db.outbox.put(op);
     }),
   );
   requestSync();
@@ -655,7 +688,9 @@ export async function overwriteOp(id: string, userId: string): Promise<void> {
 
 /** Ids de blobs que una operación guardó. */
 function blobIdsOf(op: OutboxOp): string[] {
-  if ((op.type === 'closeCard' || op.type === 'createHallazgo') && op.photoId) return [op.photoId];
+  if ((op.type === 'closeCard' || op.type === 'registerClosedCard' || op.type === 'createHallazgo') && op.photoId) {
+    return [op.photoId];
+  }
   if (op.type === 'httpWrite') return (op.files ?? []).map((f) => f.blobId);
   return [];
 }

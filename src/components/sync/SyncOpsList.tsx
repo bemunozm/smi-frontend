@@ -38,6 +38,8 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly O
       return conCodigo('Apertura de tarjeta', codigoEquipo(equipos, op.payload.equipoId));
     case 'closeCard':
       return conCodigo('Cierre de tarjeta', codigoDeTarjeta(op.payload.cardId, equipos, ops));
+    case 'registerClosedCard':
+      return conCodigo('Turno pasado', codigoEquipo(equipos, op.payload.equipoId));
     case 'sendExitReport':
       return 'Reporte de salida';
     case 'createHallazgo': {
