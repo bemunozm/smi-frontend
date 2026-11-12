@@ -14,6 +14,7 @@ import {
   type OpenCardOp,
   opsDeCreacion,
   type OutboxOp,
+  type RegisterClosedCardOp,
   type SendExitReportOp,
 } from './db';
 import { ENDPOINTS, isEndpointKey, type EndpointKey, type HttpParams } from './endpoints';
@@ -30,7 +31,12 @@ import {
 import { generateUuid } from '../lib/uuid';
 import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { JsonObject } from '../types/json';
-import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
+import type {
+  CloseShiftCardInput,
+  OpenShiftCardInput,
+  RegisterClosedShiftCardInput,
+  SendExitReportInput,
+} from '../types/shift';
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 function now(): number {
@@ -182,15 +188,83 @@ export async function enqueueCloseCard(
 }
 
 /**
- * Encola la apertura Y el cierre (con su foto) de una tarjeta en UNA sola
- * transacción: o quedan guardadas las dos operaciones y la foto, o ninguna.
- * Sirve a la carga de un turno ya terminado, donde una apertura sin su cierre
- * dejaría la tarjeta «En curso» y bloquearía al equipo. La foto se prepara
- * antes de abrir la transacción, así un archivo inválido ni siquiera llega a
- * escribir la apertura; hacerlo en una sola transacción evita además que el
- * replay despache la apertura antes de que exista el cierre.
+ * Encola el backfill de un turno YA terminado como UNA sola operación
+ * `registerClosedCard` (+ su foto, en la misma transacción Dexie): la tarjeta
+ * nace cerrada en el servidor (`POST /shift-cards/closed`), así nunca existe
+ * abierta — ni en la cola ni en la base — y no choca con una tarjeta abierta
+ * HOY del mismo equipo ni la afecta. La foto se prepara antes de abrir la
+ * transacción, así un archivo inválido no llega a escribir nada.
+ *
+ * La firma conserva el par (apertura, cierre) de la planilla; acá se funden
+ * en el body único del endpoint (sin `tmpPhotoKey`, que nace al subir la
+ * foto en el replay). El id de la operación y de la foto es `open.id` — la
+ * PK de la tarjeta, relación 1:1.
  */
 export async function enqueueClosedCard(
+  userId: string,
+  open: OpenShiftCardInput,
+  close: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
+  photo: File,
+): Promise<void> {
+  const compressed = await prepararArchivo(photo);
+
+  const payload: RegisterClosedCardOp['payload'] = {
+    id: open.id,
+    equipoId: open.equipoId,
+    ...(open.operatorId ? { operatorId: open.operatorId } : {}),
+    valorInicial: open.valorInicial,
+    valorFinal: close.valorFinal,
+    shiftDate: open.shiftDate,
+    shiftType: open.shiftType,
+    capturedAt: close.capturedAt,
+    closeClientId: close.closeClientId,
+    fuelLiters: close.fuelLiters,
+    ...(close.adBlue !== undefined ? { adBlue: close.adBlue } : {}),
+    ...(close.adBlueLiters !== undefined ? { adBlueLiters: close.adBlueLiters } : {}),
+    ...(close.observaciones !== undefined ? { observaciones: close.observaciones } : {}),
+  };
+
+  await conCuota(() =>
+    db.transaction('rw', db.outbox, db.blobs, async () => {
+      const timestamp = now();
+      await db.blobs.put({
+        id: open.id,
+        data: compressed.data,
+        mime: compressed.mime,
+        name: compressed.name,
+        createdAt: timestamp,
+      });
+      const op: RegisterClosedCardOp = {
+        id: open.id,
+        type: 'registerClosedCard',
+        v: 1,
+        userId,
+        payload,
+        status: 'pending_upload',
+        attempts: 0,
+        photoId: open.id,
+        seq: await nextSeq(),
+        entityKey: shiftCardEntity(open.id),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await db.outbox.put(op);
+    }),
+  );
+  requestSync();
+}
+
+/**
+ * Variante LEGACY de `enqueueClosedCard` para el turno terminado del MISMO
+ * día de negocio (p. ej. el DIURNO de hoy registrado esa misma noche): ese
+ * caso NO es un día pasado y `POST /shift-cards/closed` lo rechaza
+ * (`SHIFT_NOT_FINISHED`), así que viaja como el par apertura+cierre de
+ * siempre — las dos operaciones y la foto en UNA transacción Dexie, con el
+ * cierre `dependsOn` la apertura: nunca queda una apertura encolada sin su
+ * cierre. Rigen las reglas normales del flujo vivo (equipo operativo y
+ * libre), igual que antes de la op única.
+ */
+export async function enqueueClosedCardPair(
   userId: string,
   open: OpenShiftCardInput,
   close: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
@@ -256,11 +330,7 @@ export async function enqueueExitReport(userId: string, input: SendExitReportInp
  * sin operación ni una operación `pending_upload` sin foto. El id de la foto
  * es el del hallazgo (relación 1:1). Sin foto, la operación nace `pending`.
  */
-export async function enqueueCreateHallazgo(
-  userId: string,
-  input: CreateHallazgoInput,
-  photo?: File,
-): Promise<void> {
+export async function enqueueCreateHallazgo(userId: string, input: CreateHallazgoInput, photo?: File): Promise<void> {
   const compressed = photo ? await prepararArchivo(photo) : undefined;
 
   await conCuota(() =>
@@ -371,7 +441,9 @@ export async function enqueueHttpWrite(userId: string, spec: HttpWriteSpec): Pro
   if (archivos.length > 0 && !def.carriesFiles) {
     throw new DomainError('Este endpoint no admite archivos.', { code: 'ENDPOINT_NOT_QUEUEABLE' });
   }
-  const guardables = await Promise.all(archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })));
+  const guardables = await Promise.all(
+    archivos.map(async ({ field, file }) => ({ field, ...(await prepararArchivo(file)) })),
+  );
 
   const entityKey = spec.entityKey ?? def.entity?.(spec.params, spec.body);
   const claves = [...(entityKey ? [entityKey] : []), ...(def.parents?.(spec.params, spec.body) ?? [])];
@@ -583,13 +655,30 @@ export function patchOpenCardOp(
 export function patchCloseCardOp(
   id: string,
   userId: string,
-  patch: Partial<
-    Pick<CloseShiftCardInput, 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'>
-  >,
+  patch: Partial<Pick<CloseShiftCardInput, 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'>>,
 ): Promise<PatchOutcome> {
   return patchOp<CloseCardOp>(id, userId, 'closeCard', (op) => ({
     ...op,
     payload: { ...op.payload, input: { ...op.payload.input, ...patch } },
+  }));
+}
+
+/** Cambia operador / horómetros / litros / AdBlue / observaciones de un
+ * backfill (`registerClosedCard`) todavía pendiente — la tarjeta completa vive
+ * en UNA operación, así que todos los campos editables se corrigen acá. */
+export function patchRegisterClosedCardOp(
+  id: string,
+  userId: string,
+  patch: Partial<
+    Pick<
+      RegisterClosedShiftCardInput,
+      'operatorId' | 'valorInicial' | 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'
+    >
+  >,
+): Promise<PatchOutcome> {
+  return patchOp<RegisterClosedCardOp>(id, userId, 'registerClosedCard', (op) => ({
+    ...op,
+    payload: { ...op.payload, ...patch },
   }));
 }
 
@@ -616,13 +705,7 @@ export async function retryOp(id: string, userId: string): Promise<void> {
   // acepta las claves comunes a todos los tipos de operación, y acá hace
   // falta tocar `lastError`, que si vive en un miembro le sobra a los otros.
   // Con `put()` y el objeto completo (`...op`) no hay ese problema.
-  await db.outbox.put({
-    ...op,
-    status: pendingStatusFor(op),
-    lastError: undefined,
-    serverErrors: 0,
-    updatedAt: now(),
-  });
+  await db.outbox.put({ ...op, status: pendingStatusFor(op), lastError: undefined, serverErrors: 0, updatedAt: now() });
   requestSync();
 }
 
@@ -655,7 +738,9 @@ export async function overwriteOp(id: string, userId: string): Promise<void> {
 
 /** Ids de blobs que una operación guardó. */
 function blobIdsOf(op: OutboxOp): string[] {
-  if ((op.type === 'closeCard' || op.type === 'createHallazgo') && op.photoId) return [op.photoId];
+  if ((op.type === 'closeCard' || op.type === 'registerClosedCard' || op.type === 'createHallazgo') && op.photoId) {
+    return [op.photoId];
+  }
   if (op.type === 'httpWrite') return (op.files ?? []).map((f) => f.blobId);
   return [];
 }

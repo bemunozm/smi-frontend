@@ -9,6 +9,18 @@ import { opcionesOperador } from '../../lib/operadores-habituales';
 import type { Operator } from '../../types/operator';
 import { Boton, Card, CardHead, Campo, Form, Hint, Input, Selector } from './ui';
 
+/** Avisos informativos del equipo en la planilla — NO bloquean: el estado de
+ * HOY (en taller, en uso) no dice nada del día pasado que se registra. */
+function avisoDeEquipo(e: Equipment, esDiaPasado: boolean): string | undefined {
+  const partes: string[] = [];
+  if (esDiaPasado && e.status !== 'OPERATIONAL') partes.push('No operativo hoy');
+  if (e.openShift != null) {
+    const quien = e.openShift.supervisorName;
+    partes.push(quien ? `Hoy está en uso por ${quien}` : 'Hoy está en uso');
+  }
+  return partes.length > 0 ? partes.join(' · ') : undefined;
+}
+
 /**
  * Carga rápida del turno pasado: la planilla de papel en pantalla — una fila
  * por equipo (operador, horómetro inicial/final, litros) que al guardar
@@ -32,7 +44,7 @@ export function PastShiftQuickEntry({
   esDiaPasado: boolean;
 }) {
   const { user } = useCurrentUser();
-  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar });
+  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar, esDiaPasado });
 
   return (
     <Card>
@@ -65,13 +77,16 @@ export function PastShiftQuickEntry({
                 disabled={q.isGuardando}
                 valor={fila.equipoId}
                 onChange={(equipoId) => q.setFila(i, { equipoId })}
-                opciones={q.equiposDeFila(i).map((e) => ({
-                  valor: e.id,
-                  titulo: e.internalCode,
-                  detalle: e.type,
-                  ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
-                  ...(esDiaPasado && e.status !== 'OPERATIONAL' ? { aviso: 'No operativo hoy' } : {}),
-                }))}
+                opciones={q.equiposDeFila(i).map((e) => {
+                  const aviso = avisoDeEquipo(e, esDiaPasado);
+                  return {
+                    valor: e.id,
+                    titulo: e.internalCode,
+                    detalle: e.type,
+                    ...(checklistSinAceptar.has(e.id) ? { motivo: checklistSinAceptar.get(e.id) } : {}),
+                    ...(aviso ? { aviso } : {}),
+                  };
+                })}
               />
             </Campo>
 
@@ -147,9 +162,8 @@ export function PastShiftQuickEntry({
           <ArrowRight className="h-[19px] w-[19px]" aria-hidden />
         </Boton>
         <Hint>
-          Cada fila queda como tarjeta cerrada de este turno, con su foto del combustible
-          (obligatoria; litros vacío = turno sin carga). Al final envía el reporte de salida
-          como siempre.
+          Cada fila queda como tarjeta cerrada de este turno, con su foto del combustible (obligatoria; litros vacío =
+          turno sin carga). Al final envía el reporte de salida como siempre.
         </Hint>
       </Form>
     </Card>

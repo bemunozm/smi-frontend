@@ -19,7 +19,11 @@ function codigoEquipo(equipos: Equipment[] | undefined, equipoId: string): strin
 
 /** Código del equipo de una tarjeta: de la lista ya cargada o, si la apertura
  * también está en la cola (abierta sin señal), de esa apertura. */
-function codigoDeTarjeta(cardId: string, equipos: Equipment[] | undefined, ops: readonly OutboxOp[]): string | undefined {
+function codigoDeTarjeta(
+  cardId: string,
+  equipos: Equipment[] | undefined,
+  ops: readonly OutboxOp[],
+): string | undefined {
   const apertura = ops.find((o) => o.type === 'openCard' && o.id === cardId);
   return (
     cachedEquipoCode('shift-card', cardId) ??
@@ -38,6 +42,8 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly O
       return conCodigo('Apertura de tarjeta', codigoEquipo(equipos, op.payload.equipoId));
     case 'closeCard':
       return conCodigo('Cierre de tarjeta', codigoDeTarjeta(op.payload.cardId, equipos, ops));
+    case 'registerClosedCard':
+      return conCodigo('Turno pasado', codigoEquipo(equipos, op.payload.equipoId));
     case 'sendExitReport':
       return 'Reporte de salida';
     case 'createHallazgo': {
@@ -107,8 +113,8 @@ function AvisoDependientes({ op, ops }: { op: OutboxOp; ops: OutboxOp[] }) {
   }
   return (
     <p className="m-0 text-[12.5px] text-muted-foreground">
-      Hay {dependientes.length === 1 ? '1 cambio guardado' : `${dependientes.length} cambios guardados`} que dependen
-      de este: se envían cuando lo resuelvas.
+      Hay {dependientes.length === 1 ? '1 cambio guardado' : `${dependientes.length} cambios guardados`} que dependen de
+      este: se envían cuando lo resuelvas.
     </p>
   );
 }

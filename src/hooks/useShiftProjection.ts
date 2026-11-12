@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import { esActual, fechaHoraCorta, mapCardToTarjeta, SIN_CONDUCTOR, type TarjetaTurno } from './shift-register-helpers';
-import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp } from '../offline/db';
+import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp, RegisterClosedCardOp } from '../offline/db';
 import type { ContextoTurno } from '../lib/turno';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
@@ -63,16 +63,60 @@ function overlayCloseOp(
     adBlue: op.payload.input.adBlue ?? false,
     adBlueLitros: op.payload.input.adBlueLiters,
     observaciones: op.payload.input.observaciones ?? base.observaciones,
-    cerradaA: new Date(op.payload.input.capturedAt).toLocaleTimeString('es-CL', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
+    cerradaA: new Date(op.payload.input.capturedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
     cerradaIso: op.payload.input.capturedAt,
     sinSincronizar: true,
     arrastrada: false,
     cerradaPor: supervisor,
     cerradaPorId: userId,
     cerradaEnActual: shiftDate != null && shiftType != null && esActual(shiftDate, shiftType, ctx),
+  };
+}
+
+/** Backfill pendiente en el outbox (`registerClosedCard`) → tarjeta sintética
+ * ya CERRADA de su día histórico, con `sinSincronizar: true`. Nunca pasa por
+ * el estado 'curso': la tarjeta nace cerrada también en el servidor. */
+function mapRegisterClosedOpToTarjeta(
+  op: RegisterClosedCardOp,
+  ctx: ContextoTurno,
+  equipos: Equipment[],
+  operadores: Operator[],
+  supervisor: string,
+): TarjetaTurno {
+  const equipo = equipos.find((e) => e.id === op.payload.equipoId);
+  const operador = operadores.find((o) => o.id === op.payload.operatorId);
+  const actual = esActual(op.payload.shiftDate, op.payload.shiftType, ctx);
+  const liviano = equipo?.equipmentClass === 'LIGHT';
+  return {
+    id: op.id,
+    equipo: equipo?.internalCode ?? '—',
+    tipo: equipo?.type ?? '—',
+    operador: operador?.name ?? (op.payload.operatorId ? 'Operador' : SIN_CONDUCTOR),
+    operatorId: op.payload.operatorId ?? null,
+    inicial: op.payload.valorInicial,
+    final: op.payload.valorFinal,
+    litros: op.payload.fuelLiters,
+    adBlue: op.payload.adBlue ?? false,
+    adBlueLitros: op.payload.adBlueLiters,
+    observaciones: op.payload.observaciones,
+    grupo: actual ? 'actual' : 'anterior',
+    // El turno REAL de la tarjeta (histórico) — mismo criterio que la
+    // apertura pendiente: el historial de cerradas rotula con esto.
+    turnoFecha: op.payload.shiftDate,
+    turnoTipo: op.payload.shiftType,
+    estado: 'cerrada',
+    supervisor,
+    supervisorId: op.userId,
+    sinSincronizar: true,
+    arrastrada: false,
+    liviano,
+    abiertaEl: fechaHoraCorta(op.payload.capturedAt),
+    abiertaIso: op.payload.capturedAt,
+    cerradaA: new Date(op.payload.capturedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+    cerradaIso: op.payload.capturedAt,
+    cerradaPor: supervisor,
+    cerradaPorId: op.userId,
+    cerradaEnActual: actual,
   };
 }
 
@@ -87,9 +131,7 @@ function overlayEditOp(base: TarjetaTurno, op: HttpWriteOp, operadores: Operator
   const adBlue = typeof body.adBlue === 'boolean' ? body.adBlue : (base.adBlue ?? false);
   return {
     ...base,
-    ...(operatorId
-      ? { operatorId, operador: operadores.find((o) => o.id === operatorId)?.name ?? base.operador }
-      : {}),
+    ...(operatorId ? { operatorId, operador: operadores.find((o) => o.id === operatorId)?.name ?? base.operador } : {}),
     inicial: numero(body.valorInicial) ?? base.inicial,
     final: numero(body.valorFinal) ?? base.final,
     litros: numero(body.fuelLiters) ?? base.litros,
@@ -118,7 +160,9 @@ function construirHintEquipo(enTaller: Equipment[], ocupados: Equipment[]): stri
     partes.push(`${ocupados.length} equipos no aparecen porque están ocupados.`);
   }
 
-  return partes.length > 0 ? `Solo equipos operativos y libres. ${partes.join(' ')}` : 'Solo equipos operativos y libres.';
+  return partes.length > 0
+    ? `Solo equipos operativos y libres. ${partes.join(' ')}`
+    : 'Solo equipos operativos y libres.';
 }
 
 export interface UseShiftProjectionParams {
@@ -131,9 +175,11 @@ export interface UseShiftProjectionParams {
   userId: string | undefined;
   /** Carga histórica de un día de negocio PASADO: el estado ACTUAL del
    * equipo no dice nada de ese día, así que los pesados no operativos
-   * también entran en `disponibles` (misma relajación que hace el backend
-   * en `openCard`). La unicidad de tarjeta abierta se respeta igual. */
-  incluirNoOperativos?: boolean;
+   * también entran en `disponibles` (misma relajación que hace el backend) y
+   * un equipo con tarjeta abierta HOY tampoco se excluye — el backfill crea
+   * la tarjeta ya cerrada (`POST /shift-cards/closed`), nunca compite por el
+   * "slot" de tarjeta abierta del equipo. */
+  modoDiaPasado?: boolean;
 }
 
 export interface UseShiftProjectionResult {
@@ -171,10 +217,14 @@ export function useShiftProjection({
   ops,
   supervisor,
   userId,
-  incluirNoOperativos = false,
+  modoDiaPasado = false,
 }: UseShiftProjectionParams): UseShiftProjectionResult {
   const opsAbrir = useMemo(() => ops.filter((op): op is OpenCardOp => op.type === 'openCard'), [ops]);
   const opsCerrar = useMemo(() => ops.filter((op): op is CloseCardOp => op.type === 'closeCard'), [ops]);
+  const opsRegistrarCerrada = useMemo(
+    () => ops.filter((op): op is RegisterClosedCardOp => op.type === 'registerClosedCard'),
+    [ops],
+  );
 
   const opsEditar = useMemo(
     () => ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'shiftCard.edit'),
@@ -191,6 +241,11 @@ export function useShiftProjection({
       if (porId.has(op.id)) return;
       porId.set(op.id, mapOpenOpToTarjeta(op, ctx, equipos, operadores, supervisor));
     });
+    // Backfill pendiente: mismo criterio que la apertura (el servidor gana).
+    opsRegistrarCerrada.forEach((op) => {
+      if (porId.has(op.id)) return;
+      porId.set(op.id, mapRegisterClosedOpToTarjeta(op, ctx, equipos, operadores, supervisor));
+    });
     // Un cierre pendiente se superpone sobre la que ya esté en el mapa
     // (servidor o apertura pendiente) — si no hay base (no debería pasar,
     // el orden FIFO garantiza la apertura antes), se ignora en silencio.
@@ -205,7 +260,18 @@ export function useShiftProjection({
       if (id && base) porId.set(id, overlayEditOp(base, op, operadores));
     });
     return Array.from(porId.values());
-  }, [tarjetasServidor, opsAbrir, opsCerrar, opsEditar, ctx, equipos, operadores, supervisor, userId]);
+  }, [
+    tarjetasServidor,
+    opsAbrir,
+    opsRegistrarCerrada,
+    opsCerrar,
+    opsEditar,
+    ctx,
+    equipos,
+    operadores,
+    supervisor,
+    userId,
+  ]);
 
   const pesadas = tarjetas.filter((t) => !t.liviano);
   const abiertas = pesadas.filter((t) => t.estado === 'curso');
@@ -252,11 +318,14 @@ export function useShiftProjection({
     () =>
       equipos.filter(
         (e) =>
-          (e.status === 'OPERATIONAL' || (incluirNoOperativos && e.equipmentClass !== 'LIGHT')) &&
-          (e.openShift == null || pendingClosedEquipoIds.has(e.id)) &&
-          !pendingOpenEquipoIds.has(e.id),
+          (e.status === 'OPERATIONAL' || (modoDiaPasado && e.equipmentClass !== 'LIGHT')) &&
+          // El presente no interfiere en el pasado: una tarjeta abierta HOY
+          // (del servidor o pendiente en el outbox) no excluye al equipo del
+          // backfill — su tarjeta histórica nace cerrada y no la toca.
+          (modoDiaPasado || e.openShift == null || pendingClosedEquipoIds.has(e.id)) &&
+          (modoDiaPasado || !pendingOpenEquipoIds.has(e.id)),
       ),
-    [equipos, incluirNoOperativos, pendingClosedEquipoIds, pendingOpenEquipoIds],
+    [equipos, modoDiaPasado, pendingClosedEquipoIds, pendingOpenEquipoIds],
   );
   const disponibles = useMemo(() => libres.filter((e) => e.equipmentClass !== 'LIGHT'), [libres]);
   const disponiblesLivianos = useMemo(() => libres.filter((e) => e.equipmentClass === 'LIGHT'), [libres]);
@@ -286,10 +355,11 @@ export function useShiftProjection({
       ),
     [equipos, equipoIdsConTarjetaPropiaAbierta],
   );
-  // Con los no operativos ya elegibles, el hint de "no aparecen" mentiría.
+  // Con los no operativos Y los ocupados ya elegibles en modo día pasado, el
+  // hint de "no aparecen" mentiría.
   const equipoHint = useMemo(
-    () => construirHintEquipo(incluirNoOperativos ? [] : enTaller, ocupados),
-    [incluirNoOperativos, enTaller, ocupados],
+    () => construirHintEquipo(modoDiaPasado ? [] : enTaller, modoDiaPasado ? [] : ocupados),
+    [modoDiaPasado, enTaller, ocupados],
   );
 
   return {

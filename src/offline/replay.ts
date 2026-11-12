@@ -13,6 +13,7 @@ import {
   type OutboxLastError,
   type OutboxOp,
   type PhotoOp,
+  type RegisterClosedCardOp,
 } from './db';
 import { purgeApiCacheFor } from './api-cache';
 import { applyCardToCache, applyHallazgoToCache, applyTrabajoExtraToCache } from './cache-upserts';
@@ -225,10 +226,7 @@ async function releaseWaitersOfQueuedOps(userId: string): Promise<void> {
  * que lo espera. Al vencer el plazo (o al cancelar) resuelve `queued` — la
  * operación sigue en la cola, esperar solo era una cortesía para el que mira.
  */
-export function waitForOutcome(
-  opId: string,
-  waitMs: number,
-): { promise: Promise<WriteOutcome>; cancel: () => void } {
+export function waitForOutcome(opId: string, waitMs: number): { promise: Promise<WriteOutcome>; cancel: () => void } {
   ensureCrossTab();
   const promise = new Promise<WriteOutcome>((resolve) => {
     const timer = setTimeout(() => settleWaiter(opId, { kind: 'queued' }), waitMs);
@@ -724,6 +722,22 @@ function processCloseCard(op: CloseCardOp): Promise<ProcessOutcome> {
   );
 }
 
+function processRegisterClosedCard(op: RegisterClosedCardOp): Promise<ProcessOutcome> {
+  return processPhotoOp(
+    op,
+    'Falta la foto guardada de este turno pasado — descartalo y volvé a registrarlo.',
+    async (current, tmpKey) => {
+      // El backfill siempre lleva foto (`photoId` es obligatorio).
+      if (!tmpKey) throw new DomainError('Falta la foto del turno pasado.', { code: 'PHOTO_MISSING' });
+      const card = await ShiftCardAPI.registerClosedCard(
+        { ...current.payload, tmpPhotoKey: tmpKey },
+        replayConfig(JSON_TIMEOUT_MS),
+      );
+      afterServerAccepted('el turno pasado', () => applyCardToCache(card));
+    },
+  );
+}
+
 function processCreateHallazgo(op: CreateHallazgoOp): Promise<ProcessOutcome> {
   return processPhotoOp(
     op,
@@ -922,6 +936,7 @@ async function processOp(userId: string, candidate: OutboxOp): Promise<ProcessOu
   if (!op) return 'skipped';
 
   if (op.type === 'closeCard') return finishLegacy(await processCloseCard(op));
+  if (op.type === 'registerClosedCard') return finishLegacy(await processRegisterClosedCard(op));
   if (op.type === 'createHallazgo') return finishLegacy(await processCreateHallazgo(op));
   if (op.type === 'createTrabajoExtra') return finishLegacy(await processCreateTrabajoExtra(op));
   if (op.type === 'httpWrite') return processHttpWrite(op);
@@ -962,9 +977,9 @@ function finishLegacy(outcome: ProcessOutcome): ProcessOutcome {
  * dependen de una retenida (ver el recorrido abajo). `deferred` son las que ya
  * fallaron por algo transitorio en ESTE run. */
 async function nextPendingOp(userId: string, deferred: ReadonlySet<string>): Promise<OutboxOp | undefined> {
-  const ops = (
-    await db.outbox.where('[userId+seq]').between([userId, -Infinity], [userId, Infinity]).toArray()
-  ).sort(bySeq);
+  const ops = (await db.outbox.where('[userId+seq]').between([userId, -Infinity], [userId, Infinity]).toArray()).sort(
+    bySeq,
+  );
   // Recorrido FIFO con dos conjuntos de "retenidos": las operaciones que
   // esperan una acción humana (`needs_attention`), las que fallaron por algo
   // transitorio en este run (`deferred`) o que están bloqueadas por otra, y las
@@ -1016,9 +1031,7 @@ async function resetStuckSyncingOps(userId: string): Promise<void> {
     .between([userId, -Infinity], [userId, Infinity])
     .and((op) => op.status === 'syncing')
     .toArray();
-  await Promise.all(
-    stuck.map((op) => db.outbox.put({ ...op, status: pendingStatusFor(op), updatedAt: Date.now() })),
-  );
+  await Promise.all(stuck.map((op) => db.outbox.put({ ...op, status: pendingStatusFor(op), updatedAt: Date.now() })));
 }
 
 /** Al terminar un run con conexión: las listas que cambiaron por lo enviado se

@@ -6,7 +6,7 @@ import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
-import { enqueueClosedCard } from '../offline/outbox';
+import { enqueueClosedCard, enqueueClosedCardPair } from '../offline/outbox';
 import type { Equipment } from '../types/equipment';
 import type { ShiftType } from '../types/shift';
 
@@ -51,6 +51,12 @@ export interface UsePastShiftQuickEntryParams {
    * backend rechaza abrir un equipo así, y la fila fallaría recién al
    * reproducir el outbox: se frena antes de guardar. */
   checklistSinAceptar?: ReadonlyMap<string, string>;
+  /** `true` = día de negocio estrictamente ANTERIOR a hoy → cada fila viaja
+   * como tarjeta que nace cerrada (`POST /shift-cards/closed`, una sola op).
+   * `false` = turno terminado de HOY (p. ej. el DIURNO registrado esa misma
+   * noche): `/closed` lo rechazaría (`SHIFT_NOT_FINISHED`), así que va por el
+   * par legacy apertura+cierre, con las reglas normales del flujo vivo. */
+  esDiaPasado: boolean;
 }
 
 export interface UsePastShiftQuickEntryResult {
@@ -82,6 +88,7 @@ export function usePastShiftQuickEntry({
   disponibles,
   userId,
   checklistSinAceptar = SIN_CHECKLISTS_PENDIENTES,
+  esDiaPasado,
 }: UsePastShiftQuickEntryParams): UsePastShiftQuickEntryResult {
   const [filas, setFilas] = useState<QuickEntryRow[]>(() => [filaVacia()]);
   const [isGuardando, setIsGuardando] = useState(false);
@@ -89,8 +96,7 @@ export function usePastShiftQuickEntry({
   const setFila = (i: number, patch: Partial<QuickEntryRow>) =>
     setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const agregarFila = () => setFilas((fs) => [...fs, filaVacia()]);
-  const quitarFila = (i: number) =>
-    setFilas((fs) => (fs.length === 1 ? [filaVacia()] : fs.filter((_, j) => j !== i)));
+  const quitarFila = (i: number) => setFilas((fs) => (fs.length === 1 ? [filaVacia()] : fs.filter((_, j) => j !== i)));
 
   const equiposDeFila = (i: number) => {
     const tomados = new Set(filas.filter((_, j) => j !== i).map((f) => f.equipoId));
@@ -119,8 +125,7 @@ export function usePastShiftQuickEntry({
   };
 
   const completas = filas.filter((f, i) => !esVacia(f) && errorDeFila(i) == null);
-  const puedeGuardar =
-    completas.length > 0 && filas.every((f, i) => esVacia(f) || errorDeFila(i) == null);
+  const puedeGuardar = completas.length > 0 && filas.every((f, i) => esVacia(f) || errorDeFila(i) == null);
 
   const guardar = async (): Promise<boolean> => {
     if (isGuardando || !puedeGuardar) return false;
@@ -131,13 +136,15 @@ export function usePastShiftQuickEntry({
     setIsGuardando(true);
     const guardadas = new Set<string>();
     try {
+      // Día estrictamente pasado → tarjeta que NACE cerrada (una sola op,
+      // sin ventana abierta ni dependencia del estado presente del equipo).
+      // Turno terminado de HOY → par legacy apertura+cierre (ver el jsdoc de
+      // `esDiaPasado`). Ambos guardan la fila con SU foto, atómicos.
+      const encolar = esDiaPasado ? enqueueClosedCard : enqueueClosedCardPair;
       for (const f of completas) {
         const id = generateUuid();
         const capturedAt = new Date().toISOString();
-        // Apertura y cierre (con SU foto, obligatoria) se guardan juntos y
-        // atómicos: una tarjeta de turno terminado nunca queda abierta sin
-        // su cierre, aunque la foto falle o no haya espacio.
-        await enqueueClosedCard(
+        await encolar(
           userId,
           {
             id,
@@ -170,24 +177,12 @@ export function usePastShiftQuickEntry({
         });
         avisarGuardadoEnCola();
       }
-      toast.danger(
-        error instanceof Error ? error.message : 'No se pudo guardar el turno en el equipo.',
-      );
+      toast.danger(error instanceof Error ? error.message : 'No se pudo guardar el turno en el equipo.');
       return false;
     } finally {
       setIsGuardando(false);
     }
   };
 
-  return {
-    filas,
-    setFila,
-    agregarFila,
-    quitarFila,
-    equiposDeFila,
-    errorDeFila,
-    puedeGuardar,
-    guardar,
-    isGuardando,
-  };
+  return { filas, setFila, agregarFila, quitarFila, equiposDeFila, errorDeFila, puedeGuardar, guardar, isGuardando };
 }

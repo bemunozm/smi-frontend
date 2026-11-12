@@ -5,6 +5,7 @@ import { waitFor } from '@testing-library/react';
 const {
   openCardMock,
   closeCardMock,
+  registerClosedCardMock,
   sendExitReportMock,
   uploadFileMock,
   toastMock,
@@ -13,6 +14,7 @@ const {
 } = vi.hoisted(() => ({
   openCardMock: vi.fn(),
   closeCardMock: vi.fn(),
+  registerClosedCardMock: vi.fn(),
   sendExitReportMock: vi.fn(),
   uploadFileMock: vi.fn(),
   toastMock: vi.fn(),
@@ -24,7 +26,12 @@ vi.mock('../api/HallazgosAPI', () => ({ createHallazgo: createHallazgoMock, list
 vi.mock('../api/TrabajosExtraAPI', () => ({ createTrabajoExtra: createTrabajoExtraMock, listTrabajosExtra: vi.fn() }));
 
 vi.mock('../api/ShiftCardAPI', () => ({
-  ShiftCardAPI: { openCard: openCardMock, closeCard: closeCardMock, listMine: vi.fn() },
+  ShiftCardAPI: {
+    openCard: openCardMock,
+    closeCard: closeCardMock,
+    registerClosedCard: registerClosedCardMock,
+    listMine: vi.fn(),
+  },
 }));
 vi.mock('../api/ShiftReportAPI', () => ({
   ShiftReportAPI: { sendExitReport: sendExitReportMock, fileUrl: (id: string) => `/reports/${id}` },
@@ -38,6 +45,7 @@ import {
   type CreateHallazgoOp,
   type CreateTrabajoExtraOp,
   type OpenCardOp,
+  type RegisterClosedCardOp,
   type SendExitReportOp,
 } from './db';
 import { countPending, retryOp } from './outbox';
@@ -123,6 +131,35 @@ function putCloseOp(overrides: Partial<CloseCardOp> = {}): Promise<string> {
   return db.outbox.put(base);
 }
 
+function putRegisterClosedOp(overrides: Partial<RegisterClosedCardOp> = {}): Promise<string> {
+  const base: RegisterClosedCardOp = {
+    id: 'card-9',
+    type: 'registerClosedCard',
+    v: 1,
+    userId: 'u1',
+    status: 'pending_upload',
+    attempts: 0,
+    photoId: 'card-9',
+    createdAt: Date.now(),
+    seq: overrides.createdAt ?? Date.now(),
+    updatedAt: Date.now(),
+    payload: {
+      id: 'card-9',
+      equipoId: 'eq-1',
+      operatorId: 'op-1',
+      valorInicial: 1000,
+      valorFinal: 1010,
+      shiftDate: '2026-11-01',
+      shiftType: 'DIURNO',
+      capturedAt: '2026-11-11T09:00:00.000Z',
+      closeClientId: 'close-9',
+      fuelLiters: 60,
+    },
+    ...overrides,
+  };
+  return db.outbox.put(base);
+}
+
 function putReportOp(overrides: Partial<SendExitReportOp> = {}): Promise<string> {
   const base: SendExitReportOp = {
     id: 'report-1',
@@ -147,7 +184,13 @@ function putReportOp(overrides: Partial<SendExitReportOp> = {}): Promise<string>
 }
 
 async function putPhoto(id = 'close-1') {
-  await db.blobs.put({ id, data: new Uint8Array([1, 2, 3]).buffer, mime: 'image/jpeg', name: 'x.jpg', createdAt: Date.now() });
+  await db.blobs.put({
+    id,
+    data: new Uint8Array([1, 2, 3]).buffer,
+    mime: 'image/jpeg',
+    name: 'x.jpg',
+    createdAt: Date.now(),
+  });
 }
 
 beforeEach(async () => {
@@ -187,9 +230,45 @@ describe('replay — orden y alcance', () => {
       return Promise.resolve(baseCard({ id: input.id }));
     });
 
-    await putOpenOp({ id: 'c-1', createdAt: 100, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-2', createdAt: 200, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-3', createdAt: 50, payload: { id: 'c-3', equipoId: 'eq-3', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 100,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 200,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-3',
+      createdAt: 50,
+      payload: {
+        id: 'c-3',
+        equipoId: 'eq-3',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle();
 
@@ -198,8 +277,32 @@ describe('replay — orden y alcance', () => {
 
   it('solo procesa las operaciones del usuario de la sesión', async () => {
     openCardMock.mockImplementation((input: { id: string }) => Promise.resolve(baseCard({ id: input.id })));
-    await putOpenOp({ id: 'mio', userId: 'u1', payload: { id: 'mio', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'ajeno', userId: 'u2', payload: { id: 'ajeno', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'mio',
+      userId: 'u1',
+      payload: {
+        id: 'mio',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'ajeno',
+      userId: 'u2',
+      payload: {
+        id: 'ajeno',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle('u1');
 
@@ -257,8 +360,32 @@ describe('replay — errores transitorios (red/5xx/429)', () => {
     async (_label, error) => {
       openCardMock.mockRejectedValueOnce(error);
       openCardMock.mockResolvedValueOnce(baseCard({ id: 'c-2' }));
-      await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-      await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+      await putOpenOp({
+        id: 'c-1',
+        createdAt: 1,
+        payload: {
+          id: 'c-1',
+          equipoId: 'eq-1',
+          operatorId: 'op-1',
+          valorInicial: 1,
+          shiftDate: '2026-09-24',
+          shiftType: 'DIURNO',
+          capturedAt: 't',
+        },
+      });
+      await putOpenOp({
+        id: 'c-2',
+        createdAt: 2,
+        payload: {
+          id: 'c-2',
+          equipoId: 'eq-2',
+          operatorId: 'op-1',
+          valorInicial: 1,
+          shiftDate: '2026-09-24',
+          shiftType: 'DIURNO',
+          capturedAt: 't',
+        },
+      });
 
       await syncAndSettle();
 
@@ -279,8 +406,32 @@ describe('replay — errores transitorios (red/5xx/429)', () => {
       vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
       return Promise.reject(new DomainError('Network Error'));
     });
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 2,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle();
 
@@ -293,8 +444,32 @@ describe('replay — errores transitorios (red/5xx/429)', () => {
 describe('replay — 401', () => {
   it('pausa la cola entera (authRequired) y no toca las operaciones siguientes', async () => {
     openCardMock.mockRejectedValueOnce(new DomainError('no autorizado', { status: 401 }));
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 2,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle();
 
@@ -308,8 +483,32 @@ describe('replay — errores de negocio (4xx que no es 401)', () => {
   it('409 (ej. ID_CONFLICT): la operación queda needs_attention y el run CONTINÚA', async () => {
     openCardMock.mockRejectedValueOnce(new DomainError('Ya existe', { status: 409, code: 'ID_CONFLICT' }));
     openCardMock.mockResolvedValueOnce(baseCard({ id: 'c-2' }));
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 2,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle();
 
@@ -322,10 +521,75 @@ describe('replay — errores de negocio (4xx que no es 401)', () => {
   });
 });
 
+describe('replay — turno pasado (registerClosedCard)', () => {
+  it('sube la foto y manda el body con tmpPhotoKey a registerClosedCard; borra operación y foto', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
+    registerClosedCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-9', valorFinal: 1010, closedAt: '2026-11-11T09:00:00.000Z' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(1);
+    expect(registerClosedCardMock).toHaveBeenCalledTimes(1);
+    const [body] = registerClosedCardMock.mock.calls[0]!;
+    expect(body).toMatchObject({
+      id: 'card-9',
+      equipoId: 'eq-1',
+      valorInicial: 1000,
+      valorFinal: 1010,
+      shiftDate: '2026-11-01',
+      closeClientId: 'close-9',
+      fuelLiters: 60,
+      tmpPhotoKey: 'tmp/u1/foto.jpg',
+    });
+    expect(await db.outbox.get('card-9')).toBeUndefined();
+    expect(await db.blobs.get('card-9')).toBeUndefined();
+  });
+
+  it('con TMP_KEY_EXPIRED resube la foto UNA vez y reintenta en el mismo run', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/vencida.jpg', url: 'https://x' });
+    registerClosedCardMock.mockRejectedValueOnce(new DomainError('expiró', { status: 400, code: 'TMP_KEY_EXPIRED' }));
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/nueva.jpg', url: 'https://x' });
+    registerClosedCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-9', valorFinal: 1010, closedAt: '2026-11-11T09:00:00.000Z' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    expect(uploadFileMock).toHaveBeenCalledTimes(2);
+    expect(registerClosedCardMock).toHaveBeenCalledTimes(2);
+    const [secondBody] = registerClosedCardMock.mock.calls[1]!;
+    expect(secondBody).toMatchObject({ tmpPhotoKey: 'tmp/nueva.jpg' });
+    expect(await db.outbox.get('card-9')).toBeUndefined();
+  });
+
+  it('un error de negocio la deja en needs_attention sin perder la foto', async () => {
+    uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
+    registerClosedCardMock.mockRejectedValueOnce(
+      new DomainError('El checklist de hoy está por validar', { status: 409, code: 'CHECKLIST_NOT_ACCEPTED' }),
+    );
+    await putRegisterClosedOp();
+    await putPhoto('card-9');
+
+    await syncAndSettle();
+
+    const op = await db.outbox.get('card-9');
+    expect(op).toMatchObject({ status: 'needs_attention', tmpKey: 'tmp/u1/foto.jpg' });
+    expect(await db.blobs.get('card-9')).toBeTruthy();
+  });
+});
+
 describe('replay — cierre de tarjeta', () => {
   it('sube la foto (pending_upload → pending_claim) y después cierra', async () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
-    closeCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }));
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
     await putCloseOp();
     await putPhoto();
 
@@ -347,7 +611,9 @@ describe('replay — cierre de tarjeta', () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/vencida.jpg', url: 'https://x' });
     closeCardMock.mockRejectedValueOnce(new DomainError('expiró', { status: 400, code: 'TMP_KEY_EXPIRED' }));
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/nueva.jpg', url: 'https://x' });
-    closeCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }));
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
     await putCloseOp();
     await putPhoto();
 
@@ -355,8 +621,18 @@ describe('replay — cierre de tarjeta', () => {
 
     expect(uploadFileMock).toHaveBeenCalledTimes(2);
     expect(closeCardMock).toHaveBeenCalledTimes(2);
-    expect(closeCardMock).toHaveBeenNthCalledWith(1, 'card-1', expect.objectContaining({ tmpPhotoKey: 'tmp/vencida.jpg' }), expect.anything());
-    expect(closeCardMock).toHaveBeenNthCalledWith(2, 'card-1', expect.objectContaining({ tmpPhotoKey: 'tmp/nueva.jpg' }), expect.anything());
+    expect(closeCardMock).toHaveBeenNthCalledWith(
+      1,
+      'card-1',
+      expect.objectContaining({ tmpPhotoKey: 'tmp/vencida.jpg' }),
+      expect.anything(),
+    );
+    expect(closeCardMock).toHaveBeenNthCalledWith(
+      2,
+      'card-1',
+      expect.objectContaining({ tmpPhotoKey: 'tmp/nueva.jpg' }),
+      expect.anything(),
+    );
     expect(await db.outbox.get('close-1')).toBeUndefined();
   });
 });
@@ -394,7 +670,19 @@ describe('replay — candado', () => {
       resolveFirst = resolve;
     });
     openCardMock.mockImplementationOnce(() => pending);
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     setCurrentUser('u1');
     requestSync();
@@ -435,7 +723,19 @@ describe('replay — candado', () => {
     openCardMock.mockImplementationOnce(() => pending);
     openCardMock.mockImplementationOnce((input: { id: string }) => Promise.resolve(baseCard({ id: input.id })));
 
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     setCurrentUser('u1');
     requestSync();
@@ -444,7 +744,19 @@ describe('replay — candado', () => {
     // Mientras el primer run sigue con el candado tomado (todavía esperando
     // la respuesta de c-1), se encola una segunda operación — el mismo
     // patrón que `offline/outbox.ts#enqueueOpenCard` (guardar + `requestSync()`).
-    await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 2,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
     requestSync();
 
     resolveFirst(baseCard({ id: 'c-1' }));
@@ -474,7 +786,9 @@ describe('replay — operación atascada en "syncing" (bug crítico)', () => {
   });
 
   it('un cierre atascado en `syncing` vuelve a `pending_claim` (no a `pending_upload`) si ya tenía `tmpKey`', async () => {
-    closeCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }));
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
     await putCloseOp({ status: 'syncing', tmpKey: 'tmp/u1/ya-subida.jpg' });
     await putPhoto();
 
@@ -520,7 +834,9 @@ describe('replay — tmpKey se conserva tras un error posterior a la subida', ()
     expect(uploadFileMock).toHaveBeenCalledTimes(1);
 
     // Segundo run: NO debe volver a subir la foto — solo reintentar el cierre.
-    closeCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }));
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
     useEngineStoreForTests.setState({ lastSyncAt: null });
 
     await syncAndSettle();
@@ -552,8 +868,32 @@ describe('replay — clasificación de errores sin status', () => {
   it('INVALID_RESPONSE (respuesta que no calza con el contrato, ej. ZodError): needs_attention y el run CONTINÚA', async () => {
     openCardMock.mockRejectedValueOnce(new DomainError('Respuesta inválida: x', { code: 'INVALID_RESPONSE' }));
     openCardMock.mockResolvedValueOnce(baseCard({ id: 'c-2' }));
-    await putOpenOp({ id: 'c-1', createdAt: 1, payload: { id: 'c-1', equipoId: 'eq-1', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
-    await putOpenOp({ id: 'c-2', createdAt: 2, payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-1',
+      createdAt: 1,
+      payload: {
+        id: 'c-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
+    await putOpenOp({
+      id: 'c-2',
+      createdAt: 2,
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
 
     await syncAndSettle();
 
@@ -569,7 +909,9 @@ describe('replay — clasificación de errores sin status', () => {
 
 describe('replay — 429 REPORT_RATE_LIMITED', () => {
   it('con code REPORT_RATE_LIMITED: needs_attention, no reintenta en bucle', async () => {
-    sendExitReportMock.mockRejectedValueOnce(new DomainError('Demasiados reportes', { status: 429, code: 'REPORT_RATE_LIMITED' }));
+    sendExitReportMock.mockRejectedValueOnce(
+      new DomainError('Demasiados reportes', { status: 429, code: 'REPORT_RATE_LIMITED' }),
+    );
     await putReportOp();
 
     await syncAndSettle();
@@ -651,7 +993,9 @@ describe('replay — cierre cuya apertura falló ("no lo mandes, ligalos")', () 
   it('tras un retryOp exitoso sobre la apertura, el cierre se sincroniza solo, sin tocarlo directamente', async () => {
     openCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1' }));
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'https://x' });
-    closeCardMock.mockResolvedValueOnce(baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }));
+    closeCardMock.mockResolvedValueOnce(
+      baseCard({ id: 'card-1', valorFinal: 130, closedAt: '2026-09-24T16:00:00.000Z' }),
+    );
     await putOpenOp({ status: 'needs_attention' });
     await putCloseOp();
     await putPhoto();
@@ -1064,7 +1408,18 @@ describe('replay — syncNow (disparo manual)', () => {
     syncNow();
     await waitFor(() => expect(useEngineStoreForTests.getState().lastSyncAt).not.toBeNull(), { timeout: 3000 });
 
-    await putOpenOp({ id: 'c-2', payload: { id: 'c-2', equipoId: 'eq-2', operatorId: 'op-1', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' } });
+    await putOpenOp({
+      id: 'c-2',
+      payload: {
+        id: 'c-2',
+        equipoId: 'eq-2',
+        operatorId: 'op-1',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      },
+    });
     requestSync();
     await new Promise((resolve) => setTimeout(resolve, 50));
 

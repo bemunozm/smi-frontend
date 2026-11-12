@@ -4,7 +4,12 @@ import type { EndpointKey } from './endpoints';
 import type { QueryKeyName } from '../lib/query-keys';
 import type { CreateHallazgoInput } from '../types/hallazgos';
 import type { JsonObject } from '../types/json';
-import type { CloseShiftCardInput, OpenShiftCardInput, SendExitReportInput } from '../types/shift';
+import type {
+  CloseShiftCardInput,
+  OpenShiftCardInput,
+  RegisterClosedShiftCardInput,
+  SendExitReportInput,
+} from '../types/shift';
 import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 
 /**
@@ -26,6 +31,7 @@ import type { CreateTrabajoExtraInput } from '../types/trabajosExtra';
 export type OutboxOpType =
   | 'openCard'
   | 'closeCard'
+  | 'registerClosedCard'
   | 'sendExitReport'
   | 'createHallazgo'
   | 'createTrabajoExtra'
@@ -132,6 +138,24 @@ export interface CloseCardOp extends OutboxBase {
   tmpKey?: string;
 }
 
+/**
+ * Backfill de un turno YA terminado: UNA sola operación que crea la tarjeta
+ * CERRADA en el servidor (`POST /shift-cards/closed`) — reemplaza al par
+ * apertura+cierre que usaba la carga histórica, para que la tarjeta no exista
+ * nunca abierta ni el backfill dependa del estado presente del equipo. El par
+ * legacy sigue soportado por el replay (colas encoladas antes del cambio).
+ */
+export interface RegisterClosedCardOp extends OutboxBase {
+  type: 'registerClosedCard';
+  /** `payload.id` = id de la operación = PK de la tarjeta en el backend. El
+   * body real agrega `tmpPhotoKey` recién al mandar (ver `tmpKey`). */
+  payload: Omit<RegisterClosedShiftCardInput, 'tmpPhotoKey'>;
+  /** id de la fila en `blobs` (= id de la tarjeta) — la foto es obligatoria. */
+  photoId: string;
+  /** Misma semántica que `CloseCardOp#tmpKey`. */
+  tmpKey?: string;
+}
+
 export interface SendExitReportOp extends OutboxBase {
   type: 'sendExitReport';
   payload: SendExitReportInput;
@@ -193,6 +217,7 @@ export interface HttpWriteOp extends OutboxBase {
 export type OutboxOp =
   | OpenCardOp
   | CloseCardOp
+  | RegisterClosedCardOp
   | SendExitReportOp
   | CreateHallazgoOp
   | CreateTrabajoExtraOp
@@ -200,7 +225,7 @@ export type OutboxOp =
 
 /** Operaciones que pueden arrastrar una foto por subir — comparten el
  * pipeline `pending_upload` → `pending_claim` de `offline/replay.ts`. */
-export type PhotoOp = CloseCardOp | CreateHallazgoOp | CreateTrabajoExtraOp;
+export type PhotoOp = CloseCardOp | RegisterClosedCardOp | CreateHallazgoOp | CreateTrabajoExtraOp;
 
 /** Un archivo guardado en el equipo, a la espera de subirse (≤ 8 MB). */
 export interface BlobRecord {
@@ -237,10 +262,7 @@ class SmiOfflineDatabase extends Dexie {
 
   constructor() {
     super('smi-offline');
-    this.version(1).stores({
-      outbox: 'id, [userId+createdAt], status',
-      photos: 'id',
-    });
+    this.version(1).stores({ outbox: 'id, [userId+createdAt], status', photos: 'id' });
     this.version(2)
       .stores({
         // `[userId+seq]`: el índice compuesto que usa el replay para recorrer
@@ -280,7 +302,7 @@ export const db = new SmiOfflineDatabase();
  * entre `offline/outbox.ts` (acción "Reintentar") y `offline/replay.ts`
  * (errores de red/401), para no repetir la misma regla dos veces. */
 export function pendingStatusFor(op: OutboxOp): OutboxStatus {
-  if ((op.type === 'closeCard' || op.type === 'createHallazgo') && op.photoId) {
+  if ((op.type === 'closeCard' || op.type === 'registerClosedCard' || op.type === 'createHallazgo') && op.photoId) {
     return op.tmpKey ? 'pending_claim' : 'pending_upload';
   }
   if (op.type === 'httpWrite' && op.files && op.files.length > 0) {

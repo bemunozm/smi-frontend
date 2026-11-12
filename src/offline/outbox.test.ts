@@ -9,6 +9,7 @@ import {
   countPending,
   discardOp,
   enqueueClosedCard,
+  enqueueClosedCardPair,
   enqueueCloseCard,
   enqueueCreateHallazgo,
   enqueueCreateTrabajoExtra,
@@ -58,12 +59,7 @@ describe('enqueueCloseCard', () => {
     await enqueueCloseCard(
       'u1',
       'card-1',
-      {
-        closeClientId: 'close-1',
-        valorFinal: 130,
-        fuelLiters: 20,
-        capturedAt: '2026-09-24T16:00:00.000Z',
-      },
+      { closeClientId: 'close-1', valorFinal: 130, fuelLiters: 20, capturedAt: '2026-09-24T16:00:00.000Z' },
       photoFile(),
     );
 
@@ -107,22 +103,40 @@ describe('enqueueClosedCard', () => {
     capturedAt: '2026-09-24T16:00:00.000Z',
   };
 
-  it('guarda apertura, cierre y foto juntos, con el cierre dependiendo de la apertura', async () => {
+  it('guarda UNA operación registerClosedCard con su foto — sin apertura suelta en la cola', async () => {
     await enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
 
-    const [apertura, cierre, foto] = await Promise.all([
-      db.outbox.get('card-1'),
-      db.outbox.get('close-9'),
-      db.blobs.get('close-9'),
-    ]);
-    expect(apertura).toMatchObject({ type: 'openCard', status: 'pending' });
-    expect(cierre).toMatchObject({ type: 'closeCard', status: 'pending_upload', dependsOn: ['card-1'] });
+    const op = await db.outbox.get('card-1');
+    expect(op).toMatchObject({
+      id: 'card-1',
+      type: 'registerClosedCard',
+      status: 'pending_upload',
+      photoId: 'card-1',
+      payload: {
+        id: 'card-1',
+        equipoId: 'eq-1',
+        operatorId: 'op-1',
+        valorInicial: 100,
+        valorFinal: 130,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        closeClientId: 'close-9',
+        fuelLiters: 20,
+      },
+    });
+    if (op?.type !== 'registerClosedCard') throw new Error('setup inválido');
+    // `tmpPhotoKey` NO viaja en el payload guardado — todavía no existe.
+    expect('tmpPhotoKey' in op.payload).toBe(false);
+    expect(op.dependsOn).toBeUndefined();
+    expect(await db.outbox.count()).toBe(1);
+
+    const foto = await db.blobs.get('card-1');
     expect(foto).toBeTruthy();
-    expect(cierre!.seq).toBeGreaterThan(apertura!.seq);
+    expect(foto!.mime).toBe('image/jpeg');
     expect(requestSyncMock).toHaveBeenCalledTimes(1);
   });
 
-  it('con una foto inválida no queda nada en el equipo (ni la apertura)', async () => {
+  it('con una foto inválida no queda nada en el equipo', async () => {
     const pdf = new File([new Uint8Array([1])], 'x.exe', { type: 'application/x-msdownload' });
 
     await expect(enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, pdf)).rejects.toThrow();
@@ -133,22 +147,21 @@ describe('enqueueClosedCard', () => {
   });
 
   // La foto válida pasa `prepararArchivo`: la falla ocurre DENTRO de la
-  // transacción, después de que la apertura ya se escribió.
-  it('si falla una escritura dentro de la transacción, se revierte también la apertura', async () => {
+  // transacción — no debe quedar ni la operación ni la foto.
+  it('si falla una escritura dentro de la transacción, no queda ni la operación ni la foto', async () => {
     const put = vi.spyOn(db.blobs, 'put').mockRejectedValueOnce(new Error('disco lleno'));
 
     await expect(enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile())).rejects.toThrow('disco lleno');
 
     expect(put).toHaveBeenCalledTimes(1);
     expect(await db.outbox.get('card-1')).toBeUndefined();
-    expect(await db.outbox.get('close-9')).toBeUndefined();
     expect(await db.outbox.count()).toBe(0);
     expect(await db.blobs.count()).toBe(0);
     expect(requestSyncMock).not.toHaveBeenCalled();
     put.mockRestore();
   });
 
-  it('con operaciones ya en cola, la apertura va antes que el cierre y ambos después de las existentes', async () => {
+  it('con operaciones ya en cola, la nueva va después de las existentes (FIFO)', async () => {
     await enqueueOpenCard('u1', { ...OPEN_INPUT, id: 'card-previa' });
     await enqueueExitReport('u1', {
       id: 'report-previo',
@@ -162,9 +175,56 @@ describe('enqueueClosedCard', () => {
 
     await enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
 
-    const [apertura, cierre] = await Promise.all([db.outbox.get('card-1'), db.outbox.get('close-9')]);
-    expect(apertura!.seq).toBeGreaterThan(maxExistente);
+    const op = await db.outbox.get('card-1');
+    expect(op!.seq).toBeGreaterThan(maxExistente);
+  });
+
+  it('discardOp la borra junto con su foto', async () => {
+    await enqueueClosedCard('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
+
+    await discardOp('card-1', 'u1');
+
+    expect(await db.outbox.get('card-1')).toBeUndefined();
+    expect(await db.blobs.get('card-1')).toBeUndefined();
+  });
+});
+
+// El turno terminado de HOY (p. ej. el DIURNO registrado esa misma noche) NO es
+// un día de negocio pasado: `POST /shift-cards/closed` lo rechazaría
+// (SHIFT_NOT_FINISHED), así que ese caso sigue viajando como el par legacy
+// apertura+cierre — atómico en Dexie, igual que antes.
+describe('enqueueClosedCardPair', () => {
+  const CLOSE_INPUT = {
+    closeClientId: 'close-9',
+    valorFinal: 130,
+    fuelLiters: 20,
+    capturedAt: '2026-09-24T16:00:00.000Z',
+  };
+
+  it('guarda apertura, cierre y foto juntos, con el cierre dependiendo de la apertura', async () => {
+    await enqueueClosedCardPair('u1', OPEN_INPUT, CLOSE_INPUT, photoFile());
+
+    const [apertura, cierre, foto] = await Promise.all([
+      db.outbox.get('card-1'),
+      db.outbox.get('close-9'),
+      db.blobs.get('close-9'),
+    ]);
+    expect(apertura).toMatchObject({ type: 'openCard', status: 'pending' });
+    expect(cierre).toMatchObject({ type: 'closeCard', status: 'pending_upload', dependsOn: ['card-1'] });
+    expect(foto).toBeTruthy();
     expect(cierre!.seq).toBeGreaterThan(apertura!.seq);
+    expect(requestSyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('si falla una escritura dentro de la transacción, se revierte también la apertura', async () => {
+    const put = vi.spyOn(db.blobs, 'put').mockRejectedValueOnce(new Error('disco lleno'));
+
+    await expect(enqueueClosedCardPair('u1', OPEN_INPUT, CLOSE_INPUT, photoFile())).rejects.toThrow('disco lleno');
+
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
+    expect(requestSyncMock).not.toHaveBeenCalled();
+    put.mockRestore();
   });
 });
 

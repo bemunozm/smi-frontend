@@ -82,10 +82,7 @@ export type ShiftCardResponse = z.infer<typeof ShiftCardResponseSchema>;
 // --- Envolturas `{ data, message }` ---------------------------------------
 
 export const ShiftCardWrapperSchema = z.object({ data: ShiftCardResponseSchema, message: z.string() });
-export const ShiftCardListResponseSchema = z.object({
-  data: z.array(ShiftCardResponseSchema),
-  message: z.string(),
-});
+export const ShiftCardListResponseSchema = z.object({ data: z.array(ShiftCardResponseSchema), message: z.string() });
 
 // --- Resumen de un turno (`GET /api/shifts?date&type`) ---------------------
 
@@ -122,16 +119,11 @@ export const ShiftSummarySchema = z.object({
       fechaSalida: z.string().nullable(),
     }),
   ),
-  exitReports: z.array(
-    z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() }),
-  ),
+  exitReports: z.array(z.object({ id: z.string(), requestedAt: z.string(), cardCount: z.number() })),
 });
 export type ShiftSummary = z.infer<typeof ShiftSummarySchema>;
 
-export const ShiftSummaryListResponseSchema = z.object({
-  data: z.array(ShiftSummarySchema),
-  message: z.string(),
-});
+export const ShiftSummaryListResponseSchema = z.object({ data: z.array(ShiftSummarySchema), message: z.string() });
 
 // --- Bodies de request -------------------------------------------------------
 
@@ -150,6 +142,35 @@ export interface OpenShiftCardInput {
   shiftType: ShiftType;
   /** Hora del DISPOSITIVO al abrir la tarjeta. */
   capturedAt: string;
+}
+
+/** Body de `POST /api/shift-cards/closed` — backfill de un turno YA
+ * terminado: la tarjeta nace CERRADA en el servidor (apertura + cierre +
+ * combustible en una transacción), así nunca ocupa el "slot" de tarjeta
+ * abierta del equipo ni choca con una tarjeta abierta HOY. Une los campos de
+ * `OpenShiftCardInput` y del cierre; idempotente por `id` (y
+ * `closeClientId` ante carreras). */
+export interface RegisterClosedShiftCardInput {
+  id: string;
+  equipoId: string;
+  /** Obligatorio en pesados — mismo criterio que la apertura. */
+  operatorId?: string;
+  valorInicial: number;
+  valorFinal: number;
+  /** `YYYY-MM-DD` del día de negocio HISTÓRICO (ver `lib/turno.ts#toDateOnly`). */
+  shiftDate: string;
+  shiftType: ShiftType;
+  /** Hora del DISPOSITIVO al registrar (solo auditoría de desfase). */
+  capturedAt: string;
+  closeClientId: string;
+  /** Litros cargados ese turno — 0 permitido. */
+  fuelLiters: number;
+  /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` — obligatoria aun
+   * con 0 litros. */
+  tmpPhotoKey: string;
+  adBlue?: boolean;
+  adBlueLiters?: number;
+  observaciones?: string;
 }
 
 /** Body de `POST /api/shift-cards/:id/close`. `closeClientId` es la clave

@@ -9,6 +9,7 @@ import {
   ShiftSummaryListResponseSchema,
   type CloseShiftCardInput,
   type OpenShiftCardInput,
+  type RegisterClosedShiftCardInput,
   type ShiftCardResponse,
   type ShiftSummary,
   type ShiftType,
@@ -56,6 +57,25 @@ async function closeCard(
   }
 }
 
+/**
+ * Registra un turno PASADO como tarjeta que nace cerrada (backfill, ver
+ * `offline/outbox.ts#enqueueClosedCard`). Idempotente por `input.id`.
+ * Errores de negocio: `SHIFT_NOT_FINISHED` (el turno aún no termina),
+ * `CHECKLIST_NOT_ACCEPTED`, `HOURMETER_BELOW_INITIAL`, `TMP_KEY_EXPIRED`,
+ * `ID_CONFLICT`. Mismo `config` opcional que `openCard`.
+ */
+async function registerClosedCard(
+  input: RegisterClosedShiftCardInput,
+  config?: AxiosRequestConfig,
+): Promise<ShiftCardResponse> {
+  try {
+    const response = await axiosInstance.post('/api/shift-cards/closed', input, config);
+    return ShiftCardWrapperSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo registrar el turno pasado en el equipo.');
+  }
+}
+
 /** Tarjetas propias: abiertas + cerradas en las últimas 48 h. Quién ve qué
  * (SUPERVISOR: las suyas; ADMIN: todas) lo decide el backend, no este
  * archivo — ver `hooks/useShiftRegister.ts#veTodo`, que solo cambia el
@@ -93,10 +113,4 @@ async function listShiftsByDate(date: string, type: ShiftType): Promise<ShiftSum
   }
 }
 
-export const ShiftCardAPI = {
-  listChanges,
-  openCard,
-  closeCard,
-  listMine,
-  listShiftsByDate,
-};
+export const ShiftCardAPI = { listChanges, openCard, closeCard, registerClosedCard, listMine, listShiftsByDate };

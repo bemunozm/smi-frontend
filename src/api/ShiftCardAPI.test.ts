@@ -3,14 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShiftCardAPI } from './ShiftCardAPI';
 import { DomainError } from '../lib/api-error';
 
-const { getMock, postMock } = vi.hoisted(() => ({
-  getMock: vi.fn(),
-  postMock: vi.fn(),
-}));
+const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }));
 
-vi.mock('../lib/axios', () => ({
-  axiosInstance: { get: getMock, post: postMock },
-}));
+vi.mock('../lib/axios', () => ({ axiosInstance: { get: getMock, post: postMock } }));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -24,12 +19,7 @@ const CARD = {
   operatorName: 'Patricio Rojas',
   supervisorId: 'u1',
   supervisorName: 'Ana Soto',
-  shift: {
-    id: 'sh_1',
-    date: '2026-09-24',
-    type: 'DIURNO',
-    exitReports: [],
-  },
+  shift: { id: 'sh_1', date: '2026-09-24', type: 'DIURNO', exitReports: [] },
   valorInicial: 100,
   valorFinal: null,
   horasMaquina: null,
@@ -221,9 +211,7 @@ describe('ShiftCardAPI.listShiftsByDate', () => {
 
     const shifts = await ShiftCardAPI.listShiftsByDate('2026-10-20', 'DIURNO');
 
-    expect(getMock).toHaveBeenCalledWith('/api/shifts', {
-      params: { date: '2026-10-20', type: 'DIURNO' },
-    });
+    expect(getMock).toHaveBeenCalledWith('/api/shifts', { params: { date: '2026-10-20', type: 'DIURNO' } });
     expect(shifts).toHaveLength(1);
     expect(shifts[0].cards[0].equipo.internalCode).toBe('EX-005');
     expect(shifts[0].exitReports[0].cardCount).toBe(4);
@@ -244,5 +232,48 @@ describe('ShiftCardAPI.listMine', () => {
     getMock.mockRejectedValueOnce(axiosError(403, 'Sin permisos para ver tus tarjetas'));
 
     await expect(ShiftCardAPI.listMine()).rejects.toThrow('Sin permisos para ver tus tarjetas');
+  });
+});
+
+const CLOSED_INPUT = {
+  id: 'c9',
+  equipoId: 'eq_1',
+  operatorId: 'op_1',
+  valorInicial: 1000,
+  valorFinal: 1010,
+  shiftDate: '2026-11-01',
+  shiftType: 'DIURNO' as const,
+  capturedAt: '2026-11-11T08:00:00.000Z',
+  closeClientId: 'cc9',
+  fuelLiters: 60,
+  tmpPhotoKey: 'tmp/u1/foto.jpg',
+};
+
+describe('ShiftCardAPI.registerClosedCard', () => {
+  it('postea a /api/shift-cards/closed y devuelve la tarjeta ya parseada', async () => {
+    const closedCard = {
+      ...CARD,
+      id: 'c9',
+      valorFinal: 1010,
+      fechaSalida: '2026-11-01T15:00:00.000Z',
+      closedAt: '2026-11-11T08:00:00.000Z',
+    };
+    postMock.mockResolvedValueOnce({ data: { data: closedCard, message: 'Turno pasado registrado' } });
+
+    const result = await ShiftCardAPI.registerClosedCard(CLOSED_INPUT);
+
+    expect(postMock).toHaveBeenCalledWith('/api/shift-cards/closed', CLOSED_INPUT, undefined);
+    expect(result).toEqual(closedCard);
+  });
+
+  it('convierte el error del backend en DomainError con su code', async () => {
+    postMock.mockRejectedValueOnce(axiosError(400, 'El turno aún no termina', 'SHIFT_NOT_FINISHED'));
+
+    const error = await ShiftCardAPI.registerClosedCard(CLOSED_INPUT).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(DomainError);
+    expect((error as DomainError).code).toBe('SHIFT_NOT_FINISHED');
   });
 });

@@ -63,7 +63,10 @@ describe('registradaDespues', () => {
       turnoTipo: 'DIURNO',
       cerradaIso: new Date(2026, 10, 11, 13, 16).toISOString(),
     });
-    expect(registradaDespues(t)).toMatch(/11-11 (13:16|01:16 p\. ?m\.)/);
+    // `Intl` puede separar la hora del «p. m.» con espacio común, no separable
+    // (U+00A0) o angosto (U+202F), según la versión de ICU de Node — por eso
+    // el separador se acepta como "cualquier espacio".
+    expect(registradaDespues(t)).toMatch(/11-11[\s  ]+(13:16|01:16[\s  ]+p\.[\s  ]?m\.)/);
   });
 
   it('un DIURNO cerrado el mismo día no se marca', () => {
