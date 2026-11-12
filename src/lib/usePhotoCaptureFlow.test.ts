@@ -121,3 +121,45 @@ describe('usePhotoCaptureFlow — opción `ocr: false`', () => {
     expect(result.current.ocr).toEqual({ value: null, status: 'UNREADABLE', confidence: 0 });
   });
 });
+
+describe('usePhotoCaptureFlow — umbral de autollenado', () => {
+  it('una lectura CONFIRMED dentro del rango autollena normal', async () => {
+    stubOnline(true);
+    fuelReadingOcrMock.mockResolvedValue({ value: '183.089', status: 'CONFIRMED', confidence: 0.9 });
+    const onReading = vi.fn();
+    const { result } = renderHook(() => usePhotoCaptureFlow(onReading));
+
+    await act(() => result.current.handleSelectPhoto(onlineArchivo()));
+
+    expect(onReading).toHaveBeenCalledWith(183.089);
+    expect(result.current.ocr?.fueraDeRango).toBeUndefined();
+  });
+
+  it('una lectura sobre el umbral (punto decimal perdido) NO autollena y queda marcada', async () => {
+    stubOnline(true);
+    // El caso real: el display decía «100.000» (cien litros) y el OCR no vio
+    // el punto — entregó "100000" como CONFIRMED.
+    fuelReadingOcrMock.mockResolvedValue({ value: '100000', status: 'CONFIRMED', confidence: 0.9 });
+    const onReading = vi.fn();
+    const { result } = renderHook(() => usePhotoCaptureFlow(onReading));
+
+    await act(() => result.current.handleSelectPhoto(onlineArchivo()));
+
+    expect(onReading).not.toHaveBeenCalled();
+    expect(result.current.ocr?.fueraDeRango).toBe(true);
+    // El value crudo se conserva: el chip puede decir qué se leyó.
+    expect(result.current.ocr?.value).toBe('100000');
+  });
+
+  it('el umbral vale también para REVIEW', async () => {
+    stubOnline(true);
+    fuelReadingOcrMock.mockResolvedValue({ value: '45210', status: 'REVIEW', confidence: 0.4 });
+    const onReading = vi.fn();
+    const { result } = renderHook(() => usePhotoCaptureFlow(onReading));
+
+    await act(() => result.current.handleSelectPhoto(onlineArchivo()));
+
+    expect(onReading).not.toHaveBeenCalled();
+    expect(result.current.ocr?.fueraDeRango).toBe(true);
+  });
+});

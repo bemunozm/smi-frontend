@@ -39,11 +39,30 @@ function ocrConTimeout(file: File): Promise<FuelReadingOcrResult> {
   });
 }
 
+/**
+ * Litros máximos que el OCR puede AUTOLLENAR. Una carga real de surtidor no
+ * pasa de cientos de litros: una lectura mayor es casi seguro el punto
+ * decimal del display que el modelo no vio (caso real: «100.000» del display
+ * — cien litros — leído como "100000" y registrado como cien mil). Sobre el
+ * umbral la sugerencia NO se autollena (los litros se tipean a mano) y queda
+ * marcada `fueraDeRango` para que el modal lo diga. El tope de VALIDACIÓN
+ * sigue siendo `FUEL_LITERS_MAX` (100.000, cargas de estanque): esto solo
+ * gobierna el autollenado del OCR.
+ */
+export const OCR_AUTOFILL_MAX_LITROS = 1_000;
+
+/** La sugerencia del OCR tal como la guarda el flujo: el resultado del
+ * backend más la marca local de umbral. */
+export type SugerenciaOcr = FuelReadingOcrResult & {
+  /** `true` cuando `value` superó `OCR_AUTOFILL_MAX_LITROS`: no se autollenó. */
+  fueraDeRango?: boolean;
+};
+
 export interface UsePhotoCaptureFlowResult {
   file: File | null;
   isReadingPhoto: boolean;
   captureDate: Date | null;
-  ocr: FuelReadingOcrResult | null;
+  ocr: SugerenciaOcr | null;
   handleSelectPhoto: (file: File) => Promise<void>;
   handleClearPhoto: () => void;
   /** Resetea todo el estado de la foto (file/OCR/EXIF) — el llamador lo combina
@@ -80,7 +99,7 @@ export function usePhotoCaptureFlow(
   const [file, setFile] = useState<File | null>(null);
   const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [captureDate, setCaptureDate] = useState<Date | null>(null);
-  const [ocr, setOcr] = useState<FuelReadingOcrResult | null>(null);
+  const [ocr, setOcr] = useState<SugerenciaOcr | null>(null);
   const handleSelectPhoto = async (selected: File) => {
     setFile(selected);
     setOcr(null);
@@ -92,19 +111,22 @@ export function usePhotoCaptureFlow(
         runOcr ? ocrConTimeout(selected) : Promise.resolve(SIN_SUGERENCIA),
       ]);
       setCaptureDate(fecha);
-      // Se guarda el resultado completo aunque `value` sea `null` — el modal
-      // lo necesita para distinguir "sin sugerencia" (muestra aviso de baja
-      // confianza) de "todavía no se leyó" (mientras `isReadingPhoto`).
-      setOcr(lectura);
       if (lectura.value != null) {
         // El backend ya entrega `value` con el punto decimal puesto (ej.
         // "183.089"), pero igual se guarda el guard de NaN por si alguna vez
         // llega un string no numérico — no autorrellenamos con NaN: se deja
         // el campo como estaba y el usuario corrige a mano.
         const parsedValue = Number(lectura.value);
-        if (Number.isFinite(parsedValue)) {
+        const fueraDeRango = Number.isFinite(parsedValue) && parsedValue > OCR_AUTOFILL_MAX_LITROS;
+        // Se guarda el resultado completo aunque `value` sea `null` — el modal
+        // lo necesita para distinguir "sin sugerencia" (muestra aviso de baja
+        // confianza) de "todavía no se leyó" (mientras `isReadingPhoto`).
+        setOcr(fueraDeRango ? { ...lectura, fueraDeRango } : lectura);
+        if (Number.isFinite(parsedValue) && !fueraDeRango) {
           onReadingDetected(parsedValue);
         }
+      } else {
+        setOcr(lectura);
       }
     } finally {
       setIsReadingPhoto(false);
@@ -124,13 +146,5 @@ export function usePhotoCaptureFlow(
     setIsReadingPhoto(false);
   };
 
-  return {
-    file,
-    isReadingPhoto,
-    captureDate,
-    ocr,
-    handleSelectPhoto,
-    handleClearPhoto,
-    resetPhoto,
-  };
+  return { file, isReadingPhoto, captureDate, ocr, handleSelectPhoto, handleClearPhoto, resetPhoto };
 }
