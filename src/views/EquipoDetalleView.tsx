@@ -21,7 +21,6 @@ import { AlertDialog, Button, Card, Dropdown, Label, Spinner, Table } from '@her
 import { env } from '../config/env';
 import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
 import { useHorometroList } from '../hooks/useHorometro';
-import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
@@ -56,30 +55,15 @@ import { EquipoThumb } from '../components/flota/EquipoThumb';
 import { StatusChip } from '../components/flota/StatusChip';
 import { DeleteEquipoAlertDialog, EditEquipoModal } from '../components/flota/EquipoEditDelete';
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
-import { fmtLitros } from '../lib/format';
+import { fmtFechaHora, fmtLitros } from '../lib/format';
+import { FuelHistoryTable } from '../components/flota/FuelHistoryTable';
+import { UsageHistoryList } from '../components/flota/UsageHistoryList';
 import { buildAssignmentDiff, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
 import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/flota/RegistrarHorometroModal';
 import { RegistrarCargaCombustibleModal } from '../components/flota/RegistrarCargaCombustibleModal';
 
 const NUMERO = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 });
-
-const TIPO_COMBUSTIBLE_LABEL: Record<string, string> = {
-  PETROLEO: 'Petróleo',
-  BENCINA: 'Bencina',
-};
-
-function formatFecha(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat('es-CL', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
 
 /** Versión corta (sin hora) — para captions de KPI, donde el espacio es
  * angosto y la hora no aporta (calca `k.caption` de `FichaEquipoClientePC.dc.html`). */
@@ -95,22 +79,6 @@ function formatFechaConAnio(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
-}
-
-/** Duración real de un turno cerrado (`fechaSalida − fecha`), en formato
- * corto "Xh Ym" — complementa el uso en horas-máquina (`valorFinal −
- * valorInicial`) de la tabla de historial de horómetro: son dos medidas
- * distintas (tiempo de reloj vs. horas de motor) que pueden diferir bastante
- * (un turno de 8h de reloj con el motor detenido gran parte del tiempo). */
-function formatDuracion(fechaInicioIso: string, fechaFinIso: string): string {
-  const inicio = new Date(fechaInicioIso).getTime();
-  const fin = new Date(fechaFinIso).getTime();
-  if (Number.isNaN(inicio) || Number.isNaN(fin) || fin < inicio) return '—';
-  const totalMinutos = Math.round((fin - inicio) / 60000);
-  const horas = Math.floor(totalMinutos / 60);
-  const minutos = totalMinutos % 60;
-  if (horas === 0) return `${minutos} min`;
-  return minutos === 0 ? `${horas} h` : `${horas} h ${minutos} min`;
 }
 
 /** Fila "Datos de la unidad" — calca `.datarow` (label uppercase a la
@@ -144,9 +112,7 @@ function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps)
   return (
     <Card className={hero ? 'border-(--accent)' : undefined}>
       <Card.Content className="flex flex-col gap-2.5 p-4">
-        <span
-          className={`flex h-8.5 w-8.5 items-center justify-center rounded-[9px] ${toneClass ?? DEFAULT_KPI_TONE}`}
-        >
+        <span className={`flex h-8.5 w-8.5 items-center justify-center rounded-[9px] ${toneClass ?? DEFAULT_KPI_TONE}`}>
           {icon}
         </span>
         <span className="text-[10.5px] font-bold tracking-wider text-(--label-color) uppercase">{label}</span>
@@ -413,8 +379,8 @@ function DocumentsCard({
                 <AlertDialog.Body>
                   <p>
                     {deletingDoc ? equipmentDocumentTypeLabel(deletingDoc.type) : ''}
-                    {deletingDoc?.title ? ` · ${deletingDoc.title}` : ''} se eliminará de esta unidad. Esta acción no
-                    se puede deshacer.
+                    {deletingDoc?.title ? ` · ${deletingDoc.title}` : ''} se eliminará de esta unidad. Esta acción no se
+                    puede deshacer.
                   </p>
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
@@ -548,8 +514,8 @@ function RepuestosCompatiblesCard() {
       </Card.Header>
       <Card.Content className="mt-1">
         <p className="text-sm text-(--muted)">
-          Todavía no hay una API de Compatibilidad para listar los repuestos de esta unidad — follow-up
-          coordinado con ese dominio.
+          Todavía no hay una API de Compatibilidad para listar los repuestos de esta unidad — follow-up coordinado con
+          ese dominio.
         </p>
       </Card.Content>
     </Card>
@@ -593,7 +559,10 @@ function ActividadReciente({
                 : 'Últimos eventos registrados para esta unidad.'}
             </Card.Description>
           </div>
-          <Link className="shrink-0 text-xs font-semibold text-(--accent) hover:underline" to={`${fichaBase}/${equipoId}/ficha`}>
+          <Link
+            className="shrink-0 text-xs font-semibold text-(--accent) hover:underline"
+            to={`${fichaBase}/${equipoId}/ficha`}
+          >
             Ver bitácora completa →
           </Link>
         </div>
@@ -605,9 +574,7 @@ function ActividadReciente({
           </div>
         ) : null}
 
-        {isError ? (
-          <p className="text-sm text-(--muted)">No se pudo cargar la actividad reciente.</p>
-        ) : null}
+        {isError ? <p className="text-sm text-(--muted)">No se pudo cargar la actividad reciente.</p> : null}
 
         {!isPending && !isError && eventos.length === 0 ? (
           <p className="text-sm text-(--muted)">
@@ -637,7 +604,7 @@ function ActividadReciente({
                       <StatusChip tone={eventoTipoColor(evento)}>{eventoTipoLabel(evento.tipo)}</StatusChip>
                     </div>
                     <p className="mt-0.5 text-[13px] text-(--muted)">{evento.detalle}</p>
-                    <span className="font-mono text-[11.5px] text-(--muted)">{formatFecha(evento.fecha)}</span>
+                    <span className="font-mono text-[11.5px] text-(--muted)">{fmtFechaHora(evento.fecha)}</span>
                   </div>
                 </li>
               );
@@ -700,7 +667,7 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
               {NUMERO.format(openShift.valorInicial)} {suffix}
             </strong>
           </span>
-          <span>Desde {formatFecha(openShift.fecha)}</span>
+          <span>Desde {fmtFechaHora(openShift.fecha)}</span>
           {equipo.equipmentClass === 'LIGHT' ? (
             <span className="basis-full text-xs">
               Se cierra al cargar combustible: el supervisor desde Registro de equipo o el mantenedor desde «Mi
@@ -748,9 +715,6 @@ export function EquipoDetalleView({
   const navigate = useNavigate();
   const { data: equipo, isPending, isError, error } = useEquipmentDetail(id);
   const { can, canAny, role } = usePermissions();
-  // El historial en tablas solo en escritorio; en tablet y celular, tarjetas.
-  // Arriba de los `return` tempranos: un hook no puede llamarse a veces sí y a veces no.
-  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enTaller = contexto === 'taller';
   const base = enTaller ? '/mantenimiento/equipos' : '/equipos';
   /** Quien navega hasta acá puede declarar su origen (el dashboard pasa
@@ -808,10 +772,7 @@ export function EquipoDetalleView({
   if (isError) {
     return (
       <div className="flex flex-col gap-4">
-        <div
-          className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground"
-          role="alert"
-        >
+        <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground" role="alert">
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha del equipo.'}
         </div>
         {!enModal ? (
@@ -918,11 +879,7 @@ export function EquipoDetalleView({
                   }}
                 >
                   {EQUIPMENT_STATUS.map((opcionEstado) => (
-                    <Dropdown.Item
-                      key={opcionEstado}
-                      id={opcionEstado}
-                      textValue={equipmentStatusLabel(opcionEstado)}
-                    >
+                    <Dropdown.Item key={opcionEstado} id={opcionEstado} textValue={equipmentStatusLabel(opcionEstado)}>
                       <Label>{equipmentStatusLabel(opcionEstado)}</Label>
                     </Dropdown.Item>
                   ))}
@@ -987,9 +944,7 @@ export function EquipoDetalleView({
         <KpiTile
           caption={
             equipo.ultimaMantencion
-              ? [equipo.ultimaMantencion.titulo, equipo.ultimaMantencion.realizadaPor]
-                  .filter(Boolean)
-                  .join(' · ')
+              ? [equipo.ultimaMantencion.titulo, equipo.ultimaMantencion.realizadaPor].filter(Boolean).join(' · ')
               : 'Sin mantenciones registradas'
           }
           icon={<Wrench className="h-4.25 w-4.25" />}
@@ -1071,7 +1026,7 @@ export function EquipoDetalleView({
               <Dato label="Unidad de control" value={controlUnitLabel(equipo.controlUnit)} />
               <Dato label="Uso acumulado" value={uso} />
               <Dato label="Sucursal base" value={equipo.homeBranch?.name ?? '—'} />
-              <Dato label="Dado de alta" value={formatFecha(equipo.createdAt)} />
+              <Dato label="Dado de alta" value={fmtFechaHora(equipo.createdAt)} />
             </Card.Content>
           </Card>
 
@@ -1139,7 +1094,7 @@ export function EquipoDetalleView({
                       </div>
                       <p className="mt-2 text-xs text-(--muted)">
                         {ultimaLecturaConNivel
-                          ? `Registrado ${formatFecha(ultimaLecturaConNivel.fecha)} por ${ultimaLecturaConNivel.operador}`
+                          ? `Registrado ${fmtFechaHora(ultimaLecturaConNivel.fecha)} por ${ultimaLecturaConNivel.operador}`
                           : esLiviano
                             ? 'Esta unidad todavía no tiene registros con nivel de combustible.'
                             : 'Esta unidad todavía no tiene lecturas de horómetro con nivel de combustible.'}
@@ -1151,40 +1106,7 @@ export function EquipoDetalleView({
                     <p className="mb-2 text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
                       Historial de cargas
                     </p>
-                    {historialCombustible.length > 0 ? (
-                      <Table variant="secondary">
-                        {/* ~3 filas visibles con scroll propio (pedido del administrador:
-                           que el historial no estire la ficha); el encabezado queda fijo. */}
-                        <Table.ScrollContainer className="max-h-48 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
-                          <Table.Content aria-label="Historial de cargas de combustible" className="min-w-full">
-                            <Table.Header>
-                              <Table.Column isRowHeader>Fecha</Table.Column>
-                              <Table.Column>Tipo</Table.Column>
-                              <Table.Column className="text-right">Litros</Table.Column>
-                            </Table.Header>
-                            <Table.Body>
-                              <Table.Collection items={historialCombustibleTabla}>
-                                {(registro) => (
-                                  <Table.Row>
-                                    <Table.Cell className="text-sm text-(--muted)">
-                                      {formatFecha(registro.fecha)}
-                                    </Table.Cell>
-                                    <Table.Cell>{TIPO_COMBUSTIBLE_LABEL[registro.tipo] ?? registro.tipo}</Table.Cell>
-                                    <Table.Cell className="text-right font-mono text-sm font-semibold">
-                                      {fmtLitros(registro.litros)} L
-                                    </Table.Cell>
-                                  </Table.Row>
-                                )}
-                              </Table.Collection>
-                            </Table.Body>
-                          </Table.Content>
-                        </Table.ScrollContainer>
-                      </Table>
-                    ) : (
-                      <p className="text-sm text-(--muted)">
-                        Esta unidad todavía no tiene cargas de combustible registradas.
-                      </p>
-                    )}
+                    <FuelHistoryTable registros={historialCombustibleTabla} />
                   </div>
                 </>
               )}
@@ -1210,104 +1132,8 @@ export function EquipoDetalleView({
                 <div className="flex justify-center py-6">
                   <Spinner color="accent" size="sm" />
                 </div>
-              ) : historialHorometro.length > 0 && !esEscritorio ? (
-                <ul
-                  aria-label={esLiviano ? 'Historial de kilometraje' : 'Historial de horómetro'}
-                  className="m-0 flex max-h-80 list-none flex-col gap-2 overflow-y-auto p-0"
-                >
-                  {historialHorometro.map((registro) => (
-                    <li className="flex flex-col gap-1 rounded-xl border border-border px-3.5 py-2.5" key={registro.id}>
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-sm text-(--muted)">{formatFecha(registro.fecha)}</span>
-                        <span className="font-mono text-sm font-semibold text-foreground">
-                          {registro.valorFinal != null
-                            ? `${NUMERO.format(registro.valorFinal - registro.valorInicial)} ${controlUnitSuffix(equipo.controlUnit)}`
-                            : 'En curso'}
-                        </span>
-                      </div>
-                      <span className="text-sm text-foreground">
-                        {esLiviano ? (registro.supervisorName ?? '—') : registro.operador}
-                        {esLiviano && registro.closedByName && registro.closedByName !== registro.supervisorName
-                          ? ` · cerró ${registro.closedByName}`
-                          : ''}
-                      </span>
-                      <span className="text-xs text-(--muted)">
-                        {esLiviano
-                          ? `Km ${NUMERO.format(registro.valorInicial)} → ${
-                              registro.valorFinal != null ? NUMERO.format(registro.valorFinal) : '…'
-                            }`
-                          : `Turno ${turnoLabel(registro.turno).toLowerCase()}`}
-                        {' · '}
-                        <span>
-                          {registro.fechaSalida
-                            ? formatDuracion(registro.fecha, registro.fechaSalida)
-                            : registro.valorFinal != null
-                              ? 'sin hora de salida'
-                              : 'en curso'}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : historialHorometro.length > 0 ? (
-                <Table variant="secondary">
-                  {/* Misma regla que el historial de cargas: ~3 filas y scroll propio. */}
-                  <Table.ScrollContainer className="max-h-48 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
-                    <Table.Content
-                      aria-label={esLiviano ? 'Historial de kilometraje' : 'Historial de horómetro'}
-                      className="min-w-full"
-                    >
-                      <Table.Header>
-                        <Table.Column isRowHeader>{esLiviano ? 'Inicio' : 'Entrada'}</Table.Column>
-                        <Table.Column>{esLiviano ? 'Registró' : 'Operador'}</Table.Column>
-                        <Table.Column>{esLiviano ? 'Km inicial → final' : 'Turno'}</Table.Column>
-                        <Table.Column className="text-right">{esLiviano ? 'Recorrido' : 'Uso'}</Table.Column>
-                        <Table.Column className="text-right">Duración</Table.Column>
-                      </Table.Header>
-                      <Table.Body>
-                        <Table.Collection items={historialHorometro}>
-                          {(registro) => (
-                            <Table.Row>
-                              <Table.Cell className="text-sm text-(--muted)">{formatFecha(registro.fecha)}</Table.Cell>
-                              <Table.Cell>
-                                {esLiviano ? (registro.supervisorName ?? '—') : registro.operador}
-                                {esLiviano && registro.closedByName && registro.closedByName !== registro.supervisorName ? (
-                                  <span className="block text-xs text-(--muted)">cerró {registro.closedByName}</span>
-                                ) : null}
-                              </Table.Cell>
-                              <Table.Cell className={esLiviano ? 'font-mono text-sm' : undefined}>
-                                {esLiviano
-                                  ? `${NUMERO.format(registro.valorInicial)} → ${
-                                      registro.valorFinal != null ? NUMERO.format(registro.valorFinal) : '…'
-                                    }`
-                                  : turnoLabel(registro.turno)}
-                              </Table.Cell>
-                              <Table.Cell className="text-right font-mono text-sm font-semibold">
-                                {registro.valorFinal != null
-                                  ? `${NUMERO.format(registro.valorFinal - registro.valorInicial)} ${controlUnitSuffix(equipo.controlUnit)}`
-                                  : 'En curso'}
-                              </Table.Cell>
-                              <Table.Cell className="text-right text-sm text-(--muted)">
-                                {/* Cerrado sin hora de salida (dato antiguo): no está «en curso». */}
-                                {registro.fechaSalida
-                                  ? formatDuracion(registro.fecha, registro.fechaSalida)
-                                  : registro.valorFinal != null
-                                    ? '—'
-                                    : 'En curso'}
-                              </Table.Cell>
-                            </Table.Row>
-                          )}
-                        </Table.Collection>
-                      </Table.Body>
-                    </Table.Content>
-                  </Table.ScrollContainer>
-                </Table>
               ) : (
-                <p className="text-sm text-(--muted)">
-                  {esLiviano
-                    ? 'Esta unidad todavía no tiene registros de kilometraje.'
-                    : 'Esta unidad todavía no tiene lecturas de horómetro registradas.'}
-                </p>
+                <UsageHistoryList equipo={equipo} registros={historialHorometro} />
               )}
             </Card.Content>
           </Card>
@@ -1349,7 +1175,7 @@ export function EquipoDetalleView({
                                 {NUMERO.format(movimiento.quantity)}
                               </Table.Cell>
                               <Table.Cell className="text-sm text-(--muted)">
-                                {formatFecha(movimiento.occurredAt)}
+                                {fmtFechaHora(movimiento.occurredAt)}
                               </Table.Cell>
                             </Table.Row>
                           )}

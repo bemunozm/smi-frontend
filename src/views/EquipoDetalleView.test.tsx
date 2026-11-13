@@ -1205,5 +1205,17 @@ describe('EquipoDetalleView — R3 identidad por clase', () => {
     expect(screen.getAllByText('EX-001').length).toBeGreaterThan(0);
     expect(screen.getByText(/Caterpillar 336/)).toBeTruthy();
   });
-});
 
+  it('el historial de cargas muestra quién realizó cada carga', async () => {
+    currentUserResult = {
+      user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+      role: 'ADMIN',
+      isPending: false,
+      isAuthenticated: true,
+    };
+    renderFicha((qc) => qc.setQueryData(['combustible'], [{ ...COMBUSTIBLES[0], realizadoPor: 'Luis Vega' }]));
+    const tabla = await screen.findByRole('grid', { name: 'Historial de cargas de combustible' });
+    expect(within(tabla).getByText('Realizó')).toBeTruthy();
+    expect(within(tabla).getByText('Luis Vega')).toBeTruthy();
+  });
+});
