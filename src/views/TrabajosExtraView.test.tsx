@@ -350,6 +350,28 @@ describe('TrabajosExtraView', () => {
     expect(screen.queryByLabelText(/otra actividad/i)).toBeNull();
   });
 
+  /** Los trabajos del Report los hacen los pesados: las camionetas no se ofrecen. */
+  it('el selector de equipo ofrece solo equipos pesados, bajo el título «Nuevo report»', () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['equipment'], [
+      { id: 'e1', internalCode: 'SEM 02', type: 'CF', equipmentClass: 'HEAVY', status: 'OPERATIONAL' },
+      { id: 'e2', internalCode: 'PJWS83', type: 'Camioneta', equipmentClass: 'LIGHT', status: 'OPERATIONAL' },
+    ]);
+    qc.setQueryData(['trabajos-extra'], []);
+    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+    render(
+      <QueryClientProvider client={qc}>
+        <TrabajosExtraView />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Nuevo report')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Equipo'));
+    const opciones = within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent);
+    expect(opciones.some((t) => t?.includes('SEM 02'))).toBe(true);
+    expect(opciones.some((t) => t?.includes('PJWS83'))).toBe(false);
+  });
+
   /**
    * El tipo define cómo se paga. La limpieza de silos es SIEMPRE Planta y es
    * la única (13-11: se marcaban como Transporte): el tipo se asigna solo y no
@@ -360,7 +382,6 @@ describe('TrabajosExtraView', () => {
     qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
     qc.setQueryData(['trabajos-extra'], []);
     qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
-    qc.setQueryData(['plantas'], [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }]);
 
     render(
       <QueryClientProvider client={qc}>
@@ -380,12 +401,20 @@ describe('TrabajosExtraView', () => {
     expect((screen.getByLabelText('Tipo de la actividad 1') as HTMLInputElement).value).toBe('Planta · automático');
     // Puede abarcar varias plantas: se marcan las que correspondan.
     const grupo = screen.getByRole('group', { name: 'Plantas de la actividad 1' });
-    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
-    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 4' }));
-    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('true');
-    expect(within(grupo).getByRole('button', { name: 'Planta 4' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
-    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('false');
+    // Solo las cinco plantas de silos, con su nombre largo (P.P. producto, P.R. rechazo).
+    expect(within(grupo).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'P.P.1Planta 1',
+      'P.P.2Planta 2',
+      'P.R.2Rechazo planta 2',
+      'P.P.4Planta 4',
+      'P.R.4Rechazo planta 4',
+    ]);
+    fireEvent.click(within(grupo).getByRole('button', { name: /^P.P.1/  }));
+    fireEvent.click(within(grupo).getByRole('button', { name: /^P.P.4/  }));
+    expect(within(grupo).getByRole('button', { name: /^P.P.1/  }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(grupo).getByRole('button', { name: /^P.P.4/  }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(grupo).getByRole('button', { name: /^P.P.1/  }));
+    expect(within(grupo).getByRole('button', { name: /^P.P.1/  }).getAttribute('aria-pressed')).toBe('false');
 
     // Volver a otra actividad deja el tipo por elegir.
     completarFila(1, { actividad: 'Soltar material' });

@@ -53,6 +53,31 @@ export function tipoAlCambiarActividad(actividad: string, tipoActual: string): s
   return tipoActual === 'PLANTA' ? '' : tipoActual;
 }
 
+/**
+ * Plantas donde se hace una limpieza de silos (cliente, 13-11): solo estas
+ * cinco, no todo el catálogo del reporte diario. P.P. es producto planta y
+ * P.R. es producto rechazo. Los nombres son los del catálogo, así coinciden
+ * con lo ya guardado y con la planilla del cliente.
+ */
+export const PLANTAS_SILOS = [
+  { nombre: 'P.P.1', detalle: 'Planta 1' },
+  { nombre: 'P.P.2', detalle: 'Planta 2' },
+  { nombre: 'P.R.2', detalle: 'Rechazo planta 2' },
+  { nombre: 'P.P.4', detalle: 'Planta 4' },
+  { nombre: 'P.R.4', detalle: 'Rechazo planta 4' },
+] as const;
+
+/** Las cinco plantas de silos, más alguna ya guardada que no esté entre ellas
+ * (un report anterior): se ve y se puede desmarcar, pero no se ofrece. */
+export function opcionesPlantasSilos(elegidas: readonly string[]): { nombre: string; detalle: string | null }[] {
+  const fijas = PLANTAS_SILOS.map((p) => ({ nombre: p.nombre as string, detalle: p.detalle as string | null }));
+  const extra = elegidas.filter((n) => !fijas.some((p) => p.nombre === n)).map((nombre) => ({ nombre, detalle: null }));
+  return [...fijas, ...extra];
+}
+
+export const AYUDA_PLANTAS_SILOS =
+  'P.P. es producto planta y P.R. es producto rechazo. Marca todas las que correspondan: en planta 2 a veces van P.P.2 y P.R.2 juntas.';
+
 /** Máximo de la descripción de una actividad (mismo tope que el servidor). */
 export const DESCRIPCION_ACTIVIDAD_MAX = 300;
 

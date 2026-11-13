@@ -14,13 +14,14 @@ import {
   TIPOS_ELEGIBLES,
   actividadLabel,
   destinoLabel,
+  AYUDA_PLANTAS_SILOS,
+  opcionesPlantasSilos,
   plantasDeFila,
   tipoAlCambiarActividad,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
 import { useTurnoActual } from '../hooks/useTurnoActual';
-import { usePlantas } from '../hooks/useReporteDiario';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import {
@@ -194,10 +195,6 @@ export function TrabajosExtraView() {
     reportNumero: '',
   });
 
-  // Catálogo de plantas del reporte diario (precargado para offline): dónde
-  // se hizo una limpieza de silos.
-  const { data: plantas = [] } = usePlantas();
-
   // La foto del report es OBLIGATORIA: viaja como blob junto a la operación
   // y se sube en el replay — igual que la foto de un hallazgo.
   const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
@@ -226,7 +223,11 @@ export function TrabajosExtraView() {
    * El selector separa los equipos en terreno de los disponibles. Los que
    * están en taller o fuera de servicio quedan al final, a la vista pero sin
    * poder elegirse, para que no parezca que desaparecieron.
+   *
+   * Solo equipos pesados: son los que hacen los trabajos del Report (cliente,
+   * 13-11). Al corregir un report viejo hecho con otro equipo, ese se mantiene.
    */
+  const equipoEditado = detalle?.equipoId;
   const opcionesEquipo = useMemo((): OpcionSelector[] => {
     const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
       const operador = enTurno.get(e.id);
@@ -239,8 +240,11 @@ export function TrabajosExtraView() {
       return { valor: e.id, titulo: e.internalCode, detalle: e.type, grupo: 'Disponibles' };
     };
     const orden = ['En terreno', 'Disponibles', 'No disponibles'];
-    return equipos.map(opcion).sort((a, b) => orden.indexOf(a.grupo!) - orden.indexOf(b.grupo!));
-  }, [equipos, enTurno]);
+    return equipos
+      .filter((e) => e.equipmentClass !== 'LIGHT' || e.id === equipoEditado)
+      .map(opcion)
+      .sort((a, b) => orden.indexOf(a.grupo!) - orden.indexOf(b.grupo!));
+  }, [equipos, enTurno, equipoEditado]);
 
   /**
    * Al registrar, el formulario se vuelve a montar en blanco (`key` nueva) en
@@ -252,7 +256,7 @@ export function TrabajosExtraView() {
   const formulario = (
     <Card>
       <CardHead
-        titulo="Nuevo trabajo extraordinario"
+        titulo="Nuevo report"
         bajada="Horas y respaldo del trabajo fuera de la operación habitual."
       />
       <FormularioTrabajo
@@ -263,7 +267,6 @@ export function TrabajosExtraView() {
         operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
-        plantas={plantas}
         foto={foto}
         textoBoton="Registrar trabajo"
         pendiente={isGuardando}
@@ -410,7 +413,6 @@ export function TrabajosExtraView() {
         operadores={operadores}
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
-        plantas={plantas}
         textoBoton="Guardar cambios"
         numero={detalle.numero}
         folios={registros}
@@ -603,7 +605,6 @@ function FormularioTrabajo({
   operadores,
   enTurno,
   opcionesEquipo,
-  plantas,
   foto,
   textoBoton,
   pendiente,
@@ -626,8 +627,6 @@ function FormularioTrabajo({
   /** Equipos con turno abierto → operador que lo lleva. */
   enTurno: Map<string, OperadorEnTurno>;
   opcionesEquipo: OpcionSelector[];
-  /** Catálogo de plantas (reporte diario): dónde se hizo una limpieza de silos. */
-  plantas: { id: string; nombre: string }[];
   /** Captura de la foto del report — OBLIGATORIA al registrar; ausente al
    * editar (la foto no se cambia desde la edición). */
   foto?: ReturnType<typeof usePhotoCaptureFlow>;
@@ -902,7 +901,7 @@ function FormularioTrabajo({
                   >
                     <Label requerido>¿En qué plantas?</Label>
                     <div className="flex flex-wrap gap-2">
-                      {[...new Set([...plantas.map((p) => p.nombre), ...(fila.plantas ?? [])])].map((nombre) => {
+                      {opcionesPlantasSilos(fila.plantas ?? []).map(({ nombre, detalle }) => {
                         const elegidas = fila.plantas ?? [];
                         const activo = elegidas.includes(nombre);
                         return (
@@ -915,12 +914,17 @@ function FormularioTrabajo({
                               })
                             }
                           >
-                            {nombre}
+                            <span className="flex flex-col items-start leading-tight">
+                              <span>{nombre}</span>
+                              {detalle && (
+                                <span className="text-[11.5px] font-normal text-muted-foreground">{detalle}</span>
+                              )}
+                            </span>
                           </ChipSeleccion>
                         );
                       })}
                     </div>
-                    <Hint>{err?.plantas?.message ?? 'Marca todas las plantas donde se hizo.'}</Hint>
+                    <Hint>{err?.plantas?.message ?? AYUDA_PLANTAS_SILOS}</Hint>
                   </div>
                 )}
                 <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>

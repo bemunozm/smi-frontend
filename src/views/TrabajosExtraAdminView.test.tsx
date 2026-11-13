@@ -217,7 +217,7 @@ describe('TrabajosExtraAdminView', () => {
   it('«N° del report» muestra el último registrado y avisa uno repetido', () => {
     listHook.mockReturnValue(ok([trabajo({ id: 'f1', reportNumero: '4508' }), trabajo({ id: 'f2', reportNumero: '4507' })]));
     render(<TrabajosExtraAdminView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo report' }));
     const dialog = screen.getByRole('dialog');
 
     expect(within(dialog).getByText(/Último report registrado: 4508 · el siguiente sería 4509./)).toBeTruthy();
@@ -225,9 +225,9 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(dialog).getByText(/El N° 4508 ya está registrado en otro Report/)).toBeTruthy();
   });
 
-  it('«Nueva actividad» registra con operador del catálogo, horómetros, actividades, report y foto', async () => {
+  it('«Nuevo report» registra con operador del catálogo, horómetros, actividades, report y foto', async () => {
     render(<TrabajosExtraAdminView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo report' }));
 
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
@@ -302,7 +302,7 @@ describe('TrabajosExtraAdminView', () => {
 
   it('sin foto del report, «Registrar trabajo» queda deshabilitado', async () => {
     render(<TrabajosExtraAdminView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo report' }));
 
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));

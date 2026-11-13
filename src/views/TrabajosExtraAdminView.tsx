@@ -33,7 +33,6 @@ import {
   useEliminarTrabajoExtra,
   useTrabajosExtraList,
 } from '../hooks/useTrabajosExtra';
-import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
@@ -56,6 +55,8 @@ import {
   TIPOS_ELEGIBLES,
   actividadLabel,
   destinoLabel,
+  AYUDA_PLANTAS_SILOS,
+  opcionesPlantasSilos,
   plantasDeFila,
   tipoAlCambiarActividad,
   trabajoExtraEdicionSchema,
@@ -257,7 +258,6 @@ const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 te
 function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinario; onClose: () => void }) {
   const { data: equipos } = useEquipment();
   const { data: operadores } = useOperators();
-  const { data: plantas } = usePlantas();
   const crear = useCrearTrabajoExtra();
   const { guardar, isGuardando } = useEditarTrabajoExtra();
   const [equipoId, setEquipoId] = useState(trabajo?.equipoId ?? '');
@@ -377,7 +377,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               {trabajo
                 ? `Editar Report ${numeroReport(trabajo.numero)} · ${trabajo.equipo?.internalCode ?? '—'}`
-                : 'Nueva actividad'}
+                : 'Nuevo report'}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -391,7 +391,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
-                      {(equipos ?? []).map((equipo) => (
+                      {(equipos ?? []).filter((e) => e.equipmentClass !== 'LIGHT' || e.id === trabajo?.equipoId).map((equipo) => (
                         <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
                           {equipo.internalCode}
                           <ListBox.ItemIndicator />
@@ -595,15 +595,17 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                             cambiarFila(i, { plantas: [...keys].filter((k): k is string => typeof k === 'string') })
                           }
                         >
-                          {[...new Set([...(plantas ?? []).map((p) => p.nombre), ...fila.plantas])].map((nombre) => (
+                          {opcionesPlantasSilos(fila.plantas).map(({ nombre, detalle }) => (
                             <ToggleButton id={nombre} key={nombre}>
-                              {nombre}
+                              {detalle ? `${nombre} · ${detalle}` : nombre}
                             </ToggleButton>
                           ))}
                         </ToggleButtonGroup>
                         {fila.plantas.length === 0 ? (
                           <p className="m-0 text-xs text-danger-soft-foreground">Elige al menos una planta.</p>
-                        ) : null}
+                        ) : (
+                          <p className="m-0 text-xs text-muted-foreground">{AYUDA_PLANTAS_SILOS}</p>
+                        )}
                       </div>
                     ) : null}
 
@@ -819,7 +821,7 @@ export function TrabajosExtraAdminView() {
           <Button isDisabled={trabajos.length === 0} onPress={() => setExportando(true)} variant="secondary">
             Exportar Excel
           </Button>
-          <Button onPress={() => setCreando(true)}>Nueva actividad</Button>
+          <Button onPress={() => setCreando(true)}>Nuevo report</Button>
         </div>
       </div>
 
