@@ -162,7 +162,14 @@ export const ResumenDiaSchema = z.object({
   }),
   reports: z.object({
     totalHoras: z.number(),
-    porEquipo: z.array(z.object({ internalCode: z.string(), horas: z.number() })),
+    porEquipo: z.array(
+      z.object({
+        internalCode: z.string(),
+        horas: z.number(),
+        /** Para navegar a Report filtrado; ausente en payloads cacheados (PWA). */
+        equipmentId: z.string().optional(),
+      }),
+    ),
   }),
   produccion: z.object({ internos: z.number(), minaCaleta: z.number(), mineras: z.number() }),
   adBlue: z
@@ -193,7 +200,28 @@ export const ResumenDiaSchema = z.object({
       inicial: z.number(),
       final: z.number().nullable(),
       avance: z.number().nullable(),
+      /** Detalle del registro (popup HM). Opcionales: payloads cacheados previos. */
+      operador: z.string().optional(),
+      registradoPor: z.string().nullish(),
+      horaEntrada: z.string().optional(),
+      horaSalida: z.string().nullish(),
     }),
   ),
+  /** Detalle de cada carga de diésel del día (popup Diésel). `operador` y
+   * `cargadoPor` vienen de la tarjeta vinculada (null en cargas manuales).
+   * Opcional: payloads cacheados (PWA) previos al campo. */
+  cargas: z
+    .array(
+      z.object({
+        equipmentId: z.string(),
+        internalCode: z.string(),
+        litros: z.number(),
+        tipo: z.string(),
+        hora: z.string(),
+        operador: z.string().nullable(),
+        cargadoPor: z.string().nullable(),
+      }),
+    )
+    .optional(),
 });
 export type ResumenDia = z.infer<typeof ResumenDiaSchema>;
