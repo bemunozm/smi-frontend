@@ -380,7 +380,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
   const celdas = (dialog: HTMLElement, testId: string) =>
     Array.from(within(dialog).getByTestId(testId).querySelectorAll('td')).map((c) => c.textContent);
 
-  it('HM: tabla por equipo con el TOTAL del payload y fila navegable a la ficha', () => {
+  it('HM: tabla por equipo con el TOTAL del payload', () => {
     mock(BASE);
     render(<ResumenDia />);
     const dialog = abrir('Ver detalle de HM operacionales');
@@ -390,8 +390,36 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(celdas(dialog, 'hm-det-TOTAL')).toEqual(['TOTAL', '6', '4,5', '10,5']);
     // Sin pie «Ver todo»: el detalle ya es completo.
     expect(within(dialog).queryByRole('button', { name: 'Ver todo →' })).toBeNull();
+  });
+
+  it('HM: la fila expande el detalle de las tarjetas del equipo (y ya no navega)', () => {
+    mock({
+      ...BASE,
+      lecturas: [
+        {
+          ...BASE.lecturas[0],
+          operador: 'P. Rojas',
+          registradoPor: 'Limbert V.',
+          horaEntrada: '2026-10-16T08:00:00.000Z',
+          horaSalida: '2026-10-16T18:30:00.000Z',
+        },
+        BASE.lecturas[1], // payload cacheado: sin los campos nuevos
+      ],
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de HM operacionales');
     fireEvent.click(within(dialog).getByTestId('hm-det-CG-002'));
-    expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
+    const exp = within(dialog).getByTestId('hm-exp-CG-002');
+    expect(within(exp).getByText('P. Rojas')).toBeTruthy();
+    expect(within(exp).getByText('Registró: Limbert V.')).toBeTruthy();
+    expect(within(exp).getByText('100 → 106 (+6)')).toBeTruthy();
+    // La tarjeta del payload viejo: sin quién registró y aún en curso.
+    expect(within(exp).getByText('Registró: —')).toBeTruthy();
+    expect(within(exp).getByText('106 → en curso')).toBeTruthy();
+    expect(navigateMock).not.toHaveBeenCalled();
+    // Segundo clic colapsa.
+    fireEvent.click(within(dialog).getByTestId('hm-det-CG-002'));
+    expect(within(dialog).queryByTestId('hm-exp-CG-002')).toBeNull();
   });
 
   it('Diésel: litros por equipo con L/HM y «Ver todo» a cargas de combustible', () => {
@@ -405,6 +433,51 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
   });
 
+  it('Diésel: la fila expande las cargas del equipo (quién cargó, operador, hora, tipo)', () => {
+    mock({
+      ...BASE,
+      cargas: [
+        {
+          equipmentId: 'e-cg',
+          internalCode: 'CG-002',
+          litros: 80,
+          tipo: 'PETROLEO',
+          hora: '2026-10-16T12:00:00.000Z',
+          operador: 'P. Rojas',
+          cargadoPor: 'Limbert V.',
+        },
+        // Carga manual sin tarjeta: sin operador ni quién cargó.
+        {
+          equipmentId: 'e-cg',
+          internalCode: 'CG-002',
+          litros: 15,
+          tipo: 'BENCINA',
+          hora: '2026-10-16T13:00:00.000Z',
+          operador: null,
+          cargadoPor: null,
+        },
+      ],
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Diésel');
+    fireEvent.click(within(dialog).getByTestId('diesel-det-CG-002'));
+    const exp = within(dialog).getByTestId('diesel-exp-CG-002');
+    expect(within(exp).getByText('80 L · Petróleo')).toBeTruthy();
+    expect(within(exp).getByText('Cargó: Limbert V.')).toBeTruthy();
+    expect(within(exp).getByText('Operador: P. Rojas')).toBeTruthy();
+    expect(within(exp).getByText('15 L · Bencina')).toBeTruthy();
+    expect(within(exp).getByText('Cargó: —')).toBeTruthy();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('Diésel: payload cacheado sin cargas[] avisa que no hay detalle', () => {
+    mock(BASE); // sin `cargas`
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Diésel');
+    fireEvent.click(within(dialog).getByTestId('diesel-det-EX-001'));
+    expect(within(within(dialog).getByTestId('diesel-exp-EX-001')).getByText('Detalle no disponible en este payload.')).toBeTruthy();
+  });
+
   it('Reports: lista el día completo (la card corta en 3) y «Ver todo» va a Report', () => {
     mock(BASE);
     render(<ResumenDia />);
@@ -414,6 +487,24 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(within(dialog).getByText('9 HM')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
     expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra');
+  });
+
+  it('Reports: la fila con equipmentId navega a Report filtrado por equipo y día', () => {
+    mock({
+      ...BASE,
+      reports: {
+        totalHoras: 9,
+        porEquipo: [
+          { equipmentId: 'e-ex', internalCode: 'EX-001', horas: 4 },
+          { internalCode: 'CG-002', horas: 2.5 }, // payload viejo: sin id, no navegable
+        ],
+      },
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Reports');
+    expect(within(dialog).queryByRole('button', { name: 'Ver reports de CG-002' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver reports de EX-001' }));
+    expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra?equipo=e-ex&desde=2026-10-16&hasta=2026-10-16');
   });
 
   it('Producción: camiones del endpoint de vueltas del día; vueltas, del payload de la card', () => {

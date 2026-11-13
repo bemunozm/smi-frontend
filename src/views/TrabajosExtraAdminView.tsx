@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertDialog,
   Button,
@@ -720,10 +721,13 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
  */
 export function TrabajosExtraAdminView() {
   const { data, isPending, isError, error } = useTrabajosExtraList();
-  const [equipoFiltro, setEquipoFiltro] = useState('TODOS');
+  // Deep-link del dashboard (popup Reports): la URL siembra el estado INICIAL
+  // de los filtros; después mandan los controles de la vista.
+  const [searchParams] = useSearchParams();
+  const [equipoFiltro, setEquipoFiltro] = useState(() => searchParams.get('equipo') ?? 'TODOS');
   const [turnoFiltro, setTurnoFiltro] = useState('TODOS');
-  const [desde, setDesde] = useState('');
-  const [hasta, setHasta] = useState('');
+  const [desde, setDesde] = useState(() => searchParams.get('desde') ?? '');
+  const [hasta, setHasta] = useState(() => searchParams.get('hasta') ?? '');
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
   const [creando, setCreando] = useState(false);
   const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
@@ -753,20 +757,24 @@ export function TrabajosExtraAdminView() {
     return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
   }, [trabajos]);
 
+  // Un `?equipo=` que no está en el listado (deep-link viejo o equipo sin trabajos) cae a TODOS.
+  const equipoEfectivo =
+    equipoFiltro === 'TODOS' || equipos.some((e) => e.id === equipoFiltro) ? equipoFiltro : 'TODOS';
+
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   const lista = useMemo(
     () =>
       trabajos.filter((t) => {
-        if (equipoFiltro !== 'TODOS' && t.equipoId !== equipoFiltro) return false;
+        if (equipoEfectivo !== 'TODOS' && t.equipoId !== equipoEfectivo) return false;
         if (turnoFiltro !== 'TODOS' && t.turno !== turnoFiltro) return false;
         const dia = diaLocal(t.fecha);
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
         return true;
       }),
-    [trabajos, equipoFiltro, turnoFiltro, desde, hasta],
+    [trabajos, equipoEfectivo, turnoFiltro, desde, hasta],
   );
 
   const totalHoras = lista.reduce((acc, t) => acc + t.totalHoras, 0);
@@ -838,7 +846,7 @@ export function TrabajosExtraAdminView() {
                 <select
                   className={SELECT_FILTRO}
                   onChange={(event) => setEquipoFiltro(event.target.value)}
-                  value={equipoFiltro}
+                  value={equipoEfectivo}
                 >
                   <option value="TODOS">Todos</option>
                   {equipos.map((equipo) => (

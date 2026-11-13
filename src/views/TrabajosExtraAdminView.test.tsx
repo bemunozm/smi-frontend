@@ -10,6 +10,10 @@ const { listHook, crearMock, guardarMock, eliminarMock } = vi.hoisted(() => ({
   eliminarMock: vi.fn(),
 }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
+// Deep-link del dashboard: la vista siembra sus filtros desde la URL.
+const { urlParams } = vi.hoisted(() => ({ urlParams: { value: '' } }));
+
+vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(urlParams.value)] as const }));
 
 vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => listHook(),
@@ -84,6 +88,7 @@ const ok = (data: TrabajoExtraordinario[]) => ({ data, isPending: false, isError
 
 beforeEach(() => {
   rol.value = 'ADMIN';
+  urlParams.value = '';
   listHook.mockReturnValue(ok(LISTA));
   guardarMock.mockResolvedValue(true);
 });
@@ -129,6 +134,21 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(screen.getByLabelText(/hasta/i), { target: { value: '2026-10-15' } });
     expect(screen.getAllByTestId(/trabajo-fila-/)).toHaveLength(1);
     expect(screen.getByTestId('trabajo-fila-t1')).toBeTruthy();
+  });
+
+  it('siembra los filtros desde la URL (deep-link del dashboard)', () => {
+    urlParams.value = 'equipo=e2&desde=2026-10-16&hasta=2026-10-16';
+    render(<TrabajosExtraAdminView />);
+    expect(screen.getAllByTestId(/trabajo-fila-/)).toHaveLength(1);
+    expect(screen.getByTestId('trabajo-fila-t2')).toBeTruthy();
+    expect(screen.getByTestId('total-filtrado').textContent).toBe('2,5 h en 1 trabajo');
+  });
+
+  it('un equipo de la URL que no existe en el listado cae a TODOS', () => {
+    urlParams.value = 'equipo=e-fantasma';
+    render(<TrabajosExtraAdminView />);
+    expect(screen.getAllByTestId(/trabajo-fila-/)).toHaveLength(3);
+    expect((screen.getByLabelText(/equipo/i) as HTMLSelectElement).value).toBe('TODOS');
   });
 
   it('ningún calce con el filtro muestra el vacío sin romper', () => {

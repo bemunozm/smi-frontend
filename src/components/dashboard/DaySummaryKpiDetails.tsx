@@ -1,12 +1,10 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Spinner, Table } from '@heroui/react';
 
 import { KpiDetailModal } from './KpiDetailModal';
-import { rowToEquipment } from './equipment-row';
 import { useDashboardVueltas } from '../../hooks/useDashboard';
 import { useKardex } from '../../hooks/useInventory';
-import { usePermissions } from '../../hooks/usePermissions';
-import { canOpenPath } from '../../lib/permissions';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
 import { MovementKindChip, movementKind } from '../inventario/shared';
@@ -19,7 +17,27 @@ export type DaySummaryKpi = 'hm' | 'diesel' | 'reports' | 'production' | 'adblue
 const CELL = 'font-mono text-sm';
 const CELL_TOTAL = 'font-mono text-sm font-semibold';
 const ROW_LISTA = 'flex flex-wrap items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0';
+/** Fila que expande/colapsa su detalle (clic y Enter vía `onAction`). */
+const ROW_TOGGLE = 'cursor-pointer hover:bg-surface-secondary';
 const HORA = new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit' });
+
+/** Set de equipos con su fila de detalle expandida (toggle por `internalCode`). */
+function useExpandedRows() {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (code: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(code)) next.add(code);
+      return next;
+    });
+  return { expanded, toggle };
+}
+
+/** «08:00–18:30», «08:00–en curso», o '' si el payload (cacheado) no trae horas. */
+function rangoHoras(entrada?: string, salida?: string | null): string {
+  if (!entrada) return '';
+  return `${HORA.format(new Date(entrada))}–${salida ? HORA.format(new Date(salida)) : 'en curso'}`;
+}
 
 /**
  * Popups de detalle de las KPI cards de colores del «Resumen del día». HM y
@@ -64,7 +82,7 @@ export function DaySummaryKpiDetails({
         title={`Reports – ${dia}`}
         verTodoTo="/trabajos-extra"
       >
-        <ReportsDetail data={data} />
+        <ReportsDetail data={data} onClose={onClose} />
       </KpiDetailModal>
       <KpiDetailModal
         isOpen={open === 'production'}
@@ -88,10 +106,33 @@ export function DaySummaryKpiDetails({
   );
 }
 
-/** HM por equipo (Día/Noche/Total) — mismas filas de `operacionPorEquipo`, solo las que aportan HM. */
+/** Las tarjetas de un equipo ese día, dentro de la fila expandida del popup HM. */
+function ShiftCardsOfEquipment({ lecturas }: { lecturas: ResumenDia['lecturas'] }) {
+  const n = (v: number) => NUM_CL_1.format(v);
+  if (lecturas.length === 0) return <span className="text-xs text-muted-foreground">Sin tarjetas de este equipo.</span>;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {lecturas.map((l) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" key={l.id}>
+          <span className="font-medium text-foreground">{l.turno}</span>
+          <span className="text-muted-foreground">{l.operador ?? '—'}</span>
+          <span className="text-muted-foreground">Registró: {l.registradoPor ?? '—'}</span>
+          <span className="font-mono text-foreground">
+            {`${n(l.inicial)} → ${l.final === null ? 'en curso' : n(l.final)}${l.avance == null ? '' : ` (+${n(l.avance)})`}`}
+          </span>
+          {rangoHoras(l.horaEntrada, l.horaSalida) ? (
+            <span className="text-muted-foreground">{rangoHoras(l.horaEntrada, l.horaSalida)}</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** HM por equipo (Día/Noche/Total) — mismas filas de `operacionPorEquipo`, solo las que aportan HM.
+ * Cada fila expande las tarjetas que originan sus horas (quién registró, inicial→final, horario). */
 function HmDetail({ data }: { data: ResumenDia }) {
-  const navigate = useNavigate();
-  const toFicha = canOpenPath(usePermissions().role, '/equipos');
+  const { expanded, toggle } = useExpandedRows();
   const rows = data.operacionPorEquipo.filter((f) => f.total.hm !== 0);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Sin horas máquina este día.</p>;
   const n = (v: number) => NUM_CL_1.format(v);
@@ -107,19 +148,35 @@ function HmDetail({ data }: { data: ResumenDia }) {
           </Table.Header>
           <Table.Body>
             {[
-              ...rows.map((f) => (
+              ...rows.flatMap((f) => [
                 <Table.Row
+                  className={ROW_TOGGLE}
                   data-testid={`hm-det-${f.internalCode}`}
                   id={f.internalCode}
                   key={f.internalCode}
-                  {...rowToEquipment(toFicha ? f.equipmentId : undefined, navigate)}
+                  onAction={() => toggle(f.internalCode)}
                 >
                   <Table.Cell className={CELL}>{f.internalCode}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.dia.hm)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.noche.hm)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.total.hm)}</Table.Cell>
-                </Table.Row>
-              )),
+                </Table.Row>,
+                ...(expanded.has(f.internalCode)
+                  ? [
+                      <Table.Row
+                        data-testid={`hm-exp-${f.internalCode}`}
+                        id={`exp-${f.internalCode}`}
+                        key={`exp-${f.internalCode}`}
+                      >
+                        <Table.Cell colSpan={4}>
+                          <ShiftCardsOfEquipment
+                            lecturas={data.lecturas.filter((l) => l.internalCode === f.internalCode)}
+                          />
+                        </Table.Cell>
+                      </Table.Row>,
+                    ]
+                  : []),
+              ]),
               <Table.Row data-testid="hm-det-TOTAL" id="TOTAL" key="TOTAL">
                 <Table.Cell className="text-sm font-semibold">TOTAL</Table.Cell>
                 <Table.Cell className={CELL_TOTAL}>{n(data.hm.dia)}</Table.Cell>
@@ -134,10 +191,32 @@ function HmDetail({ data }: { data: ResumenDia }) {
   );
 }
 
-/** Litros por equipo (Día/Noche/Total) + rendimiento L/HM de cada uno. */
+const FUEL_LABELS: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
+
+/** Las cargas de un equipo ese día, dentro de la fila expandida del popup Diésel. */
+function FuelLoadsOfEquipment({ cargas, internalCode }: { cargas: ResumenDia['cargas']; internalCode: string }) {
+  // Payload cacheado por la PWA anterior al campo: no hay detalle que mostrar.
+  if (!cargas) return <span className="text-xs text-muted-foreground">Detalle no disponible en este payload.</span>;
+  const delEquipo = cargas.filter((c) => c.internalCode === internalCode);
+  if (delEquipo.length === 0) return <span className="text-xs text-muted-foreground">Sin cargas de este equipo.</span>;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {delEquipo.map((c, i) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" key={`${c.hora}-${i}`}>
+          <span className="font-mono text-muted-foreground">{HORA.format(new Date(c.hora))}</span>
+          <span className="font-mono text-foreground">{`${NUM_CL_1.format(c.litros)} L · ${FUEL_LABELS[c.tipo] ?? c.tipo}`}</span>
+          <span className="text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
+          <span className="text-muted-foreground">Operador: {c.operador ?? '—'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Litros por equipo (Día/Noche/Total) + rendimiento L/HM de cada uno.
+ * Cada fila expande las cargas que originan sus litros (hora, quién cargó, operador). */
 function DieselDetail({ data }: { data: ResumenDia }) {
-  const navigate = useNavigate();
-  const toFicha = canOpenPath(usePermissions().role, '/equipos');
+  const { expanded, toggle } = useExpandedRows();
   const rows = data.operacionPorEquipo.filter((f) => f.total.litros !== 0);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Sin cargas de diésel este día.</p>;
   const n = (v: number) => NUM_CL_1.format(v);
@@ -154,20 +233,34 @@ function DieselDetail({ data }: { data: ResumenDia }) {
           </Table.Header>
           <Table.Body>
             {[
-              ...rows.map((f) => (
+              ...rows.flatMap((f) => [
                 <Table.Row
+                  className={ROW_TOGGLE}
                   data-testid={`diesel-det-${f.internalCode}`}
                   id={f.internalCode}
                   key={f.internalCode}
-                  {...rowToEquipment(toFicha ? f.equipmentId : undefined, navigate)}
+                  onAction={() => toggle(f.internalCode)}
                 >
                   <Table.Cell className={CELL}>{f.internalCode}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.dia.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.noche.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.total.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{f.total.hm > 0 ? n(f.total.litros / f.total.hm) : '—'}</Table.Cell>
-                </Table.Row>
-              )),
+                </Table.Row>,
+                ...(expanded.has(f.internalCode)
+                  ? [
+                      <Table.Row
+                        data-testid={`diesel-exp-${f.internalCode}`}
+                        id={`exp-${f.internalCode}`}
+                        key={`exp-${f.internalCode}`}
+                      >
+                        <Table.Cell colSpan={5}>
+                          <FuelLoadsOfEquipment cargas={data.cargas} internalCode={f.internalCode} />
+                        </Table.Cell>
+                      </Table.Row>,
+                    ]
+                  : []),
+              ]),
               <Table.Row data-testid="diesel-det-TOTAL" id="TOTAL" key="TOTAL">
                 <Table.Cell className="text-sm font-semibold">TOTAL</Table.Cell>
                 <Table.Cell className={CELL_TOTAL}>{n(data.diesel.dia)}</Table.Cell>
@@ -185,18 +278,46 @@ function DieselDetail({ data }: { data: ResumenDia }) {
   );
 }
 
-/** El día completo de reports por equipo — la card corta en 3 y pone «+n más». */
-function ReportsDetail({ data }: { data: ResumenDia }) {
+/** El día completo de reports por equipo — la card corta en 3 y pone «+n más».
+ * Cada fila navega a la vista Report filtrada por ese equipo y ese día; sin
+ * `equipmentId` (payload cacheado viejo) la fila queda informativa. */
+function ReportsDetail({ data, onClose }: { data: ResumenDia; onClose: () => void }) {
+  const navigate = useNavigate();
   const { totalHoras, porEquipo } = data.reports;
   if (porEquipo.length === 0) return <p className="text-sm text-muted-foreground">Sin reports este día.</p>;
   return (
     <>
-      {porEquipo.map((e) => (
-        <div className={ROW_LISTA} data-testid={`reports-det-${e.internalCode}`} key={e.internalCode}>
-          <span className="font-mono text-sm text-foreground">{e.internalCode}</span>
-          <span className="ms-auto font-mono text-sm font-semibold text-foreground">{NUM_CL_1.format(e.horas)} HM</span>
-        </div>
-      ))}
+      {porEquipo.map((e) => {
+        const fila = (
+          <>
+            <span className="font-mono text-sm text-foreground">{e.internalCode}</span>
+            <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+              {NUM_CL_1.format(e.horas)} HM
+            </span>
+          </>
+        );
+        if (!e.equipmentId)
+          return (
+            <div className={ROW_LISTA} data-testid={`reports-det-${e.internalCode}`} key={e.internalCode}>
+              {fila}
+            </div>
+          );
+        return (
+          <button
+            aria-label={`Ver reports de ${e.internalCode}`}
+            className={`${ROW_LISTA} ${ROW_TOGGLE} w-full text-left`}
+            data-testid={`reports-det-${e.internalCode}`}
+            key={e.internalCode}
+            onClick={() => {
+              onClose();
+              void navigate(`/trabajos-extra?equipo=${e.equipmentId}&desde=${data.fecha}&hasta=${data.fecha}`);
+            }}
+            type="button"
+          >
+            {fila}
+          </button>
+        );
+      })}
       <div className="flex items-center gap-2 border-t border-border pt-2.5">
         <span className="text-sm font-semibold text-foreground">TOTAL</span>
         <span className="ms-auto font-mono text-sm font-semibold text-foreground">
