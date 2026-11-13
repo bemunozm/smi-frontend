@@ -17,6 +17,7 @@ import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
 
 import { assetUrl } from '../api/UploadsAPI';
+import { RecordPhoto } from '../components/RecordPhoto';
 import { EditarCargaCombustibleModal } from '../components/flota/EditarCargaCombustibleModal';
 import { NuevaCargaCombustibleModal } from '../components/flota/NuevaCargaCombustibleModal';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
@@ -106,6 +107,10 @@ function DetalleCargaModal({
   /** Presente solo cuando el rol puede eliminarla (ADMIN). */
   onEliminar?: () => void;
 }) {
+  // `assetUrl`: las fotoUrl legacy de combustible son rutas relativas del
+  // backend (/uploads/...) — crudas se rompen cuando front y API viven en
+  // orígenes distintos.
+  const fotoSrc = assetUrl(carga?.fotoUrl);
   return (
     <Modal.Backdrop
       isDismissable
@@ -138,25 +143,8 @@ function DetalleCargaModal({
                   <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
                   <Dato label="Origen" value={origenDe(carga)} />
                 </div>
-                {carga.fotoUrl ? (
-                  <a
-                    className="group relative block overflow-hidden rounded-2xl border border-border"
-                    // `assetUrl`: las fotoUrl legacy de combustible son rutas
-                    // relativas del backend (/uploads/...) — crudas se rompen
-                    // cuando front y API viven en orígenes distintos.
-                    href={assetUrl(carga.fotoUrl)}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <img
-                      alt={`Foto de la carga de ${carga.equipo?.internalCode ?? 'equipo'}`}
-                      className="max-h-80 w-full bg-surface-secondary object-contain"
-                      src={assetUrl(carga.fotoUrl)}
-                    />
-                    <span className="absolute right-2 bottom-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      Abrir en tamaño completo
-                    </span>
-                  </a>
+                {fotoSrc ? (
+                  <RecordPhoto alt={`Foto de la carga de ${carga.equipo?.internalCode ?? 'equipo'}`} src={fotoSrc} />
                 ) : (
                   <p className="text-sm text-muted-foreground">Sin foto adjunta.</p>
                 )}
