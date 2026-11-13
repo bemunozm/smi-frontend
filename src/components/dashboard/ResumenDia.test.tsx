@@ -433,6 +433,51 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
   });
 
+  it('Diésel: la fila expande las cargas del equipo (quién cargó, operador, hora, tipo)', () => {
+    mock({
+      ...BASE,
+      cargas: [
+        {
+          equipmentId: 'e-cg',
+          internalCode: 'CG-002',
+          litros: 80,
+          tipo: 'PETROLEO',
+          hora: '2026-10-16T12:00:00.000Z',
+          operador: 'P. Rojas',
+          cargadoPor: 'Limbert V.',
+        },
+        // Carga manual sin tarjeta: sin operador ni quién cargó.
+        {
+          equipmentId: 'e-cg',
+          internalCode: 'CG-002',
+          litros: 15,
+          tipo: 'BENCINA',
+          hora: '2026-10-16T13:00:00.000Z',
+          operador: null,
+          cargadoPor: null,
+        },
+      ],
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Diésel');
+    fireEvent.click(within(dialog).getByTestId('diesel-det-CG-002'));
+    const exp = within(dialog).getByTestId('diesel-exp-CG-002');
+    expect(within(exp).getByText('80 L · Petróleo')).toBeTruthy();
+    expect(within(exp).getByText('Cargó: Limbert V.')).toBeTruthy();
+    expect(within(exp).getByText('Operador: P. Rojas')).toBeTruthy();
+    expect(within(exp).getByText('15 L · Bencina')).toBeTruthy();
+    expect(within(exp).getByText('Cargó: —')).toBeTruthy();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('Diésel: payload cacheado sin cargas[] avisa que no hay detalle', () => {
+    mock(BASE); // sin `cargas`
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Diésel');
+    fireEvent.click(within(dialog).getByTestId('diesel-det-EX-001'));
+    expect(within(within(dialog).getByTestId('diesel-exp-EX-001')).getByText('Detalle no disponible en este payload.')).toBeTruthy();
+  });
+
   it('Reports: lista el día completo (la card corta en 3) y «Ver todo» va a Report', () => {
     mock(BASE);
     render(<ResumenDia />);

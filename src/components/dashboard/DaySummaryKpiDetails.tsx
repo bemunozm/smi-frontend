@@ -1,12 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Spinner, Table } from '@heroui/react';
 
 import { KpiDetailModal } from './KpiDetailModal';
-import { rowToEquipment } from './equipment-row';
 import { useDashboardVueltas } from '../../hooks/useDashboard';
-import { usePermissions } from '../../hooks/usePermissions';
-import { canOpenPath } from '../../lib/permissions';
 import { useKardex } from '../../hooks/useInventory';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
@@ -189,10 +185,33 @@ function HmDetail({ data }: { data: ResumenDia }) {
   );
 }
 
-/** Litros por equipo (Día/Noche/Total) + rendimiento L/HM de cada uno. */
+const FUEL_LABELS: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
+
+/** Las cargas de un equipo ese día, dentro de la fila expandida del popup Diésel. */
+function FuelLoadsOfEquipment({ cargas, internalCode }: { cargas: ResumenDia['cargas']; internalCode: string }) {
+  // Payload cacheado por la PWA anterior al campo: no hay detalle que mostrar.
+  if (!cargas) return <span className="text-xs text-muted-foreground">Detalle no disponible en este payload.</span>;
+  const delEquipo = cargas.filter((c) => c.internalCode === internalCode);
+  if (delEquipo.length === 0)
+    return <span className="text-xs text-muted-foreground">Sin cargas de este equipo.</span>;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {delEquipo.map((c, i) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" key={`${c.hora}-${i}`}>
+          <span className="font-mono text-muted-foreground">{HORA.format(new Date(c.hora))}</span>
+          <span className="font-mono text-foreground">{`${NUM_CL_1.format(c.litros)} L · ${FUEL_LABELS[c.tipo] ?? c.tipo}`}</span>
+          <span className="text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
+          <span className="text-muted-foreground">Operador: {c.operador ?? '—'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Litros por equipo (Día/Noche/Total) + rendimiento L/HM de cada uno.
+ * Cada fila expande las cargas que originan sus litros (hora, quién cargó, operador). */
 function DieselDetail({ data }: { data: ResumenDia }) {
-  const navigate = useNavigate();
-  const toFicha = canOpenPath(usePermissions().role, '/equipos');
+  const { expanded, toggle } = useExpandedRows();
   const rows = data.operacionPorEquipo.filter((f) => f.total.litros !== 0);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Sin cargas de diésel este día.</p>;
   const n = (v: number) => NUM_CL_1.format(v);
@@ -209,20 +228,34 @@ function DieselDetail({ data }: { data: ResumenDia }) {
           </Table.Header>
           <Table.Body>
             {[
-              ...rows.map((f) => (
+              ...rows.flatMap((f) => [
                 <Table.Row
+                  className={ROW_TOGGLE}
                   data-testid={`diesel-det-${f.internalCode}`}
                   id={f.internalCode}
                   key={f.internalCode}
-                  {...rowToEquipment(toFicha ? f.equipmentId : undefined, navigate)}
+                  onAction={() => toggle(f.internalCode)}
                 >
                   <Table.Cell className={CELL}>{f.internalCode}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.dia.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.noche.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.total.litros)}</Table.Cell>
                   <Table.Cell className={CELL}>{f.total.hm > 0 ? n(f.total.litros / f.total.hm) : '—'}</Table.Cell>
-                </Table.Row>
-              )),
+                </Table.Row>,
+                ...(expanded.has(f.internalCode)
+                  ? [
+                      <Table.Row
+                        data-testid={`diesel-exp-${f.internalCode}`}
+                        id={`exp-${f.internalCode}`}
+                        key={`exp-${f.internalCode}`}
+                      >
+                        <Table.Cell colSpan={5}>
+                          <FuelLoadsOfEquipment cargas={data.cargas} internalCode={f.internalCode} />
+                        </Table.Cell>
+                      </Table.Row>,
+                    ]
+                  : []),
+              ]),
               <Table.Row data-testid="diesel-det-TOTAL" id="TOTAL" key="TOTAL">
                 <Table.Cell className="text-sm font-semibold">TOTAL</Table.Cell>
                 <Table.Cell className={CELL_TOTAL}>{n(data.diesel.dia)}</Table.Cell>
