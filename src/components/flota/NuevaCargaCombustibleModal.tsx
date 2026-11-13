@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Chip, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
+import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
 import { EQUIPMENT_CLASS_OPTIONS } from '../../config/flota-colors';
@@ -12,6 +12,7 @@ import { fechaRegistroIso, toDateTimeLocal } from '../../lib/format';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import type { EquipmentClass } from '../../types/equipment';
 import { FotoRespaldoField } from './FotoRespaldoField';
+import { OcrLitrosChip } from './OcrLitrosChip';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from './modal-styles';
 
 const TIPO_OPTIONS = [
@@ -72,15 +73,26 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
     if (!getFieldState('litros').isDirty) setValue('litros', value, { shouldValidate: true });
   });
 
-  // Con EXIF, la fecha real de captura reemplaza el "ahora" inicial, pero
+  // Con EXIF, la fecha real de captura reemplaza el "ahora" inicial; sin
+  // EXIF, vuelve a "ahora" (así una foto REEMPLAZADA no deja la fecha EXIF de
+  // la descartada — «Reemplazar foto» no pasa por `onClear`). En ambos casos
   // solo si la fecha no se tocó: un registro anterior (foto del papel, sin
   // EXIF, o sacada hoy a un papel viejo) quedaba con la fecha de hoy aunque
   // el administrador ya hubiera puesto la del día de la carga.
   useEffect(() => {
-    if (!photoFlow.file || photoFlow.isReadingPhoto || !photoFlow.captureDate) return;
+    if (!photoFlow.file || photoFlow.isReadingPhoto) return;
     if (getFieldState('fecha').isDirty) return;
-    setValue('fecha', toDateTimeLocal(photoFlow.captureDate), { shouldValidate: true });
+    setValue('fecha', toDateTimeLocal(photoFlow.captureDate ?? new Date()), { shouldValidate: true });
   }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue, getFieldState]);
+
+  // Quitar la foto también retira lo que se llenó DESDE ella (fecha EXIF,
+  // litros OCR): un registro no puede quedar fechado/litrado por evidencia
+  // que se descartó. Lo tipeado a mano (dirty) sí se conserva.
+  const quitarFoto = () => {
+    photoFlow.handleClearPhoto();
+    if (!getFieldState('fecha').isDirty) setValue('fecha', toDateTimeLocal(new Date()), { shouldValidate: true });
+    if (!getFieldState('litros').isDirty) setValue('litros', 0, { shouldValidate: false });
+  };
 
   const cerrar = () => {
     photoFlow.resetPhoto();
@@ -239,29 +251,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                     errorMessage={errors.litros?.message}
                     isInvalid={!!errors.litros}
                     label="Litros"
-                    labelAddon={
-                      ocrLeido ? (
-                        ocrLeido.fueraDeRango ? (
-                          // Mismo criterio que `RegistrarCargaCombustibleModal`:
-                          // sobre `OCR_AUTOFILL_MAX_LITROS` no se autollena.
-                          <Chip color="danger" size="sm" variant="soft">
-                            ⚠️ Lectura inusual de la foto: escribí los litros a mano
-                          </Chip>
-                        ) : ocrLeido.status === 'CONFIRMED' ? (
-                          <Chip color="success" size="sm" variant="soft">
-                            Leído de la foto
-                          </Chip>
-                        ) : ocrLeido.status === 'REVIEW' ? (
-                          <Chip color="warning" size="sm" variant="soft">
-                            ⚠️ Verificá el valor leído
-                          </Chip>
-                        ) : (
-                          <Chip color="default" size="sm" variant="soft">
-                            No se pudo leer la foto, ingresá los litros a mano
-                          </Chip>
-                        )
-                      ) : undefined
-                    }
+                    labelAddon={ocrLeido ? <OcrLitrosChip litros={litros} ocr={ocrLeido} /> : undefined}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
                     value={field.value}
@@ -322,9 +312,10 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
 
               <FotoRespaldoField
                 captureDate={photoFlow.captureDate}
+                fechaEditable
                 file={photoFlow.file}
                 isReadingPhoto={photoFlow.isReadingPhoto}
-                onClear={photoFlow.handleClearPhoto}
+                onClear={quitarFoto}
                 onSelect={(f) => void photoFlow.handleSelectPhoto(f)}
                 requerida={false}
                 staleQuestion="¿es la carga registrada?"

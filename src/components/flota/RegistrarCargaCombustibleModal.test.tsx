@@ -252,6 +252,59 @@ describe('RegistrarCargaCombustibleModal', () => {
     expect(cancelar.hasAttribute('disabled')).toBe(true);
   });
 
+  it('una fecha tipeada a mano no se pisa con el EXIF de la foto (registro de un día anterior)', async () => {
+    fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
+    readCaptureDateMock.mockResolvedValue(new Date(2026, 0, 15, 10, 30));
+
+    renderModal();
+    const fechaInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(fechaInput, { target: { value: '2026-11-03T10:00' } });
+
+    subirFoto();
+    await waitFor(() => expect(screen.getByText('Leído de la foto')).toBeTruthy());
+
+    expect(fechaInput.value).toBe('2026-11-03T10:00');
+  });
+
+  it('litros tipeados a mano no se pisan por el OCR de la foto siguiente, y el chip avisa la diferencia', async () => {
+    fuelReadingOcrMock.mockResolvedValue({ value: null, status: 'UNREADABLE', confidence: 0 });
+    readCaptureDateMock.mockResolvedValue(null);
+
+    renderModal();
+    subirFoto();
+    await waitFor(() => expect(screen.getByText(/No se pudo leer la foto/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('Litros'), { target: { value: '85' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar foto' }));
+    fuelReadingOcrMock.mockResolvedValue({ value: '120', status: 'CONFIRMED', confidence: 0.95 });
+    subirFoto();
+
+    // El valor tipeado queda, y el chip NO dice "Leído de la foto" (sería
+    // avalar 85 con una foto que dice 120): muestra la discrepancia.
+    await waitFor(() => expect(screen.getByText(/La foto dice 120 L/)).toBeTruthy());
+    expect((screen.getByLabelText('Litros') as HTMLInputElement).value).toBe('85');
+    expect(screen.queryByText('Leído de la foto')).toBeNull();
+  });
+
+  it('al quitar la foto, la fecha y los litros autollenados (no tipeados) se limpian con ella', async () => {
+    fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.9 });
+    readCaptureDateMock.mockResolvedValue(new Date(2026, 0, 15, 10, 30));
+
+    renderModal();
+    subirFoto();
+    await waitFor(() => expect((screen.getByLabelText('Litros') as HTMLInputElement).value).toBe('80'));
+    const fechaInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    await waitFor(() => expect(fechaInput.value).not.toBe(''));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar foto' }));
+
+    // El registro ya no tiene su evidencia: no puede quedar fechado ni
+    // litrado por la foto que se descartó.
+    expect(fechaInput.value).toBe('');
+    expect((screen.getByLabelText('Litros') as HTMLInputElement).value).toBe('0');
+  });
+
   it('Cancelar limpia el estado — reabrir el mismo modal para otro equipo no arrastra la foto anterior', async () => {
     fuelReadingOcrMock.mockResolvedValue({ value: '80', status: 'CONFIRMED', confidence: 0.95 });
     readCaptureDateMock.mockResolvedValue(new Date());
