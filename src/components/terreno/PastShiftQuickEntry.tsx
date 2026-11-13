@@ -133,7 +133,7 @@ export function PastShiftQuickEntry({
                   onChange={(e) => q.setFila(i, { final: e.target.value })}
                 />
               </Campo>
-              <Campo label="Litros">
+              <Campo label="Litros" litros>
                 <Input
                   numerico
                   aria-label={`Litros de la fila ${i + 1}`}
@@ -163,6 +163,7 @@ export function PastShiftQuickEntry({
             />
 
             {q.errorDeFila(i) && <Hint>{q.errorDeFila(i)}</Hint>}
+            {!q.errorDeFila(i) && q.avisoDeFila(i) && <Hint>{q.avisoDeFila(i)}</Hint>}
           </div>
         ))}
 

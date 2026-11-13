@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
+import { revisarLitros } from '../../lib/litros';
 import { useEditarCargaCombustible } from '../../hooks/useCombustible';
 import type { UpdateCombustibleBody } from '../../api/CombustibleAPI';
 import { fechaRegistroIso, toDateTimeLocal } from '../../lib/format';
@@ -60,7 +61,9 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
   const litros = watch('litros');
   const lectura = watch('lectura');
   const fechaIso = fechaRegistroIso(watch('fecha'));
+  const revisionLitros = revisarLitros(watch('litros'), { liviano: esLiviano });
   const puedeGuardar =
+    revisionLitros.error == null &&
     !editar.isPending &&
     Number.isFinite(litros) &&
     litros > 0 &&
@@ -128,9 +131,12 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
                 name="litros"
                 render={({ field }) => (
                   <DecimalField
-                    errorMessage={errors.litros?.message}
-                    isInvalid={!!errors.litros}
+                    decimales={3}
+                    errorMessage={errors.litros?.message ?? revisionLitros.error ?? undefined}
+                    isInvalid={!!errors.litros || revisionLitros.error != null}
                     label="Litros"
+                    litros
+                    warning={revisionLitros.aviso ?? undefined}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
                     value={field.value}

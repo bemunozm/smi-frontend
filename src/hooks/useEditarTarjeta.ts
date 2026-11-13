@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
 import { useCambiosTarjeta } from './useShiftCards';
-import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
+import { LITROS_MAX } from './useCierreForm';
+import { validarLitros } from '../lib/litros';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedMutation } from './useQueuedMutation';
 import type { TarjetaTurno } from './shift-register-helpers';
@@ -30,7 +31,8 @@ function estadoInicial(t: TarjetaTurno): EdicionTarjetaState {
     operatorId: t.operatorId ?? '',
     inicial: formatDecimalInput(t.inicial),
     final: formatDecimalInput(t.final),
-    litros: formatDecimalInput(t.litros),
+    // 3 decimales, como el surtidor: con 2, guardar sin cambios redondeaba 48,493 a 48,49.
+    litros: formatDecimalInput(t.litros, 3),
     adBlue: t.adBlue ?? false,
     adBlueLitros: formatDecimalInput(t.adBlueLitros),
     observaciones: t.observaciones ?? '',
@@ -134,11 +136,13 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const inicialNum = parseDecimal(form.inicial);
   const finalNum = parseDecimal(form.final);
   const litrosNum = parseDecimal(form.litros);
+  // Mismo criterio que el cierre: 48493 en una camioneta no se guarda (era 48,493).
+  const revisionLitros = validarLitros(form.litros, { liviano: !!editando?.liviano });
   const finalInvalido = esCerrada && inicialNum != null && finalNum != null && finalNum < inicialNum;
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
-    (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0 || litrosNum > LITROS_MAX)) ||
+    (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0 || litrosNum > LITROS_MAX || revisionLitros.error != null)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
   const faltante = !esCerrada
     ? null
@@ -148,9 +152,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
         : 'Faltan los horómetros.'
       : litrosNum == null || litrosNum < 0
         ? 'Indica los litros de combustible (cero si no cargó).'
-        : litrosNum > LITROS_MAX
-          ? LITROS_FUERA_DE_RANGO
-          : null;
+        : revisionLitros.error;
   const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
 
   const abrirEdicion = (id: string) => {

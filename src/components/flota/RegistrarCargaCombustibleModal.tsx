@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
+import { revisarLitros } from '../../lib/litros';
 import { useCreateCombustible } from '../../hooks/useCombustible';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from './FotoRespaldoField';
@@ -41,6 +42,8 @@ interface RegistrarCargaCombustibleModalProps {
   equipoId: string;
   /** Código interno del equipo, solo para el título del modal. */
   equipoLabel?: string;
+  /** Camioneta: los litros imposibles (48493) bloquean; en un pesado solo avisan. */
+  liviano?: boolean;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }
@@ -58,6 +61,7 @@ interface RegistrarCargaCombustibleModalProps {
 export function RegistrarCargaCombustibleModal({
   equipoId,
   equipoLabel,
+  liviano = false,
   isOpen,
   onOpenChange,
 }: RegistrarCargaCombustibleModalProps) {
@@ -125,7 +129,9 @@ export function RegistrarCargaCombustibleModal({
   const ocrLeido = photoFlow.file && !photoFlow.isReadingPhoto ? photoFlow.ocr : null;
 
   const litros = watch('litros');
+  const revisionLitros = revisarLitros(litros, { liviano });
   const puedeGuardar =
+    revisionLitros.error == null &&
     !!photoFlow.file && !photoFlow.isReadingPhoto && !crear.isPending && Number.isFinite(litros) && litros > 0;
 
   const onSubmit = (values: CargaFormValues) => {
@@ -180,10 +186,13 @@ export function RegistrarCargaCombustibleModal({
                 name="litros"
                 render={({ field }) => (
                   <DecimalField
-                    errorMessage={errors.litros?.message}
+                    decimales={3}
+                    errorMessage={errors.litros?.message ?? revisionLitros.error ?? undefined}
                     isDisabled={!photoFlow.file}
-                    isInvalid={!!errors.litros}
+                    isInvalid={!!errors.litros || revisionLitros.error != null}
                     label="Litros"
+                    litros
+                    warning={revisionLitros.aviso ?? undefined}
                     labelAddon={ocrLeido ? <OcrLitrosChip litros={litros} ocr={ocrLeido} /> : undefined}
                     onBlur={field.onBlur}
                     onChange={field.onChange}

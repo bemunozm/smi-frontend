@@ -271,6 +271,8 @@ export function MiCamionetaView({
           label="Combustible cargado"
           requerido
           unidad="L"
+          litros
+          hint="Como marca el surtidor: 48.493 son 48,493 L."
           error={cierre.litrosError ?? undefined}
           aviso={cierre.litrosAviso ?? undefined}
         >

@@ -299,6 +299,7 @@ export function Campo({
   aviso,
   error,
   unidad,
+  litros = false,
   children,
 }: {
   label?: ReactNode;
@@ -310,6 +311,9 @@ export function Campo({
   error?: ReactNode;
   /** Sufijo fijo dentro del campo: `h`, `L`, `t`, `%`. */
   unidad?: string;
+  /** Litros de una carga: el punto del surtidor es la coma (`48.493`), así que
+   * no se avisa «¿querías 48493?» — ese aviso empujaba a sacar el punto. */
+  litros?: boolean;
   children: ReactElement<{ id?: string; 'aria-describedby'?: string; numerico?: boolean; value?: unknown }>;
 }) {
   const base = useId();
@@ -318,7 +322,7 @@ export function Campo({
 
   // Un campo numérico con aspecto de "2.130" avisa cómo se va a leer.
   const valor = children.props.numerico ? children.props.value : undefined;
-  const avisoAgrupacion = typeof valor === 'string' ? avisoDeAgrupacion(valor) : null;
+  const avisoAgrupacion = !litros && typeof valor === 'string' ? avisoDeAgrupacion(valor) : null;
 
   const control = cloneElement(children, {
     id: children.props.id ?? idCampo,

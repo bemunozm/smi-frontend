@@ -27,7 +27,8 @@ export function fechaRegistroIso(valor: string, ahora: Date = new Date()): strin
 }
 /** Litros de combustible o AdBlue: hasta dos decimales, sin forzar ceros (30,75
  * se ve `30,75`, no `30,8`). `—` si no hay valor. */
-export const fmtLitros = (n: number | null | undefined) => (n == null ? '—' : fmtDecimales(n, 2));
+/** Litros con hasta 3 decimales, como los marca el surtidor (48,493): con 2 se veía 48,49. */
+export const fmtLitros = (n: number | null | undefined) => (n == null ? '—' : fmtDecimales(n, 3));
 export const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 export const initials = (name: string) =>

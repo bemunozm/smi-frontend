@@ -2,6 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from '@heroui/react';
 
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
+import { validarLitros } from '../lib/litros';
 import type { TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
@@ -18,14 +19,9 @@ export interface CierreState {
   observaciones: string;
 }
 
-/** Tope del servidor (`CloseShiftCardDto.fuelLiters`): más es casi seguro el km u horómetro en el campo equivocado. */
-export const LITROS_MAX = 100_000;
-
-/** Mismo texto en el cierre normal y en el registro de un turno pasado. */
-export const LITROS_FUERA_DE_RANGO =
-  'Los litros van de 0 a 100.000. Revisa que no sea el kilometraje u horómetro.';
-/** Sobre esto, en una camioneta, se pide revisar (no bloquea). */
-const LITROS_AVISO_LIVIANO = 150;
+// Topes y mensajes de litros: viven en `lib/litros.ts` (los comparten el cierre,
+// el turno pasado y las cargas del panel). Se re-exportan por compatibilidad.
+export { LITROS_FUERA_DE_RANGO, LITROS_MAX } from '../lib/litros';
 
 const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' };
 
@@ -74,7 +70,8 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const foto = usePhotoCaptureFlow((litros) =>
     setCierre((c) => ({
       ...c,
-      litros: formatDecimalInput(litros, 1),
+      // Los 3 decimales del surtidor tal cual (antes se redondeaba a 1: 48,493 → 48,5).
+      litros: formatDecimalInput(litros, 3),
     })),
   );
 
@@ -84,18 +81,11 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
 
-  const textoLitros = cierre.litros.trim();
-  const litrosNum = parseDecimal(textoLitros);
-  const litrosError =
-    textoLitros !== '' && litrosNum == null
-      ? 'Escribe un número, por ejemplo 45,5.'
-      : litrosNum != null && (litrosNum < 0 || litrosNum > LITROS_MAX)
-        ? LITROS_FUERA_DE_RANGO
-        : null;
-  const litrosAviso =
-    !litrosError && cerrando?.liviano && litrosNum != null && litrosNum > LITROS_AVISO_LIVIANO
-      ? `${litrosNum.toLocaleString('es-CL')} L es mucho para una camioneta. Revisa que esté bien.`
-      : null;
+  // El punto del surtidor es la coma (48.493 = 48,493 L); una camioneta no carga
+  // cientos de litros y un pesado con miles se avisa — ver `lib/litros.ts`.
+  const validacionLitros = validarLitros(cierre.litros, { liviano: !!cerrando?.liviano });
+  const litrosError = validacionLitros.error;
+  const litrosAviso = validacionLitros.aviso;
 
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');

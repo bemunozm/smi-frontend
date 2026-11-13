@@ -83,7 +83,7 @@ export function EditorTarjeta({
               }
               valor={horas != null ? `${fmt(horas)} ${unidad}` : '—'}
             />
-            <Campo label="Combustible cargado" unidad="L" hint="Cero si no cargó en el turno.">
+            <Campo label="Combustible cargado" unidad="L" litros hint="Como marca el surtidor (48.493 son 48,493 L). Cero si no cargó.">
               <Input
                 numerico
                 value={form.litros}

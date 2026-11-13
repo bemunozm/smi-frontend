@@ -1040,7 +1040,12 @@ export function RegistroEquipoView() {
         label="Combustible cargado"
         requerido
         unidad="L"
-        hint={cerrando.liviano ? 'Lo que se cargó a la camioneta.' : 'Cero si no cargó en el turno.'}
+        litros
+        hint={
+          cerrando.liviano
+            ? 'Como marca el surtidor: 48.493 son 48,493 L.'
+            : 'Como marca el surtidor (48.493 son 48,493 L). Cero si no cargó en el turno.'
+        }
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}
       >
