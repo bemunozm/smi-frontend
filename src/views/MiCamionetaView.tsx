@@ -30,6 +30,7 @@ import { useShiftProjection } from '../hooks/useShiftProjection';
 import type { TarjetaTurno } from '../hooks/shift-register-helpers';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros } from '../lib/format';
+import { AYUDA_LITROS } from '../lib/litros';
 import { tiempoEnUso } from '../lib/tiempo-en-uso';
 import { contextoTurno } from '../lib/turno';
 import type { OutboxOp } from '../offline/db';
@@ -272,7 +273,7 @@ export function MiCamionetaView({
           requerido
           unidad="L"
           litros
-          hint="Como marca el surtidor: 48.493 son 48,493 L."
+          hint={AYUDA_LITROS}
           error={cierre.litrosError ?? undefined}
           aviso={cierre.litrosAviso ?? undefined}
         >

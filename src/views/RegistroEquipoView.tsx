@@ -32,6 +32,7 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros, fmtTime, plural } from '../lib/format';
+import { AYUDA_LITROS } from '../lib/litros';
 import { fechaCorta, fromDateOnly, toDateOnly, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
@@ -1043,8 +1044,8 @@ export function RegistroEquipoView() {
         litros
         hint={
           cerrando.liviano
-            ? 'Como marca el surtidor: 48.493 son 48,493 L.'
-            : 'Como marca el surtidor (48.493 son 48,493 L). Cero si no cargó en el turno.'
+            ? AYUDA_LITROS
+            : `${AYUDA_LITROS} Cero si no cargó en el turno.`
         }
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}

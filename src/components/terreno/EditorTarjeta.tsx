@@ -1,7 +1,8 @@
 import { ArrowRight, Check, Lock } from 'lucide-react';
 
 import type { UseEditarTarjetaResult } from '../../hooks/useEditarTarjeta';
-import { parseDecimal } from '../../lib/decimal';
+import { parseDecimal } from '../../lib/decimal';
+import { AYUDA_LITROS } from '../../lib/litros';
 import { AdBlueCampos } from './AdBlueCampos';
 import { AvisoEdicion, Boton, Calculado, Campo, Form, Hint, HistorialCambios, Input, Selector, Textarea } from './ui';
 
@@ -83,7 +84,7 @@ export function EditorTarjeta({
               }
               valor={horas != null ? `${fmt(horas)} ${unidad}` : '—'}
             />
-            <Campo label="Combustible cargado" unidad="L" litros hint="Como marca el surtidor (48.493 son 48,493 L). Cero si no cargó.">
+            <Campo label="Combustible cargado" unidad="L" litros hint={`${AYUDA_LITROS} Cero si no cargó.`}>
               <Input
                 numerico
                 value={form.litros}

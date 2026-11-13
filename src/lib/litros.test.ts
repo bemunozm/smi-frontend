@@ -11,14 +11,17 @@ describe('validarLitros', () => {
   it('en una camioneta, 48493 L no se guarda y sugiere 48,493', () => {
     const r = validarLitros('48493', { liviano: true });
     expect(r.error).toMatch(/no cabe en una camioneta/);
-    expect(r.error).toMatch(/escribe 48,493/);
+    expect(r.error).toMatch(/48,493 si es un surtidor digital/);
   });
 
   it('en un pesado, más de 1.000 L tampoco se guarda y sugiere la coma', () => {
     const r = validarLitros('48493', { liviano: false });
-    expect(r.error).toMatch(/escribe 48,493/);
+    expect(r.error).toMatch(/48,493 si es un surtidor digital/);
     expect(validarLitros('950', { liviano: false }).error).toBeNull();
-    expect(validarLitros('1200', { liviano: false }).error).toMatch(/escribe 1,2/);
+    // Caso real de SEM 06: el contador de ruedas marcaba 0 1 3 4 8 y se escribió 1340.
+    const sem06 = validarLitros('1340', { liviano: false }).error;
+    expect(sem06).toMatch(/1,34 si es un surtidor digital/);
+    expect(sem06).toMatch(/134 si es un contador de ruedas/);
   });
 
   it('una carga normal de pesado no avisa', () => {

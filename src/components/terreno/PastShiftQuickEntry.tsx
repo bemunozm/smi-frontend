@@ -3,7 +3,8 @@ import { ArrowRight, Plus, X } from 'lucide-react';
 import { FotoRespaldoField } from '../flota/FotoRespaldoField';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { usePastShiftQuickEntry } from '../../hooks/usePastShiftQuickEntry';
-import type { ContextoTurno } from '../../lib/turno';
+import type { ContextoTurno } from '../../lib/turno';
+import { AYUDA_LITROS } from '../../lib/litros';
 import type { Equipment } from '../../types/equipment';
 import { opcionesOperador } from '../../lib/operadores-habituales';
 import type { Operator } from '../../types/operator';
@@ -180,6 +181,7 @@ export function PastShiftQuickEntry({
           turno sin carga). Al guardar se envía solo el reporte de salida del día: llega con su PDF al Informe diario
           equipos del administrador.
         </Hint>
+        <Hint>Litros: {AYUDA_LITROS}</Hint>
       </Form>
     </Card>
   );
