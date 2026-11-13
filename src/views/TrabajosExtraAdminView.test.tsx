@@ -220,8 +220,8 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nueva actividad' }));
     const dialog = screen.getByRole('dialog');
 
-    expect(within(dialog).getByText('Último report registrado: 4508 · el siguiente sería 4509.')).toBeTruthy();
-    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4508' } });
+    expect(within(dialog).getByText(/Último report registrado: 4508 · el siguiente sería 4509./)).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4508' } });
     expect(within(dialog).getByText(/El N° 4508 ya está registrado en otro Report/)).toBeTruthy();
   });
 
@@ -240,15 +240,16 @@ describe('TrabajosExtraAdminView', () => {
     // El desglose: la fila dice qué se hizo, dónde y sus horas máquina.
     fireEvent.click(within(dialog).getByRole('button', { name: /Actividad/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Regulación y carga' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
     fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
+    fireEvent.change(within(dialog).getByLabelText('Descripción de la actividad'), { target: { value: 'Romana 2' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha y hora del trabajo'), {
       target: { value: '2026-10-05T21:15' },
     });
     // Los campos del report: folio y la foto obligatoria.
-    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
+    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
     const foto = new File(['report'], 'report.jpg', { type: 'image/jpeg' });
     fireEvent.change(within(dialog).getByLabelText('Foto del report'), { target: { files: [foto] } });
 
@@ -264,7 +265,7 @@ describe('TrabajosExtraAdminView', () => {
           turno: 'DIURNO',
           horometroInicial: 1200,
           horometroFinal: 1212,
-          detalle: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', horas: 12 }],
+          detalle: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', horas: 12, descripcion: 'Romana 2' }],
           descripcion: 'Carga de material',
           reportNumero: '4509',
         }),
@@ -313,11 +314,12 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Horómetro final'), { target: { value: '1212' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /Actividad/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Regulación y carga' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: /Dónde se hizo/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tipo/ }));
     fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
     fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
+    fireEvent.change(within(dialog).getByLabelText('Descripción de la actividad'), { target: { value: 'Romana 2' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
-    fireEvent.change(within(dialog).getByLabelText('N° del report'), { target: { value: '4509' } });
+    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
     expect(crearMock).not.toHaveBeenCalled();

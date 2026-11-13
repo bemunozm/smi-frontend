@@ -33,6 +33,7 @@ export function detalleComparable(
     lugar: f.lugar,
     planta: f.lugar === 'PLANTA' ? (f.planta?.trim() || null) : null,
     horas: Number(Number(f.horas).toFixed(2)),
+    descripcion: f.descripcion?.trim() || null,
   }));
 }
 

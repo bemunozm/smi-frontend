@@ -6,10 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil, Plus, X } from 'lucide-react';
 
 import {
+  trabajoExtraCorreccionSchema,
   trabajoExtraFormSchema,
+  ACTIVIDAD_DE_PLANTA,
   ACTIVIDADES,
-  DESTINOS,
+  DESCRIPCION_ACTIVIDAD_MAX,
+  TIPOS_ELEGIBLES,
   actividadLabel,
+  destinoLabel,
+  tipoAlCambiarActividad,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
 } from '../types/trabajosExtra';
@@ -133,6 +138,8 @@ interface FilaDetalleInput {
   planta?: string;
   /** Texto tal como se escribe (`1,5`): el schema lo lee con `leerNumero`. */
   horas?: string | number;
+  /** Qué se hizo en esta actividad (p. ej. en qué silo o planta). */
+  descripcion?: string;
 }
 
 /** Número de un campo de texto (`12,5`, `12.5`); vacío o ilegible → `NaN`. */
@@ -141,7 +148,7 @@ const numeroEscrito = (v: unknown): number => {
   return typeof n === 'number' ? n : Number.NaN;
 };
 
-const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', planta: '', horas: undefined });
+const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', planta: '', horas: undefined, descripcion: '' });
 
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -385,11 +392,13 @@ export function TrabajosExtraView() {
           detalle: (detalle.detalleActividades?.length
             ? detalle.detalleActividades.map((f) => ({
                 actividad: f.actividad,
-                lugar: f.lugar,
+                // Una limpieza de silos guardada con otro tipo se corrige acá.
+                lugar: f.actividad === ACTIVIDAD_DE_PLANTA ? 'PLANTA' : f.lugar,
                 planta: f.planta ?? '',
                 horas: formatDecimalInput(f.horas),
+                descripcion: f.descripcion ?? '',
               }))
-            : detalle.actividades.map((a) => ({ ...filaVacia(), actividad: a }))) as unknown as TrabajoExtraFormInput['detalle'],
+            : detalle.actividades.map((a) => ({ ...filaVacia(), actividad: a, lugar: tipoAlCambiarActividad(a, '') }))) as unknown as TrabajoExtraFormInput['detalle'],
           otraActividad: detalle.otraActividad ?? '',
           descripcion: detalle.descripcion,
           observaciones: detalle.observaciones ?? '',
@@ -479,6 +488,7 @@ export function TrabajosExtraView() {
                 <div className="min-w-0">
                   <div className="text-[14.5px] font-semibold">{actividadDeFila(f, detalle.otraActividad)}</div>
                   <div className="text-[12.5px] text-muted-foreground">{lugarDeFila(f)}</div>
+                  {f.descripcion && <div className="mt-0.5 text-[13px] leading-snug">{f.descripcion}</div>}
                 </div>
                 <span className="tabular shrink-0 text-[14.5px] font-semibold">{fmtNum(f.horas)} h</span>
               </div>
@@ -633,7 +643,8 @@ function FormularioTrabajo({
     setValue,
     formState: { errors, isSubmitted },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
-    resolver: zodResolver(trabajoExtraFormSchema),
+    // Al corregir, una actividad anterior a la descripción puede quedar sin ella.
+    resolver: zodResolver(idEditado ? trabajoExtraCorreccionSchema : trabajoExtraFormSchema),
     defaultValues: inicial,
   });
   /** La foto no vive en el schema (es un `File`): se exige a mano al enviar. */
@@ -758,8 +769,16 @@ function FormularioTrabajo({
         {/* El folio del report en papel: con él se cruza este registro contra
             la planilla del cliente (y el Excel que exporta el admin). */}
         <Campo
-          label="N° del report"
-          hint={errors.reportNumero?.message ?? textoPistaFolio(pista) ?? undefined}
+          label="N° del report (boleta)"
+          hint={
+            errors.reportNumero?.message ??
+            [
+              'El número impreso en la boleta del report en papel.',
+              textoPistaFolio(pista),
+            ]
+              .filter(Boolean)
+              .join(' ')
+          }
           aviso={pista.repetido ? `El N° ${reportNumero.trim()} ya está registrado en otro Report: revisa el folio.` : undefined}
         >
           <Input
@@ -798,13 +817,17 @@ function FormularioTrabajo({
 
         {/*
           El desglose del report, UNA FILA POR ACTIVIDAD (planilla del
-          cliente): qué se hizo, dónde —solo una limpieza de silos puede ser
-          en planta; la regla la avisa el schema al guardar— y cuántas horas
-          máquina tomó. Las horas son desglose: el cobro sigue saliendo de
-          los horómetros, y un descuadre avisa sin bloquear.
+          cliente): qué se hizo, de qué tipo —define cómo se paga; la
+          limpieza de silos es Planta sola y es la única—, cuántas horas
+          máquina tomó y su descripción. Las horas son desglose: el cobro
+          sigue saliendo de los horómetros, y un descuadre avisa sin bloquear.
         */}
         <div className="flex flex-col gap-2">
           <Label>Actividades del report</Label>
+          <Hint>
+            Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado, lo
+            circunstancial, como trabajos con otras empresas.
+          </Hint>
           {filas.map((fila, i) => {
             const err = erroresDetalle?.[i];
             return (
@@ -816,7 +839,10 @@ function FormularioTrabajo({
                         etiqueta={`Actividad ${i + 1}`}
                         placeholder="Elegí la actividad"
                         valor={fila.actividad}
-                        onChange={(v) => cambiarFila(i, { actividad: v })}
+                        onChange={(v) => {
+                          const lugar = tipoAlCambiarActividad(v, fila.lugar);
+                          cambiarFila(i, { actividad: v, lugar, ...(lugar !== 'PLANTA' ? { planta: '' } : {}) });
+                        }}
                         opciones={ACTIVIDADES.map((a) => ({ valor: a.value, titulo: a.label }))}
                       />
                     </Campo>
@@ -833,15 +859,26 @@ function FormularioTrabajo({
                   )}
                 </div>
                 <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
-                  <Campo label="Dónde se hizo" error={err?.lugar?.message}>
-                    <Selector
-                      etiqueta={`Dónde se hizo la actividad ${i + 1}`}
-                      placeholder="Elegí dónde"
-                      valor={fila.lugar}
-                      onChange={(v) => cambiarFila(i, { lugar: v, ...(v !== 'PLANTA' ? { planta: '' } : {}) })}
-                      opciones={DESTINOS.map((d) => ({ valor: d.value as string, titulo: d.label }))}
-                    />
-                  </Campo>
+                  {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
+                    // La limpieza de silos es siempre de tipo Planta: no se elige.
+                    <Campo label="Tipo" error={err?.lugar?.message}>
+                      <Input
+                        readOnly
+                        aria-label={`Tipo de la actividad ${i + 1}`}
+                        value={`${destinoLabel.PLANTA} · automático`}
+                      />
+                    </Campo>
+                  ) : (
+                    <Campo label="Tipo" error={err?.lugar?.message}>
+                      <Selector
+                        etiqueta={`Tipo de la actividad ${i + 1}`}
+                        placeholder="Elige el tipo"
+                        valor={fila.lugar}
+                        onChange={(v) => cambiarFila(i, { lugar: v, planta: '' })}
+                        opciones={TIPOS_ELEGIBLES.map((d) => ({ valor: d.value as string, titulo: d.label }))}
+                      />
+                    </Campo>
+                  )}
                   <Campo label="HM" unidad="h" error={err?.horas?.message}>
                     <Input
                       numerico
@@ -864,6 +901,20 @@ function FormularioTrabajo({
                     />
                   </Campo>
                 )}
+                <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>
+                  <Textarea
+                    rows={2}
+                    maxLength={DESCRIPCION_ACTIVIDAD_MAX}
+                    aria-label={`Descripción de la actividad ${i + 1}`}
+                    placeholder={
+                      fila.actividad === ACTIVIDAD_DE_PLANTA
+                        ? 'Ej: silo 2, limpieza de fondo y paredes'
+                        : 'Qué se hizo en esta actividad y dónde'
+                    }
+                    value={fila.descripcion ?? ''}
+                    onChange={(e) => cambiarFila(i, { descripcion: e.target.value })}
+                  />
+                </Campo>
               </div>
             );
           })}
@@ -890,7 +941,7 @@ function FormularioTrabajo({
         )}
 
         <Campo label="Descripción de la tarea" hint={errors.descripcion?.message}>
-          <Textarea rows={3} placeholder="Qué se hizo y dónde" {...register('descripcion')} />
+          <Textarea rows={3} placeholder="Resumen del trabajo completo" {...register('descripcion')} />
         </Campo>
 
         <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">

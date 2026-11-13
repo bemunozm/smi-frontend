@@ -47,7 +47,17 @@ import {
 import { parseDecimal } from '../lib/decimal';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
-import { ACTIVIDADES, DESTINOS, actividadLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
+import {
+  ACTIVIDAD_DE_PLANTA,
+  ACTIVIDADES,
+  DESCRIPCION_ACTIVIDAD_MAX,
+  TIPOS_ELEGIBLES,
+  actividadLabel,
+  destinoLabel,
+  tipoAlCambiarActividad,
+  trabajoExtraEdicionSchema,
+  trabajoExtraFormSchema,
+} from '../types/trabajosExtra';
 import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
@@ -59,9 +69,10 @@ interface FilaDetalleAdmin {
   lugar: string;
   planta: string;
   horas: string;
+  descripcion: string;
 }
 
-const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', planta: '', horas: '' };
+const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', planta: '', horas: '', descripcion: '' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -91,7 +102,7 @@ function actividadesDe(trabajo: TrabajoExtraordinario): string {
     .join(', ');
 }
 
-/** Columna «Dónde» de la tabla: los lugares del desglose, sin repetir. */
+/** Columna «Tipo» de la tabla: los tipos del desglose, sin repetir. */
 function lugaresDe(trabajo: TrabajoExtraordinario): string {
   const filas = trabajo.detalleActividades ?? [];
   if (filas.length === 0) return '—';
@@ -170,6 +181,9 @@ function DetalleTrabajoModal({
                           <span className="min-w-0 text-sm text-foreground">
                             {actividadDeFila(f, trabajo.otraActividad)}
                             <span className="text-muted-foreground"> · {lugarDeFila(f)}</span>
+                            {f.descripcion ? (
+                              <span className="block text-xs text-muted-foreground">{f.descripcion}</span>
+                            ) : null}
                           </span>
                           <span className="shrink-0 font-mono text-sm font-semibold">
                             {NUM_CL_1.format(f.horas)} h
@@ -256,9 +270,11 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     trabajo
       ? (trabajo.detalleActividades ?? []).map((f) => ({
           actividad: f.actividad,
-          lugar: f.lugar,
+          // Una limpieza de silos guardada con otro tipo se corrige acá.
+          lugar: f.actividad === ACTIVIDAD_DE_PLANTA ? 'PLANTA' : f.lugar,
           planta: f.planta ?? '',
           horas: String(f.horas),
+          descripcion: f.descripcion ?? '',
         }))
       : [FILA_VACIA],
   );
@@ -292,6 +308,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     lugar: f.lugar,
     planta: f.planta || undefined,
     horas: f.horas,
+    descripcion: f.descripcion.trim() || undefined,
   }));
 
   const entrada = {
@@ -456,23 +473,30 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
 
               <div className="flex flex-col gap-1">
                 <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
-                  <Label>N° del report</Label>
+                  <Label>N° del report (boleta)</Label>
                   <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
                 </TextField>
                 {pista.repetido ? (
                   <p className="m-0 text-xs font-semibold text-(--warning)">
                     El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
                   </p>
-                ) : textoPista ? (
-                  <p className="m-0 text-xs text-muted-foreground">{textoPista}</p>
-                ) : null}
+                ) : (
+                  <p className="m-0 text-xs text-muted-foreground">
+                    El número impreso en la boleta del report en papel.{textoPista ? ` ${textoPista}` : ''}
+                  </p>
+                )}
               </div>
 
-              {/* El desglose: una fila por actividad con dónde se hizo y sus
-                  horas máquina. En un trabajo legacy la tabla parte vacía;
-                  agregar filas reemplaza el desglose completo. */}
+              {/* El desglose: una fila por actividad con su tipo (define cómo
+                  se paga; la limpieza de silos es Planta sola), sus horas
+                  máquina y su descripción. En un trabajo legacy la tabla parte
+                  vacía; agregar filas reemplaza el desglose completo. */}
               <div className="flex flex-col gap-3">
-                <span className="text-sm font-medium text-foreground">Actividades (qué · dónde · HM)</span>
+                <span className="text-sm font-medium text-foreground">Actividades (qué · tipo · HM)</span>
+                <p className="m-0 text-xs text-muted-foreground">
+                  Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado,
+                  lo circunstancial, como trabajos con otras empresas.
+                </p>
                 {trabajo && filas.length === 0 ? (
                   <p className="m-0 text-sm text-muted-foreground">
                     Este trabajo es anterior al desglose ({actividadesDe(trabajo)}). Si agregás filas, el
@@ -486,7 +510,15 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                         fullWidth
                         placeholder="Actividad"
                         value={fila.actividad}
-                        onChange={(value) => value && cambiarFila(i, { actividad: String(value) })}
+                        onChange={(value) => {
+                          if (!value) return;
+                          const lugar = tipoAlCambiarActividad(String(value), fila.lugar);
+                          cambiarFila(i, {
+                            actividad: String(value),
+                            lugar,
+                            ...(lugar !== 'PLANTA' ? { planta: '' } : {}),
+                          });
+                        }}
                       >
                         <Label>Actividad</Label>
                         <Select.Trigger>
@@ -505,34 +537,36 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                         </Select.Popover>
                       </Select>
 
-                      <Select
-                        fullWidth
-                        placeholder="Dónde"
-                        value={fila.lugar}
-                        onChange={(value) =>
-                          value &&
-                          cambiarFila(i, {
-                            lugar: String(value),
-                            ...(String(value) !== 'PLANTA' ? { planta: '' } : {}),
-                          })
-                        }
-                      >
-                        <Label>Dónde se hizo</Label>
-                        <Select.Trigger>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {DESTINOS.map((d) => (
-                              <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
-                                {d.label}
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
+                      {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
+                        // La limpieza de silos es siempre de tipo Planta: no se elige.
+                        <TextField fullWidth isReadOnly name={`detalle-tipo-${i}`} value={`${destinoLabel.PLANTA} · automático`}>
+                          <Label>Tipo</Label>
+                          <Input />
+                        </TextField>
+                      ) : (
+                        <Select
+                          fullWidth
+                          placeholder="Tipo"
+                          value={fila.lugar}
+                          onChange={(value) => value && cambiarFila(i, { lugar: String(value), planta: '' })}
+                        >
+                          <Label>Tipo</Label>
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {TIPOS_ELEGIBLES.map((d) => (
+                                <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
+                                  {d.label}
+                                  <ListBox.ItemIndicator />
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
+                      )}
 
                       <TextField
                         fullWidth
@@ -570,11 +604,23 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                       </Select>
                     ) : null}
 
-                    {fila.lugar === 'PLANTA' && fila.actividad !== 'LIMPIEZA_SILOS' ? (
-                      <p className="m-0 text-sm text-danger-soft-foreground">
-                        Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado.
-                      </p>
-                    ) : null}
+                    <TextField
+                      fullWidth
+                      name={`detalle-descripcion-${i}`}
+                      onChange={(valor) => cambiarFila(i, { descripcion: valor })}
+                      value={fila.descripcion}
+                    >
+                      <Label>Descripción de la actividad</Label>
+                      <TextArea
+                        maxLength={DESCRIPCION_ACTIVIDAD_MAX}
+                        placeholder={
+                          fila.actividad === ACTIVIDAD_DE_PLANTA
+                            ? 'Ej: silo 2, limpieza de fondo y paredes'
+                            : 'Qué se hizo en esta actividad y dónde'
+                        }
+                        rows={2}
+                      />
+                    </TextField>
 
                     {filas.length > 1 || trabajo ? (
                       <div className="flex justify-end">
@@ -919,7 +965,7 @@ export function TrabajosExtraAdminView() {
                     <Table.Column>Operador</Table.Column>
                     <Table.Column>Turno</Table.Column>
                     <Table.Column>Report N°</Table.Column>
-                    <Table.Column>Dónde</Table.Column>
+                    <Table.Column>Tipo</Table.Column>
                     <Table.Column>Registrado por</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
                     <Table.Column className="text-right">HM</Table.Column>

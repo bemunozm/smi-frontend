@@ -50,6 +50,7 @@ function mapOpToTrabajo(op: CreateTrabajoExtraOp, equipos: Equipment[], operador
       lugar: f.lugar,
       planta: f.planta ?? null,
       horas: f.horas,
+      descripcion: f.descripcion?.trim() || null,
     })),
     reportNumero: payload.reportNumero,
     otraActividad: payload.otraActividad?.trim() || null,

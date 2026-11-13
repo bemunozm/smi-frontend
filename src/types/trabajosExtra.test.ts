@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { trabajoExtraEdicionSchema, trabajoExtraFormSchema } from './trabajosExtra';
+import {
+  tipoAlCambiarActividad,
+  trabajoExtraCorreccionSchema,
+  trabajoExtraEdicionSchema,
+  trabajoExtraFormSchema,
+} from './trabajosExtra';
 
 const fila = (over: Record<string, unknown> = {}) => ({
   actividad: 'LIMPIEZA_CANCHA',
   lugar: 'TRANSPORTE',
   horas: 2,
+  descripcion: 'Cancha norte, frente a la romana',
   ...over,
 });
 
@@ -126,6 +132,29 @@ describe('trabajoExtraFormSchema', () => {
         ],
       }).success,
     ).toBe(true);
+  });
+
+  it('al registrar, cada actividad lleva su descripción', () => {
+    const r = trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ descripcion: ' ' })] });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues.some((i) => i.path.join('.') === 'detalle.0.descripcion')).toBe(true);
+    }
+    expect(trabajoExtraFormSchema.safeParse({ ...base, detalle: [fila({ descripcion: undefined })] }).success).toBe(
+      false,
+    );
+  });
+
+  it('al corregir, una actividad anterior a la descripción puede quedar sin ella', () => {
+    expect(
+      trabajoExtraCorreccionSchema.safeParse({ ...base, detalle: [fila({ descripcion: undefined })] }).success,
+    ).toBe(true);
+  });
+
+  it('la limpieza de silos pasa sola a tipo Planta; salir de ella deja el tipo por elegir', () => {
+    expect(tipoAlCambiarActividad('LIMPIEZA_SILOS', 'TRANSPORTE')).toBe('PLANTA');
+    expect(tipoAlCambiarActividad('LIMPIEZA_CANCHA', 'PLANTA')).toBe('');
+    expect(tipoAlCambiarActividad('LIMPIEZA_CANCHA', 'VARIADO')).toBe('VARIADO');
   });
 
   it('las otras actividades aceptan Transporte o Variado', () => {
