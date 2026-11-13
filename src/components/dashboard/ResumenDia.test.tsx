@@ -1,13 +1,21 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 
-const { resumenHook, navigateMock } = vi.hoisted(() => ({ resumenHook: vi.fn(), navigateMock: vi.fn() }));
+const { resumenHook, navigateMock, vueltasHook, kardexHook } = vi.hoisted(() => ({
+  resumenHook: vi.fn(),
+  navigateMock: vi.fn(),
+  vueltasHook: vi.fn(),
+  kardexHook: vi.fn(),
+}));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 
 vi.mock('../../hooks/useDashboard', () => ({
   useDashboardResumenDia: (fecha?: string) => resumenHook(fecha),
+  useDashboardVueltas: (rango: unknown, enabled?: boolean) => vueltasHook(rango, enabled),
 }));
+
+vi.mock('../../hooks/useInventory', () => ({ useKardex: (itemId: string | null) => kardexHook(itemId) }));
 
 import { toDateOnly } from '../../lib/turno';
 import { ResumenDia } from './ResumenDia';
@@ -55,6 +63,14 @@ const mock = (data: object) =>
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+/** Las consultas de los popups (vueltas, kardex) parten "cargando" salvo que el test diga otra cosa. */
+const SIN_CARGA = { data: undefined, isPending: true, isError: false, error: null };
+
+beforeEach(() => {
+  vueltasHook.mockReturnValue(SIN_CARGA);
+  kardexHook.mockReturnValue(SIN_CARGA);
 });
 
 describe('ResumenDia', () => {
@@ -353,5 +369,132 @@ describe('ResumenDia: una sección, una tarjeta', () => {
       fireEvent.click(screen.getByTestId('lectura-c1'));
       expect(navigateMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('popups de detalle de las tarjetas KPI', () => {
+  const abrir = (nombre: string) => {
+    fireEvent.click(screen.getByRole('button', { name: nombre }));
+    return screen.getByRole('dialog');
+  };
+  const celdas = (dialog: HTMLElement, testId: string) =>
+    Array.from(within(dialog).getByTestId(testId).querySelectorAll('td')).map((c) => c.textContent);
+
+  it('HM: tabla por equipo con el TOTAL del payload y fila navegable a la ficha', () => {
+    mock(BASE);
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de HM operacionales');
+    expect(within(dialog).getByText('HM operacionales – 16/10')).toBeTruthy();
+    expect(celdas(dialog, 'hm-det-CG-002')).toEqual(['CG-002', '6', '4', '10']);
+    expect(celdas(dialog, 'hm-det-EX-001')).toEqual(['EX-001', '0', '0,5', '0,5']);
+    expect(celdas(dialog, 'hm-det-TOTAL')).toEqual(['TOTAL', '6', '4,5', '10,5']);
+    // Sin pie «Ver todo»: el detalle ya es completo.
+    expect(within(dialog).queryByRole('button', { name: 'Ver todo →' })).toBeNull();
+    fireEvent.click(within(dialog).getByTestId('hm-det-CG-002'));
+    expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
+  });
+
+  it('Diésel: litros por equipo con L/HM y «Ver todo» a cargas de combustible', () => {
+    mock(BASE);
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Diésel');
+    expect(celdas(dialog, 'diesel-det-CG-002')).toEqual(['CG-002', '40', '30', '80', '8']);
+    expect(celdas(dialog, 'diesel-det-EX-001')).toEqual(['EX-001', '0', '60', '70', '140']);
+    expect(celdas(dialog, 'diesel-det-TOTAL')).toEqual(['TOTAL', '40', '60', '120', '11,4']);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+    expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
+  });
+
+  it('Reports: lista el día completo (la card corta en 3) y «Ver todo» va a Report', () => {
+    mock(BASE);
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Reports');
+    expect(within(dialog).getByTestId('reports-det-CN-007')).toBeTruthy();
+    expect(within(dialog).getByTestId('reports-det-AA-001')).toBeTruthy();
+    expect(within(dialog).getByText('9 HM')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+    expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra');
+  });
+
+  it('Producción: camiones del endpoint de vueltas del día; vueltas, del payload de la card', () => {
+    vueltasHook.mockReturnValue({
+      data: {
+        porSeccion: [
+          { seccion: 'INTERNOS', camiones: 4, vueltasTotales: 26, serieDiaria: [] },
+          { seccion: 'MINA_CALETA', camiones: 6, vueltasTotales: 48, serieDiaria: [] },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    mock(BASE);
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Producción');
+    expect(vueltasHook).toHaveBeenLastCalledWith({ desde: '2026-10-16', hasta: '2026-10-16' }, true);
+    expect(celdas(dialog, 'prod-det-INTERNOS')).toEqual(['Internos', '4', '26']);
+    expect(celdas(dialog, 'prod-det-MINA_CALETA')).toEqual(['Mina Caleta', '6', '48']);
+    expect(celdas(dialog, 'prod-det-MINERAS')).toEqual(['Mineras', '—', '0']);
+    expect(celdas(dialog, 'prod-det-TOTAL')).toEqual(['TOTAL', '10', '74']);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+    expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios');
+  });
+
+  it('AdBlue: kardex filtrado al día y «Ver todo» a la ficha del ítem', () => {
+    kardexHook.mockReturnValue({
+      data: {
+        movements: [
+          {
+            id: 'm1',
+            direction: 'IN',
+            reason: 'PURCHASE',
+            quantity: 20,
+            occurredAt: '2026-10-16T12:00:00.000Z',
+            equipment: null,
+          },
+          {
+            id: 'm2',
+            direction: 'OUT',
+            reason: 'ACTIVITY',
+            quantity: 5,
+            occurredAt: '2026-10-14T12:00:00.000Z',
+            equipment: { id: 'e-cg', internalCode: 'CG-002' },
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    mock({ ...BASE, adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER', stockLitros: null } });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue');
+    expect(kardexHook).toHaveBeenLastCalledWith('i1');
+    expect(within(dialog).getByText('Saldo actual: 150,5 L')).toBeTruthy();
+    const mov = within(dialog).getByTestId('adblue-mov-m1');
+    expect(within(mov).getByText('Entrada')).toBeTruthy();
+    expect(within(mov).getByText('Compra / reposición')).toBeTruthy();
+    expect(within(mov).getByText('+20 L')).toBeTruthy();
+    // El movimiento de otro día no aparece.
+    expect(within(dialog).queryByTestId('adblue-mov-m2')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
+    expect(navigateMock).toHaveBeenCalledWith('/inventario/i1');
+  });
+
+  it('sin ítem AdBlue la tarjeta no es un botón', () => {
+    mock(BASE);
+    render(<ResumenDia />);
+    expect(screen.queryByRole('button', { name: 'Ver detalle de AdBlue' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ver detalle de HM operacionales' })).toBeTruthy();
+  });
+
+  it('en un día pasado el popup de AdBlue aclara que el saldo es el vivo', () => {
+    kardexHook.mockReturnValue({ data: { movements: [] }, isPending: false, isError: false, error: null });
+    mock({ ...BASE, adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' } });
+    render(<ResumenDia />);
+    fireEvent.click(screen.getByRole('button', { name: 'Día anterior' }));
+    const dialog = abrir('Ver detalle de AdBlue');
+    expect(within(dialog).getByText(/El saldo es el vivo de Inventario/)).toBeTruthy();
+    expect(within(dialog).getByText('Sin movimientos este día.')).toBeTruthy();
   });
 });

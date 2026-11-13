@@ -100,10 +100,12 @@ export function useDashboardMantenedores(rango: RangoDashboard) {
   });
 }
 
-export function useDashboardVueltas(rango: RangoDashboard) {
+/** `enabled` difiere la consulta hasta que alguien mire el dato (p. ej. un popup de detalle). */
+export function useDashboardVueltas(rango: RangoDashboard, enabled = true) {
   return useQuery({
     queryKey: [...DASHBOARD_KEY, 'vueltas', rango],
     queryFn: () => getDashboardVueltas(rango),
+    enabled,
   });
 }
 
