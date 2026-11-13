@@ -31,6 +31,13 @@ interface FotoRespaldoFieldProps {
   guia?: string;
   /** Bloquea elegir, tomar o quitar la foto (p. ej. mientras se guarda). */
   disabled?: boolean;
+  /**
+   * Registro de un día que ya pasó: sirve cualquier foto de respaldo (el
+   * surtidor, la boleta o el registro en papel), y no tiene sentido evaluar
+   * su antigüedad ni avisar que no trae fecha — una foto del papel o de
+   * WhatsApp casi nunca la trae, y el aviso se leía como un rechazo.
+   */
+  registroAnterior?: boolean;
 }
 
 /**
@@ -60,6 +67,7 @@ export function FotoRespaldoField({
   requerida = true,
   guia = 'Saca la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
   disabled = false,
+  registroAnterior = false,
 }: FotoRespaldoFieldProps) {
   return (
     <div>
@@ -85,7 +93,7 @@ export function FotoRespaldoField({
           <Spinner size="sm" /> Analizando la foto…
         </p>
       )}
-      {!isReadingPhoto && captureDate && (
+      {!registroAnterior && !isReadingPhoto && captureDate && (
         <div
           className={`mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
             isFresh(captureDate)
@@ -105,9 +113,11 @@ export function FotoRespaldoField({
           </span>
         </div>
       )}
-      {!isReadingPhoto && file && !captureDate && (
+      {/* Informativo, no bloquea: la foto se acepta igual. */}
+      {!registroAnterior && !isReadingPhoto && file && !captureDate && (
         <p className="mt-2 text-xs text-(--muted)">
-          La foto no trae fecha de captura (EXIF) — no se pudo validar su antigüedad.
+          La foto no trae su fecha (pasa con fotos del papel o reenviadas): se acepta igual. Revisa que la
+          fecha del registro sea la correcta.
         </p>
       )}
     </div>
