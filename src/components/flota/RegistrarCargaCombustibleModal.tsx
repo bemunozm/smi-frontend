@@ -2,12 +2,13 @@ import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Chip, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
+import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
 import { useCreateCombustible } from '../../hooks/useCombustible';
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from './FotoRespaldoField';
+import { OcrLitrosChip } from './OcrLitrosChip';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from './modal-styles';
 
 const TIPO_OPTIONS = [
@@ -68,24 +69,39 @@ export function RegistrarCargaCombustibleModal({
     reset,
     watch,
     setValue,
+    getFieldState,
     formState: { errors },
   } = useForm<CargaFormValues>({ resolver: zodResolver(CargaSchema), defaultValues: DEFAULT_VALUES });
 
   // Orquestación foto→OCR→EXIF+subida compartida con `RegistrarEntradaModal`/
   // `RegistrarSalidaModal` — ver `usePhotoCaptureFlow`. La lectura sugerida
-  // por OCR autorrellena `litros`.
-  const photoFlow = usePhotoCaptureFlow((value) => setValue('litros', value, { shouldValidate: true }));
+  // por OCR autorrellena `litros`, pero solo si no se escribieron a mano: una
+  // lectura mala del OCR de una foto reemplazada no debe pisar lo tipeado
+  // (mismo guard que `NuevaCargaCombustibleModal`).
+  const photoFlow = usePhotoCaptureFlow((value) => {
+    if (!getFieldState('litros').isDirty) setValue('litros', value, { shouldValidate: true });
+  });
 
   // Pre-relleno automático de "Fecha de carga": se dispara cuando termina la
   // lectura EXIF+OCR de la foto recién elegida (`isReadingPhoto` pasa a
   // `false`). Con EXIF, usa la fecha real de captura; sin EXIF (`captureDate
-  // === null`), usa "ahora". Solo fija el valor inicial — el campo queda
-  // editable a mano después.
+  // === null`), usa "ahora". Solo si la fecha no se tipeó a mano — una carga
+  // de un día anterior se fecha a mano y la foto del papel no debe pisarla.
   useEffect(() => {
     if (!photoFlow.file || photoFlow.isReadingPhoto) return;
+    if (getFieldState('fecha').isDirty) return;
     const capturada = photoFlow.captureDate ?? new Date();
     setValue('fecha', toLocalDateTimeInputValue(capturada), { shouldValidate: true });
-  }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue]);
+  }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue, getFieldState]);
+
+  // Quitar la foto también retira lo que se llenó DESDE ella (fecha EXIF,
+  // litros OCR): un registro no puede quedar fechado/litrado por evidencia
+  // que se descartó. Lo tipeado a mano (dirty) sí se conserva.
+  const quitarFoto = () => {
+    photoFlow.handleClearPhoto();
+    if (!getFieldState('fecha').isDirty) setValue('fecha', DEFAULT_VALUES.fecha, { shouldValidate: false });
+    if (!getFieldState('litros').isDirty) setValue('litros', DEFAULT_VALUES.litros, { shouldValidate: false });
+  };
 
   const limpiarTodo = () => {
     reset(DEFAULT_VALUES);
@@ -149,9 +165,10 @@ export function RegistrarCargaCombustibleModal({
             >
               <FotoRespaldoField
                 captureDate={photoFlow.captureDate}
+                fechaEditable
                 file={photoFlow.file}
                 isReadingPhoto={photoFlow.isReadingPhoto}
-                onClear={photoFlow.handleClearPhoto}
+                onClear={quitarFoto}
                 onSelect={(f) => void photoFlow.handleSelectPhoto(f)}
                 staleQuestion="¿es la carga actual?"
                 subtitle="Debe verse el totalizador del surtidor"
@@ -167,30 +184,7 @@ export function RegistrarCargaCombustibleModal({
                     isDisabled={!photoFlow.file}
                     isInvalid={!!errors.litros}
                     label="Litros"
-                    labelAddon={
-                      ocrLeido ? (
-                        ocrLeido.fueraDeRango ? (
-                          // El OCR puede saltarse el punto decimal del display
-                          // («100.000» leído como cien mil): sobre el umbral no
-                          // se autollena nada — ver `OCR_AUTOFILL_MAX_LITROS`.
-                          <Chip color="danger" size="sm" variant="soft">
-                            ⚠️ Lectura inusual de la foto: escribí los litros a mano
-                          </Chip>
-                        ) : ocrLeido.status === 'CONFIRMED' ? (
-                          <Chip color="success" size="sm" variant="soft">
-                            Leído de la foto
-                          </Chip>
-                        ) : ocrLeido.status === 'REVIEW' ? (
-                          <Chip color="warning" size="sm" variant="soft">
-                            ⚠️ Verificá el valor leído
-                          </Chip>
-                        ) : (
-                          <Chip color="default" size="sm" variant="soft">
-                            No se pudo leer la foto, ingresá los litros a mano
-                          </Chip>
-                        )
-                      ) : undefined
-                    }
+                    labelAddon={ocrLeido ? <OcrLitrosChip litros={litros} ocr={ocrLeido} /> : undefined}
                     onBlur={field.onBlur}
                     onChange={field.onChange}
                     placeholder={!photoFlow.file ? 'Requiere foto de respaldo' : undefined}

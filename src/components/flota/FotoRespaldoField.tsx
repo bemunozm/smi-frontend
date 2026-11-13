@@ -38,6 +38,14 @@ interface FotoRespaldoFieldProps {
    * WhatsApp casi nunca la trae, y el aviso se leía como un rechazo.
    */
   registroAnterior?: boolean;
+  /**
+   * `true` cuando el formulario tiene un campo de fecha del registro editable
+   * (las altas de carga de combustible): el aviso de "foto sin fecha" agrega
+   * la instrucción de revisarla. En los flujos del día (cierre de tarjeta,
+   * entrada/salida, checklist) no existe ese campo — mandar a revisarlo hace
+   * buscar un campo que no está.
+   */
+  fechaEditable?: boolean;
 }
 
 /**
@@ -68,6 +76,7 @@ export function FotoRespaldoField({
   guia = 'Saca la foto de frente al display, sin la mano sobre el vidrio, evitando reflejos y sombras.',
   disabled = false,
   registroAnterior = false,
+  fechaEditable = false,
 }: FotoRespaldoFieldProps) {
   return (
     <div>
@@ -108,16 +117,15 @@ export function FotoRespaldoField({
           )}
           <span>
             Foto tomada {formatRelative(captureDate)} ({fmtDate(captureDate.toISOString())}{' '}
-            {fmtTime(captureDate.toISOString())})
-            {isFresh(captureDate) ? ' · reciente' : ` · ${staleQuestion}`}
+            {fmtTime(captureDate.toISOString())}){isFresh(captureDate) ? ' · reciente' : ` · ${staleQuestion}`}
           </span>
         </div>
       )}
       {/* Informativo, no bloquea: la foto se acepta igual. */}
       {!registroAnterior && !isReadingPhoto && file && !captureDate && (
         <p className="mt-2 text-xs text-(--muted)">
-          La foto no trae su fecha (pasa con fotos del papel o reenviadas): se acepta igual. Revisa que la
-          fecha del registro sea la correcta.
+          La foto no trae su fecha (pasa con fotos del papel o reenviadas): se acepta igual.
+          {fechaEditable ? ' Revisa que la fecha del registro sea la correcta.' : ''}
         </p>
       )}
     </div>

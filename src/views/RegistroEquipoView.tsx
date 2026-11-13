@@ -19,6 +19,7 @@ import {
 
 import { lineaEstadoCorreo, useShiftRegister, type EstadoReporte, type TarjetaTurno } from '../hooks/useShiftRegister';
 import { agruparPorTurno, registradaDespues, rotuloTurno } from '../hooks/shift-register-helpers';
+import { RecordPhoto } from '../components/RecordPhoto';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
@@ -941,25 +942,18 @@ export function RegistroEquipoView() {
 
       {/* La foto que subieron, para revisar qué se cargó (surtidor, boleta o
           registro en papel). Tocarla la abre completa en otra pestaña. La URL
-          es firmada y vence: se renueva cada vez que se recarga el historial. */}
+          es firmada y vence: se renueva cada vez que se recarga el historial
+          (si venció con la vista abierta, `RecordPhoto` muestra el aviso). */}
       {detalleCerrada.pumpPhotoUrl ? (
         <div className="flex flex-col gap-1.5">
           <GrupoHead titulo="Foto del combustible" />
-          <a
-            href={detalleCerrada.pumpPhotoUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded-2xl border border-border bg-[#fafbfc]"
-            aria-label={`Abrir la foto del combustible de ${detalleCerrada.equipo}`}
-          >
-            <img
-              src={detalleCerrada.pumpPhotoUrl}
-              alt={`Foto del combustible de ${detalleCerrada.equipo}`}
-              className="max-h-[420px] w-full object-contain"
-              loading="lazy"
-            />
-          </a>
-          <span className="text-[12.5px] text-muted-foreground">Toca la foto para verla completa.</span>
+          <RecordPhoto
+            alt={`Foto del combustible de ${detalleCerrada.equipo}`}
+            caption="Toca la foto para verla completa."
+            maxHeightClassName="max-h-[420px]"
+            openLabel={`Abrir la foto del combustible de ${detalleCerrada.equipo}`}
+            src={detalleCerrada.pumpPhotoUrl}
+          />
         </div>
       ) : null}
 

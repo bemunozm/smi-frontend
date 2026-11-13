@@ -29,6 +29,16 @@ describe('FotoRespaldoField', () => {
     expect(screen.getByText(/no trae su fecha/).textContent).toMatch(/se acepta igual/);
   });
 
+  it('solo pide revisar la fecha del registro cuando el formulario tiene ese campo', () => {
+    renderField({ fechaEditable: true });
+    expect(screen.getByText(/no trae su fecha/).textContent).toMatch(/Revisa que la fecha del registro/);
+  });
+
+  it('en un flujo del día (sin campo de fecha) no manda a buscar un campo que no existe', () => {
+    renderField();
+    expect(screen.getByText(/no trae su fecha/).textContent).not.toMatch(/Revisa que la fecha/);
+  });
+
   it('en un registro anterior no avisa nada de la fecha de la foto', () => {
     renderField({ registroAnterior: true });
     expect(screen.queryByText(/no trae su fecha/)).toBeNull();
