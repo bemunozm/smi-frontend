@@ -109,8 +109,7 @@ export function DaySummaryKpiDetails({
 /** Las tarjetas de un equipo ese día, dentro de la fila expandida del popup HM. */
 function ShiftCardsOfEquipment({ lecturas }: { lecturas: ResumenDia['lecturas'] }) {
   const n = (v: number) => NUM_CL_1.format(v);
-  if (lecturas.length === 0)
-    return <span className="text-xs text-muted-foreground">Sin tarjetas de este equipo.</span>;
+  if (lecturas.length === 0) return <span className="text-xs text-muted-foreground">Sin tarjetas de este equipo.</span>;
   return (
     <div className="flex flex-col gap-1.5">
       {lecturas.map((l) => (
@@ -164,9 +163,15 @@ function HmDetail({ data }: { data: ResumenDia }) {
                 </Table.Row>,
                 ...(expanded.has(f.internalCode)
                   ? [
-                      <Table.Row data-testid={`hm-exp-${f.internalCode}`} id={`exp-${f.internalCode}`} key={`exp-${f.internalCode}`}>
+                      <Table.Row
+                        data-testid={`hm-exp-${f.internalCode}`}
+                        id={`exp-${f.internalCode}`}
+                        key={`exp-${f.internalCode}`}
+                      >
                         <Table.Cell colSpan={4}>
-                          <ShiftCardsOfEquipment lecturas={data.lecturas.filter((l) => l.internalCode === f.internalCode)} />
+                          <ShiftCardsOfEquipment
+                            lecturas={data.lecturas.filter((l) => l.internalCode === f.internalCode)}
+                          />
                         </Table.Cell>
                       </Table.Row>,
                     ]
@@ -193,8 +198,7 @@ function FuelLoadsOfEquipment({ cargas, internalCode }: { cargas: ResumenDia['ca
   // Payload cacheado por la PWA anterior al campo: no hay detalle que mostrar.
   if (!cargas) return <span className="text-xs text-muted-foreground">Detalle no disponible en este payload.</span>;
   const delEquipo = cargas.filter((c) => c.internalCode === internalCode);
-  if (delEquipo.length === 0)
-    return <span className="text-xs text-muted-foreground">Sin cargas de este equipo.</span>;
+  if (delEquipo.length === 0) return <span className="text-xs text-muted-foreground">Sin cargas de este equipo.</span>;
   return (
     <div className="flex flex-col gap-1.5">
       {delEquipo.map((c, i) => (
@@ -287,7 +291,9 @@ function ReportsDetail({ data, onClose }: { data: ResumenDia; onClose: () => voi
         const fila = (
           <>
             <span className="font-mono text-sm text-foreground">{e.internalCode}</span>
-            <span className="ms-auto font-mono text-sm font-semibold text-foreground">{NUM_CL_1.format(e.horas)} HM</span>
+            <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+              {NUM_CL_1.format(e.horas)} HM
+            </span>
           </>
         );
         if (!e.equipmentId)
