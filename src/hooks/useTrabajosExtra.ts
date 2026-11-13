@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
-import { createTrabajoExtra, listTrabajosExtra, listCambiosTrabajoExtra } from '../api/TrabajosExtraAPI';
+import {
+  createTrabajoExtra,
+  deleteTrabajoExtra,
+  listTrabajosExtra,
+  listCambiosTrabajoExtra,
+} from '../api/TrabajosExtraAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { useCurrentUser } from './useCurrentUser';
 import { useQueuedMutation } from './useQueuedMutation';
@@ -213,6 +218,21 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   };
 
   return { guardar, isGuardando: edicion.isPending };
+}
+
+/** Eliminación definitiva de un report (solo ADMIN en el backend). */
+export function useEliminarTrabajoExtra() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteTrabajoExtra(id),
+    onSuccess: () => {
+      toast.success('Report eliminado');
+      void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
+    },
+    onError: (error) => {
+      toast.danger(error instanceof Error ? error.message : 'No se pudo eliminar el report.');
+    },
+  });
 }
 
 export function useCambiosTrabajoExtra(id: string | null) {
