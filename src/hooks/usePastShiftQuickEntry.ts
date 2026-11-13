@@ -128,7 +128,7 @@ export function usePastShiftQuickEntry({
     const final = parseDecimal(f.final);
     if (final == null) return 'Escribe el horómetro final.';
     if (final < inicial) return 'El horómetro final debe ser ≥ al inicial.';
-    // Solo pesados en esta planilla: miles de litros se avisan (`avisoDeFila`), no bloquean.
+    // Solo pesados en esta planilla: tope de 1.000 L (ver `lib/litros.ts`).
     const litros = validarLitros(f.litros, { liviano: false });
     if (litros.error) return litros.error;
     if (!f.foto) return 'Agrega la foto del combustible de esta carga.';

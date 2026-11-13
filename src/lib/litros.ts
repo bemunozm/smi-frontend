@@ -17,8 +17,8 @@ export const LITROS_MAX = 100_000;
 /** Ninguna camioneta carga más que esto en una carga: sobre esto no se guarda. */
 export const LITROS_MAX_LIVIANO = 200;
 
-/** Sobre esto, en un pesado, se pide revisar (no bloquea: hay equipos grandes). */
-export const LITROS_AVISO_PESADO = 1_500;
+/** Ningún pesado de la faena carga más que esto (rondan los 500 L; margen hasta 1.000). */
+export const LITROS_MAX_PESADO = 1_000;
 
 export const LITROS_FUERA_DE_RANGO =
   'Los litros van de 0 a 100.000. Revisa que no sea el kilometraje u horómetro.';
@@ -50,8 +50,9 @@ export interface ValidacionLitros {
 }
 
 /**
- * Valida los litros escritos para un equipo. `liviano` decide el tope: en una
- * camioneta un valor imposible bloquea; en un pesado solo se avisa.
+ * Valida los litros escritos para un equipo. `liviano` decide el tope: 200 L en
+ * una camioneta, 1.000 L en un pesado (definidos por Joaquín, 13/11). Sobre el
+ * tope no se guarda y el mensaje dice cómo escribirlo.
  */
 export function validarLitros(texto: string, { liviano }: { liviano: boolean }): ValidacionLitros {
   const limpio = texto.trim();
@@ -71,8 +72,8 @@ export function revisarLitros(valor: number, { liviano }: { liviano: boolean }):
   if (liviano && valor > LITROS_MAX_LIVIANO) {
     return { error: `${enTexto} L no cabe en una camioneta. ${mensajeSugerencia(valor)}`, aviso: null };
   }
-  if (!liviano && valor > LITROS_AVISO_PESADO) {
-    return { error: null, aviso: `${enTexto} L es mucho para una carga: revísalo. ${mensajeSugerencia(valor)}` };
+  if (!liviano && valor > LITROS_MAX_PESADO) {
+    return { error: `${enTexto} L es más de lo que carga un equipo. ${mensajeSugerencia(valor)}`, aviso: null };
   }
   return { error: null, aviso: null };
 }

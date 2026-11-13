@@ -14,10 +14,11 @@ describe('validarLitros', () => {
     expect(r.error).toMatch(/escribe 48,493/);
   });
 
-  it('en un pesado, 48493 L avisa con la misma sugerencia pero deja guardar', () => {
+  it('en un pesado, más de 1.000 L tampoco se guarda y sugiere la coma', () => {
     const r = validarLitros('48493', { liviano: false });
-    expect(r.error).toBeNull();
-    expect(r.aviso).toMatch(/escribe 48,493/);
+    expect(r.error).toMatch(/escribe 48,493/);
+    expect(validarLitros('950', { liviano: false }).error).toBeNull();
+    expect(validarLitros('1200', { liviano: false }).error).toMatch(/escribe 1,2/);
   });
 
   it('una carga normal de pesado no avisa', () => {
