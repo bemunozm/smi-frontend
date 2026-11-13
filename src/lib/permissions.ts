@@ -124,6 +124,12 @@ export function canDeleteCombustible(role: Role | null | undefined): boolean {
   return role === ADMIN;
 }
 
+/** Eliminar un report (trabajo extra): `DELETE /api/trabajos-extra/:id` es
+ * solo ADMIN — mismo criterio que los hallazgos. */
+export function canDeleteTrabajoExtra(role: Role | null | undefined): boolean {
+  return role === ADMIN;
+}
+
 /**
  * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
  * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un

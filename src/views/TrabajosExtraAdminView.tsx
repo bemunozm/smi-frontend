@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  AlertDialog,
   Button,
   Card,
   Chip,
@@ -16,6 +17,8 @@ import {
   Table,
   TextArea,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@heroui/react';
 import { Group } from 'react-aria-components/Group';
 import type { DateValue } from 'react-aria-components/Calendar';
@@ -24,7 +27,13 @@ import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOperators } from '../hooks/useOperators';
 import { usePermissions } from '../hooks/usePermissions';
-import { useCrearTrabajoExtra, useEditarTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { canDeleteTrabajoExtra } from '../lib/permissions';
+import {
+  useCrearTrabajoExtra,
+  useEditarTrabajoExtra,
+  useEliminarTrabajoExtra,
+  useTrabajosExtraList,
+} from '../hooks/useTrabajosExtra';
 import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
@@ -41,7 +50,18 @@ import {
 import { parseDecimal } from '../lib/decimal';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
-import { ACTIVIDADES, DESTINOS, actividadLabel, trabajoExtraEdicionSchema, trabajoExtraFormSchema } from '../types/trabajosExtra';
+import {
+  ACTIVIDAD_DE_PLANTA,
+  ACTIVIDADES,
+  DESCRIPCION_ACTIVIDAD_MAX,
+  TIPOS_ELEGIBLES,
+  actividadLabel,
+  destinoLabel,
+  plantasDeFila,
+  tipoAlCambiarActividad,
+  trabajoExtraEdicionSchema,
+  trabajoExtraFormSchema,
+} from '../types/trabajosExtra';
 import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
@@ -51,11 +71,12 @@ const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
 interface FilaDetalleAdmin {
   actividad: string;
   lugar: string;
-  planta: string;
+  plantas: string[];
   horas: string;
+  descripcion: string;
 }
 
-const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', planta: '', horas: '' };
+const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', plantas: [], horas: '', descripcion: '' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -85,7 +106,7 @@ function actividadesDe(trabajo: TrabajoExtraordinario): string {
     .join(', ');
 }
 
-/** Columna «Dónde» de la tabla: los lugares del desglose, sin repetir. */
+/** Columna «Tipo» de la tabla: los tipos del desglose, sin repetir. */
 function lugaresDe(trabajo: TrabajoExtraordinario): string {
   const filas = trabajo.detalleActividades ?? [];
   if (filas.length === 0) return '—';
@@ -104,15 +125,18 @@ function Dato({ label, value }: { label: string; value: string }) {
 /** Popup de detalle de UN trabajo: todo lo que la tabla trunca (horómetros,
  * descripción, observaciones), solo lectura — los trabajos se corrigen desde
  * Terreno, con historial. */
-/** Popup de detalle; «Editar» al pie solo si llega `onEditar` (quien puede corregir). */
+/** Popup de detalle; al pie, «Editar» solo si llega `onEditar` (quien puede
+ * corregir) y «Eliminar» solo si llega `onEliminar` (ADMIN). */
 function DetalleTrabajoModal({
   trabajo,
   onClose,
   onEditar,
+  onEliminar,
 }: {
   trabajo: TrabajoExtraordinario | null;
   onClose: () => void;
   onEditar?: () => void;
+  onEliminar?: () => void;
 }) {
   return (
     <Modal.Backdrop
@@ -161,6 +185,9 @@ function DetalleTrabajoModal({
                           <span className="min-w-0 text-sm text-foreground">
                             {actividadDeFila(f, trabajo.otraActividad)}
                             <span className="text-muted-foreground"> · {lugarDeFila(f)}</span>
+                            {f.descripcion ? (
+                              <span className="block text-xs text-muted-foreground">{f.descripcion}</span>
+                            ) : null}
                           </span>
                           <span className="shrink-0 font-mono text-sm font-semibold">
                             {NUM_CL_1.format(f.horas)} h
@@ -199,9 +226,14 @@ function DetalleTrabajoModal({
               </div>
             ) : null}
           </Modal.Body>
-          {onEditar ? (
+          {onEditar || onEliminar ? (
             <Modal.Footer>
-              <Button onPress={onEditar}>Editar</Button>
+              {onEliminar ? (
+                <Button onPress={onEliminar} variant="danger">
+                  Eliminar
+                </Button>
+              ) : null}
+              {onEditar ? <Button onPress={onEditar}>Editar</Button> : null}
             </Modal.Footer>
           ) : null}
         </Modal.Dialog>
@@ -242,9 +274,11 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     trabajo
       ? (trabajo.detalleActividades ?? []).map((f) => ({
           actividad: f.actividad,
-          lugar: f.lugar,
-          planta: f.planta ?? '',
+          // Una limpieza de silos guardada con otro tipo se corrige acá.
+          lugar: f.actividad === ACTIVIDAD_DE_PLANTA ? 'PLANTA' : f.lugar,
+          plantas: plantasDeFila(f),
           horas: String(f.horas),
+          descripcion: f.descripcion ?? '',
         }))
       : [FILA_VACIA],
   );
@@ -276,8 +310,9 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const detalleEntrada = filas.map((f) => ({
     actividad: f.actividad,
     lugar: f.lugar,
-    planta: f.planta || undefined,
+    plantas: f.plantas,
     horas: f.horas,
+    descripcion: f.descripcion.trim() || undefined,
   }));
 
   const entrada = {
@@ -442,23 +477,30 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
 
               <div className="flex flex-col gap-1">
                 <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
-                  <Label>N° del report</Label>
+                  <Label>N° del report (boleta)</Label>
                   <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
                 </TextField>
                 {pista.repetido ? (
                   <p className="m-0 text-xs font-semibold text-(--warning)">
                     El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
                   </p>
-                ) : textoPista ? (
-                  <p className="m-0 text-xs text-muted-foreground">{textoPista}</p>
-                ) : null}
+                ) : (
+                  <p className="m-0 text-xs text-muted-foreground">
+                    El número impreso en la boleta del report en papel.{textoPista ? ` ${textoPista}` : ''}
+                  </p>
+                )}
               </div>
 
-              {/* El desglose: una fila por actividad con dónde se hizo y sus
-                  horas máquina. En un trabajo legacy la tabla parte vacía;
-                  agregar filas reemplaza el desglose completo. */}
+              {/* El desglose: una fila por actividad con su tipo (define cómo
+                  se paga; la limpieza de silos es Planta sola), sus horas
+                  máquina y su descripción. En un trabajo legacy la tabla parte
+                  vacía; agregar filas reemplaza el desglose completo. */}
               <div className="flex flex-col gap-3">
-                <span className="text-sm font-medium text-foreground">Actividades (qué · dónde · HM)</span>
+                <span className="text-sm font-medium text-foreground">Actividades (qué · tipo · HM)</span>
+                <p className="m-0 text-xs text-muted-foreground">
+                  Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado,
+                  lo circunstancial, como trabajos con otras empresas.
+                </p>
                 {trabajo && filas.length === 0 ? (
                   <p className="m-0 text-sm text-muted-foreground">
                     Este trabajo es anterior al desglose ({actividadesDe(trabajo)}). Si agregás filas, el
@@ -472,7 +514,15 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                         fullWidth
                         placeholder="Actividad"
                         value={fila.actividad}
-                        onChange={(value) => value && cambiarFila(i, { actividad: String(value) })}
+                        onChange={(value) => {
+                          if (!value) return;
+                          const lugar = tipoAlCambiarActividad(String(value), fila.lugar);
+                          cambiarFila(i, {
+                            actividad: String(value),
+                            lugar,
+                            ...(lugar !== 'PLANTA' ? { plantas: [] } : {}),
+                          });
+                        }}
                       >
                         <Label>Actividad</Label>
                         <Select.Trigger>
@@ -491,34 +541,36 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                         </Select.Popover>
                       </Select>
 
-                      <Select
-                        fullWidth
-                        placeholder="Dónde"
-                        value={fila.lugar}
-                        onChange={(value) =>
-                          value &&
-                          cambiarFila(i, {
-                            lugar: String(value),
-                            ...(String(value) !== 'PLANTA' ? { planta: '' } : {}),
-                          })
-                        }
-                      >
-                        <Label>Dónde se hizo</Label>
-                        <Select.Trigger>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {DESTINOS.map((d) => (
-                              <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
-                                {d.label}
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
+                      {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
+                        // La limpieza de silos es siempre de tipo Planta: no se elige.
+                        <TextField fullWidth isReadOnly name={`detalle-tipo-${i}`} value={`${destinoLabel.PLANTA} · automático`}>
+                          <Label>Tipo</Label>
+                          <Input />
+                        </TextField>
+                      ) : (
+                        <Select
+                          fullWidth
+                          placeholder="Tipo"
+                          value={fila.lugar}
+                          onChange={(value) => value && cambiarFila(i, { lugar: String(value), plantas: [] })}
+                        >
+                          <Label>Tipo</Label>
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {TIPOS_ELEGIBLES.map((d) => (
+                                <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
+                                  {d.label}
+                                  <ListBox.ItemIndicator />
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
+                      )}
 
                       <TextField
                         fullWidth
@@ -532,35 +584,47 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                     </div>
 
                     {fila.lugar === 'PLANTA' ? (
-                      <Select
-                        fullWidth
-                        placeholder="Elegir planta"
-                        value={fila.planta}
-                        onChange={(value) => value && cambiarFila(i, { planta: String(value) })}
-                      >
-                        <Label>¿En qué planta?</Label>
-                        <Select.Trigger>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {(plantas ?? []).map((p) => (
-                              <ListBox.Item id={p.nombre} key={p.id} textValue={p.nombre}>
-                                {p.nombre}
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
+                      // Una limpieza de silos puede abarcar varias plantas: se marcan todas.
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-foreground">¿En qué plantas?</span>
+                        <ToggleButtonGroup
+                          aria-label={`Plantas de la actividad ${i + 1}`}
+                          className="flex-wrap"
+                          selectedKeys={new Set(fila.plantas)}
+                          selectionMode="multiple"
+                          onSelectionChange={(keys) =>
+                            cambiarFila(i, { plantas: [...keys].filter((k): k is string => typeof k === 'string') })
+                          }
+                        >
+                          {[...new Set([...(plantas ?? []).map((p) => p.nombre), ...fila.plantas])].map((nombre) => (
+                            <ToggleButton id={nombre} key={nombre}>
+                              {nombre}
+                            </ToggleButton>
+                          ))}
+                        </ToggleButtonGroup>
+                        {fila.plantas.length === 0 ? (
+                          <p className="m-0 text-xs text-danger-soft-foreground">Elige al menos una planta.</p>
+                        ) : null}
+                      </div>
                     ) : null}
 
-                    {fila.lugar === 'PLANTA' && fila.actividad !== 'LIMPIEZA_SILOS' ? (
-                      <p className="m-0 text-sm text-danger-soft-foreground">
-                        Solo una limpieza de silos puede hacerse en planta: usá Transporte o Variado.
-                      </p>
-                    ) : null}
+                    <TextField
+                      fullWidth
+                      name={`detalle-descripcion-${i}`}
+                      onChange={(valor) => cambiarFila(i, { descripcion: valor })}
+                      value={fila.descripcion}
+                    >
+                      <Label>Descripción de la actividad</Label>
+                      <TextArea
+                        maxLength={DESCRIPCION_ACTIVIDAD_MAX}
+                        placeholder={
+                          fila.actividad === ACTIVIDAD_DE_PLANTA
+                            ? 'Ej: silo 2, limpieza de fondo y paredes'
+                            : 'Qué se hizo en esta actividad y dónde'
+                        }
+                        rows={2}
+                      />
+                    </TextField>
 
                     {filas.length > 1 || trabajo ? (
                       <div className="flex justify-end">
@@ -649,7 +713,9 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
  * detalle de cada trabajo en popup. Es el destino de «Ver todo» de la KPI
  * card «HM Trabajos extraordinarios» del dashboard. Quien puede corregir
  * (`trabajoExtra.edit`: ADMIN, SECRETARIA) tiene «Editar» en el detalle; el
- * cambio queda en el mismo historial que las correcciones de Terreno.
+ * cambio queda en el mismo historial que las correcciones de Terreno. El
+ * ADMIN además tiene «Eliminar» (DELETE definitivo, con confirmación —
+ * mismo patrón que los hallazgos).
  */
 export function TrabajosExtraAdminView() {
   const { data, isPending, isError, error } = useTrabajosExtraList();
@@ -663,7 +729,11 @@ export function TrabajosExtraAdminView() {
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
   const [creando, setCreando] = useState(false);
   const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
-  const puedeEditar = usePermissions().can('trabajoExtra.edit');
+  const [eliminando, setEliminando] = useState<TrabajoExtraordinario | null>(null);
+  const permisos = usePermissions();
+  const puedeEditar = permisos.can('trabajoExtra.edit');
+  const puedeEliminar = canDeleteTrabajoExtra(permisos.role);
+  const eliminar = useEliminarTrabajoExtra();
   // «Exportar Excel» pide el rango de fechas en un diálogo propio (pedido del
   // cliente): el rango es obligatorio y se elige en UN solo calendario de
   // rango — mismo selector que el período de Movimientos de inventario.
@@ -906,7 +976,7 @@ export function TrabajosExtraAdminView() {
                     <Table.Column>Operador</Table.Column>
                     <Table.Column>Turno</Table.Column>
                     <Table.Column>Report N°</Table.Column>
-                    <Table.Column>Dónde</Table.Column>
+                    <Table.Column>Tipo</Table.Column>
                     <Table.Column>Registrado por</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
                     <Table.Column className="text-right">HM</Table.Column>
@@ -957,6 +1027,14 @@ export function TrabajosExtraAdminView() {
           puedeEditar
             ? () => {
                 setEditando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
+        onEliminar={
+          puedeEliminar
+            ? () => {
+                setEliminando(detalle);
                 setDetalle(null);
               }
             : undefined
@@ -1053,6 +1131,54 @@ export function TrabajosExtraAdminView() {
       {editando ? <TrabajoExtraModal trabajo={editando} onClose={() => setEditando(null)} /> : null}
 
       {creando ? <TrabajoExtraModal onClose={() => setCreando(false)} /> : null}
+
+      <AlertDialog.Backdrop
+        isOpen={eliminando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar report?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    El Report {eliminando ? numeroReport(eliminando.numero) : ''} de{' '}
+                    {eliminando?.equipo?.internalCode ?? 'este equipo'} se eliminará definitivamente, junto a su
+                    foto. Esta acción no se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button onPress={close} variant="tertiary">
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={eliminar.isPending}
+                    onPress={() => {
+                      if (!eliminando) return;
+                      eliminar.mutate(eliminando.id, {
+                        onSuccess: () => {
+                          close();
+                          setEliminando(null);
+                        },
+                      });
+                    }}
+                    variant="danger"
+                  >
+                    {eliminar.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }

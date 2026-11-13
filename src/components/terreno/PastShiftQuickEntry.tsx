@@ -3,7 +3,8 @@ import { ArrowRight, Plus, X } from 'lucide-react';
 import { FotoRespaldoField } from '../flota/FotoRespaldoField';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { usePastShiftQuickEntry } from '../../hooks/usePastShiftQuickEntry';
-import type { ContextoTurno } from '../../lib/turno';
+import type { ContextoTurno } from '../../lib/turno';
+import { AYUDA_LITROS } from '../../lib/litros';
 import type { Equipment } from '../../types/equipment';
 import { opcionesOperador } from '../../lib/operadores-habituales';
 import type { Operator } from '../../types/operator';
@@ -133,7 +134,7 @@ export function PastShiftQuickEntry({
                   onChange={(e) => q.setFila(i, { final: e.target.value })}
                 />
               </Campo>
-              <Campo label="Litros">
+              <Campo label="Litros" litros>
                 <Input
                   numerico
                   aria-label={`Litros de la fila ${i + 1}`}
@@ -163,6 +164,7 @@ export function PastShiftQuickEntry({
             />
 
             {q.errorDeFila(i) && <Hint>{q.errorDeFila(i)}</Hint>}
+            {!q.errorDeFila(i) && q.avisoDeFila(i) && <Hint>{q.avisoDeFila(i)}</Hint>}
           </div>
         ))}
 
@@ -179,6 +181,7 @@ export function PastShiftQuickEntry({
           turno sin carga). Al guardar se envía solo el reporte de salida del día: llega con su PDF al Informe diario
           equipos del administrador.
         </Hint>
+        <Hint>Litros: {AYUDA_LITROS}</Hint>
       </Form>
     </Card>
   );

@@ -107,18 +107,23 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
     target: { value: 'Carga de material extra' },
   });
   // Los campos del report: folio y la foto obligatoria.
-  fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4509' } });
+  fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
   elegirFoto();
 }
 
-/** Completa una fila del desglose (actividad · dónde · HM). */
-function completarFila(n: number, fila: { actividad?: string; lugar?: string; horas?: string }) {
+/** Completa una fila del desglose (actividad · tipo · HM · descripción). Sin
+ * `descripcion` explícita la fila lleva «Frente norte»: es obligatoria. */
+function completarFila(
+  n: number,
+  { descripcion = 'Frente norte', ...fila }: { actividad?: string; lugar?: string; horas?: string; descripcion?: string },
+) {
+  fireEvent.change(screen.getByLabelText(`Descripción de la actividad ${n}`), { target: { value: descripcion } });
   if (fila.actividad) {
     fireEvent.click(screen.getByLabelText(`Actividad ${n}`));
     fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: fila.actividad }));
   }
   if (fila.lugar) {
-    fireEvent.click(screen.getByLabelText(`Dónde se hizo la actividad ${n}`));
+    fireEvent.click(screen.getByLabelText(`Tipo de la actividad ${n}`));
     fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: fila.lugar }));
   }
   if (fila.horas != null) {
@@ -346,6 +351,49 @@ describe('TrabajosExtraView', () => {
   });
 
   /**
+   * El tipo define cómo se paga. La limpieza de silos es SIEMPRE Planta y es
+   * la única (13-11: se marcaban como Transporte): el tipo se asigna solo y no
+   * se elige; las demás eligen entre Transporte y Variado, sin Planta.
+   */
+  it('la limpieza de silos queda de tipo Planta sola y pide en qué planta', () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
+    qc.setQueryData(['trabajos-extra'], []);
+    qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+    qc.setQueryData(['plantas'], [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }]);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <TrabajosExtraView />
+      </QueryClientProvider>,
+    );
+
+    // Otra actividad: el tipo se elige y Planta no está entre las opciones.
+    completarFila(1, { actividad: 'Soltar material' });
+    fireEvent.click(screen.getByLabelText('Tipo de la actividad 1'));
+    const opciones = within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent);
+    expect(opciones).toEqual(['Transporte', 'Variado']);
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Transporte' }));
+
+    // Limpieza de silos: tipo Planta fijo y la pregunta de en qué planta.
+    completarFila(1, { actividad: 'Limpieza de silos' });
+    expect((screen.getByLabelText('Tipo de la actividad 1') as HTMLInputElement).value).toBe('Planta · automático');
+    // Puede abarcar varias plantas: se marcan las que correspondan.
+    const grupo = screen.getByRole('group', { name: 'Plantas de la actividad 1' });
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 4' }));
+    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(grupo).getByRole('button', { name: 'Planta 4' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
+    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('false');
+
+    // Volver a otra actividad deja el tipo por elegir.
+    completarFila(1, { actividad: 'Soltar material' });
+    expect(screen.getByLabelText('Tipo de la actividad 1').textContent).not.toContain('Planta');
+    expect(screen.queryByRole('group', { name: 'Plantas de la actividad 1' })).toBeNull();
+  });
+
+  /**
    * El operador dejó de ser texto libre: sale del catálogo propio
    * (`useOperators({ isActive: true })`), mismo `Selector` del kit de
    * Terreno y mismo criterio que `RegistroEquipoView`.
@@ -397,8 +445,10 @@ describe('TrabajosExtraView', () => {
       operatorId: 'op_1',
       horometroInicial: 100,
       horometroFinal: 112,
-      // El desglose viaja normalizado: planta solo en filas PLANTA (null acá).
-      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', planta: null, horas: 12 }],
+      // El desglose viaja normalizado: plantas solo en filas PLANTA (vacías acá).
+      detalle: [
+        { actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', plantas: [], horas: 12, descripcion: 'Frente norte' },
+      ],
       descripcion: 'Carga de material extra',
       reportNumero: '4509',
     });
@@ -465,7 +515,7 @@ describe('TrabajosExtraView', () => {
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
     completarFila(1, { actividad: 'Soltar material', lugar: 'Variado', horas: '0.3' });
     fireEvent.change(screen.getByLabelText('Descripción de la tarea'), { target: { value: 'Despeje' } });
-    fireEvent.change(screen.getByLabelText('N° del report'), { target: { value: '4510' } });
+    fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4510' } });
     elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 

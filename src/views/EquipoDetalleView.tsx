@@ -1378,6 +1378,7 @@ export function EquipoDetalleView({
       <RegistrarCargaCombustibleModal
         equipoId={equipo.id}
         equipoLabel={equipo.internalCode}
+        liviano={equipo.equipmentClass === 'LIGHT'}
         isOpen={isCargaOpen}
         onOpenChange={setIsCargaOpen}
       />

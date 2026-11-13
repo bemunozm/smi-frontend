@@ -1118,7 +1118,7 @@ function putTrabajoOp(overrides: Partial<CreateTrabajoExtraOp> = {}): Promise<st
       turno: 'DIURNO',
       horometroInicial: 100,
       horometroFinal: 112,
-      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'VARIADO', planta: null, horas: 12 }],
+      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'VARIADO', plantas: [], horas: 12 }],
       descripcion: 'Carga extra',
       reportNumero: '4509',
       capturedAt: '2026-09-24T09:00:00.000Z',

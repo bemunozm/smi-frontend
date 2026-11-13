@@ -23,6 +23,11 @@ export interface DecimalFieldProps {
    * Usar `IntegerField`, que lo fija.
    */
   entero?: boolean;
+  /** Decimales al mostrar un valor que llega del formulario (OCR, edición). */
+  decimales?: number;
+  /** Litros de una carga: el punto del surtidor es la coma (`48.493`), así que
+   * no se avisa «¿querías 48493?» — ese aviso empujaba a sacar el punto. */
+  litros?: boolean;
 }
 
 /**
@@ -49,9 +54,11 @@ export function DecimalField({
   placeholder,
   className,
   entero = false,
+  decimales = 2,
+  litros = false,
 }: DecimalFieldProps) {
   const leer = entero ? parseInteger : parseDecimal;
-  const escribirValor = (numero: number | null | undefined) => formatDecimalInput(numero, entero ? 0 : 2);
+  const escribirValor = (numero: number | null | undefined) => formatDecimalInput(numero, entero ? 0 : decimales);
 
   const [texto, setTexto] = useState(() => escribirValor(value));
   const [valorVisto, setValorVisto] = useState(value);
@@ -95,7 +102,7 @@ export function DecimalField({
         placeholder={placeholder ?? ' '}
       />
       {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
-      {[warning, entero ? null : avisoDeAgrupacion(texto)].map((aviso, i) =>
+      {[warning, entero || litros ? null : avisoDeAgrupacion(texto)].map((aviso, i) =>
         aviso ? (
           <p className="m-0 text-xs text-warning-soft-foreground" key={i} role="status">
             {aviso}

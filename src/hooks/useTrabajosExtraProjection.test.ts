@@ -52,7 +52,7 @@ function op(
       turno: 'DIURNO',
       horometroInicial: 100,
       horometroFinal: 112.5,
-      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'VARIADO', planta: null, horas: 12.5 }],
+      detalle: [{ actividad: 'SOLTAR_MATERIAL', lugar: 'VARIADO', plantas: [], horas: 12.5 }],
       reportNumero: '4509',
       descripcion: 'Pendiente',
       capturedAt: '2026-09-24T09:00:00.000Z',
@@ -176,7 +176,7 @@ describe('proyectarTrabajosExtra — ediciones pendientes', () => {
       [
         edicion('t-1', {
           observaciones: '',
-          detalle: [{ actividad: 'LIMPIEZA_CANCHA', lugar: 'VARIADO', planta: null, horas: 2 }],
+          detalle: [{ actividad: 'LIMPIEZA_CANCHA', lugar: 'VARIADO', plantas: [], horas: 2 }],
           otraActividad: '',
         }),
       ],

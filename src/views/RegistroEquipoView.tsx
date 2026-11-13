@@ -32,6 +32,7 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros, fmtTime, plural } from '../lib/format';
+import { AYUDA_LITROS } from '../lib/litros';
 import { fechaCorta, fromDateOnly, toDateOnly, type Turno } from '../lib/turno';
 import {
   BloqueTurno,
@@ -1040,7 +1041,12 @@ export function RegistroEquipoView() {
         label="Combustible cargado"
         requerido
         unidad="L"
-        hint={cerrando.liviano ? 'Lo que se cargó a la camioneta.' : 'Cero si no cargó en el turno.'}
+        litros
+        hint={
+          cerrando.liviano
+            ? AYUDA_LITROS
+            : `${AYUDA_LITROS} Cero si no cargó en el turno.`
+        }
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}
       >

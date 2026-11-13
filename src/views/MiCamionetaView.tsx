@@ -30,6 +30,7 @@ import { useShiftProjection } from '../hooks/useShiftProjection';
 import type { TarjetaTurno } from '../hooks/shift-register-helpers';
 import { formatDecimalInput } from '../lib/decimal';
 import { fmtLitros } from '../lib/format';
+import { AYUDA_LITROS } from '../lib/litros';
 import { tiempoEnUso } from '../lib/tiempo-en-uso';
 import { contextoTurno } from '../lib/turno';
 import type { OutboxOp } from '../offline/db';
@@ -271,6 +272,8 @@ export function MiCamionetaView({
           label="Combustible cargado"
           requerido
           unidad="L"
+          litros
+          hint={AYUDA_LITROS}
           error={cierre.litrosError ?? undefined}
           aviso={cierre.litrosAviso ?? undefined}
         >
