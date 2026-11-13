@@ -58,7 +58,10 @@ import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentMod
 import { fmtFechaHora, fmtLitros } from '../lib/format';
 import { FuelHistoryTable } from '../components/flota/FuelHistoryTable';
 import {
+  ExtraWorksPopup,
+  FindingsPopup,
   FuelHistoryPopup,
+  MaintenancePopup,
   UsageHistoryPopup,
   type EquipmentKpiPopupKind,
 } from '../components/flota/EquipmentKpiPopups';
@@ -975,6 +978,8 @@ export function EquipoDetalleView({
           }
           icon={<Wrench className="h-4.25 w-4.25" />}
           label="Última mantención"
+          onOpen={() => setKpiPopup('maintenance')}
+          ariaLabel="Ver mantenciones"
           value={equipo.ultimaMantencion ? formatFechaConAnio(equipo.ultimaMantencion.fecha) : '—'}
         />
         <KpiTile
@@ -1018,12 +1023,16 @@ export function EquipoDetalleView({
           caption="Horas extra en Terreno"
           icon={<Wrench className="h-4.25 w-4.25" />}
           label="Trabajos extra"
+          onOpen={() => setKpiPopup('extraWorks')}
+          ariaLabel="Ver trabajos extra"
           value={String(equipo._count.trabajosExtra)}
         />
         <KpiTile
           caption="Reportados en Terreno"
           icon={<AlertTriangle className="h-4.25 w-4.25" />}
           label="Hallazgos"
+          onOpen={() => setKpiPopup('findings')}
+          ariaLabel="Ver hallazgos"
           toneClass={equipo._count.hallazgos > 0 ? 'bg-danger-soft text-danger-soft-foreground' : undefined}
           value={String(equipo._count.hallazgos)}
         />
@@ -1251,6 +1260,24 @@ export function EquipoDetalleView({
         onOpenChange={(open) => setKpiPopup(open ? 'fuel' : null)}
         registros={historialCombustible}
         verTodoTo={verTodoAdmin ? '/cargas-combustible' : undefined}
+      />
+      <MaintenancePopup
+        equipo={equipo}
+        fichaBase={base}
+        isOpen={kpiPopup === 'maintenance'}
+        onOpenChange={(open) => setKpiPopup(open ? 'maintenance' : null)}
+      />
+      <ExtraWorksPopup
+        equipo={equipo}
+        isOpen={kpiPopup === 'extraWorks'}
+        onOpenChange={(open) => setKpiPopup(open ? 'extraWorks' : null)}
+        verTodoTo={verTodoAdmin ? '/trabajos-extra' : undefined}
+      />
+      <FindingsPopup
+        equipo={equipo}
+        isOpen={kpiPopup === 'findings'}
+        onOpenChange={(open) => setKpiPopup(open ? 'findings' : null)}
+        verTodoTo={verTodoAdmin ? '/hallazgos' : undefined}
       />
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog

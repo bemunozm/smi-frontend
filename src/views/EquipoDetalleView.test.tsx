@@ -37,6 +37,12 @@ const { docListMock } = vi.hoisted(() => ({ docListMock: vi.fn() }));
 
 vi.mock('../api/EquipmentDocumentAPI', () => ({ EquipmentDocumentAPI: { list: docListMock } }));
 
+// Lectura de la ficha mockeada a nivel de módulo: permite simular una falla.
+// Los seeds de ['ficha','eq_1'] siguen mandando (staleTime: Infinity).
+const { fichaGetMock } = vi.hoisted(() => ({ fichaGetMock: vi.fn() }));
+
+vi.mock('../api/FichaAPI', () => ({ FichaAPI: { getFicha: fichaGetMock } }));
+
 /** Lo encolado para un endpoint, en orden. */
 function escrituras(endpoint: string): Array<Record<string, unknown>> {
   return submitWriteMock.mock.calls.filter(([clave]) => clave === endpoint).map(([, input]) => input);
@@ -53,6 +59,7 @@ afterEach(() => {
 // les importa esta sección) no se queden esperando una promesa nunca resuelta.
 beforeEach(() => {
   docListMock.mockResolvedValue([]);
+  fichaGetMock.mockResolvedValue(FICHA);
   // jsdom no implementa los object URL con los que se previsualiza un archivo elegido.
   URL.createObjectURL = vi.fn(() => 'blob:archivo-nuevo');
   URL.revokeObjectURL = vi.fn();
@@ -270,6 +277,79 @@ const SUPERVISOR_SESSION = {
 };
 
 describe('EquipoDetalleView', () => {
+  it('la tarjeta Hallazgos abre los hallazgos de la bitácora con la nota de recorte', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver hallazgos' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Fuga de aceite detectada')).toBeTruthy();
+    expect(within(dialogo).queryByText('Lectura de horómetro')).toBeNull();
+    expect(within(dialogo).getByText(/Mostrando los 1 más recientes de 4/)).toBeTruthy();
+  });
+
+  it('la tarjeta Última mantención muestra el detalle y las intervenciones', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha((qc) =>
+      qc.setQueryData(['ficha', 'eq_1'], {
+        ...FICHA,
+        timeline: [
+          ...FICHA.timeline,
+          {
+            id: 'ev_int',
+            tipo: 'INTERVENCION',
+            fecha: '2026-10-19T16:30:00.000Z',
+            titulo: 'Cambio de filtro hidráulico',
+            detalle: 'Cierre de la OT-12',
+            meta: {},
+          },
+        ],
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ver mantenciones' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Mantención 10.000 km')).toBeTruthy();
+    expect(within(dialogo).getByText('Cambio de filtro hidráulico')).toBeTruthy();
+    expect(within(dialogo).getByText('Ver bitácora completa →')).toBeTruthy();
+  });
+
+  it('la tarjeta Trabajos extra sin eventos abre con el texto vacío y sin nota', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver trabajos extra' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Esta unidad todavía no tiene trabajos extra registrados.')).toBeTruthy();
+    expect(within(dialogo).queryByText(/Mostrando los/)).toBeNull();
+  });
+
+  it('si la bitácora falla, el popup avisa en vez de romperse', async () => {
+    currentUserResult = ADMIN_SESSION;
+    fichaGetMock.mockRejectedValue(new DomainError('falló'));
+    renderFicha((qc) => qc.removeQueries({ queryKey: ['ficha', 'eq_1'] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver hallazgos' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(await within(dialogo).findByText('No se pudo cargar el detalle.')).toBeTruthy();
+  });
+
+  it('en el taller los popups de bitácora no ofrecen «Ver todo» hacia vistas de admin', async () => {
+    currentUserResult = ADMIN_SESSION;
+    const qc = crearQueryClient();
+    qc.setQueryData(['equipment', 'eq_1'], EQUIPO_DETALLE);
+    qc.setQueryData(['horometro'], HOROMETROS);
+    qc.setQueryData(['combustible'], COMBUSTIBLES);
+    qc.setQueryData(['ficha', 'eq_1'], FICHA);
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/mantenimiento/equipos/eq_1']}>
+          <Routes>
+            <Route element={<EquipoDetalleView contexto="taller" />} path="/mantenimiento/equipos/:id" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ver hallazgos' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).queryByText('Ver todo →')).toBeNull();
+  });
   it('montada en el taller es solo lectura incluso para ADMIN y no sale de su shell', async () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
