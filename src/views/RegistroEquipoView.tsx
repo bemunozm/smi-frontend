@@ -1217,6 +1217,7 @@ export function RegistroEquipoView() {
                   operadores={operadores}
                   checklistSinAceptar={checklistSinAceptar}
                   esDiaPasado={esDiaPasado}
+                  turnosRegistrados={turnosPasados ?? []}
                 />
               </>
             ) : (
