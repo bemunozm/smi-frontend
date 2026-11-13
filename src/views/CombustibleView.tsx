@@ -6,6 +6,7 @@ import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustibl
 import { useEquipment } from '../hooks/useEquipment';
 import { assetUrl } from '../api/UploadsAPI';
 import { formatDecimalInput } from '../lib/decimal';
+import { validarLitros } from '../lib/litros';
 import { fmtDate, fmtLitros, fmtTime } from '../lib/format';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
@@ -46,6 +47,12 @@ export function CombustibleView() {
   });
 
   const tipo = (watch('tipo') as CombustibleForm['tipo']) ?? 'PETROLEO';
+  // El punto del surtidor es la coma; 48493 en una camioneta no se guarda (ver `lib/litros.ts`).
+  const equipoElegido = equipos.find((e) => e.id === watch('equipoId'));
+  const litrosTexto = watch('litros');
+  const revisionLitros = validarLitros(typeof litrosTexto === 'string' ? litrosTexto : '', {
+    liviano: equipoElegido?.equipmentClass === 'LIGHT',
+  });
 
   /** El OCR prellena los litros y el campo queda editable: el supervisor
    *  confirma en vez de tipear el totalizador a mano. Va con coma decimal
@@ -57,7 +64,7 @@ export function CombustibleView() {
   const onSubmit = (values: CombustibleForm) => {
     // La foto viaja con la carga y se sube al sincronizar: sin señal igual queda
     // guardada con su respaldo.
-    if (!foto.file) return;
+    if (!foto.file || revisionLitros.error) return;
     const input = { equipoId: values.equipoId, litros: values.litros, tipo: values.tipo, fecha: values.fecha };
     crear.mutate(
       { input, foto: foto.file },
@@ -88,7 +95,7 @@ export function CombustibleView() {
           type="text"
           inputMode="decimal"
           placeholder="0"
-          error={errors.litros?.message}
+          error={errors.litros?.message ?? revisionLitros.error ?? revisionLitros.aviso ?? undefined}
           {...register('litros')}
         />
 
@@ -113,7 +120,7 @@ export function CombustibleView() {
 
         <PrimaryButton
           type="submit"
-          disabled={crear.isPending || !foto.file || foto.isReadingPhoto}
+          disabled={crear.isPending || !foto.file || foto.isReadingPhoto || revisionLitros.error != null}
         >
           {crear.isPending ? 'Guardando…' : 'Registrar carga'}
           <ArrowRight className="h-4 w-4" />

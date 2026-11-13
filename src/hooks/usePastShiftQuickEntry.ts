@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from '@heroui/react';
 
 import { parseDecimal } from '../lib/decimal';
-import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
+import { validarLitros } from '../lib/litros';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
@@ -74,6 +74,8 @@ export interface UsePastShiftQuickEntryResult {
   equiposDeFila: (i: number) => Equipment[];
   /** Qué le falta o qué está mal en la fila — `null` si está completa o del todo vacía. */
   errorDeFila: (i: number) => string | null;
+  /** Advertencia que no impide guardar (litros de miles en un pesado). */
+  avisoDeFila: (i: number) => string | null;
   /** Al menos una fila completa y ninguna a medias o con error. */
   puedeGuardar: boolean;
   /** Encola apertura + cierre (con su foto) por cada fila, en orden, por el
@@ -126,13 +128,18 @@ export function usePastShiftQuickEntry({
     const final = parseDecimal(f.final);
     if (final == null) return 'Escribe el horómetro final.';
     if (final < inicial) return 'El horómetro final debe ser ≥ al inicial.';
-    if (f.litros.trim() !== '' && parseDecimal(f.litros) == null) {
-      return 'Litros inválidos (vacío = sin carga).';
-    }
-    const litros = parseDecimal(f.litros);
-    if (litros != null && (litros < 0 || litros > LITROS_MAX)) return LITROS_FUERA_DE_RANGO;
+    // Solo pesados en esta planilla: tope de 1.000 L (ver `lib/litros.ts`).
+    const litros = validarLitros(f.litros, { liviano: false });
+    if (litros.error) return litros.error;
     if (!f.foto) return 'Agrega la foto del combustible de esta carga.';
     return null;
+  };
+
+  /** Advertencia de la fila que no impide guardar (p. ej. litros de miles). */
+  const avisoDeFila = (i: number): string | null => {
+    const f = filas[i];
+    if (!f || esVacia(f)) return null;
+    return validarLitros(f.litros, { liviano: false }).aviso;
   };
 
   const completas = filas.filter((f, i) => !esVacia(f) && errorDeFila(i) == null);
@@ -220,5 +227,5 @@ export function usePastShiftQuickEntry({
     }
   };
 
-  return { filas, setFila, agregarFila, quitarFila, equiposDeFila, errorDeFila, puedeGuardar, guardar, isGuardando };
+  return { filas, setFila, agregarFila, quitarFila, equiposDeFila, errorDeFila, avisoDeFila, puedeGuardar, guardar, isGuardando };
 }

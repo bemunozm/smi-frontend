@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
+import { revisarLitros } from '../../lib/litros';
 import { EQUIPMENT_CLASS_OPTIONS } from '../../config/flota-colors';
 import { useCrearCargaCombustible } from '../../hooks/useCombustible';
 import { useEquipment } from '../../hooks/useEquipment';
@@ -109,7 +110,10 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
   // corregirla después — se bloquea acá (mismo patrón que el alta del panel
   // de Trabajos extra y Hallazgos).
   const fechaIso = fechaRegistroIso(watch('fecha'));
+  // Litros imposibles para la clase (48493 en vez de 48,493): bloquea en camioneta, avisa en pesado.
+  const revisionLitros = revisarLitros(litros, { liviano: clase === 'LIGHT' });
   const puedeGuardar =
+    revisionLitros.error == null &&
     equipoId !== '' &&
     fechaIso !== null &&
     !photoFlow.isReadingPhoto &&
@@ -248,9 +252,12 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                 name="litros"
                 render={({ field }) => (
                   <DecimalField
-                    errorMessage={errors.litros?.message}
-                    isInvalid={!!errors.litros}
+                    decimales={3}
+                    errorMessage={errors.litros?.message ?? revisionLitros.error ?? undefined}
+                    isInvalid={!!errors.litros || revisionLitros.error != null}
                     label="Litros"
+                    litros
+                    warning={revisionLitros.aviso ?? undefined}
                     labelAddon={ocrLeido ? <OcrLitrosChip litros={litros} ocr={ocrLeido} /> : undefined}
                     onBlur={field.onBlur}
                     onChange={field.onChange}

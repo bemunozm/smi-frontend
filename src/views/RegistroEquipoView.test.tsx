@@ -47,6 +47,7 @@ vi.mock('../hooks/usePastShiftQuickEntry', () => ({
     quitarFila: vi.fn(),
     equiposDeFila: () => EQUIPOS_DISPONIBLES,
     errorDeFila: () => null,
+    avisoDeFila: () => null,
     puedeGuardar: true,
     guardar: guardarRapidoMock,
     isGuardando: false,
@@ -1023,7 +1024,7 @@ describe('RegistroEquipoView', () => {
       expect(ventana.getByText('La foto del surtidor no se cambia: es el respaldo de lo que se registró al cerrar.')).toBeTruthy();
       expect(ventana.getByText('El horómetro final no puede ser menor que el inicial.')).toBeTruthy();
       expect(ventana.getByText('Indica los litros de combustible (cero si no cargó).')).toBeTruthy();
-      expect(ventana.getByText('Cero si no cargó en el turno.')).toBeTruthy();
+      expect(ventana.getByText(/Cero si no cargó/)).toBeTruthy();
       expect(ventana.getByRole('group', { name: '¿Se cargó AdBlue?' })).toBeTruthy();
     });
 

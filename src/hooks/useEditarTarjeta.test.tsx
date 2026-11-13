@@ -257,15 +257,15 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     expect(result.current.puedeGuardar).toBe(true);
   });
 
-  it('cerrada: litros sobre 100.000 impiden guardar; 100.000 sí', () => {
+  it('cerrada (pesado): litros sobre 1.000 impiden guardar; 1.000 sí', () => {
     const { result } = render(cerrada);
     act(() => result.current.abrirEdicion('c1'));
 
-    act(() => result.current.setForm((f) => ({ ...f, litros: '100001' })));
-    expect(result.current.faltante).toMatch(/0 a 100.000/);
+    act(() => result.current.setForm((f) => ({ ...f, litros: '1001' })));
+    expect(result.current.faltante).toMatch(/más de lo que carga un equipo/);
     expect(result.current.puedeGuardar).toBe(false);
 
-    act(() => result.current.setForm((f) => ({ ...f, litros: '100000' })));
+    act(() => result.current.setForm((f) => ({ ...f, litros: '1000' })));
     expect(result.current.faltante).toBeNull();
     expect(result.current.puedeGuardar).toBe(true);
   });
