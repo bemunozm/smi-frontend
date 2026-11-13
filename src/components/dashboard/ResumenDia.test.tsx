@@ -489,6 +489,24 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra');
   });
 
+  it('Reports: la fila con equipmentId navega a Report filtrado por equipo y día', () => {
+    mock({
+      ...BASE,
+      reports: {
+        totalHoras: 9,
+        porEquipo: [
+          { equipmentId: 'e-ex', internalCode: 'EX-001', horas: 4 },
+          { internalCode: 'CG-002', horas: 2.5 }, // payload viejo: sin id, no navegable
+        ],
+      },
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de Reports');
+    expect(within(dialog).queryByRole('button', { name: 'Ver reports de CG-002' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver reports de EX-001' }));
+    expect(navigateMock).toHaveBeenCalledWith('/trabajos-extra?equipo=e-ex&desde=2026-10-16&hasta=2026-10-16');
+  });
+
   it('Producción: camiones del endpoint de vueltas del día; vueltas, del payload de la card', () => {
     vueltasHook.mockReturnValue({
       data: {

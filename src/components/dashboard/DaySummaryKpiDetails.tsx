@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Spinner, Table } from '@heroui/react';
 
 import { KpiDetailModal } from './KpiDetailModal';
@@ -81,7 +82,7 @@ export function DaySummaryKpiDetails({
         title={`Reports – ${dia}`}
         verTodoTo="/trabajos-extra"
       >
-        <ReportsDetail data={data} />
+        <ReportsDetail data={data} onClose={onClose} />
       </KpiDetailModal>
       <KpiDetailModal
         isOpen={open === 'production'}
@@ -273,18 +274,44 @@ function DieselDetail({ data }: { data: ResumenDia }) {
   );
 }
 
-/** El día completo de reports por equipo — la card corta en 3 y pone «+n más». */
-function ReportsDetail({ data }: { data: ResumenDia }) {
+/** El día completo de reports por equipo — la card corta en 3 y pone «+n más».
+ * Cada fila navega a la vista Report filtrada por ese equipo y ese día; sin
+ * `equipmentId` (payload cacheado viejo) la fila queda informativa. */
+function ReportsDetail({ data, onClose }: { data: ResumenDia; onClose: () => void }) {
+  const navigate = useNavigate();
   const { totalHoras, porEquipo } = data.reports;
   if (porEquipo.length === 0) return <p className="text-sm text-muted-foreground">Sin reports este día.</p>;
   return (
     <>
-      {porEquipo.map((e) => (
-        <div className={ROW_LISTA} data-testid={`reports-det-${e.internalCode}`} key={e.internalCode}>
-          <span className="font-mono text-sm text-foreground">{e.internalCode}</span>
-          <span className="ms-auto font-mono text-sm font-semibold text-foreground">{NUM_CL_1.format(e.horas)} HM</span>
-        </div>
-      ))}
+      {porEquipo.map((e) => {
+        const fila = (
+          <>
+            <span className="font-mono text-sm text-foreground">{e.internalCode}</span>
+            <span className="ms-auto font-mono text-sm font-semibold text-foreground">{NUM_CL_1.format(e.horas)} HM</span>
+          </>
+        );
+        if (!e.equipmentId)
+          return (
+            <div className={ROW_LISTA} data-testid={`reports-det-${e.internalCode}`} key={e.internalCode}>
+              {fila}
+            </div>
+          );
+        return (
+          <button
+            aria-label={`Ver reports de ${e.internalCode}`}
+            className={`${ROW_LISTA} ${ROW_TOGGLE} w-full text-left`}
+            data-testid={`reports-det-${e.internalCode}`}
+            key={e.internalCode}
+            onClick={() => {
+              onClose();
+              void navigate(`/trabajos-extra?equipo=${e.equipmentId}&desde=${data.fecha}&hasta=${data.fecha}`);
+            }}
+            type="button"
+          >
+            {fila}
+          </button>
+        );
+      })}
       <div className="flex items-center gap-2 border-t border-border pt-2.5">
         <span className="text-sm font-semibold text-foreground">TOTAL</span>
         <span className="ms-auto font-mono text-sm font-semibold text-foreground">
