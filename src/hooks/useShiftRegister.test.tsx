@@ -833,6 +833,29 @@ describe('useShiftRegister', () => {
       await waitFor(() => expect(result.current.enCurso).toHaveLength(2));
       expect(result.current.reportePuedeReenviar).toBe(true);
     });
+
+    it('"enviado" sin tarjetas en curso (todas cerradas, p. ej. turno pasado): NO ofrece reenviar', async () => {
+      // `enviarReporte()` no tendría qué mandar (manda los ids de `enCurso`):
+      // antes el botón aparecía como «Reenviar con 0 equipos» y no hacía nada.
+      const cerradaConReporte: ShiftCardResponse = {
+        ...CARD_ABIERTA_ACTUAL,
+        valorFinal: 130,
+        horasMaquina: 30,
+        closedAt: '2026-09-24T16:00:00.000Z',
+        shift: {
+          ...CARD_ABIERTA_ACTUAL.shift!,
+          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-24T08:00:00.000Z', cardCount: 2, emailStatus: 'SENT' }],
+        },
+      };
+      mockApis({ tarjetas: [cerradaConReporte] });
+      const { Wrapper } = withQueryClient();
+
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.reporteEstado).toBe('enviado'));
+      expect(result.current.enCurso).toHaveLength(0);
+      expect(result.current.reportePuedeReenviar).toBe(false);
+    });
   });
 });
 
