@@ -144,9 +144,10 @@ export function PastShiftQuickEntry({
               onSelect={(foto) => q.setFila(i, { foto })}
               onClear={() => q.setFila(i, { foto: null })}
               title="Foto del combustible"
-              subtitle="Del surtidor o la boleta de esa carga"
+              subtitle="Del surtidor, la boleta o el registro en papel"
               staleQuestion="¿es la de esa carga?"
-              guia="De la galería del teléfono («Elegir de la galería»): la foto que se tomó ese día al cargar."
+              guia="Sirve la foto del surtidor de ese día o, si no la hay, la del registro en papel. Desde la galería («Elegir de la galería») o sacándola ahora."
+              registroAnterior
             />
 
             {q.errorDeFila(i) && <Hint>{q.errorDeFila(i)}</Hint>}

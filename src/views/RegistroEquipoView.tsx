@@ -922,14 +922,46 @@ export function RegistroEquipoView() {
               : ['Cerrada a las', detalleCerrada.cerradaA ?? '—'],
             ['AdBlue', detalleCerrada.adBlue ? `${fmtLitros(detalleCerrada.adBlueLitros)} L` : 'No se cargó'],
             [
-              'Foto del surtidor',
-              <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
-                <Camera className="h-4 w-4" /> Adjunta
-              </span>,
+              'Foto del combustible',
+              // Antes decía «Adjunta» siempre, hubiera o no foto. Ahora dice la
+              // verdad: la foto (abajo), pendiente de subir, o que no hay.
+              detalleCerrada.pumpPhotoUrl ? (
+                <span key="foto" className="inline-flex items-center gap-1.5 text-[var(--success-soft-foreground)]">
+                  <Camera className="h-4 w-4" /> Adjunta
+                </span>
+              ) : detalleCerrada.sinSincronizar ? (
+                <span key="foto" className="text-[var(--warning-soft-foreground)]">Se sube al sincronizar</span>
+              ) : (
+                <span key="foto" className="text-muted-foreground">Sin foto</span>
+              ),
             ],
           ]}
         />
       </div>
+
+      {/* La foto que subieron, para revisar qué se cargó (surtidor, boleta o
+          registro en papel). Tocarla la abre completa en otra pestaña. La URL
+          es firmada y vence: se renueva cada vez que se recarga el historial. */}
+      {detalleCerrada.pumpPhotoUrl ? (
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Foto del combustible" />
+          <a
+            href={detalleCerrada.pumpPhotoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block overflow-hidden rounded-2xl border border-border bg-[#fafbfc]"
+            aria-label={`Abrir la foto del combustible de ${detalleCerrada.equipo}`}
+          >
+            <img
+              src={detalleCerrada.pumpPhotoUrl}
+              alt={`Foto del combustible de ${detalleCerrada.equipo}`}
+              className="max-h-[420px] w-full object-contain"
+              loading="lazy"
+            />
+          </a>
+          <span className="text-[12.5px] text-muted-foreground">Toca la foto para verla completa.</span>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Observaciones" />

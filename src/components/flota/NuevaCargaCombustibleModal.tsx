@@ -52,6 +52,7 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
     handleSubmit,
     watch,
     setValue,
+    getFieldState,
     formState: { errors },
   } = useForm<CargaManualValues>({
     resolver: zodResolver(CargaManualSchema),
@@ -64,15 +65,22 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
 
   // OCR de la foto (si hay) sugiere los litros, editable — mismo flujo que
   // Terreno.
-  const photoFlow = usePhotoCaptureFlow((value) => setValue('litros', value, { shouldValidate: true }));
+  // Solo si los litros no se escribieron a mano: aquí llegan registros
+  // anteriores con foto del papel, y una lectura mala del OCR no debe pisar
+  // lo que el administrador ya tipeó.
+  const photoFlow = usePhotoCaptureFlow((value) => {
+    if (!getFieldState('litros').isDirty) setValue('litros', value, { shouldValidate: true });
+  });
 
-  // Con EXIF, la fecha real de captura reemplaza el "ahora" inicial; el campo
-  // sigue editable (ver `RegistrarCargaCombustibleModal`).
+  // Con EXIF, la fecha real de captura reemplaza el "ahora" inicial, pero
+  // solo si la fecha no se tocó: un registro anterior (foto del papel, sin
+  // EXIF, o sacada hoy a un papel viejo) quedaba con la fecha de hoy aunque
+  // el administrador ya hubiera puesto la del día de la carga.
   useEffect(() => {
-    if (!photoFlow.file || photoFlow.isReadingPhoto) return;
-    const capturada = photoFlow.captureDate ?? new Date();
-    setValue('fecha', toDateTimeLocal(capturada), { shouldValidate: true });
-  }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue]);
+    if (!photoFlow.file || photoFlow.isReadingPhoto || !photoFlow.captureDate) return;
+    if (getFieldState('fecha').isDirty) return;
+    setValue('fecha', toDateTimeLocal(photoFlow.captureDate), { shouldValidate: true });
+  }, [photoFlow.file, photoFlow.isReadingPhoto, photoFlow.captureDate, setValue, getFieldState]);
 
   const cerrar = () => {
     photoFlow.resetPhoto();
@@ -320,8 +328,8 @@ export function NuevaCargaCombustibleModal({ onClose }: { onClose: () => void })
                 onSelect={(f) => void photoFlow.handleSelectPhoto(f)}
                 requerida={false}
                 staleQuestion="¿es la carga registrada?"
-                subtitle="Si la tenés, debe verse el totalizador del surtidor"
-                title="Foto del surtidor (opcional)"
+                subtitle="Del surtidor o, si es una carga anterior, del registro en papel"
+                title="Foto de la carga (opcional)"
               />
             </form>
           </Modal.Body>
