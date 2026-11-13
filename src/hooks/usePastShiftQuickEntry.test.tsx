@@ -1,23 +1,35 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { enqueueClosedCardMock, enqueueClosedCardPairMock, toastDangerMock } = vi.hoisted(() => ({
+const { enqueueClosedCardMock, enqueueClosedCardPairMock, enqueueExitReportMock, toastDangerMock } = vi.hoisted(() => ({
   enqueueClosedCardMock: vi.fn(),
   enqueueClosedCardPairMock: vi.fn(),
+  enqueueExitReportMock: vi.fn(),
   toastDangerMock: vi.fn(),
 }));
 vi.mock('../offline/outbox', () => ({
   enqueueClosedCard: enqueueClosedCardMock,
   enqueueClosedCardPair: enqueueClosedCardPairMock,
+  enqueueExitReport: enqueueExitReportMock,
 }));
 vi.mock('@heroui/react', () => ({ toast: { danger: toastDangerMock, success: vi.fn() } }));
 vi.mock('../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: vi.fn() }));
 
+// El outbox EN VIVO (tarjetas de ESTE turno aún pendientes, de un guardado
+// anterior) — cada test lo puebla antes de renderizar el hook.
+let outboxOps: OutboxOp[] = [];
+vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => outboxOps }));
+
 import { usePastShiftQuickEntry } from './usePastShiftQuickEntry';
 import { contextoDeTurno } from '../lib/turno';
 import type { Equipment } from '../types/equipment';
+import type { OutboxOp } from '../offline/db';
+import type { ShiftSummary } from '../types/shift';
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  outboxOps = [];
+  vi.clearAllMocks();
+});
 
 const CTX = contextoDeTurno('DIURNO', new Date(2026, 9, 20)); // 2026-10-20
 const EQUIPOS = [
@@ -25,10 +37,46 @@ const EQUIPOS = [
   { id: 'e2', internalCode: 'SEM-04', type: 'Semirremolque', currentHourmeter: 3180 },
 ] as Equipment[];
 
-function hook(checklistSinAceptar?: ReadonlyMap<string, string>, esDiaPasado = true) {
+function hook(
+  checklistSinAceptar?: ReadonlyMap<string, string>,
+  esDiaPasado = true,
+  turnosRegistrados?: ShiftSummary[],
+) {
   return renderHook(() =>
-    usePastShiftQuickEntry({ ctx: CTX, disponibles: EQUIPOS, userId: 'u1', checklistSinAceptar, esDiaPasado }),
+    usePastShiftQuickEntry({
+      ctx: CTX,
+      disponibles: EQUIPOS,
+      userId: 'u1',
+      checklistSinAceptar,
+      esDiaPasado,
+      turnosRegistrados,
+    }),
   );
+}
+
+/** Un `ShiftSummary` mínimo para los tests del reporte automático. */
+function turnoResumen(supervisorId: string, cardIds: string[]): ShiftSummary {
+  return {
+    id: `shift-${supervisorId}`,
+    date: '2026-10-20',
+    type: 'DIURNO',
+    supervisorId,
+    cards: cardIds.map((id) => ({ id, equipoId: 'e9' })),
+    exitReports: [],
+  } as unknown as ShiftSummary;
+}
+
+function filaCompleta(result: { current: ReturnType<typeof usePastShiftQuickEntry> }) {
+  act(() => {
+    result.current.setFila(0, {
+      equipoId: 'e1',
+      operatorId: 'op_1',
+      inicial: '100',
+      final: '110',
+      litros: '5',
+      foto: FOTO,
+    });
+  });
 }
 
 const FOTO = new File([new Uint8Array([1, 2, 3])], 'surtidor.jpg', { type: 'image/jpeg' });
@@ -366,5 +414,105 @@ describe('usePastShiftQuickEntry', () => {
     expect(result.current.equiposDeFila(1).map((e) => e.id)).toEqual(['e2']);
     // La propia fila sigue viendo su equipo elegido.
     expect(result.current.equiposDeFila(0).map((e) => e.id)).toContain('e1');
+  });
+});
+
+// El guardado ES el envío: las tarjetas del turno pasado nacen cerradas y el
+// flujo normal del reporte (que cuenta tarjetas "en curso") nunca las ve, así
+// que sin esto el día jamás llegaba al Informe diario equipos del
+// administrador ni tenía PDF.
+describe('usePastShiftQuickEntry — reporte de salida automático', () => {
+  it('guardar() encola el reporte de salida del turno DESPUÉS de las tarjetas, con sus ids', async () => {
+    const { result } = hook();
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    expect(enqueueExitReportMock).toHaveBeenCalledTimes(1);
+    const [userId, input] = enqueueExitReportMock.mock.calls[0]!;
+    expect(userId).toBe('u1');
+    const [, open1] = enqueueClosedCardMock.mock.calls[0]!;
+    expect(input).toMatchObject({ shiftDate: '2026-10-20', shiftType: 'DIURNO', cardIds: [open1.id] });
+    // Después de las tarjetas: el outbox hace depender el reporte de ellas.
+    expect(enqueueExitReportMock.mock.invocationCallOrder[0]).toBeGreaterThan(
+      enqueueClosedCardMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('el reporte suma las tarjetas que MI turno ya tenía registradas (no las de otro supervisor)', async () => {
+    const { result } = hook(undefined, true, [turnoResumen('u1', ['prev-1']), turnoResumen('u2', ['ajena-1'])]);
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    const [, input] = enqueueExitReportMock.mock.calls[0]!;
+    const [, open1] = enqueueClosedCardMock.mock.calls[0]!;
+    expect(input.cardIds).toContain('prev-1');
+    expect(input.cardIds).toContain(open1.id);
+    expect(input.cardIds).not.toContain('ajena-1');
+  });
+
+  it('las tarjetas de ESTE turno aún pendientes en el outbox (guardado anterior) también entran', async () => {
+    outboxOps = [
+      { id: 'off-1', type: 'registerClosedCard', payload: { shiftDate: '2026-10-20', shiftType: 'DIURNO' } },
+      { id: 'otro-dia', type: 'registerClosedCard', payload: { shiftDate: '2026-10-19', shiftType: 'DIURNO' } },
+      { id: 'otro-tipo', type: 'openCard', payload: { shiftDate: '2026-10-20', shiftType: 'NOCTURNO' } },
+    ] as unknown as OutboxOp[];
+    const { result } = hook();
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    const [, input] = enqueueExitReportMock.mock.calls[0]!;
+    expect(input.cardIds).toContain('off-1');
+    expect(input.cardIds).not.toContain('otro-dia');
+    expect(input.cardIds).not.toContain('otro-tipo');
+  });
+
+  it('si una fila falla, el reporte NO se encola (saldrá con el reintento, ya completo)', async () => {
+    enqueueClosedCardMock.mockRejectedValueOnce(new Error('Foto inválida'));
+    const { result } = hook();
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(false);
+    });
+
+    expect(enqueueExitReportMock).not.toHaveBeenCalled();
+  });
+
+  it('el turno terminado de HOY (par legacy) también envía su reporte al guardar', async () => {
+    const { result } = hook(undefined, false);
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    expect(enqueueExitReportMock).toHaveBeenCalledTimes(1);
+    const [, input] = enqueueExitReportMock.mock.calls[0]!;
+    const [, open1] = enqueueClosedCardPairMock.mock.calls[0]!;
+    expect(input.cardIds).toEqual([open1.id]);
+  });
+
+  it('una tarjeta repetida entre lo previo, lo pendiente y lo recién guardado entra UNA vez', async () => {
+    outboxOps = [
+      { id: 'prev-1', type: 'registerClosedCard', payload: { shiftDate: '2026-10-20', shiftType: 'DIURNO' } },
+    ] as unknown as OutboxOp[];
+    const { result } = hook(undefined, true, [turnoResumen('u1', ['prev-1'])]);
+    filaCompleta(result);
+
+    await act(async () => {
+      expect(await result.current.guardar()).toBe(true);
+    });
+
+    const [, input] = enqueueExitReportMock.mock.calls[0]!;
+    expect(input.cardIds.filter((id: string) => id === 'prev-1')).toHaveLength(1);
   });
 });

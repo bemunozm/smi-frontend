@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-const { enqueueClosedCardMock, enqueueClosedCardPairMock } = vi.hoisted(() => ({
+const { enqueueClosedCardMock, enqueueClosedCardPairMock, enqueueExitReportMock } = vi.hoisted(() => ({
   enqueueClosedCardMock: vi.fn(),
   enqueueClosedCardPairMock: vi.fn(),
+  enqueueExitReportMock: vi.fn(),
 }));
 vi.mock('../../offline/outbox', () => ({
   enqueueClosedCard: enqueueClosedCardMock,
   enqueueClosedCardPair: enqueueClosedCardPairMock,
+  enqueueExitReport: enqueueExitReportMock,
 }));
 vi.mock('../../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: vi.fn() }));
 vi.mock('../../hooks/useCurrentUser', () => ({

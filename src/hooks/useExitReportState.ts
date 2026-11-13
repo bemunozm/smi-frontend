@@ -84,8 +84,14 @@ export function useExitReportState({
     reporteEstado = 'sin-enviar';
   }
 
+  // `enCurso.length > 0`: con todo cerrado (p. ej. un turno pasado) no habría
+  // qué mandar — `enviarReporte()` envía los ids de `enCurso` y con 0 el
+  // botón era un no-op silencioso («Reenviar con 0 equipos»).
   const reportePuedeReenviar =
-    reporteEstado === 'enviado' && reporteUltimo != null && enCurso.length !== reporteUltimo.cardCount;
+    reporteEstado === 'enviado' &&
+    reporteUltimo != null &&
+    enCurso.length > 0 &&
+    enCurso.length !== reporteUltimo.cardCount;
 
   // Doble-toque/duplicados: sin este guard, dos toques antes de que
   // `liveQuery` alcance a reflejar el primer encolado (`opsReporte` todavía

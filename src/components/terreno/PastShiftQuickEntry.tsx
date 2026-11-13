@@ -7,6 +7,7 @@ import type { ContextoTurno } from '../../lib/turno';
 import type { Equipment } from '../../types/equipment';
 import { opcionesOperador } from '../../lib/operadores-habituales';
 import type { Operator } from '../../types/operator';
+import type { ShiftSummary } from '../../types/shift';
 import { Boton, Card, CardHead, Campo, Form, Hint, Input, Selector } from './ui';
 
 /** Avisos informativos del equipo en la planilla — NO bloquean: el estado de
@@ -33,6 +34,7 @@ export function PastShiftQuickEntry({
   operadores,
   checklistSinAceptar,
   esDiaPasado,
+  turnosRegistrados,
 }: {
   ctx: ContextoTurno;
   disponibles: Equipment[];
@@ -42,9 +44,19 @@ export function PastShiftQuickEntry({
   /** El día elegido es estrictamente anterior a hoy: ahí el backend deja
    * registrar equipos no operativos. */
   esDiaPasado: boolean;
+  /** Los turnos ya existentes del día elegido (`usePastShiftSummary`) — las
+   * tarjetas previas de MI turno entran al reporte automático del guardado. */
+  turnosRegistrados?: ShiftSummary[];
 }) {
   const { user } = useCurrentUser();
-  const q = usePastShiftQuickEntry({ ctx, disponibles, userId: user?.id, checklistSinAceptar, esDiaPasado });
+  const q = usePastShiftQuickEntry({
+    ctx,
+    disponibles,
+    userId: user?.id,
+    checklistSinAceptar,
+    esDiaPasado,
+    turnosRegistrados,
+  });
 
   return (
     <Card>
@@ -164,7 +176,8 @@ export function PastShiftQuickEntry({
         </Boton>
         <Hint>
           Cada fila queda como tarjeta cerrada de este turno, con su foto del combustible (obligatoria; litros vacío =
-          turno sin carga). Al final envía el reporte de salida como siempre.
+          turno sin carga). Al guardar se envía solo el reporte de salida del día: llega con su PDF al Informe diario
+          equipos del administrador.
         </Hint>
       </Form>
     </Card>

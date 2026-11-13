@@ -6,9 +6,11 @@ import { LITROS_FUERA_DE_RANGO, LITROS_MAX } from './useCierreForm';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
 import { generateUuid } from '../lib/uuid';
-import { enqueueClosedCard, enqueueClosedCardPair } from '../offline/outbox';
+import type { OpenCardOp, RegisterClosedCardOp } from '../offline/db';
+import { enqueueClosedCard, enqueueClosedCardPair, enqueueExitReport } from '../offline/outbox';
+import { useOutboxOps } from '../offline/useOutboxOps';
 import type { Equipment } from '../types/equipment';
-import type { ShiftType } from '../types/shift';
+import type { ShiftSummary, ShiftType } from '../types/shift';
 
 /** Una fila de la planilla: equipo · operador · horómetros · litros · foto.
  * Los números en texto crudo del input; se parsean recién al validar/guardar. */
@@ -57,6 +59,10 @@ export interface UsePastShiftQuickEntryParams {
    * noche): `/closed` lo rechazaría (`SHIFT_NOT_FINISHED`), así que va por el
    * par legacy apertura+cierre, con las reglas normales del flujo vivo. */
   esDiaPasado: boolean;
+  /** Los turnos ya existentes del día elegido (`usePastShiftSummary`): las
+   * tarjetas previas de MI turno entran también al reporte automático, para
+   * que el último PDF enviado sea la foto completa del día. */
+  turnosRegistrados?: ShiftSummary[];
 }
 
 export interface UsePastShiftQuickEntryResult {
@@ -81,7 +87,10 @@ export interface UsePastShiftQuickEntryResult {
 /**
  * Carga rápida del turno pasado: la planilla de papel (una fila por equipo)
  * convertida en tarjetas abiertas+cerradas de ese turno. Sub-flujo del modo
- * "Registrar turno pasado" de Informe diario equipos.
+ * "Registrar turno pasado" de Informe diario equipos. `guardar()` encola
+ * también el reporte de salida del día: las tarjetas nacen cerradas, así que
+ * el flujo normal del reporte (que cuenta las "en curso") nunca las vería y
+ * el día no llegaría al Informe diario equipos del administrador ni a su PDF.
  */
 export function usePastShiftQuickEntry({
   ctx,
@@ -89,9 +98,11 @@ export function usePastShiftQuickEntry({
   userId,
   checklistSinAceptar = SIN_CHECKLISTS_PENDIENTES,
   esDiaPasado,
+  turnosRegistrados,
 }: UsePastShiftQuickEntryParams): UsePastShiftQuickEntryResult {
   const [filas, setFilas] = useState<QuickEntryRow[]>(() => [filaVacia()]);
   const [isGuardando, setIsGuardando] = useState(false);
+  const ops = useOutboxOps(userId);
 
   const setFila = (i: number, patch: Partial<QuickEntryRow>) =>
     setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
@@ -141,6 +152,7 @@ export function usePastShiftQuickEntry({
       // Turno terminado de HOY → par legacy apertura+cierre (ver el jsdoc de
       // `esDiaPasado`). Ambos guardan la fila con SU foto, atómicos.
       const encolar = esDiaPasado ? enqueueClosedCard : enqueueClosedCardPair;
+      const idsEncoladas: string[] = [];
       for (const f of completas) {
         const id = generateUuid();
         const capturedAt = new Date().toISOString();
@@ -164,7 +176,31 @@ export function usePastShiftQuickEntry({
           f.foto!,
         );
         guardadas.add(f.key);
+        idsEncoladas.push(id);
       }
+      // El guardado ES el envío del reporte de salida del día (con su PDF
+      // para el Informe diario equipos del administrador) — se encola
+      // DESPUÉS de las tarjetas y el outbox lo hace depender de ellas, así
+      // el PDF siempre las incluye. Entran también las tarjetas que MI
+      // turno ya tenía (`turnosRegistrados`) y las de un guardado anterior
+      // aún pendientes en el outbox: cada envío es la foto completa del día
+      // (un turno puede tener más de un envío; el último manda).
+      const previas = (turnosRegistrados ?? []).find((t) => t.supervisorId === userId)?.cards.map((c) => c.id) ?? [];
+      const pendientes = ops
+        .filter(
+          (op): op is OpenCardOp | RegisterClosedCardOp => op.type === 'openCard' || op.type === 'registerClosedCard',
+        )
+        .filter((op) => op.payload.shiftDate === toDateOnly(ctx.fecha) && op.payload.shiftType === ctx.turno)
+        .map((op) => op.id);
+      // `slice(0, 100)`: tope `ArrayMaxSize(100)` de `CreateShiftReportDto`.
+      const cardIds = [...new Set([...previas, ...pendientes, ...idsEncoladas])].slice(0, 100);
+      await enqueueExitReport(userId, {
+        id: generateUuid(),
+        shiftDate: toDateOnly(ctx.fecha),
+        shiftType: ctx.turno as ShiftType,
+        cardIds,
+        requestedAt: new Date().toISOString(),
+      });
       avisarGuardadoEnCola();
       setFilas([filaVacia()]);
       return true;
