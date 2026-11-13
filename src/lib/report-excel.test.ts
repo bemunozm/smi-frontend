@@ -14,7 +14,7 @@ const trabajo = (over: Partial<TrabajoExtraordinario> & Pick<TrabajoExtraordinar
   totalHoras: 1,
   actividades: ['REGULACION_CARGA', 'LIMPIEZA_CANCHA'],
   detalleActividades: [
-    { actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', planta: null, horas: 0.6 },
+    { actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', planta: null, horas: 0.6, descripcion: 'Romana 2' },
     { actividad: 'LIMPIEZA_CANCHA', lugar: 'VARIADO', planta: null, horas: 0.4 },
   ],
   otraActividad: null,
@@ -76,8 +76,8 @@ describe('construirExcelReport', () => {
 
     // Encabezado: azul del shell de SMI, texto blanco y filtros.
     expect(ws.getCell('A4').value).toBe('Item');
-    expect(ws.getCell('J4').value).toBe('HM_Act');
-    expect(ws.getCell('M4').value).toBe('Total_Horas');
+    expect(ws.getCell('K4').value).toBe('HM_Act');
+    expect(ws.getCell('N4').value).toBe('Total_Horas');
     expect(ws.getCell('A4').fill).toMatchObject({ fgColor: { argb: 'FF1E293B' } });
     expect(ws.getCell('A4').font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } });
     expect(ws.autoFilter).toBeTruthy();
@@ -92,8 +92,10 @@ describe('construirExcelReport', () => {
     expect(ws.getCell('G5').value).toBe('4509');
     expect(ws.getCell('H5').value).toBe('Transporte');
     expect(ws.getCell('I5').value).toBe('Regulación y carga');
-    expect(ws.getCell('J5').value).toBeCloseTo(0.6);
-    expect(ws.getCell('M5').value).toBe(1);
+    expect(ws.getCell('J4').value).toBe('Detalle actividad');
+    expect(ws.getCell('J5').value).toBe('Romana 2');
+    expect(ws.getCell('K5').value).toBeCloseTo(0.6);
+    expect(ws.getCell('N5').value).toBe(1);
 
     // t1, segunda actividad: folio/equipo/operador repetidos, lugar y HM
     // propios, y el total del trabajo VACÍO (no se duplica al sumar).
@@ -101,14 +103,14 @@ describe('construirExcelReport', () => {
     expect(ws.getCell('D6').value).toBe('SEM 02');
     expect(ws.getCell('H6').value).toBe('Variado');
     expect(ws.getCell('I6').value).toBe('Limpieza de cancha');
-    expect(ws.getCell('J6').value).toBeCloseTo(0.4);
-    expect(ws.getCell('M6').value == null || ws.getCell('M6').value === '').toBe(true);
+    expect(ws.getCell('K6').value).toBeCloseTo(0.4);
+    expect(ws.getCell('N6').value == null || ws.getCell('N6').value === '').toBe(true);
 
     // t2: la fila PLANTA muestra la planta concreta, y lleva cebra (por trabajo).
     expect(ws.getCell('A7').value).toBe('Noche');
     expect(ws.getCell('G7').value).toBe('4510');
     expect(ws.getCell('H7').value).toBe('Planta 4');
-    expect(ws.getCell('J7').value).toBeCloseTo(2.5);
+    expect(ws.getCell('K7').value).toBeCloseTo(2.5);
     expect(ws.getCell('A7').fill).toMatchObject({ fgColor: { argb: 'FFF1F5F9' } });
     // Las filas de t1 (trabajo par) no llevan cebra.
     expect(ws.getCell('A6').fill?.type === 'pattern' ? ws.getCell('A6').fill : undefined).not.toMatchObject({
@@ -118,11 +120,11 @@ describe('construirExcelReport', () => {
     // t3 legacy: una sola fila, actividades juntas y sin HM por actividad.
     expect(ws.getCell('I8').value).toBe('Soltar material');
     expect(ws.getCell('H8').value == null || ws.getCell('H8').value === '').toBe(true);
-    expect(ws.getCell('J8').value == null || ws.getCell('J8').value === '').toBe(true);
-    expect(ws.getCell('M8').value).toBe(3);
+    expect(ws.getCell('K8').value == null || ws.getCell('K8').value === '').toBe(true);
+    expect(ws.getCell('N8').value).toBe(3);
 
     // Fila de total del período: suma de los TRABAJOS (1 + 2.5 + 3).
     expect(ws.getCell('I9').value).toBe('Total horas del período');
-    expect(ws.getCell('M9').value).toBeCloseTo(6.5);
+    expect(ws.getCell('N9').value).toBeCloseTo(6.5);
   }, 30_000);
 });
