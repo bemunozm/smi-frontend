@@ -14,6 +14,7 @@ import {
   TIPOS_ELEGIBLES,
   actividadLabel,
   destinoLabel,
+  plantasDeFila,
   tipoAlCambiarActividad,
   type TrabajoExtraForm,
   type TrabajoExtraFormInput,
@@ -59,6 +60,7 @@ import {
   Card,
   CardHead,
   Chip,
+  ChipSeleccion,
   ChipContexto,
   Cifras,
   Filas,
@@ -135,7 +137,7 @@ const FAENAS = [
 interface FilaDetalleInput {
   actividad: string;
   lugar: string;
-  planta?: string;
+  plantas?: string[];
   /** Texto tal como se escribe (`1,5`): el schema lo lee con `leerNumero`. */
   horas?: string | number;
   /** Qué se hizo en esta actividad (p. ej. en qué silo o planta). */
@@ -148,7 +150,7 @@ const numeroEscrito = (v: unknown): number => {
   return typeof n === 'number' ? n : Number.NaN;
 };
 
-const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', planta: '', horas: undefined, descripcion: '' });
+const filaVacia = (): FilaDetalleInput => ({ actividad: '', lugar: '', plantas: [], horas: undefined, descripcion: '' });
 
 export function TrabajosExtraView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -394,7 +396,7 @@ export function TrabajosExtraView() {
                 actividad: f.actividad,
                 // Una limpieza de silos guardada con otro tipo se corrige acá.
                 lugar: f.actividad === ACTIVIDAD_DE_PLANTA ? 'PLANTA' : f.lugar,
-                planta: f.planta ?? '',
+                plantas: plantasDeFila(f),
                 horas: formatDecimalInput(f.horas),
                 descripcion: f.descripcion ?? '',
               }))
@@ -841,7 +843,7 @@ function FormularioTrabajo({
                         valor={fila.actividad}
                         onChange={(v) => {
                           const lugar = tipoAlCambiarActividad(v, fila.lugar);
-                          cambiarFila(i, { actividad: v, lugar, ...(lugar !== 'PLANTA' ? { planta: '' } : {}) });
+                          cambiarFila(i, { actividad: v, lugar, ...(lugar !== 'PLANTA' ? { plantas: [] } : {}) });
                         }}
                         opciones={ACTIVIDADES.map((a) => ({ valor: a.value, titulo: a.label }))}
                       />
@@ -874,7 +876,7 @@ function FormularioTrabajo({
                         etiqueta={`Tipo de la actividad ${i + 1}`}
                         placeholder="Elige el tipo"
                         valor={fila.lugar}
-                        onChange={(v) => cambiarFila(i, { lugar: v, planta: '' })}
+                        onChange={(v) => cambiarFila(i, { lugar: v, plantas: [] })}
                         opciones={TIPOS_ELEGIBLES.map((d) => ({ valor: d.value as string, titulo: d.label }))}
                       />
                     </Campo>
@@ -891,15 +893,35 @@ function FormularioTrabajo({
                   </Campo>
                 </div>
                 {fila.lugar === 'PLANTA' && (
-                  <Campo label="¿En qué planta?" requerido error={err?.planta?.message}>
-                    <Selector
-                      etiqueta={`Planta de la actividad ${i + 1}`}
-                      placeholder="Elegí la planta"
-                      valor={fila.planta ?? ''}
-                      onChange={(nombre) => cambiarFila(i, { planta: nombre })}
-                      opciones={plantas.map((p) => ({ valor: p.nombre, titulo: p.nombre }))}
-                    />
-                  </Campo>
+                  // Una limpieza de silos puede abarcar varias plantas (PP1 y PP4):
+                  // se marcan todas las que correspondan.
+                  <div
+                    role="group"
+                    aria-label={`Plantas de la actividad ${i + 1}`}
+                    className="flex flex-col gap-1.5"
+                  >
+                    <Label requerido>¿En qué plantas?</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[...new Set([...plantas.map((p) => p.nombre), ...(fila.plantas ?? [])])].map((nombre) => {
+                        const elegidas = fila.plantas ?? [];
+                        const activo = elegidas.includes(nombre);
+                        return (
+                          <ChipSeleccion
+                            key={nombre}
+                            activo={activo}
+                            onToggle={() =>
+                              cambiarFila(i, {
+                                plantas: activo ? elegidas.filter((p) => p !== nombre) : [...elegidas, nombre],
+                              })
+                            }
+                          >
+                            {nombre}
+                          </ChipSeleccion>
+                        );
+                      })}
+                    </div>
+                    <Hint>{err?.plantas?.message ?? 'Marca todas las plantas donde se hizo.'}</Hint>
+                  </div>
                 )}
                 <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>
                   <Textarea

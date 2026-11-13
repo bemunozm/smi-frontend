@@ -112,7 +112,7 @@ describe('trabajoExtraFormSchema', () => {
     expect(
       trabajoExtraFormSchema.safeParse({
         ...base,
-        detalle: [fila({ lugar: 'PLANTA', planta: 'Planta 1' })],
+        detalle: [fila({ lugar: 'PLANTA', plantas: ['Planta 1'] })],
       }).success,
     ).toBe(false);
     // Con limpieza de silos pero sin decir cuál planta → tampoco.
@@ -127,11 +127,24 @@ describe('trabajoExtraFormSchema', () => {
       trabajoExtraFormSchema.safeParse({
         ...base,
         detalle: [
-          fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA', planta: 'Planta 4' }),
+          fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA', plantas: ['Planta 4'] }),
           fila({ actividad: 'SOLTAR_MATERIAL' }),
         ],
       }).success,
     ).toBe(true);
+    // Varias plantas (PP1 y PP4) → válido; la lista vacía → no.
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        detalle: [fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA', plantas: ['Planta 1', 'Planta 4'] })],
+      }).success,
+    ).toBe(true);
+    expect(
+      trabajoExtraFormSchema.safeParse({
+        ...base,
+        detalle: [fila({ actividad: 'LIMPIEZA_SILOS', lugar: 'PLANTA', plantas: [] })],
+      }).success,
+    ).toBe(false);
   });
 
   it('al registrar, cada actividad lleva su descripción', () => {
@@ -174,7 +187,7 @@ describe('trabajoExtraEdicionSchema (trabajos legacy)', () => {
     expect(
       trabajoExtraEdicionSchema.safeParse({
         ...base,
-        detalle: [fila({ lugar: 'PLANTA', planta: 'Planta 1' })],
+        detalle: [fila({ lugar: 'PLANTA', plantas: ['Planta 1'] })],
       }).success,
     ).toBe(false);
   });

@@ -360,6 +360,7 @@ describe('TrabajosExtraView', () => {
     qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
     qc.setQueryData(['trabajos-extra'], []);
     qc.setQueryData(['operators', { isActive: true }], [OPERADOR]);
+    qc.setQueryData(['plantas'], [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }]);
 
     render(
       <QueryClientProvider client={qc}>
@@ -377,12 +378,19 @@ describe('TrabajosExtraView', () => {
     // Limpieza de silos: tipo Planta fijo y la pregunta de en qué planta.
     completarFila(1, { actividad: 'Limpieza de silos' });
     expect((screen.getByLabelText('Tipo de la actividad 1') as HTMLInputElement).value).toBe('Planta · automático');
-    expect(screen.getByLabelText('Planta de la actividad 1')).toBeTruthy();
+    // Puede abarcar varias plantas: se marcan las que correspondan.
+    const grupo = screen.getByRole('group', { name: 'Plantas de la actividad 1' });
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 4' }));
+    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(grupo).getByRole('button', { name: 'Planta 4' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Planta 1' }));
+    expect(within(grupo).getByRole('button', { name: 'Planta 1' }).getAttribute('aria-pressed')).toBe('false');
 
     // Volver a otra actividad deja el tipo por elegir.
     completarFila(1, { actividad: 'Soltar material' });
     expect(screen.getByLabelText('Tipo de la actividad 1').textContent).not.toContain('Planta');
-    expect(screen.queryByLabelText('Planta de la actividad 1')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Plantas de la actividad 1' })).toBeNull();
   });
 
   /**
@@ -437,9 +445,9 @@ describe('TrabajosExtraView', () => {
       operatorId: 'op_1',
       horometroInicial: 100,
       horometroFinal: 112,
-      // El desglose viaja normalizado: planta solo en filas PLANTA (null acá).
+      // El desglose viaja normalizado: plantas solo en filas PLANTA (vacías acá).
       detalle: [
-        { actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', planta: null, horas: 12, descripcion: 'Frente norte' },
+        { actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', plantas: [], horas: 12, descripcion: 'Frente norte' },
       ],
       descripcion: 'Carga de material extra',
       reportNumero: '4509',

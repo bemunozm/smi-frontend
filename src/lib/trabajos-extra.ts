@@ -12,26 +12,41 @@
  */
 
 import { actividadLabel, destinoLabel } from '../types/trabajosExtra';
+import { plantasDeFila } from '../types/trabajosExtra';
 import type { ActividadDetalle, DetalleActividadRegistro } from '../types/trabajosExtra';
 
 export const COBRO_MINIMO_HORAS = 1;
 
+/** Una fila del desglose como viaja al servidor (POST y PATCH). */
+export interface DetalleActividadCuerpo {
+  actividad: string;
+  lugar: string;
+  plantas: string[];
+  horas: number;
+  descripcion: string | null;
+}
+
 /**
- * El desglose en su forma de servidor (`planta` solo en filas PLANTA, `horas`
- * a 2 decimales — el mismo redondeo que aplica el backend): sirve de cuerpo
- * del PATCH y de término de comparación contra `detalleActividades`, para que
- * un formulario abierto y guardado sin tocar no marque el desglose como
- * cambiado. OJO: el desglose NO entra en la precondición `X-Expected` (el
- * header solo acepta primitivos); el servidor audita el reemplazo completo.
+ * El desglose en su forma de servidor (`plantas` solo en filas PLANTA, sin
+ * repetir; `horas` a 2 decimales — el mismo redondeo que aplica el backend):
+ * sirve de cuerpo del POST/PATCH y de término de comparación contra
+ * `detalleActividades`, para que un formulario abierto y guardado sin tocar no
+ * marque el desglose como cambiado. OJO: el desglose NO entra en la
+ * precondición `X-Expected` (el header solo acepta primitivos); el servidor
+ * audita el reemplazo completo.
  */
 export function detalleComparable(
   filas: readonly (ActividadDetalle | DetalleActividadRegistro)[] | null | undefined,
-): DetalleActividadRegistro[] | undefined {
+): DetalleActividadCuerpo[] | undefined {
   if (filas == null || filas.length === 0) return undefined;
   return filas.map((f) => ({
     actividad: f.actividad,
     lugar: f.lugar,
-    planta: f.lugar === 'PLANTA' ? (f.planta?.trim() || null) : null,
+    plantas:
+      f.lugar === 'PLANTA'
+        ? [...new Set(plantasDeFila({ plantas: f.plantas, planta: 'planta' in f ? f.planta : null }).map((p) => p.trim()))]
+            .filter((p) => p !== '')
+        : [],
     horas: Number(Number(f.horas).toFixed(2)),
     descripcion: f.descripcion?.trim() || null,
   }));

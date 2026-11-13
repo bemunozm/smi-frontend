@@ -265,7 +265,7 @@ describe('TrabajosExtraAdminView', () => {
           turno: 'DIURNO',
           horometroInicial: 1200,
           horometroFinal: 1212,
-          detalle: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', horas: 12, descripcion: 'Romana 2' }],
+          detalle: [{ actividad: 'REGULACION_CARGA', lugar: 'TRANSPORTE', plantas: [], horas: 12, descripcion: 'Romana 2' }],
           descripcion: 'Carga de material',
           reportNumero: '4509',
         }),

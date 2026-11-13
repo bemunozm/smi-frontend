@@ -67,10 +67,9 @@ const actividadValues = ACTIVIDADES.map((a) => a.value) as [string, ...string[]]
 const actividadDetalleSchema = z.object({
   actividad: z.enum(actividadValues, { message: 'Elegí la actividad' }),
   lugar: z.enum(['TRANSPORTE', 'PLANTA', 'VARIADO'], { message: 'Elige el tipo' }),
-  /** En cuál planta (catálogo del reporte diario) cuando `lugar` es PLANTA.
-   * `null` es la forma canónica de «no aplica» (la misma que guarda el
-   * servidor): así el payload normalizado sigue siendo de esta forma. */
-  planta: z.string().nullable().optional(),
+  /** En qué plantas (catálogo del reporte diario) cuando `lugar` es PLANTA:
+   * una limpieza de silos puede abarcar varias (PP1 y PP4). Vacío = no aplica. */
+  plantas: z.array(z.string()).optional(),
   // Texto o número: punto o coma sueltos son el decimal (`lib/forms.ts#leerNumero`).
   horas: z.preprocess(
     leerNumero,
@@ -94,10 +93,19 @@ export type ActividadDetalle = z.infer<typeof actividadDetalleSchema>;
 export interface DetalleActividadRegistro {
   actividad: string;
   lugar: string;
+  /** Las plantas unidas por «, » (`PP1, PP4`) — la forma que se muestra. */
   planta: string | null;
+  /** Las plantas por separado — ausente en filas anteriores (una sola, en `planta`). */
+  plantas?: string[] | null;
   horas: number;
   /** Qué se hizo en la actividad — `null`/ausente en filas anteriores al campo. */
   descripcion?: string | null;
+}
+
+/** Las plantas de una fila: la lista nueva o, en una fila anterior, la única. */
+export function plantasDeFila(f: { planta?: string | null; plantas?: readonly string[] | null }): string[] {
+  if (f.plantas?.length) return [...f.plantas];
+  return f.planta?.trim() ? [f.planta.trim()] : [];
 }
 
 const camposTrabajoExtra = z
@@ -172,8 +180,8 @@ const reglasTrabajoExtra = (
         message: 'Solo la limpieza de silos es de tipo Planta: elige Transporte o Variado',
         path: ['detalle', i, 'lugar'],
       });
-    } else if (!f.planta?.trim()) {
-      ctx.addIssue({ code: 'custom', message: 'Indicá en qué planta se hizo', path: ['detalle', i, 'planta'] });
+    } else if (!(f.plantas ?? []).some((p) => p.trim() !== '')) {
+      ctx.addIssue({ code: 'custom', message: 'Elige al menos una planta', path: ['detalle', i, 'plantas'] });
     }
   });
 };
@@ -282,6 +290,7 @@ export const TrabajoExtraordinarioSchema = z.object({
         actividad: z.string(),
         lugar: z.string(),
         planta: z.string().nullable(),
+        plantas: z.array(z.string()).nullish(),
         horas: z.number(),
         descripcion: z.string().nullish(),
       }),

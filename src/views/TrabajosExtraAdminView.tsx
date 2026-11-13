@@ -16,6 +16,8 @@ import {
   Table,
   TextArea,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@heroui/react';
 import { Group } from 'react-aria-components/Group';
 import type { DateValue } from 'react-aria-components/Calendar';
@@ -54,6 +56,7 @@ import {
   TIPOS_ELEGIBLES,
   actividadLabel,
   destinoLabel,
+  plantasDeFila,
   tipoAlCambiarActividad,
   trabajoExtraEdicionSchema,
   trabajoExtraFormSchema,
@@ -67,12 +70,12 @@ const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
 interface FilaDetalleAdmin {
   actividad: string;
   lugar: string;
-  planta: string;
+  plantas: string[];
   horas: string;
   descripcion: string;
 }
 
-const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', planta: '', horas: '', descripcion: '' };
+const FILA_VACIA: FilaDetalleAdmin = { actividad: '', lugar: '', plantas: [], horas: '', descripcion: '' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -272,7 +275,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
           actividad: f.actividad,
           // Una limpieza de silos guardada con otro tipo se corrige acá.
           lugar: f.actividad === ACTIVIDAD_DE_PLANTA ? 'PLANTA' : f.lugar,
-          planta: f.planta ?? '',
+          plantas: plantasDeFila(f),
           horas: String(f.horas),
           descripcion: f.descripcion ?? '',
         }))
@@ -306,7 +309,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const detalleEntrada = filas.map((f) => ({
     actividad: f.actividad,
     lugar: f.lugar,
-    planta: f.planta || undefined,
+    plantas: f.plantas,
     horas: f.horas,
     descripcion: f.descripcion.trim() || undefined,
   }));
@@ -516,7 +519,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                           cambiarFila(i, {
                             actividad: String(value),
                             lugar,
-                            ...(lugar !== 'PLANTA' ? { planta: '' } : {}),
+                            ...(lugar !== 'PLANTA' ? { plantas: [] } : {}),
                           });
                         }}
                       >
@@ -548,7 +551,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                           fullWidth
                           placeholder="Tipo"
                           value={fila.lugar}
-                          onChange={(value) => value && cambiarFila(i, { lugar: String(value), planta: '' })}
+                          onChange={(value) => value && cambiarFila(i, { lugar: String(value), plantas: [] })}
                         >
                           <Label>Tipo</Label>
                           <Select.Trigger>
@@ -580,28 +583,28 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                     </div>
 
                     {fila.lugar === 'PLANTA' ? (
-                      <Select
-                        fullWidth
-                        placeholder="Elegir planta"
-                        value={fila.planta}
-                        onChange={(value) => value && cambiarFila(i, { planta: String(value) })}
-                      >
-                        <Label>¿En qué planta?</Label>
-                        <Select.Trigger>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {(plantas ?? []).map((p) => (
-                              <ListBox.Item id={p.nombre} key={p.id} textValue={p.nombre}>
-                                {p.nombre}
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
+                      // Una limpieza de silos puede abarcar varias plantas: se marcan todas.
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-foreground">¿En qué plantas?</span>
+                        <ToggleButtonGroup
+                          aria-label={`Plantas de la actividad ${i + 1}`}
+                          className="flex-wrap"
+                          selectedKeys={new Set(fila.plantas)}
+                          selectionMode="multiple"
+                          onSelectionChange={(keys) =>
+                            cambiarFila(i, { plantas: [...keys].filter((k): k is string => typeof k === 'string') })
+                          }
+                        >
+                          {[...new Set([...(plantas ?? []).map((p) => p.nombre), ...fila.plantas])].map((nombre) => (
+                            <ToggleButton id={nombre} key={nombre}>
+                              {nombre}
+                            </ToggleButton>
+                          ))}
+                        </ToggleButtonGroup>
+                        {fila.plantas.length === 0 ? (
+                          <p className="m-0 text-xs text-danger-soft-foreground">Elige al menos una planta.</p>
+                        ) : null}
+                      </div>
                     ) : null}
 
                     <TextField

@@ -25,7 +25,7 @@ const trabajo: TrabajoExtraordinario = {
 
 const formTrabajo: TrabajoExtraForm = {
   equipoId: 'e1', operatorId: 'op-1', faena: 'Patillo', turno: 'DIURNO', horometroInicial: 1, horometroFinal: 3,
-  detalle: [{ actividad: 'OTRO', lugar: 'VARIADO', planta: null, horas: 2 }],
+  detalle: [{ actividad: 'OTRO', lugar: 'VARIADO', plantas: [], horas: 2 }],
   otraActividad: 'x', descripcion: 'abc', reportNumero: '4509',
 };
 
