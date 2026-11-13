@@ -57,6 +57,11 @@ import { DeleteEquipoAlertDialog, EditEquipoModal } from '../components/flota/Eq
 import { EquipmentDocumentModal } from '../components/flota/EquipmentDocumentModal';
 import { fmtFechaHora, fmtLitros } from '../lib/format';
 import { FuelHistoryTable } from '../components/flota/FuelHistoryTable';
+import {
+  FuelHistoryPopup,
+  UsageHistoryPopup,
+  type EquipmentKpiPopupKind,
+} from '../components/flota/EquipmentKpiPopups';
 import { UsageHistoryList } from '../components/flota/UsageHistoryList';
 import { buildAssignmentDiff, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
@@ -102,15 +107,20 @@ interface KpiTileProps {
   caption: string;
   hero?: boolean;
   toneClass?: string;
+  /** Con él, la tarjeta entera es un botón que abre el popup de detalle. */
+  onOpen?: () => void;
+  ariaLabel?: string;
 }
 
 /** Tarjeta de la fila de KPIs — calca `.kpi`/`.kpi-hero` de
  * `FichaEquipoClientePC.dc.html` (icono con badge de color, label, valor
  * grande en mono y una caption). La primera (uso acumulado) es la única
  * "hero" — borde de acento y valor más grande, igual que el artefacto. */
-function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps) {
-  return (
-    <Card className={hero ? 'border-(--accent)' : undefined}>
+function KpiTile({ icon, label, value, caption, hero, toneClass, onOpen, ariaLabel }: KpiTileProps) {
+  const contenido = (
+    <Card
+      className={`${hero ? 'border-(--accent)' : ''} ${onOpen ? 'h-full transition-colors hover:bg-surface-secondary active:bg-surface-secondary' : ''}`}
+    >
       <Card.Content className="flex flex-col gap-2.5 p-4">
         <span className={`flex h-8.5 w-8.5 items-center justify-center rounded-[9px] ${toneClass ?? DEFAULT_KPI_TONE}`}>
           {icon}
@@ -124,6 +134,17 @@ function KpiTile({ icon, label, value, caption, hero, toneClass }: KpiTileProps)
         <span className="text-[11.5px] leading-snug text-(--muted)">{caption}</span>
       </Card.Content>
     </Card>
+  );
+  if (!onOpen) return contenido;
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="block h-full w-full rounded-(--radius) text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+      onClick={onOpen}
+      type="button"
+    >
+      {contenido}
+    </button>
   );
 }
 
@@ -734,6 +755,8 @@ export function EquipoDetalleView({
   // por `can()`: la mutación no pasa por la cola offline, así que no tiene
   // entrada en el registro de escrituras que tipa `WRITE_ROLES`.
   const puedeRegistrarMantencionAnterior = !enTaller && role === ROLES.ADMIN;
+  // «Ver todo» de los popups apunta a vistas de admin: nunca desde Taller ni para otros roles.
+  const verTodoAdmin = !enTaller && role === ROLES.ADMIN;
   const puedeGestionarDocumentos = !enTaller && can('equipmentDocument.create');
   const puedeRegistrarHorometro = !enTaller && canAny(['horometro.create', 'horometro.close']);
   const puedeRegistrarCombustible = !enTaller && can('combustible.create');
@@ -751,6 +774,7 @@ export function EquipoDetalleView({
   // decide internamente entre `RegistrarEntradaModal`/`RegistrarSalidaModal`
   // según `equipo.openShift`, mismo criterio que `EquipoCardMobile` en
   // `EquiposView`.
+  const [kpiPopup, setKpiPopup] = useState<EquipmentKpiPopupKind | null>(null);
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isCargaOpen, setIsCargaOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -937,6 +961,8 @@ export function EquipoDetalleView({
               : 'Sin lecturas registradas'
           }
           hero
+          onOpen={() => setKpiPopup('usage')}
+          ariaLabel={`Ver historial de ${esLiviano ? 'kilometraje' : 'horómetro'}`}
           icon={<Clock className="h-4.25 w-4.25" />}
           label={`${controlUnitLabel(equipo.controlUnit)} · uso`}
           value={uso}
@@ -959,6 +985,8 @@ export function EquipoDetalleView({
           }
           icon={<Droplet className="h-4.25 w-4.25" />}
           label={esLiviano ? 'Última carga' : 'Combustible actual'}
+          onOpen={() => setKpiPopup('fuel')}
+          ariaLabel="Ver cargas de combustible"
           toneClass={esLiviano ? undefined : fuelBadgeTone}
           value={
             esLiviano
@@ -974,12 +1002,16 @@ export function EquipoDetalleView({
           caption="Registros de carga"
           icon={<Droplet className="h-4.25 w-4.25" />}
           label="Cargas combustible"
+          onOpen={() => setKpiPopup('fuel')}
+          ariaLabel="Ver cargas de combustible"
           value={String(equipo._count.combustibles)}
         />
         <KpiTile
           caption={esLiviano ? 'Usos con km inicial y final' : 'Registros de horómetro'}
           icon={<Clock className="h-4.25 w-4.25" />}
           label={esLiviano ? 'Registros de km' : 'Lecturas horómetro'}
+          onOpen={() => setKpiPopup('usage')}
+          ariaLabel={`Ver historial de ${esLiviano ? 'kilometraje' : 'horómetro'}`}
           value={String(equipo._count.horometros)}
         />
         <KpiTile
@@ -1207,6 +1239,18 @@ export function EquipoDetalleView({
         liviano={equipo.equipmentClass === 'LIGHT'}
         isOpen={isCargaOpen}
         onOpenChange={setIsCargaOpen}
+      />
+      <UsageHistoryPopup
+        equipo={equipo}
+        isOpen={kpiPopup === 'usage'}
+        onOpenChange={(open) => setKpiPopup(open ? 'usage' : null)}
+        registros={historialHorometro}
+      />
+      <FuelHistoryPopup
+        isOpen={kpiPopup === 'fuel'}
+        onOpenChange={(open) => setKpiPopup(open ? 'fuel' : null)}
+        registros={historialCombustible}
+        verTodoTo={verTodoAdmin ? '/cargas-combustible' : undefined}
       />
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog

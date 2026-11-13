@@ -20,16 +20,12 @@ let currentUserResult: {
   isAuthenticated: boolean;
 };
 
-vi.mock('../hooks/useCurrentUser', () => ({
-  useCurrentUser: () => currentUserResult,
-}));
+vi.mock('../hooks/useCurrentUser', () => ({ useCurrentUser: () => currentUserResult }));
 
 // Se mockea la capa de lectura de la API y el borde de la cola de escrituras
 // (`submitWrite`): las mutaciones corren de verdad y lo que se verifica es lo que
 // se ENCOLA — endpoint, params, body, precondición y archivos.
-vi.mock('../api/EquipmentAPI', () => ({
-  EquipmentAPI: { list: vi.fn(), resumen: vi.fn(), getById: vi.fn() },
-}));
+vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: vi.fn(), resumen: vi.fn(), getById: vi.fn() } }));
 
 vi.mock('../offline/submit-write', async (importOriginal) =>
   (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
@@ -184,14 +180,7 @@ const HOROMETROS = [
 ];
 
 const COMBUSTIBLES = [
-  {
-    id: 'c_1',
-    equipoId: 'eq_1',
-    litros: 30.75,
-    tipo: 'PETROLEO',
-    fotoUrl: null,
-    fecha: '2026-08-04T09:00:00.000Z',
-  },
+  { id: 'c_1', equipoId: 'eq_1', litros: 30.75, tipo: 'PETROLEO', fotoUrl: null, fecha: '2026-08-04T09:00:00.000Z' },
 ];
 
 const FICHA = {
@@ -241,15 +230,10 @@ const FICHA = {
 // `HorometroAPI`/`CombustibleAPI`/`FichaAPI` (no mockeadas acá) apenas monta
 // — mismo motivo documentado en `EquiposView.test.tsx`.
 function crearQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
-  });
+  return new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
 }
 
-function renderFicha(
-  seedExtra: (qc: QueryClient) => void = () => {},
-  equipo: typeof EQUIPO_DETALLE = EQUIPO_DETALLE,
-) {
+function renderFicha(seedExtra: (qc: QueryClient) => void = () => {}, equipo: typeof EQUIPO_DETALLE = EQUIPO_DETALLE) {
   const qc = crearQueryClient();
   qc.setQueryData(['equipment', 'eq_1'], equipo);
   qc.setQueryData(['horometro'], HOROMETROS);
@@ -271,6 +255,19 @@ function renderFicha(
     </QueryClientProvider>,
   );
 }
+
+const ADMIN_SESSION = {
+  user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
+  role: 'ADMIN',
+  isPending: false,
+  isAuthenticated: true,
+};
+const SUPERVISOR_SESSION = {
+  user: { id: 'u2', name: 'Supervisor SMI', email: 'sup@smi.local', role: 'SUPERVISOR' },
+  role: 'SUPERVISOR',
+  isPending: false,
+  isAuthenticated: true,
+};
 
 describe('EquipoDetalleView', () => {
   it('montada en el taller es solo lectura incluso para ADMIN y no sale de su shell', async () => {
@@ -306,10 +303,7 @@ describe('EquipoDetalleView', () => {
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={['/mantenimiento/equipos/eq_1']}>
           <Routes>
-            <Route
-              element={<EquipoDetalleView contexto="taller" />}
-              path="/mantenimiento/equipos/:id"
-            />
+            <Route element={<EquipoDetalleView contexto="taller" />} path="/mantenimiento/equipos/:id" />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -637,7 +631,10 @@ describe('EquipoDetalleView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
 
     await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
-    expect(escrituras('equipment.assign')[0]).toMatchObject({ params: { id: 'eq_1' }, expected: { supervisorId: 'u_sup' } });
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      expected: { supervisorId: 'u_sup' },
+    });
     expect(escrituras('equipment.assign')[0]!.body).toEqual({ supervisorId: 'u_sup2' });
   });
 
@@ -667,7 +664,10 @@ describe('EquipoDetalleView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar asignación' }));
 
     await waitFor(() => expect(escrituras('equipment.assign')).toHaveLength(1));
-    expect(escrituras('equipment.assign')[0]).toMatchObject({ params: { id: 'eq_1' }, expected: { operatorId: 'u_op' } });
+    expect(escrituras('equipment.assign')[0]).toMatchObject({
+      params: { id: 'eq_1' },
+      expected: { operatorId: 'u_op' },
+    });
     expect(escrituras('equipment.assign')[0]!.body).toEqual({ operatorId: 'op_2' });
   });
 
@@ -923,26 +923,29 @@ describe('EquipoDetalleView — flujo de horómetro (entrada/salida)', () => {
       isAuthenticated: true,
     };
 
-    renderFicha((qc) => {
-      qc.setQueryData(
-        ['horometro'],
-        [
-          ...HOROMETROS,
-          {
-            id: 'h_abierto',
-            equipoId: 'eq_1',
-            operador: 'Carlos Núñez',
-            turno: 'NOCTURNO',
-            valorInicial: 1200,
-            valorFinal: null,
-            nivelCombustible: null,
-            fecha: '2026-08-06T20:00:00.000Z',
-            fechaSalida: null,
-            fotoUrlSalida: null,
-          },
-        ],
-      );
-    }, { ...EQUIPO_DETALLE, openShift: OPEN_SHIFT });
+    renderFicha(
+      (qc) => {
+        qc.setQueryData(
+          ['horometro'],
+          [
+            ...HOROMETROS,
+            {
+              id: 'h_abierto',
+              equipoId: 'eq_1',
+              operador: 'Carlos Núñez',
+              turno: 'NOCTURNO',
+              valorInicial: 1200,
+              valorFinal: null,
+              nivelCombustible: null,
+              fecha: '2026-08-06T20:00:00.000Z',
+              fechaSalida: null,
+              fotoUrlSalida: null,
+            },
+          ],
+        );
+      },
+      { ...EQUIPO_DETALLE, openShift: OPEN_SHIFT },
+    );
 
     expect(screen.getAllByText('En curso').length).toBeGreaterThan(0);
   });
@@ -1142,9 +1145,7 @@ describe('EquipoDetalleView — Documentos', () => {
     expect((screen.getByLabelText('Título (opcional)') as HTMLInputElement).value).toBe('Revisión anual');
     expect((screen.getByLabelText('Vencimiento (opcional)') as HTMLInputElement).value).toBe('2026-12-01');
 
-    fireEvent.change(screen.getByLabelText('Título (opcional)'), {
-      target: { value: 'Revisión anual (renovada)' },
-    });
+    fireEvent.change(screen.getByLabelText('Título (opcional)'), { target: { value: 'Revisión anual (renovada)' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(escrituras('equipmentDocument.update')).toHaveLength(1));
@@ -1217,5 +1218,47 @@ describe('EquipoDetalleView — R3 identidad por clase', () => {
     const tabla = await screen.findByRole('grid', { name: 'Historial de cargas de combustible' });
     expect(within(tabla).getByText('Realizó')).toBeTruthy();
     expect(within(tabla).getByText('Luis Vega')).toBeTruthy();
+  });
+
+  it('la tarjeta Cargas combustible abre el popup con el historial completo', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha();
+    // Dos tarjetas comparten el popup de combustible: la de nivel/última carga y la de contador.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver cargas de combustible' })[1]);
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Cargas de combustible')).toBeTruthy();
+    expect(within(dialogo).getByText('30,75 L')).toBeTruthy();
+    expect(within(dialogo).getByText('Ver todo →')).toBeTruthy();
+  });
+
+  it('la tarjeta de lecturas abre el historial de horómetro', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha();
+    // Dos tarjetas comparten el popup de uso: la hero y la de registros.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver historial de horómetro' })[1]);
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Historial de horómetro')).toBeTruthy();
+    expect(within(dialogo).getByText('Ana')).toBeTruthy();
+  });
+
+  it('un supervisor no ve «Ver todo» hacia la vista de cargas (ruta ADMIN/SECRETARIA)', async () => {
+    currentUserResult = SUPERVISOR_SESSION;
+    renderFicha();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver cargas de combustible' })[1]);
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).queryByText('Ver todo →')).toBeNull();
+  });
+
+  it('en un liviano las tarjetas de uso hablan de kilometraje', async () => {
+    currentUserResult = ADMIN_SESSION;
+    renderFicha(undefined, {
+      ...EQUIPO_DETALLE,
+      equipmentClass: 'LIGHT',
+      controlUnit: 'KM',
+      currentMileage: 3695,
+      operator: null,
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver historial de kilometraje' })[0]);
+    expect(within(await screen.findByRole('dialog')).getByText('Historial de kilometraje')).toBeTruthy();
   });
 });
