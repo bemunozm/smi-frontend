@@ -380,7 +380,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
   const celdas = (dialog: HTMLElement, testId: string) =>
     Array.from(within(dialog).getByTestId(testId).querySelectorAll('td')).map((c) => c.textContent);
 
-  it('HM: tabla por equipo con el TOTAL del payload y fila navegable a la ficha', () => {
+  it('HM: tabla por equipo con el TOTAL del payload', () => {
     mock(BASE);
     render(<ResumenDia />);
     const dialog = abrir('Ver detalle de HM operacionales');
@@ -390,8 +390,36 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(celdas(dialog, 'hm-det-TOTAL')).toEqual(['TOTAL', '6', '4,5', '10,5']);
     // Sin pie «Ver todo»: el detalle ya es completo.
     expect(within(dialog).queryByRole('button', { name: 'Ver todo →' })).toBeNull();
+  });
+
+  it('HM: la fila expande el detalle de las tarjetas del equipo (y ya no navega)', () => {
+    mock({
+      ...BASE,
+      lecturas: [
+        {
+          ...BASE.lecturas[0],
+          operador: 'P. Rojas',
+          registradoPor: 'Limbert V.',
+          horaEntrada: '2026-10-16T08:00:00.000Z',
+          horaSalida: '2026-10-16T18:30:00.000Z',
+        },
+        BASE.lecturas[1], // payload cacheado: sin los campos nuevos
+      ],
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de HM operacionales');
     fireEvent.click(within(dialog).getByTestId('hm-det-CG-002'));
-    expect(navigateMock).toHaveBeenCalledWith('/equipos/e-cg', { state: { from: '/' } });
+    const exp = within(dialog).getByTestId('hm-exp-CG-002');
+    expect(within(exp).getByText('P. Rojas')).toBeTruthy();
+    expect(within(exp).getByText('Registró: Limbert V.')).toBeTruthy();
+    expect(within(exp).getByText('100 → 106 (+6)')).toBeTruthy();
+    // La tarjeta del payload viejo: sin quién registró y aún en curso.
+    expect(within(exp).getByText('Registró: —')).toBeTruthy();
+    expect(within(exp).getByText('106 → en curso')).toBeTruthy();
+    expect(navigateMock).not.toHaveBeenCalled();
+    // Segundo clic colapsa.
+    fireEvent.click(within(dialog).getByTestId('hm-det-CG-002'));
+    expect(within(dialog).queryByTestId('hm-exp-CG-002')).toBeNull();
   });
 
   it('Diésel: litros por equipo con L/HM y «Ver todo» a cargas de combustible', () => {

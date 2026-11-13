@@ -1,12 +1,13 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Spinner, Table } from '@heroui/react';
 
 import { KpiDetailModal } from './KpiDetailModal';
 import { rowToEquipment } from './equipment-row';
 import { useDashboardVueltas } from '../../hooks/useDashboard';
-import { useKardex } from '../../hooks/useInventory';
 import { usePermissions } from '../../hooks/usePermissions';
 import { canOpenPath } from '../../lib/permissions';
+import { useKardex } from '../../hooks/useInventory';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
 import { MovementKindChip, movementKind } from '../inventario/shared';
@@ -19,7 +20,27 @@ export type DaySummaryKpi = 'hm' | 'diesel' | 'reports' | 'production' | 'adblue
 const CELL = 'font-mono text-sm';
 const CELL_TOTAL = 'font-mono text-sm font-semibold';
 const ROW_LISTA = 'flex flex-wrap items-center gap-2 border-t border-border py-2.5 first:border-t-0 first:pt-0';
+/** Fila que expande/colapsa su detalle (clic y Enter vía `onAction`). */
+const ROW_TOGGLE = 'cursor-pointer hover:bg-surface-secondary';
 const HORA = new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit' });
+
+/** Set de equipos con su fila de detalle expandida (toggle por `internalCode`). */
+function useExpandedRows() {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (code: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(code)) next.add(code);
+      return next;
+    });
+  return { expanded, toggle };
+}
+
+/** «08:00–18:30», «08:00–en curso», o '' si el payload (cacheado) no trae horas. */
+function rangoHoras(entrada?: string, salida?: string | null): string {
+  if (!entrada) return '';
+  return `${HORA.format(new Date(entrada))}–${salida ? HORA.format(new Date(salida)) : 'en curso'}`;
+}
 
 /**
  * Popups de detalle de las KPI cards de colores del «Resumen del día». HM y
@@ -88,10 +109,34 @@ export function DaySummaryKpiDetails({
   );
 }
 
-/** HM por equipo (Día/Noche/Total) — mismas filas de `operacionPorEquipo`, solo las que aportan HM. */
+/** Las tarjetas de un equipo ese día, dentro de la fila expandida del popup HM. */
+function ShiftCardsOfEquipment({ lecturas }: { lecturas: ResumenDia['lecturas'] }) {
+  const n = (v: number) => NUM_CL_1.format(v);
+  if (lecturas.length === 0)
+    return <span className="text-xs text-muted-foreground">Sin tarjetas de este equipo.</span>;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {lecturas.map((l) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" key={l.id}>
+          <span className="font-medium text-foreground">{l.turno}</span>
+          <span className="text-muted-foreground">{l.operador ?? '—'}</span>
+          <span className="text-muted-foreground">Registró: {l.registradoPor ?? '—'}</span>
+          <span className="font-mono text-foreground">
+            {`${n(l.inicial)} → ${l.final === null ? 'en curso' : n(l.final)}${l.avance == null ? '' : ` (+${n(l.avance)})`}`}
+          </span>
+          {rangoHoras(l.horaEntrada, l.horaSalida) ? (
+            <span className="text-muted-foreground">{rangoHoras(l.horaEntrada, l.horaSalida)}</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** HM por equipo (Día/Noche/Total) — mismas filas de `operacionPorEquipo`, solo las que aportan HM.
+ * Cada fila expande las tarjetas que originan sus horas (quién registró, inicial→final, horario). */
 function HmDetail({ data }: { data: ResumenDia }) {
-  const navigate = useNavigate();
-  const toFicha = canOpenPath(usePermissions().role, '/equipos');
+  const { expanded, toggle } = useExpandedRows();
   const rows = data.operacionPorEquipo.filter((f) => f.total.hm !== 0);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Sin horas máquina este día.</p>;
   const n = (v: number) => NUM_CL_1.format(v);
@@ -107,19 +152,29 @@ function HmDetail({ data }: { data: ResumenDia }) {
           </Table.Header>
           <Table.Body>
             {[
-              ...rows.map((f) => (
+              ...rows.flatMap((f) => [
                 <Table.Row
+                  className={ROW_TOGGLE}
                   data-testid={`hm-det-${f.internalCode}`}
                   id={f.internalCode}
                   key={f.internalCode}
-                  {...rowToEquipment(toFicha ? f.equipmentId : undefined, navigate)}
+                  onAction={() => toggle(f.internalCode)}
                 >
                   <Table.Cell className={CELL}>{f.internalCode}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.dia.hm)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.noche.hm)}</Table.Cell>
                   <Table.Cell className={CELL}>{n(f.total.hm)}</Table.Cell>
-                </Table.Row>
-              )),
+                </Table.Row>,
+                ...(expanded.has(f.internalCode)
+                  ? [
+                      <Table.Row data-testid={`hm-exp-${f.internalCode}`} id={`exp-${f.internalCode}`} key={`exp-${f.internalCode}`}>
+                        <Table.Cell colSpan={4}>
+                          <ShiftCardsOfEquipment lecturas={data.lecturas.filter((l) => l.internalCode === f.internalCode)} />
+                        </Table.Cell>
+                      </Table.Row>,
+                    ]
+                  : []),
+              ]),
               <Table.Row data-testid="hm-det-TOTAL" id="TOTAL" key="TOTAL">
                 <Table.Cell className="text-sm font-semibold">TOTAL</Table.Cell>
                 <Table.Cell className={CELL_TOTAL}>{n(data.hm.dia)}</Table.Cell>
