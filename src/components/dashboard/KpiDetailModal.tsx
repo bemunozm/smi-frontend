@@ -14,6 +14,8 @@ interface KpiDetailModalProps {
   /** Vista completa: destino de «Ver todo →». Sin él, el popup no lleva pie
    * (el detalle ya es completo y no hay adónde ir). */
   verTodoTo?: string;
+  /** Texto del botón de pie. Por defecto «Ver todo →». */
+  verTodoLabel?: string;
   children: ReactNode;
 }
 
@@ -23,7 +25,14 @@ interface KpiDetailModalProps {
  * el overlay y botón de cierre vienen de HeroUI/react-aria). El pie lleva la
  * navegación a la vista completa.
  */
-export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, children }: KpiDetailModalProps) {
+export function KpiDetailModal({
+  title,
+  isOpen,
+  onOpenChange,
+  verTodoTo,
+  verTodoLabel = 'Ver todo →',
+  children,
+}: KpiDetailModalProps) {
   const navigate = useNavigate();
   const { role } = usePermissions();
   // Sin acceso a la vista completa, el popup queda sin pie.
@@ -47,7 +56,7 @@ export function KpiDetailModal({ title, isOpen, onOpenChange, verTodoTo, childre
                 }}
                 variant="secondary"
               >
-                Ver todo →
+                {verTodoLabel}
               </Button>
             </Modal.Footer>
           ) : null}

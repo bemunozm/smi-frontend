@@ -46,3 +46,30 @@ export const initials = (name: string) =>
  * ("requiere" / "requieren") se sigue resolviendo aparte en el llamador.
  */
 export const plural = (n: number, singular: string, varias: string) => `${n} ${n === 1 ? singular : varias}`;
+
+/** Fecha y hora cortas (`13 nov 2026, 09:00`); `—` si la fecha no es válida. */
+export function fmtFechaHora(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+/** Duración real de un turno cerrado (`fin − inicio`), en formato corto "Xh Ym" —
+ * complementa el uso en horas-máquina (`valorFinal − valorInicial`) del historial
+ * de horómetro: son dos medidas distintas (tiempo de reloj vs. horas de motor). */
+export function fmtDuracion(inicioIso: string, finIso: string): string {
+  const inicio = new Date(inicioIso).getTime();
+  const fin = new Date(finIso).getTime();
+  if (Number.isNaN(inicio) || Number.isNaN(fin) || fin < inicio) return '—';
+  const totalMinutos = Math.round((fin - inicio) / 60000);
+  const horas = Math.floor(totalMinutos / 60);
+  const minutos = totalMinutos % 60;
+  if (horas === 0) return `${minutos} min`;
+  return minutos === 0 ? `${horas} h` : `${horas} h ${minutos} min`;
+}
