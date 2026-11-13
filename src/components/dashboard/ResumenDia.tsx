@@ -9,25 +9,13 @@ import { canOpenPath } from '../../lib/permissions';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
 import { toDateOnly } from '../../lib/turno';
 import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
+import { DaySummaryKpiDetails, type DaySummaryKpi } from './DaySummaryKpiDetails';
 import { FlotaDiaCarrusel } from './FlotaDiaCarrusel';
+import { rowToEquipment } from './equipment-row';
 import type { ResumenDia as ResumenDiaData } from '../../types/dashboard';
 import { UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 
 const MAX_REPORTS_EQUIPOS = 3;
-
-/** Fila navegable a la ficha del equipo (`onAction` de react-aria: clic y Enter; Espacio queda reservado a selección en el patrón de grilla de react-aria). */
-const FILA_NAVEGABLE = 'cursor-pointer hover:bg-surface-secondary';
-
-/** Props de una fila de tabla que lleva a `/equipos/:id`; sin id (payload cacheado) no es navegable.
- * `from: '/'` deja que la ficha vuelva al dashboard en vez de a la lista. */
-function filaAEquipo(
-  equipmentId: string | undefined,
-  navigate: (to: string, opts?: { state?: { from: string } }) => void,
-) {
-  return equipmentId
-    ? { className: FILA_NAVEGABLE, onAction: () => navigate(`/equipos/${equipmentId}`, { state: { from: '/' } }) }
-    : {};
-}
 
 function KpiTile({
   bg,
@@ -37,6 +25,7 @@ function KpiTile({
   big,
   unit,
   testId,
+  onOpen,
   children,
 }: {
   bg: string;
@@ -47,10 +36,16 @@ function KpiTile({
   big: string;
   unit?: string;
   testId: string;
+  /** Abre el popup de detalle: con `onOpen` la tarjeta entera es un botón; sin él es informativa. */
+  onOpen?: () => void;
   children: ReactNode;
 }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl p-4 text-white" data-testid={testId} style={{ backgroundColor: bg }}>
+  const tile = (
+    <div
+      className={`flex h-full flex-col gap-2 rounded-xl p-4 text-white ${onOpen ? 'transition-[filter] hover:brightness-95 active:brightness-90' : ''}`}
+      data-testid={testId}
+      style={{ backgroundColor: bg }}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-semibold tracking-wider uppercase">{label}</span>
         <span className="text-xs opacity-90">{fechaLabel ?? formatDia(fecha)}</span>
@@ -62,17 +57,36 @@ function KpiTile({
       <div className="flex flex-col gap-0.5 text-sm opacity-95">{children}</div>
     </div>
   );
+  if (!onOpen) return tile;
+  return (
+    <button
+      aria-label={`Ver detalle de ${label}`}
+      className="block h-full w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus)"
+      onClick={onOpen}
+      type="button"
+    >
+      {tile}
+    </button>
+  );
 }
 
 function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }) {
   const { fecha, hm, diesel, reports, produccion, adBlue } = data;
+  const [detalle, setDetalle] = useState<DaySummaryKpi | null>(null);
   const vueltasTotal = produccion.internos + produccion.minaCaleta + produccion.mineras;
   const extra = reports.porEquipo.length - MAX_REPORTS_EQUIPOS;
   const unidadAdBlue = adBlue ? (UNIT_SYMBOLS[adBlue.unidad as UnitOfMeasure] ?? adBlue.unidad) : '';
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-      <KpiTile bg={RESUMEN_CARD_BG.hm} big={NUM_CL_1.format(hm.total)} fecha={fecha} label="HM operacionales" testId="kpi-hm">
+      <KpiTile
+        bg={RESUMEN_CARD_BG.hm}
+        big={NUM_CL_1.format(hm.total)}
+        fecha={fecha}
+        label="HM operacionales"
+        onOpen={() => setDetalle('hm')}
+        testId="kpi-hm"
+      >
         <span>
           {NUM_CL_1.format(hm.dia)} Día + {NUM_CL_1.format(hm.noche)} Noche
         </span>
@@ -83,6 +97,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
         big={NUM_CL_1.format(diesel.total)}
         fecha={fecha}
         label="Diésel"
+        onOpen={() => setDetalle('diesel')}
         testId="kpi-diesel"
         unit="L"
       >
@@ -97,6 +112,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
         big={NUM_CL_1.format(reports.totalHoras)}
         fecha={fecha}
         label="Reports"
+        onOpen={() => setDetalle('reports')}
         testId="kpi-reports"
         unit="HM"
       >
@@ -114,6 +130,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
         big={NUM_CL.format(vueltasTotal)}
         fecha={fecha}
         label="Producción"
+        onOpen={() => setDetalle('production')}
         testId="kpi-produccion"
         unit="vueltas"
       >
@@ -128,6 +145,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
         fecha={fecha}
         fechaLabel={pasado ? 'saldo actual' : undefined}
         label="AdBlue"
+        onOpen={adBlue ? () => setDetalle('adblue') : undefined}
         testId="kpi-adblue"
         unit={adBlue ? unidadAdBlue : undefined}
       >
@@ -147,6 +165,8 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
           </>
         )}
       </KpiTile>
+
+      <DaySummaryKpiDetails data={data} onClose={() => setDetalle(null)} open={detalle} past={pasado} />
     </div>
   );
 }
@@ -194,7 +214,7 @@ function TablaOperacion({ data }: { data: ResumenDiaData }) {
                         data-testid={`op-${f.internalCode}`}
                         id={f.internalCode}
                         key={f.internalCode}
-                        {...filaAEquipo(aFicha ? f.equipmentId : undefined, navigate)}
+                        {...rowToEquipment(aFicha ? f.equipmentId : undefined, navigate)}
                       >
                         <Table.Cell className="font-mono text-sm">{f.internalCode}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{n(f.dia.hm)}</Table.Cell>
@@ -248,7 +268,12 @@ function TablaLecturas({ data }: { data: ResumenDiaData }) {
                 <Table.Body>
                   {data.lecturas.map((l) => {
                     return (
-                      <Table.Row data-testid={`lectura-${l.id}`} id={l.id} key={l.id} {...filaAEquipo(aFicha ? l.equipmentId : undefined, navigate)}>
+                      <Table.Row
+                        data-testid={`lectura-${l.id}`}
+                        id={l.id}
+                        key={l.id}
+                        {...rowToEquipment(aFicha ? l.equipmentId : undefined, navigate)}
+                      >
                         <Table.Cell className="font-mono text-sm">{l.internalCode}</Table.Cell>
                         <Table.Cell className="text-sm">{l.turno}</Table.Cell>
                         <Table.Cell className="font-mono text-sm">{NUM_CL_1.format(l.inicial)}</Table.Cell>

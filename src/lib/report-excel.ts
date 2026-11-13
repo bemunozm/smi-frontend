@@ -66,7 +66,7 @@ export async function construirExcelReport(
   const GRIS_CEBRA = 'FFF1F5F9';
   const GRIS_TEXTO = 'FF6B7280';
   const BORDE = { style: 'thin' as const, color: { argb: 'FFD9DEE5' } };
-  const N_COLUMNAS = 15;
+  const N_COLUMNAS = 16;
 
   ws.columns = [
     { key: 'item', width: 9 },
@@ -78,6 +78,7 @@ export async function construirExcelReport(
     { key: 'report', width: 10 },
     { key: 'planta', width: 16 },
     { key: 'actividad', width: 30 },
+    { key: 'detalleAct', width: 36 },
     { key: 'horasAct', width: 9 },
     { key: 'horomIni', width: 10 },
     { key: 'horomFin', width: 10 },
@@ -114,6 +115,7 @@ export async function construirExcelReport(
     'Report N°',
     'Planta',
     'Actividad',
+    'Detalle actividad',
     'HM_Act',
     'Horom_Ini',
     'Horom_Fin',
@@ -158,6 +160,7 @@ export async function construirExcelReport(
             ...comunes,
             planta: lugarExcel(f),
             actividad: actividadDeFila(f, t.otraActividad),
+            detalleAct: f.descripcion ?? '',
             horasAct: f.horas,
             ...(j === 0 ? soloPrimera : {}),
           }))

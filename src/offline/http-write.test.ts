@@ -435,7 +435,7 @@ describe('orden FIFO por seq', () => {
     reloj.mockReturnValue(1_000); // el reloj retrocede
     await enqueueCreateTrabajoExtra('u1', {
       id: 'c', equipoId: 'e', operatorId: 'o', faena: 'Patillo', turno: 'DIURNO', horometroInicial: 1, horometroFinal: 2,
-      detalle: [{ actividad: 'OTRO', lugar: 'VARIADO', planta: null, horas: 1 }],
+      detalle: [{ actividad: 'OTRO', lugar: 'VARIADO', plantas: [], horas: 1 }],
       otraActividad: 'x', descripcion: 'abc', reportNumero: '4509', capturedAt: 't',
     });
     reloj.mockRestore();

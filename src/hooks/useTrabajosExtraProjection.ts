@@ -48,8 +48,10 @@ function mapOpToTrabajo(op: CreateTrabajoExtraOp, equipos: Equipment[], operador
     detalleActividades: payload.detalle.map((f) => ({
       actividad: f.actividad,
       lugar: f.lugar,
-      planta: f.planta ?? null,
+      planta: f.plantas?.length ? f.plantas.join(', ') : null,
+      plantas: f.plantas ?? [],
       horas: f.horas,
+      descripcion: f.descripcion?.trim() || null,
     })),
     reportNumero: payload.reportNumero,
     otraActividad: payload.otraActividad?.trim() || null,
@@ -95,7 +97,11 @@ const filasDetalle = (v: unknown): DetalleActividadRegistro[] | undefined =>
   v.every(
     (f) => f != null && typeof f === 'object' && typeof (f as { actividad?: unknown }).actividad === 'string',
   )
-    ? (v as DetalleActividadRegistro[])
+    ? // El cuerpo trae `plantas`; lo que se muestra es `planta` (unidas), como lo guarda el servidor.
+      (v as DetalleActividadRegistro[]).map((f) => ({
+        ...f,
+        planta: f.plantas?.length ? f.plantas.join(', ') : (f.planta ?? null),
+      }))
     : undefined;
 
 /** Superpone las ediciones pendientes (en orden `seq`: la última gana) sobre los
