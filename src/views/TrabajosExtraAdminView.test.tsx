@@ -3,10 +3,11 @@ import { render, cleanup, screen, fireEvent, within, waitFor } from '@testing-li
 
 import type { TrabajoExtraordinario } from '../types/trabajosExtra';
 
-const { listHook, crearMock, guardarMock } = vi.hoisted(() => ({
+const { listHook, crearMock, guardarMock, eliminarMock } = vi.hoisted(() => ({
   listHook: vi.fn(),
   crearMock: vi.fn(),
   guardarMock: vi.fn(),
+  eliminarMock: vi.fn(),
 }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
@@ -14,6 +15,7 @@ vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => listHook(),
   useCrearTrabajoExtra: () => ({ mutate: crearMock, isPending: false }),
   useEditarTrabajoExtra: () => ({ guardar: guardarMock, isGuardando: false }),
+  useEliminarTrabajoExtra: () => ({ mutate: eliminarMock, isPending: false }),
 }));
 
 vi.mock('../hooks/usePermissions', async () => {
@@ -173,6 +175,28 @@ describe('TrabajosExtraAdminView', () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t1'));
     expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Editar' })).toBeNull();
+  });
+
+  it('eliminar pide confirmación y recién ahí llama al DELETE', () => {
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Eliminar' }));
+
+    const confirmacion = screen.getByRole('alertdialog');
+    expect(within(confirmacion).getByText(/se eliminará definitivamente/)).toBeTruthy();
+    expect(eliminarMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(confirmacion).getByRole('button', { name: 'Eliminar' }));
+    expect(eliminarMock).toHaveBeenCalledWith('t2', expect.anything());
+  });
+
+  it('SECRETARIA corrige pero no elimina', () => {
+    rol.value = 'SECRETARIA';
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-t1'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Editar' })).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Eliminar' })).toBeNull();
   });
 
   it('muestra el error del listado', () => {

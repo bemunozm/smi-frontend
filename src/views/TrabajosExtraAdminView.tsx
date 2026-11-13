@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  AlertDialog,
   Button,
   Card,
   Chip,
@@ -23,7 +24,13 @@ import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOperators } from '../hooks/useOperators';
 import { usePermissions } from '../hooks/usePermissions';
-import { useCrearTrabajoExtra, useEditarTrabajoExtra, useTrabajosExtraList } from '../hooks/useTrabajosExtra';
+import { canDeleteTrabajoExtra } from '../lib/permissions';
+import {
+  useCrearTrabajoExtra,
+  useEditarTrabajoExtra,
+  useEliminarTrabajoExtra,
+  useTrabajosExtraList,
+} from '../hooks/useTrabajosExtra';
 import { usePlantas } from '../hooks/useReporteDiario';
 import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
@@ -103,15 +110,18 @@ function Dato({ label, value }: { label: string; value: string }) {
 /** Popup de detalle de UN trabajo: todo lo que la tabla trunca (horómetros,
  * descripción, observaciones), solo lectura — los trabajos se corrigen desde
  * Terreno, con historial. */
-/** Popup de detalle; «Editar» al pie solo si llega `onEditar` (quien puede corregir). */
+/** Popup de detalle; al pie, «Editar» solo si llega `onEditar` (quien puede
+ * corregir) y «Eliminar» solo si llega `onEliminar` (ADMIN). */
 function DetalleTrabajoModal({
   trabajo,
   onClose,
   onEditar,
+  onEliminar,
 }: {
   trabajo: TrabajoExtraordinario | null;
   onClose: () => void;
   onEditar?: () => void;
+  onEliminar?: () => void;
 }) {
   return (
     <Modal.Backdrop
@@ -198,9 +208,14 @@ function DetalleTrabajoModal({
               </div>
             ) : null}
           </Modal.Body>
-          {onEditar ? (
+          {onEditar || onEliminar ? (
             <Modal.Footer>
-              <Button onPress={onEditar}>Editar</Button>
+              {onEliminar ? (
+                <Button onPress={onEliminar} variant="danger">
+                  Eliminar
+                </Button>
+              ) : null}
+              {onEditar ? <Button onPress={onEditar}>Editar</Button> : null}
             </Modal.Footer>
           ) : null}
         </Modal.Dialog>
@@ -648,7 +663,9 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
  * detalle de cada trabajo en popup. Es el destino de «Ver todo» de la KPI
  * card «HM Trabajos extraordinarios» del dashboard. Quien puede corregir
  * (`trabajoExtra.edit`: ADMIN, SECRETARIA) tiene «Editar» en el detalle; el
- * cambio queda en el mismo historial que las correcciones de Terreno.
+ * cambio queda en el mismo historial que las correcciones de Terreno. El
+ * ADMIN además tiene «Eliminar» (DELETE definitivo, con confirmación —
+ * mismo patrón que los hallazgos).
  */
 export function TrabajosExtraAdminView() {
   const { data, isPending, isError, error } = useTrabajosExtraList();
@@ -659,7 +676,11 @@ export function TrabajosExtraAdminView() {
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
   const [creando, setCreando] = useState(false);
   const [editando, setEditando] = useState<TrabajoExtraordinario | null>(null);
-  const puedeEditar = usePermissions().can('trabajoExtra.edit');
+  const [eliminando, setEliminando] = useState<TrabajoExtraordinario | null>(null);
+  const permisos = usePermissions();
+  const puedeEditar = permisos.can('trabajoExtra.edit');
+  const puedeEliminar = canDeleteTrabajoExtra(permisos.role);
+  const eliminar = useEliminarTrabajoExtra();
   // «Exportar Excel» pide el rango de fechas en un diálogo propio (pedido del
   // cliente): el rango es obligatorio y se elige en UN solo calendario de
   // rango — mismo selector que el período de Movimientos de inventario.
@@ -953,6 +974,14 @@ export function TrabajosExtraAdminView() {
               }
             : undefined
         }
+        onEliminar={
+          puedeEliminar
+            ? () => {
+                setEliminando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
       />
       {/* Diálogo de exportación: elegir de qué fecha hasta qué fecha es
           OBLIGATORIO (pedido del cliente) — el Excel es la planilla del
@@ -1045,6 +1074,54 @@ export function TrabajosExtraAdminView() {
       {editando ? <TrabajoExtraModal trabajo={editando} onClose={() => setEditando(null)} /> : null}
 
       {creando ? <TrabajoExtraModal onClose={() => setCreando(false)} /> : null}
+
+      <AlertDialog.Backdrop
+        isOpen={eliminando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar report?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    El Report {eliminando ? numeroReport(eliminando.numero) : ''} de{' '}
+                    {eliminando?.equipo?.internalCode ?? 'este equipo'} se eliminará definitivamente, junto a su
+                    foto. Esta acción no se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button onPress={close} variant="tertiary">
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={eliminar.isPending}
+                    onPress={() => {
+                      if (!eliminando) return;
+                      eliminar.mutate(eliminando.id, {
+                        onSuccess: () => {
+                          close();
+                          setEliminando(null);
+                        },
+                      });
+                    }}
+                    variant="danger"
+                  >
+                    {eliminar.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }

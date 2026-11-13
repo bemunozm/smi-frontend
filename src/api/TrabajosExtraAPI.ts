@@ -40,3 +40,12 @@ export async function listCambiosTrabajoExtra(id: string): Promise<EntradaCambio
     throw toDomainError(error, 'No se pudo cargar el historial de cambios.');
   }
 }
+
+/** Eliminación definitiva — endpoint solo ADMIN. */
+export async function deleteTrabajoExtra(id: string): Promise<void> {
+  try {
+    await api.delete(`/api/trabajos-extra/${id}`);
+  } catch (error) {
+    throw toDomainError(error, 'No se pudo eliminar el report.');
+  }
+}
