@@ -58,6 +58,7 @@ const OPERADOR_NUEVO = { ...OPERADOR, id: 'op_3', name: 'Pedro Soto' };
 
 const REGISTRO = {
   id: 'r1',
+  numero: 12,
   equipoId: 'e1',
   operatorId: 'op_1',
   operador: 'Juan Rojas',
@@ -455,6 +456,47 @@ describe('TrabajosExtraView', () => {
 
     await waitFor(() => expect(screen.getByText('Elegí el operador')).toBeTruthy());
     expect(await db.outbox.count()).toBe(0);
+  });
+
+  /**
+   * El formulario de terreno es largo: un error de validación arriba queda
+   * fuera de pantalla y el botón parecía no hacer nada (reporte de un
+   * supervisor, 14-11). Al rechazar el envío: el error del campo va en ROJO
+   * (`role=alert`, no como ayuda gris), aparece un aviso junto al botón y la
+   * vista se lleva sola al primer campo marcado.
+   */
+  it('al enviar con un campo inválido avisa junto al botón y lleva la vista al primer error', async () => {
+    const scrollMock = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    renderConRegistro();
+
+    completarFormularioValido({ conOperador: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('alert').map((e) => e.textContent)).toContain('Elegí el operador'),
+    );
+    expect(screen.getByText(/falta corregir los campos marcados/i)).toBeTruthy();
+    await waitFor(() => expect(scrollMock).toHaveBeenCalled());
+    expect(await db.outbox.count()).toBe(0);
+    scrollMock.mockRestore();
+  });
+
+  /** El correlativo lo asigna el sistema al guardar: en el alta la fila
+   * «Se asigna al guardar» no decía nada y se quitó (pedido del 14-11). Al
+   * corregir sí se muestra, ya asignado y fijo. */
+  it('el alta no muestra la fila del correlativo; al editar aparece con su número fijo', () => {
+    renderConRegistro();
+
+    expect(screen.queryByText('Se asigna al guardar')).toBeNull();
+    expect(screen.queryByText('Automático')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Ver detalle/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Editar/ }));
+
+    const ventana = within(screen.getByRole('dialog'));
+    expect(ventana.getAllByText('#12').length).toBeGreaterThan(0);
+    expect(ventana.getByText('No se cambia')).toBeTruthy();
   });
 
   it('al guardar, encola con id y capturedAt del cliente, manda operatorId y no manda operador', async () => {
