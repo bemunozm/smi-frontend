@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { AlertDialog, Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
 
 import { usePermissions } from '../hooks/usePermissions';
+import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
 import { useEliminarReporteDiario, useReportesDiarios } from '../hooks/useReporteDiario';
 import { canDeleteReporteDiario } from '../lib/permissions';
+import { ROLES } from '../types/roles';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL } from '../lib/dashboard-format';
 import { fromDateOnly } from '../lib/turno';
@@ -56,6 +58,7 @@ function DetalleReporteModal({
   onClose,
   onEditar,
   onEliminar,
+  operadores,
 }: {
   reporte: ReporteDiario | null;
   onClose: () => void;
@@ -63,6 +66,10 @@ function DetalleReporteModal({
   onEditar?: () => void;
   /** Presente solo cuando el rol puede eliminarlos (ADMIN). */
   onEliminar?: () => void;
+  /** Operadores del turno según el Informe diario equipos (no viven en el
+   * reporte). `undefined` mientras cargan o si el rol no puede consultarlos
+   * (SECRETARIA recibe 403): la sección no se muestra. */
+  operadores?: { id: string; nombre: string; equipo: string }[];
 }) {
   const personal = reporte ? [...reporte.personal].sort((a, b) => a.orden - b.orden) : [];
   return (
@@ -175,6 +182,28 @@ function DetalleReporteModal({
                   </Bloque>
                 ) : null}
 
+                {operadores !== undefined ? (
+                  <Bloque titulo="Operadores del turno">
+                    {operadores.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5" data-testid="detalle-operadores">
+                        {operadores.map((o) => (
+                          <Chip color="default" key={o.id} size="sm" variant="soft">
+                            {`${o.nombre} · ${o.equipo}`}
+                          </Chip>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Ese turno no tiene equipos registrados en Informe diario equipos.
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Automático: salen de las tarjetas del Informe diario equipos de ese turno, no se guardan en el
+                      reporte.
+                    </p>
+                  </Bloque>
+                ) : null}
+
                 {reporte.observaciones ? (
                   <Bloque titulo="Observaciones">
                     <p className="text-sm text-foreground">{reporte.observaciones}</p>
@@ -236,6 +265,28 @@ export function ReportesDiariosAdminView() {
       state: { fecha: diaDe(reporte), turno: reporte.turno, reporteId: reporte.id },
     });
   };
+
+  /**
+   * Operadores del turno del reporte abierto: las tarjetas del Informe diario
+   * equipos de ese día y turno (no viven en el reporte; misma fuente «viva»
+   * que el formulario de Terreno). Solo ADMIN puede consultar el resumen —
+   * SECRETARIA recibe 403 y queda sin la sección, igual que en el formulario.
+   */
+  const puedeConsultarTurno = permisos.role === ROLES.ADMIN;
+  const { data: resumenTurno } = usePastShiftSummary(
+    detalle && puedeConsultarTurno ? { fecha: fromDateOnly(diaDe(detalle)), turno: detalle.turno } : null,
+  );
+  const operadoresDetalle = useMemo(() => {
+    if (!detalle || !resumenTurno) return undefined;
+    // Primero las tarjetas del supervisor del reporte («los que trabajaron con
+    // él»); si el turno no tiene un grupo suyo (reporte backfilleado por el
+    // panel a nombre de quien lo cargó), se muestran las de todo el turno.
+    const suyos = resumenTurno.filter((s) => s.supervisorId === detalle.supervisorId);
+    return (suyos.length > 0 ? suyos : resumenTurno)
+      .flatMap((s) => s.cards)
+      .filter((c) => c.equipo.equipmentClass !== 'LIGHT')
+      .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode }));
+  }, [detalle, resumenTurno]);
 
   // El backend ya entrega fecha desc, turno asc — se respeta tal cual.
   const reportes = data ?? [];
@@ -382,6 +433,7 @@ export function ReportesDiariosAdminView() {
       <DetalleReporteModal
         reporte={detalle}
         onClose={() => setDetalle(null)}
+        operadores={operadoresDetalle}
         onEditar={puedeCorregir && detalle ? () => corregir(detalle) : undefined}
         onEliminar={
           puedeEliminar && detalle
