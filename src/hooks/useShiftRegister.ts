@@ -143,9 +143,13 @@ export interface UseShiftRegisterResult {
    * `reporteEstado === 'requiere-atencion'`. Reintentar/Descartar viven en
    * `SyncStatus` (acción genérica del outbox), no acá. */
   reporteError: OutboxLastError | null;
-  /** `true` cuando ya hay un reporte 'enviado' pero `enCurso` cambió desde
-   * entonces (se agregaron equipos) — habilita "Reenviar". */
+  /** `true` cuando ya hay un reporte 'enviado' pero se abrieron equipos
+   * después — habilita "Reenviar". */
   reportePuedeReenviar: boolean;
+  reporteCubre: (t: TarjetaTurno) => boolean;
+  /** Por qué esta tarjeta no se puede cerrar todavía (falta el reporte de
+   * salida), o `null` si se puede. */
+  motivoSinCierre: (t: TarjetaTurno) => string | null;
   enviarReporte: () => void;
   /** Cubre solo el encolado (mismo criterio que `isAbriendo`/`isCerrando`) —
    * protección anti-doble-toque mientras `liveQuery` no alcanzó a reflejar
@@ -199,6 +203,24 @@ export function useShiftRegister(): UseShiftRegisterResult {
     userId: user?.id,
   });
 
+  /**
+   * El reporte de salida es obligatorio: un pesado de ESTE turno no se cierra
+   * hasta que vaya en un reporte enviado (o en cola, sin señal). No aplica al
+   * administrador (cierra tarjetas ajenas), a la carga de turnos pasados ni a
+   * lo que quedó abierto del turno anterior.
+   */
+  const motivoSinCierre = (t: TarjetaTurno): string | null => {
+    if (veTodo || modoPasado || t.liviano || t.estado !== 'curso') return null;
+    if (!proyeccion.enCurso.some((x) => x.id === t.id) || reporte.reporteCubre(t)) return null;
+    if (reporte.reporteEstado === 'requiere-atencion') {
+      return 'El reporte de salida no se pudo enviar: revísalo en el panel de sincronización antes de cerrar.';
+    }
+    if (reporte.reporteEstado === 'enviado') {
+      return 'Este equipo se abrió después del reporte de salida: reenvíalo antes de cerrarlo.';
+    }
+    return 'Primero envía el reporte de salida: la administración tiene que saber qué equipos salieron.';
+  };
+
   const [verReporte, setVerReporte] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [detalleCerrada, setDetalleCerrada] = useState<TarjetaTurno | null>(null);
@@ -228,6 +250,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
     ...apertura,
     ...cierre,
     edicion,
+    motivoSinCierre,
     verReporte,
     setVerReporte,
     historialAbierto,

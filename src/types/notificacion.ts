@@ -33,6 +33,9 @@ export const NOTIF_TIPOS = {
   /** A un liviano le falta poco para la mantención de cada 10.000 km (Módulo 4)
    * — `data: { equipmentId, ordenId }`. */
   LIGHT_SERVICE_DUE: 'light-service.due',
+  /** Terminó el turno del supervisor con pesados abiertos (solo a él) —
+   * `data: { shiftId, shiftDate, shiftType }`. */
+  SHIFT_OPEN_CARDS: 'shift.open-cards',
 } as const;
 
 /** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */

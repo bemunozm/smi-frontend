@@ -13,8 +13,8 @@ export interface UseExitReportStateParams {
   tarjetasServidor: ShiftCardResponse[];
   ctx: ContextoTurno;
   ops: OutboxOp[];
-  /** = `abiertasActual` de `useShiftProjection` — las que entran en el
-   * reporte de salida. */
+  /** = `abiertasActual` de `useShiftProjection`: los pesados del turno, que
+   * son los que entran en el reporte de salida. */
   enCurso: TarjetaTurno[];
   userId: string | undefined;
 }
@@ -30,9 +30,12 @@ export interface UseExitReportStateResult {
    * `reporteEstado === 'requiere-atencion'`. Reintentar/Descartar viven en
    * `SyncStatus` (acción genérica del outbox), no acá. */
   reporteError: OutboxLastError | null;
-  /** `true` cuando ya hay un reporte 'enviado' pero `enCurso` cambió desde
-   * entonces (se agregaron equipos) — habilita "Reenviar". */
+  /** `true` cuando ya hay un reporte 'enviado' pero se abrieron equipos
+   * después — habilita "Reenviar". */
   reportePuedeReenviar: boolean;
+  /** ¿La tarjeta ya va en un reporte de salida enviado o en cola? Mientras
+   * no, el supervisor no puede cerrarla (el reporte es obligatorio). */
+  reporteCubre: (t: TarjetaTurno) => boolean;
   enviarReporte: () => void;
   /** Cubre solo el encolado (mismo criterio que `isAbriendo`/`isCerrando`) —
    * protección anti-doble-toque mientras `liveQuery` no alcanzó a reflejar
@@ -84,14 +87,21 @@ export function useExitReportState({
     reporteEstado = 'sin-enviar';
   }
 
-  // `enCurso.length > 0`: con todo cerrado (p. ej. un turno pasado) no habría
-  // qué mandar — `enviarReporte()` envía los ids de `enCurso` y con 0 el
-  // botón era un no-op silencioso («Reenviar con 0 equipos»).
-  const reportePuedeReenviar =
-    reporteEstado === 'enviado' &&
-    reporteUltimo != null &&
-    enCurso.length > 0 &&
-    enCurso.length !== reporteUltimo.cardCount;
+  // Qué tarjetas ya van en un reporte: las de la operación en cola, o las
+  // abiertas antes del último reporte que confirmó el servidor (el servidor
+  // no guarda los ids, solo cuántas fueron). Un reporte rechazado no cubre
+  // ninguna.
+  const reporteCubre = (t: TarjetaTurno): boolean => {
+    if (reporteEstado === 'en-cola') return opReporteActual?.payload.cardIds.includes(t.id) ?? false;
+    if (reporteEstado === 'enviado' && reporteUltimo) {
+      return t.abiertaIso != null && t.abiertaIso <= reporteUltimo.requestedAt;
+    }
+    return false;
+  };
+
+  // Antes comparaba cuántas había abiertas con cuántas fueron en el reporte:
+  // al cerrar una, ofrecía «Reenviar» sin que se hubiera agregado nada.
+  const reportePuedeReenviar = reporteEstado === 'enviado' && enCurso.some((t) => !reporteCubre(t));
 
   // Doble-toque/duplicados: sin este guard, dos toques antes de que
   // `liveQuery` alcance a reflejar el primer encolado (`opsReporte` todavía
@@ -126,6 +136,7 @@ export function useExitReportState({
     reporteUltimo,
     reporteError,
     reportePuedeReenviar,
+    reporteCubre,
     enviarReporte,
     isEnviandoReporte,
     reporteUrl: ShiftReportAPI.fileUrl,

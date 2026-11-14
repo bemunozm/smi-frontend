@@ -796,12 +796,13 @@ describe('useShiftRegister', () => {
       expect(result.current.reporteError?.message).toBe('SHIFT_NOT_FOUND');
     });
 
-    it('con `shift.exitReports` del servidor para el turno actual, es "enviado" y no puede reenviar si el conteo coincide', async () => {
+    it('con `shift.exitReports` del servidor para el turno actual, es "enviado" y no puede reenviar si todo va en el reporte', async () => {
+      // El reporte se pidió DESPUÉS de abrir la tarjeta (09:00): la cubre.
       const conReporte: ShiftCardResponse = {
         ...CARD_ABIERTA_ACTUAL,
         shift: {
           ...CARD_ABIERTA_ACTUAL.shift!,
-          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-24T08:00:00.000Z', cardCount: 1, emailStatus: 'SENT' }],
+          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-24T09:10:00.000Z', cardCount: 1, emailStatus: 'SENT' }],
         },
       };
       mockApis({ tarjetas: [conReporte] });
@@ -812,6 +813,7 @@ describe('useShiftRegister', () => {
       await waitFor(() => expect(result.current.reporteEstado).toBe('enviado'));
       expect(result.current.reporteUltimo?.id).toBe('rep-1');
       expect(result.current.reportePuedeReenviar).toBe(false);
+      expect(result.current.motivoSinCierre(result.current.enCurso[0]!)).toBeNull();
       expect(result.current.reporteUrl('rep-1')).toBe('/api/shift-reports/rep-1/file');
     });
 
@@ -832,6 +834,65 @@ describe('useShiftRegister', () => {
 
       await waitFor(() => expect(result.current.enCurso).toHaveLength(2));
       expect(result.current.reportePuedeReenviar).toBe(true);
+    });
+
+    it('sin reporte enviado, el pesado del turno no se puede cerrar (el reporte es obligatorio)', async () => {
+      mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
+      const { Wrapper } = withQueryClient();
+
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.enCurso).toHaveLength(1));
+      expect(result.current.reporteEstado).toBe('sin-enviar');
+      expect(result.current.motivoSinCierre(result.current.enCurso[0]!)).toMatch(/Primero envía el reporte de salida/);
+    });
+
+    it('un pesado abierto DESPUÉS del reporte enviado pide reenviarlo antes de cerrarlo', async () => {
+      const conReporte: ShiftCardResponse = {
+        ...CARD_ABIERTA_ACTUAL,
+        shift: {
+          ...CARD_ABIERTA_ACTUAL.shift!,
+          exitReports: [{ id: 'rep-1', requestedAt: '2026-09-24T08:30:00.000Z', cardCount: 1, emailStatus: 'SENT' }],
+        },
+      };
+      mockApis({ tarjetas: [conReporte] });
+      const { Wrapper } = withQueryClient();
+
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.reporteEstado).toBe('enviado'));
+      expect(result.current.reportePuedeReenviar).toBe(true);
+      expect(result.current.motivoSinCierre(result.current.enCurso[0]!)).toMatch(/reenvíalo antes de cerrarlo/);
+    });
+
+    it('con el reporte en cola (sin señal) que incluye la tarjeta, ya se puede cerrar', async () => {
+      mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
+      mockOps = [
+        {
+          id: 'rep-1',
+          type: 'sendExitReport',
+          v: 1,
+          userId: 'u1',
+          status: 'pending',
+          attempts: 0,
+          createdAt: Date.now(),
+          seq: Date.now(),
+          updatedAt: Date.now(),
+          payload: {
+            id: 'rep-1',
+            shiftDate: '2026-09-24',
+            shiftType: 'DIURNO',
+            cardIds: ['c1'],
+            requestedAt: '2026-09-24T09:10:00.000Z',
+          },
+        } as OutboxOp,
+      ];
+      const { Wrapper } = withQueryClient();
+
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.reporteEstado).toBe('en-cola'));
+      expect(result.current.motivoSinCierre(result.current.enCurso[0]!)).toBeNull();
     });
 
     it('"enviado" sin tarjetas en curso (todas cerradas, p. ej. turno pasado): NO ofrece reenviar', async () => {
@@ -1056,7 +1117,7 @@ describe('useShiftRegister — livianos', () => {
     expect(input).toMatchObject({ valorFinal: 45300, fuelLiters: 40, shiftDate: '2026-09-24', shiftType: 'DIURNO' });
   });
 
-  it('un liviano que YO cerré en este turno entra en el reporte; uno cerrado por otro, no', async () => {
+  it('los livianos cerrados en este turno NO entran en el reporte de salida (solo pesados)', async () => {
     const cerradoPorMi: ShiftCardResponse = {
       ...LIVIANO_AJENO,
       valorFinal: 45300,
@@ -1079,11 +1140,11 @@ describe('useShiftRegister — livianos', () => {
     const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
 
     await waitFor(() => expect(result.current.livianosCerrados).toHaveLength(2));
-    expect(result.current.enCurso.map((t) => t.id)).toEqual(['c1', 'l1']);
+    expect(result.current.enCurso.map((t) => t.id)).toEqual(['c1']);
     expect(result.current.cerradas).toHaveLength(0);
   });
 
-  it('un cierre pendiente de un liviano ya cuenta para el reporte de este turno', async () => {
+  it('un cierre pendiente de un liviano se ve cerrado, pero no pide reporte de salida', async () => {
     mockApis({ equipos: [CAMIONETA], tarjetas: [LIVIANO_AJENO] });
     mockOps = [
       closeOp('l1', {
@@ -1106,6 +1167,6 @@ describe('useShiftRegister — livianos', () => {
 
     await waitFor(() => expect(result.current.livianosCerrados).toHaveLength(1));
     expect(result.current.livianosCerrados[0]).toMatchObject({ cerradaPor: 'Ana Soto', sinSincronizar: true });
-    expect(result.current.enCurso.map((t) => t.id)).toEqual(['l1']);
+    expect(result.current.enCurso).toHaveLength(0);
   });
 });
