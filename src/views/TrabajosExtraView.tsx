@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { opcionesOperador } from '../lib/operadores-habituales';
 import { useForm } from 'react-hook-form';
@@ -118,6 +118,16 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
 /** Un cambio anterior del mismo trabajo espera una acción: encadenar otro encima lo dejaría trabado. */
 const MOTIVO_EDICION_ATENCION = 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.';
+
+/** Error fuera de un `Campo` (el mismo rojo que `Campo error=`): el aviso
+ * junto al botón, la foto faltante, el desglose sin filas. */
+function TextoError({ children }: { children: ReactNode }) {
+  return (
+    <span role="alert" className="text-[12.5px] leading-snug font-semibold text-[var(--danger)]">
+      {children}
+    </span>
+  );
+}
 
 /** Por qué un equipo no se puede elegir, según su estado en Flota. */
 const ESTADO_NO_DISPONIBLE: Record<string, string> = {
@@ -642,7 +652,7 @@ function FormularioTrabajo({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitted },
+    formState: { errors, isSubmitted, submitCount },
   } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
     // Al corregir, una actividad anterior a la descripción puede quedar sin ella.
     resolver: zodResolver(idEditado ? trabajoExtraCorreccionSchema : trabajoExtraFormSchema),
@@ -650,6 +660,22 @@ function FormularioTrabajo({
   });
   /** La foto no vive en el schema (es un `File`): se exige a mano al enviar. */
   const [fotoFaltante, setFotoFaltante] = useState(false);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  /** Quedan errores del último intento: con el resolver, cada cambio revalida
+   * el schema completo, así que esto se limpia solo al corregir. */
+  const hayErrores = Object.keys(errors).length > 0;
+  // El formulario es largo y el error suele quedar arriba, fuera de pantalla:
+  // dar a «Registrar trabajo» parecía no hacer nada (supervisor, 14-11). Tras
+  // cada intento la vista va sola al primer campo marcado. Corre después del
+  // render, cuando los `role=alert` ya existen; en un envío que entró no hay
+  // ninguno y no se mueve nada.
+  useEffect(() => {
+    if (submitCount === 0) return;
+    formRef.current
+      ?.querySelector('[data-invalido], [role="alert"]')
+      ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [submitCount]);
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
   const faena = watch('faena') || 'Patillo';
@@ -693,6 +719,7 @@ function FormularioTrabajo({
 
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit((values) => {
         // La foto del report es obligatoria al registrar (al editar no se
         // toca). Se chequea acá y no en el schema: un `File` no viaja en el
@@ -709,11 +736,11 @@ function FormularioTrabajo({
         <div className="grid grid-cols-2 gap-3">
           <Campo
             label="Equipo"
+            error={errors.equipoId?.message}
             hint={
-              errors.equipoId?.message ??
-              (operadorEnTurno != null
+              operadorEnTurno != null
                 ? `${codigoElegido} está en turno con ${operadorEnTurno.nombre}. Se registra igual: queda a nombre de esta máquina.`
-                : undefined)
+                : undefined
             }
           >
             <Selector
@@ -734,7 +761,7 @@ function FormularioTrabajo({
               opciones={opcionesEquipo}
             />
           </Campo>
-          <Campo label="Operador" hint={errors.operatorId?.message}>
+          <Campo label="Operador" error={errors.operatorId?.message}>
             <Selector
               etiqueta="Operador"
               placeholder="Elegí el operador"
@@ -771,15 +798,10 @@ function FormularioTrabajo({
             la planilla del cliente (y el Excel que exporta el admin). */}
         <Campo
           label="N° del report (boleta)"
-          hint={
-            errors.reportNumero?.message ??
-            [
-              'El número impreso en la boleta del report en papel.',
-              textoPistaFolio(pista),
-            ]
-              .filter(Boolean)
-              .join(' ')
-          }
+          error={errors.reportNumero?.message}
+          hint={['El número impreso en la boleta del report en papel.', textoPistaFolio(pista)]
+            .filter(Boolean)
+            .join(' ')}
           aviso={pista.repetido ? `El N° ${reportNumero.trim()} ya está registrado en otro Report: revisa el folio.` : undefined}
         >
           <Input
@@ -790,10 +812,10 @@ function FormularioTrabajo({
         </Campo>
 
         <div className="grid grid-cols-2 gap-3">
-          <Campo label="Horómetro inicial" unidad="h" hint={errors.horometroInicial?.message}>
+          <Campo label="Horómetro inicial" unidad="h" error={errors.horometroInicial?.message}>
             <Input numerico placeholder="0" {...register('horometroInicial')} />
           </Campo>
-          <Campo label="Horómetro final" unidad="h" hint={errors.horometroFinal?.message}>
+          <Campo label="Horómetro final" unidad="h" error={errors.horometroFinal?.message}>
             <Input numerico placeholder="0" {...register('horometroFinal')} />
           </Campo>
         </div>
@@ -924,7 +946,11 @@ function FormularioTrabajo({
                         );
                       })}
                     </div>
-                    <Hint>{err?.plantas?.message ?? AYUDA_PLANTAS_SILOS}</Hint>
+                    {err?.plantas?.message ? (
+                      <TextoError>{err.plantas.message}</TextoError>
+                    ) : (
+                      <Hint>{AYUDA_PLANTAS_SILOS}</Hint>
+                    )}
                   </div>
                 )}
                 <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>
@@ -947,7 +973,7 @@ function FormularioTrabajo({
           <Boton variante="contorno" ancho type="button" onClick={() => ponerFilas([...filas, filaVacia()])}>
             <Plus className="h-[18px] w-[18px]" /> Agregar actividad
           </Boton>
-          {erroresDetalle?.message && <Hint>{erroresDetalle.message}</Hint>}
+          {erroresDetalle?.message && <TextoError>{erroresDetalle.message}</TextoError>}
           {descuadre && totalHoras != null && (
             <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" role="status">
               Las actividades suman {fmtNum(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
@@ -961,12 +987,12 @@ function FormularioTrabajo({
             obligatorio: sin él la actividad quedaría como «otro» a secas y el
             trabajo no se podría justificar ni cobrar. */}
         {filas.some((f) => f.actividad === 'OTRO') && (
-          <Campo label="¿Cuál fue la otra actividad?" requerido hint={errors.otraActividad?.message}>
+          <Campo label="¿Cuál fue la otra actividad?" requerido error={errors.otraActividad?.message}>
             <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
           </Campo>
         )}
 
-        <Campo label="Descripción de la tarea" hint={errors.descripcion?.message}>
+        <Campo label="Descripción de la tarea" error={errors.descripcion?.message}>
           <Textarea rows={3} placeholder="Resumen del trabajo completo" {...register('descripcion')} />
         </Campo>
 
@@ -991,20 +1017,24 @@ function FormularioTrabajo({
               subtitle="Obligatoria: el trabajo se cobra contra el report en papel."
               staleQuestion="¿Es la foto del report de este trabajo?"
             />
-            {fotoFaltante && <Hint>La foto del report es obligatoria: sacala antes de registrar.</Hint>}
+            {fotoFaltante && <TextoError>La foto del report es obligatoria: sacala antes de registrar.</TextoError>}
           </>
         )}
 
-        {/* El correlativo lo pone el sistema, nunca el usuario: se informa,
-            no se edita (el backend rechaza un `numero` en el body). No es el
-            folio del papel («N° del report», arriba), que sí se escribe. */}
-        <Automaticos>
-          <Automatico
-            label="Correlativo"
-            valor={numero != null ? numeroReport(numero) : 'Se asigna al guardar'}
-            nota={numero != null ? 'No se cambia' : 'Automático'}
-          />
-        </Automaticos>
+        {/* El correlativo lo pone el sistema al guardar, nunca el usuario (el
+            backend rechaza un `numero` en el body). En el alta la fila «Se
+            asigna al guardar» no decía nada y se quitó (14-11): se muestra
+            solo al corregir, ya asignado y fijo. No es el folio del papel
+            («N° del report», arriba), que sí se escribe. */}
+        {numero != null && (
+          <Automaticos>
+            <Automatico label="Correlativo" valor={numeroReport(numero)} nota="No se cambia" />
+          </Automaticos>
+        )}
+
+        {hayErrores && (
+          <TextoError>No se registró todavía: falta corregir los campos marcados en rojo más arriba.</TextoError>
+        )}
 
         <Boton ancho type="submit" disabled={pendiente}>
           {pendiente ? 'Guardando…' : textoBoton}
