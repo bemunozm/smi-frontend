@@ -405,15 +405,15 @@ describe('ReporteDiarioView · fecha y turno elegibles (carga histórica)', () =
     );
   });
 
-  it('si el turno elegido ya está en el historial, el envío queda deshabilitado', () => {
-    // REPORTES_MOCK trae el DIURNO del 2026-09-22 ya reportado.
+  it('si el turno elegido ya tiene TU reporte en el historial, el envío queda deshabilitado', () => {
+    // REPORTES_MOCK trae el DIURNO del 2026-09-22 ya reportado por u1 (la sesión).
     render(<ReporteDiarioView />);
 
     elegirFecha(/martes,? 22 de septiembre/i);
 
     const boton = screen.getByText('Enviar reporte diario').closest('button');
     expect(boton?.disabled).toBe(true);
-    expect(screen.getByText(/ya fue reportado/)).toBeTruthy();
+    expect(screen.getByText(/Ya enviaste tu reporte/)).toBeTruthy();
   });
 });
 
@@ -757,13 +757,24 @@ describe('ReporteDiarioView · operadores de un turno pasado', () => {
 describe('ReporteDiarioView · turno ya reportado', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('con el turno vigente ya en el historial, Enviar queda deshabilitado y lo dice', () => {
+  it('con TU reporte del turno vigente ya en el historial, Enviar queda deshabilitado y lo dice', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 8, 22, 14, 0)); // DIURNO del 22/09 = r-dia
+    vi.setSystemTime(new Date(2026, 8, 22, 14, 0)); // DIURNO del 22/09 = r-dia (u1, la sesión)
     render(<ReporteDiarioView />);
 
-    expect(screen.getByText('El turno DIURNO del 22-09-2026 ya fue reportado')).toBeTruthy();
+    expect(
+      screen.getByText('Ya enviaste tu reporte del turno DIURNO del 22-09-2026: ábrelo en el historial para corregirlo'),
+    ).toBeTruthy();
     expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('el reporte de OTRO supervisor del mismo turno no bloquea el tuyo', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 22, 23, 0)); // NOCTURNO del 22/09 = r-noche (u2, otro supervisor)
+    render(<ReporteDiarioView />);
+
+    expect(screen.queryByText(/Ya enviaste tu reporte/)).toBeNull();
+    expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('sin reporte del turno vigente, Enviar está habilitado', () => {
@@ -771,7 +782,7 @@ describe('ReporteDiarioView · turno ya reportado', () => {
     vi.setSystemTime(new Date(2026, 8, 23, 14, 0));
     render(<ReporteDiarioView />);
 
-    expect(screen.queryByText(/ya fue reportado/)).toBeNull();
+    expect(screen.queryByText(/Ya enviaste tu reporte/)).toBeNull();
     expect((screen.getByRole('button', { name: /Enviar reporte diario/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

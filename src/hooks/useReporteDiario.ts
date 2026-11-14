@@ -1,13 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import {
+  deleteReporteDiario,
   listCambiosReporteDiario,
   listEmpresasExternas,
   listPlantas,
   listReportesDiarios,
   type ListReportesParams,
 } from '../api/ReporteDiarioAPI';
+import { mensajeErrorOperacion } from '../lib/error-messages';
 import { EMPRESAS_EXTERNAS_KEY, PLANTAS_KEY, REPORTE_DIARIO_KEY } from '../lib/query-keys';
 import type { CreateReporteDiarioInput, EditReporteDiarioBody } from '../types/reporte-diario';
 import { useQueuedCreate, useQueuedMutation } from './useQueuedMutation';
@@ -44,6 +46,25 @@ export function useCreateReporteDiario() {
       toast.success('Reporte diario enviado');
     },
     errorFallback: 'No se pudo enviar el reporte diario.',
+  });
+}
+
+/**
+ * Eliminación definitiva de un reporte (solo ADMIN): para el reporte basura
+ * confirmado (duplicado, carga de prueba). El backend deja el resumen como
+ * traza en el Registro de actividad. Online directa, no va por la cola.
+ */
+export function useEliminarReporteDiario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteReporteDiario(id),
+    onSuccess: () => {
+      toast.success('Reporte eliminado');
+      void queryClient.invalidateQueries({ queryKey: REPORTE_DIARIO_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo eliminar el reporte.'));
+    },
   });
 }
 

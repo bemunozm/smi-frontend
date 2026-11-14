@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
 
 import { usePermissions } from '../hooks/usePermissions';
-import { useReportesDiarios } from '../hooks/useReporteDiario';
+import { useEliminarReporteDiario, useReportesDiarios } from '../hooks/useReporteDiario';
+import { canDeleteReporteDiario } from '../lib/permissions';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL } from '../lib/dashboard-format';
 import { fromDateOnly } from '../lib/turno';
@@ -47,9 +48,22 @@ function Bloque({ titulo, children }: { titulo: string; children: React.ReactNod
   );
 }
 
-/** Popup con el reporte completo, solo lectura: las correcciones siguen
- * saliendo de Terreno, con su historial de cambios. */
-function DetalleReporteModal({ reporte, onClose }: { reporte: ReporteDiario | null; onClose: () => void }) {
+/** Popup con el reporte completo. «Corregir» lleva al formulario de carga con
+ * este reporte abierto (ahí vive la edición con su historial de cambios);
+ * «Eliminar» pide confirmación en la vista. */
+function DetalleReporteModal({
+  reporte,
+  onClose,
+  onEditar,
+  onEliminar,
+}: {
+  reporte: ReporteDiario | null;
+  onClose: () => void;
+  /** Presente solo cuando el rol puede corregir reportes (ADMIN y SECRETARIA). */
+  onEditar?: () => void;
+  /** Presente solo cuando el rol puede eliminarlos (ADMIN). */
+  onEliminar?: () => void;
+}) {
   const personal = reporte ? [...reporte.personal].sort((a, b) => a.orden - b.orden) : [];
   return (
     <Modal.Backdrop
@@ -169,6 +183,20 @@ function DetalleReporteModal({ reporte, onClose }: { reporte: ReporteDiario | nu
               </div>
             ) : null}
           </Modal.Body>
+          {onEditar || onEliminar ? (
+            <Modal.Footer>
+              {onEliminar ? (
+                <Button onPress={onEliminar} variant="danger">
+                  Eliminar reporte
+                </Button>
+              ) : null}
+              {onEditar ? (
+                <Button onPress={onEditar} variant="secondary">
+                  Corregir reporte
+                </Button>
+              ) : null}
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
@@ -183,14 +211,31 @@ const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 te
  * con filtros por día y por supervisor; cada fila abre el detalle completo en
  * un popup. «Cargar o corregir» lleva al formulario de Terreno con fecha y
  * turno a elección (`/reportes-diarios/cargar`), con su historial de cambios.
+ * Desde el detalle, «Corregir reporte» abre ese mismo reporte en el formulario
+ * y «Eliminar reporte» (solo ADMIN) lo borra previa confirmación, con traza en
+ * el Registro de actividad.
  */
 export function ReportesDiariosAdminView() {
   const { data, isPending, isError, error } = useReportesDiarios();
   const [dia, setDia] = useState('');
   const [supervisorFiltro, setSupervisorFiltro] = useState('TODOS');
   const [detalle, setDetalle] = useState<ReporteDiario | null>(null);
+  /** Reporte con la confirmación de borrado abierta; null si no hay ninguna. */
+  const [eliminando, setEliminando] = useState<ReporteDiario | null>(null);
   const navigate = useNavigate();
-  const puedeCargar = usePermissions().can('reporteDiario.create');
+  const permisos = usePermissions();
+  const puedeCargar = permisos.can('reporteDiario.create');
+  const puedeCorregir = permisos.can('reporteDiario.edit');
+  const puedeEliminar = canDeleteReporteDiario(permisos.role);
+  const eliminar = useEliminarReporteDiario();
+
+  /** Abre el formulario de carga con ESTE reporte a la vista para corregirlo. */
+  const corregir = (reporte: ReporteDiario) => {
+    setDetalle(null);
+    void navigate('/reportes-diarios/cargar', {
+      state: { fecha: diaDe(reporte), turno: reporte.turno, reporteId: reporte.id },
+    });
+  };
 
   // El backend ya entrega fecha desc, turno asc — se respeta tal cual.
   const reportes = data ?? [];
@@ -224,7 +269,8 @@ export function ReportesDiariosAdminView() {
             Informe de producción diaria
           </h1>
           <p className="text-sm text-muted-foreground">
-            Los reportes de producción que envían los supervisores desde terreno. Abre uno para ver su detalle.
+            Los reportes de producción que envían los supervisores desde terreno — cada supervisor del turno envía el
+            suyo. Abre uno para ver su detalle, corregirlo o eliminarlo.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -333,7 +379,68 @@ export function ReportesDiariosAdminView() {
         </Card.Content>
       </Card>
 
-      <DetalleReporteModal reporte={detalle} onClose={() => setDetalle(null)} />
+      <DetalleReporteModal
+        reporte={detalle}
+        onClose={() => setDetalle(null)}
+        onEditar={puedeCorregir && detalle ? () => corregir(detalle) : undefined}
+        onEliminar={
+          puedeEliminar && detalle
+            ? () => {
+                setEliminando(detalle);
+                setDetalle(null);
+              }
+            : undefined
+        }
+      />
+
+      <AlertDialog.Backdrop
+        isOpen={eliminando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar reporte?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    El reporte del {eliminando ? formatFechaReporte(eliminando) : ''} (
+                    {eliminando ? (TURNO_LABEL[eliminando.turno] ?? eliminando.turno) : ''}) de{' '}
+                    {eliminando?.supervisorNombre ?? 'este supervisor'} se eliminará definitivamente y el borrado
+                    quedará anotado en el Registro de actividad. Esta acción no se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button onPress={close} variant="tertiary">
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={eliminar.isPending}
+                    onPress={() => {
+                      if (!eliminando) return;
+                      eliminar.mutate(eliminando.id, {
+                        onSuccess: () => {
+                          close();
+                          setEliminando(null);
+                        },
+                      });
+                    }}
+                    variant="danger"
+                  >
+                    {eliminar.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }
