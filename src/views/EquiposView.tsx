@@ -60,7 +60,8 @@ import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePend
 import { idDesdeSentinel, SIN_ASIGNAR } from '../lib/equipment-assignment';
 import { useBranches } from '../hooks/useBranches';
 import { RECURSOS_DE_FLOTA } from '../lib/pending-resources';
-import { useCreateEquipment, useEquipment, useResumenFleet, useUpdateEquipmentStatus } from '../hooks/useEquipment';
+import { useCreateEquipment, useEquipment, useResumenFleet } from '../hooks/useEquipment';
+import { useCambiarEstadoEquipo } from '../components/flota/useCambiarEstadoEquipo';
 import {
   EQUIPMENT_CLASS_OPTIONS,
   EQUIPMENT_STATUS_OPTIONS,
@@ -424,7 +425,7 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isPautaOpen, setIsPautaOpen] = useState(false);
-  const updateStatus = useUpdateEquipmentStatus();
+  const cambioEstado = useCambiarEstadoEquipo();
 
   const otrosEstados = puedeCambiarEstado ? EQUIPMENT_STATUS.filter((status) => status !== equipo.status) : [];
 
@@ -443,7 +444,7 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
               if (clave === 'delete') return setIsDeleteOpen(true);
               if (clave === 'pauta') return setIsPautaOpen(true);
               if (clave.startsWith('status:')) {
-                updateStatus.mutate({ equipo, status: clave.slice('status:'.length) as EquipmentStatus });
+                cambioEstado.cambiar(equipo, clave.slice('status:'.length) as EquipmentStatus);
               }
             }}
           >
@@ -473,6 +474,7 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
 
       <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
       <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
+      {cambioEstado.modal}
       {puedeVerPauta ? (
         // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
         // cada 10.000 km y se configuran los avisos (km y días de sus papeles).
@@ -622,7 +624,7 @@ function EquipoCardMobile({
   const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
   const puedeRegistrarHorometro = canAny(['horometro.create', 'horometro.close']);
   const puedeRegistrarCombustible = can('combustible.create');
-  const updateStatus = useUpdateEquipmentStatus();
+  const cambioEstado = useCambiarEstadoEquipo();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -740,7 +742,7 @@ function EquipoCardMobile({
                                   : 'border border-border bg-surface text-foreground'
                               }
                               fullWidth
-                              isDisabled={esActual || updateStatus.isPending}
+                              isDisabled={esActual || cambioEstado.isPending}
                               key={opcionEstado}
                               size="sm"
                               // Los NO seleccionados quedan "outline" + blanco
@@ -752,12 +754,14 @@ function EquipoCardMobile({
                               // mismo look que ya usa `StatusChip`) y queda
                               // disabled: marca dónde estás, no un botón más.
                               variant="outline"
-                              onPress={() =>
-                                updateStatus.mutate(
-                                  { equipo, status: opcionEstado },
-                                  { onSuccess: () => setIsSheetOpen(false) },
-                                )
-                              }
+                              onPress={() => {
+                                const via = cambioEstado.cambiar(equipo, opcionEstado, {
+                                  onSuccess: () => setIsSheetOpen(false),
+                                });
+                                // Con uso en curso se abre «Cerrar uso»: la hoja se
+                                // cierra antes para no apilar dos diálogos.
+                                if (via === 'ventana') setIsSheetOpen(false);
+                              }}
                             >
                               {equipmentStatusLabel(opcionEstado)}
                             </Button>
@@ -847,6 +851,7 @@ function EquipoCardMobile({
           <EditEquipoModal equipo={equipo} isOpen={isEditOpen} onOpenChange={setIsEditOpen} />
           <DeleteEquipoAlertDialog equipo={equipo} isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen} />
           <RegistrarHorometroModal equipo={equipo} isOpen={isShiftModalOpen} onOpenChange={setIsShiftModalOpen} />
+          {cambioEstado.modal}
           {puedeVerPauta ? (
             // Módulo 4: los livianos no usan la pauta por hitos — su mantención es
             // cada 10.000 km y se configuran los avisos (km y días de sus papeles).

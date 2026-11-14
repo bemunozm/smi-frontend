@@ -19,7 +19,8 @@ import {
 import { AlertDialog, Button, Card, Dropdown, Label, Spinner, Table } from '@heroui/react';
 
 import { env } from '../config/env';
-import { useAssignEquipment, useEquipmentDetail, useUpdateEquipmentStatus } from '../hooks/useEquipment';
+import { useAssignEquipment, useEquipmentDetail } from '../hooks/useEquipment';
+import { useCambiarEstadoEquipo } from '../components/flota/useCambiarEstadoEquipo';
 import { useHorometroList } from '../hooks/useHorometro';
 import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
@@ -763,7 +764,7 @@ export function EquipoDetalleView({
   const puedeGestionarDocumentos = !enTaller && can('equipmentDocument.create');
   const puedeRegistrarHorometro = !enTaller && canAny(['horometro.create', 'horometro.close']);
   const puedeRegistrarCombustible = !enTaller && can('combustible.create');
-  const updateStatus = useUpdateEquipmentStatus();
+  const cambioEstado = useCambiarEstadoEquipo();
 
   // `useHorometroList`/`useCombustibleList` no aceptan `equipoId` — traen el
   // historial completo (mismas queries que usa Terreno) y se filtra acá por
@@ -902,7 +903,7 @@ export function EquipoDetalleView({
                 <Dropdown.Menu
                   disabledKeys={[equipo.status]}
                   onAction={(key) => {
-                    updateStatus.mutate({ equipo, status: String(key) as EquipmentStatus });
+                    cambioEstado.cambiar(equipo, String(key) as EquipmentStatus);
                   }}
                 >
                   {EQUIPMENT_STATUS.map((opcionEstado) => (
@@ -951,6 +952,7 @@ export function EquipoDetalleView({
           ) : null}
         </div>
       </div>
+      {cambioEstado.modal}
 
       {/* Fila de KPIs — hero (uso acumulado) + última mantención + combustible
          actual + los 4 contadores por dominio que ya traía la ficha. Con 7

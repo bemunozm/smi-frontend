@@ -7,6 +7,7 @@ import {
   ShiftCardListResponseSchema,
   ShiftCardWrapperSchema,
   ShiftSummaryListResponseSchema,
+  type AdminCloseShiftCardInput,
   type CloseShiftCardInput,
   type OpenShiftCardInput,
   type RegisterClosedShiftCardInput,
@@ -142,10 +143,26 @@ async function listShiftsByDate(date: string, type: ShiftType): Promise<ShiftSum
   }
 }
 
+/**
+ * El administrador cierra un uso que quedó colgado (`POST
+ * /api/shift-cards/:id/admin-close`): sin foto ni combustible, con la lectura
+ * final y el motivo. El servidor también suelta la asignación del equipo.
+ * Online directo — es una acción del panel, no de terreno.
+ */
+async function adminCloseCard(id: string, input: AdminCloseShiftCardInput): Promise<ShiftCardResponse> {
+  try {
+    const response = await axiosInstance.post(`/api/shift-cards/${id}/admin-close`, input);
+    return ShiftCardWrapperSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cerrar el uso del equipo.');
+  }
+}
+
 export const ShiftCardAPI = {
   listChanges,
   openCard,
   closeCard,
+  adminCloseCard,
   registerClosedCard,
   updateCard,
   listMine,

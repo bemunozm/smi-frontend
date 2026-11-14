@@ -1,7 +1,44 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@heroui/react';
 
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
-import { SHIFT_CARDS_MINE_KEY, shiftCardCambiosKey } from '../lib/query-keys';
+import {
+  DASHBOARD_KEY,
+  EQUIPMENT_KEY,
+  HOROMETRO_KEY,
+  SHIFT_CARDS_KEY,
+  SHIFT_CARDS_MINE_KEY,
+  shiftCardCambiosKey,
+} from '../lib/query-keys';
+import type { AdminCloseShiftCardInput } from '../types/shift';
+
+export interface AdminCloseShiftCardVars {
+  id: string;
+  /** Solo para el toast. */
+  equipoCodigo: string;
+  input: AdminCloseShiftCardInput;
+}
+
+/**
+ * El administrador cierra el uso en curso de un equipo (tarjeta colgada).
+ * Online directo: refresca equipos (deja de figurar «En uso»), tarjetas,
+ * horómetros y dashboard.
+ */
+export function useAdminCloseShiftCard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: AdminCloseShiftCardVars) => ShiftCardAPI.adminCloseCard(id, input),
+    onSuccess: (_data, { equipoCodigo }) => {
+      for (const queryKey of [EQUIPMENT_KEY, SHIFT_CARDS_KEY, HOROMETRO_KEY, DASHBOARD_KEY]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      toast.success('Uso cerrado', { description: equipoCodigo });
+    },
+    onError: (error: Error) => {
+      toast.danger(error.message);
+    },
+  });
+}
 
 /**
  * Tarjetas propias del Módulo A — SIN filtros en la key: es la misma URL

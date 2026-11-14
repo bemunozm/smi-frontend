@@ -175,6 +175,9 @@ interface CamposProps {
   /** Muestra la sección «Asignación». Ni al crear ni al editar va: el equipo
    * se asigna en terreno y desde la ficha («Estado de uso»). */
   conAsignacion?: boolean;
+  /** El equipo en edición tiene un uso en curso (tarjeta abierta): dejarlo
+   * fuera de servicio desde acá no lo cierra, así que se avisa. */
+  usoEnCurso?: boolean;
 }
 
 /**
@@ -195,7 +198,9 @@ export function CamposEquipo({
   currentOperator = null,
   lecturaOriginal,
   conAsignacion = true,
+  usoEnCurso = false,
 }: CamposProps) {
+  const estadoElegido = useWatch({ control, name: 'status' });
   // Al elegir la clase, la unidad de control la acompaña: un liviano va por
   // kilometraje y un pesado por horómetro. Queda editable (hay camiones
   // pesados que se controlan por km).
@@ -489,6 +494,12 @@ export function CamposEquipo({
                   </ListBox>
                 </Select.Popover>
                 {errors.status ? <FieldError>{errors.status.message}</FieldError> : null}
+                {usoEnCurso && estadoElegido !== 'OPERATIONAL' ? (
+                  <p className="mt-1 text-xs font-medium text-warning-soft-foreground">
+                    Este equipo tiene un uso en curso y guardar desde acá no lo cierra. Usa «Marcar como…» del
+                    menú del equipo: ahí se cierra el uso en el mismo paso.
+                  </p>
+                ) : null}
               </Select>
             )}
           />
@@ -711,6 +722,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                       errors={errors}
                       internalCodeEditable={false}
                       lecturaOriginal={lecturaGuardada(equipo)}
+                      usoEnCurso={equipo.openShift != null}
                       onOperatorIdChange={setOperatorId}
                       onSupervisorIdChange={setSupervisorId}
                       operatorId={operatorId}
