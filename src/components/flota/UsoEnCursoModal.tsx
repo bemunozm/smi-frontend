@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
-import { Chip, Modal, Spinner } from '@heroui/react';
+import { useMemo, useState } from 'react';
+import { Button, Chip, Modal, Spinner } from '@heroui/react';
 
 import { useCombustibleList } from '../../hooks/useCombustible';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { ROLES } from '../../types/roles';
+import { CerrarUsoModal } from './CerrarUsoModal';
 import { fmtLitros } from '../../lib/format';
 import { tiempoEnUso } from '../../lib/tiempo-en-uso';
 import { controlUnitSuffix, equipoIdentidad, turnoLabel } from '../../config/flota-colors';
@@ -43,6 +46,10 @@ function Dato({ label, value }: { label: string; value: string }) {
  */
 export function UsoEnCursoModal({ equipo, onClose }: { equipo: Equipment; onClose: () => void }) {
   const { openShift } = equipo;
+  const { role } = useCurrentUser();
+  // Solo el administrador cierra un uso ajeno (sin foto ni combustible). La
+  // ventana se reemplaza por la de cierre: dos diálogos apilados se pelean el foco.
+  const [cerrando, setCerrando] = useState(false);
   const { data: cargas, isPending: cargandoCargas } = useCombustibleList();
   const liviano = equipo.equipmentClass === 'LIGHT';
   const sufijo = controlUnitSuffix(equipo.controlUnit);
@@ -54,6 +61,10 @@ export function UsoEnCursoModal({ equipo, onClose }: { equipo: Equipment; onClos
     if (delEquipo.length === 0) return null;
     return delEquipo.reduce((max, carga) => (carga.fecha > max.fecha ? carga : max));
   }, [cargas, equipo.id]);
+
+  if (cerrando && openShift) {
+    return <CerrarUsoModal equipo={{ ...equipo, openShift }} onClose={() => setCerrando(false)} onHecho={onClose} />;
+  }
 
   return (
     <Modal.Backdrop
@@ -123,6 +134,13 @@ export function UsoEnCursoModal({ equipo, onClose }: { equipo: Equipment; onClos
               <p className="text-sm text-muted-foreground">Este equipo ya no tiene una tarjeta de turno abierta.</p>
             )}
           </Modal.Body>
+          {openShift && role === ROLES.ADMIN ? (
+            <Modal.Footer>
+              <Button onPress={() => setCerrando(true)} variant="danger-soft">
+                Cerrar uso
+              </Button>
+            </Modal.Footer>
+          ) : null}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

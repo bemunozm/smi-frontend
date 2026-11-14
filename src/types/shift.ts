@@ -175,6 +175,14 @@ export interface RegisterClosedShiftCardInput {
 
 /** Body de `POST /api/shift-cards/:id/close`. `closeClientId` es la clave
  * de idempotencia del CIERRE (distinta de `id`, ver `lib/uuid.ts`). */
+/** Body de `POST /shift-cards/:id/admin-close` (solo ADMIN). */
+export interface AdminCloseShiftCardInput {
+  /** Lectura final; la inicial si el equipo no trabajó (0 h). */
+  valorFinal: number;
+  /** Queda en las observaciones de la tarjeta. */
+  motivo?: string;
+}
+
 export interface CloseShiftCardInput {
   closeClientId: string;
   valorFinal: number;
