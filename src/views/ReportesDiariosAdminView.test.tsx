@@ -30,6 +30,18 @@ vi.mock('../hooks/useReporteDiario', () => ({
   useEliminarReporteDiario: () => ({ mutate: eliminarMock, isPending: false }),
 }));
 
+// Resumen del turno del reporte abierto (operadores del Informe diario
+// equipos). `RESUMEN_HOOK` registra con qué selección se llamó (null = la
+// consulta está apagada); cada test pisa `resumenTurno` según necesite.
+const RESUMEN_HOOK = vi.hoisted(() => vi.fn());
+let resumenTurno: unknown[] = [];
+vi.mock('../hooks/usePastShiftSummary', () => ({
+  usePastShiftSummary: (sel: unknown) => {
+    RESUMEN_HOOK(sel);
+    return { data: sel ? resumenTurno : undefined };
+  },
+}));
+
 import { ReportesDiariosAdminView } from './ReportesDiariosAdminView';
 
 const reporte = (over: Partial<ReporteDiario> & Pick<ReporteDiario, 'id'>): ReporteDiario => ({
@@ -73,6 +85,7 @@ const ok = (data: ReporteDiario[]) => ({ data, isPending: false, isError: false,
 beforeEach(() => {
   rol.value = 'ADMIN';
   listHook.mockReturnValue(ok(LISTA));
+  resumenTurno = [];
 });
 
 afterEach(() => {
@@ -177,5 +190,53 @@ describe('ReportesDiariosAdminView', () => {
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByRole('button', { name: 'Corregir reporte' })).toBeTruthy();
     expect(dialog.queryByRole('button', { name: 'Eliminar reporte' })).toBeNull();
+  });
+
+  it('el detalle muestra los operadores del turno del supervisor del reporte, sin camionetas', () => {
+    resumenTurno = [
+      {
+        id: 'sh-s2',
+        supervisorId: 's2',
+        cards: [
+          { id: 'c1', operatorName: 'Juan Carvajal', equipo: { internalCode: 'CG-002', equipmentClass: 'HEAVY' } },
+          { id: 'c2', operatorName: 'Pedro Soto', equipo: { internalCode: 'CM-NUV', equipmentClass: 'LIGHT' } },
+        ],
+      },
+      {
+        id: 'sh-s1',
+        supervisorId: 's1',
+        cards: [{ id: 'c3', operatorName: 'Otro Operador', equipo: { internalCode: 'SEM 05', equipmentClass: 'HEAVY' } }],
+      },
+    ];
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r2')); // supervisorId s2, NOCTURNO del 16-10
+
+    expect(RESUMEN_HOOK).toHaveBeenLastCalledWith(expect.objectContaining({ turno: 'NOCTURNO' }));
+    const ops = within(screen.getByTestId('detalle-operadores'));
+    expect(ops.getByText('Juan Carvajal · CG-002')).toBeTruthy();
+    // La camioneta no lleva operador del turno, y las tarjetas de OTRO supervisor no son de este reporte.
+    expect(ops.queryByText(/Pedro Soto/)).toBeNull();
+    expect(ops.queryByText(/Otro Operador/)).toBeNull();
+  });
+
+  it('si el turno no tiene grupo del supervisor del reporte (backfill del panel), muestra las de todo el turno', () => {
+    resumenTurno = [
+      {
+        id: 'sh-otro',
+        supervisorId: 'alguien-mas',
+        cards: [{ id: 'c9', operatorName: 'Marcos Vega', equipo: { internalCode: 'SANY 02', equipmentClass: 'HEAVY' } }],
+      },
+    ];
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r1'));
+    expect(within(screen.getByTestId('detalle-operadores')).getByText('Marcos Vega · SANY 02')).toBeTruthy();
+  });
+
+  it('SECRETARIA no consulta el resumen del turno y no ve la sección de operadores', () => {
+    rol.value = 'SECRETARIA';
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r1'));
+    expect(RESUMEN_HOOK).toHaveBeenLastCalledWith(null);
+    expect(within(screen.getByRole('dialog')).queryByText('Operadores del turno')).toBeNull();
   });
 });
