@@ -3,7 +3,11 @@ import { render, cleanup, screen, fireEvent, within } from '@testing-library/rea
 
 import type { ReporteDiario } from '../types/reporte-diario';
 
-const { listHook, navigateMock } = vi.hoisted(() => ({ listHook: vi.fn(), navigateMock: vi.fn() }));
+const { listHook, navigateMock, eliminarMock } = vi.hoisted(() => ({
+  listHook: vi.fn(),
+  navigateMock: vi.fn(),
+  eliminarMock: vi.fn(),
+}));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
 vi.mock('react-router-dom', async (original) => ({
@@ -23,6 +27,7 @@ vi.mock('../hooks/usePermissions', async () => {
 
 vi.mock('../hooks/useReporteDiario', () => ({
   useReportesDiarios: () => listHook(),
+  useEliminarReporteDiario: () => ({ mutate: eliminarMock, isPending: false }),
 }));
 
 import { ReportesDiariosAdminView } from './ReportesDiariosAdminView';
@@ -141,5 +146,36 @@ describe('ReportesDiariosAdminView', () => {
     listHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Terreno') });
     render(<ReportesDiariosAdminView />);
     expect(screen.getByText('Falló Terreno')).toBeTruthy();
+  });
+
+  it('ADMIN ve «Eliminar reporte» y eliminar pide confirmación antes de llamar al backend', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r2'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Eliminar reporte' }));
+
+    // El detalle se cierra y la confirmación nombra reporte, turno y supervisor.
+    const confirmacion = screen.getByRole('alertdialog');
+    expect(within(confirmacion).getByText(/Patricio Rojas/)).toBeTruthy();
+    expect(eliminarMock).not.toHaveBeenCalled();
+    fireEvent.click(within(confirmacion).getByRole('button', { name: 'Eliminar' }));
+    expect(eliminarMock).toHaveBeenCalledWith('r2', expect.anything());
+  });
+
+  it('«Corregir reporte» lleva al formulario con ese reporte abierto', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r2'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Corregir reporte' }));
+    expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios/cargar', {
+      state: { fecha: '2026-10-16', turno: 'NOCTURNO', reporteId: 'r2' },
+    });
+  });
+
+  it('SECRETARIA puede corregir pero no ve «Eliminar reporte»', () => {
+    rol.value = 'SECRETARIA';
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByTestId('reporte-fila-r1'));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByRole('button', { name: 'Corregir reporte' })).toBeTruthy();
+    expect(dialog.queryByRole('button', { name: 'Eliminar reporte' })).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, History, Pencil } from 'lucide-react';
 
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -271,20 +271,46 @@ function CabeceraFicha({
   );
 }
 
+/** Reporte elegido en el listado del panel, pasado por el estado de la
+ * navegación («Corregir reporte» del detalle). */
+export interface ReporteElegido {
+  fecha?: string;
+  turno?: Turno;
+  reporteId?: string;
+}
+
+/**
+ * `/reportes-diarios/cargar`: el formulario del panel. Lee de la navegación el
+ * reporte elegido en el listado para abrirlo de inmediato. Es un wrapper
+ * aparte porque `useLocation` exige un Router y el formulario también se
+ * renderiza (y testea) fuera de uno.
+ */
+export function ReporteDiarioCargarView() {
+  const { state } = useLocation();
+  return <ReporteDiarioView elegirTurno inicial={(state ?? null) as ReporteElegido | null} />;
+}
+
 /**
  * `elegirTurno` (panel, `/reportes-diarios/cargar`): fecha y turno los elige
  * quien carga en vez de salir del reloj — para completar el reporte que un
  * supervisor olvidó, o corregir uno de un turno que ya quedó atrás del
  * historial de la semana. Firma el usuario de la sesión, como siempre.
  */
-export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boolean } = {}) {
+export function ReporteDiarioView({
+  elegirTurno = false,
+  inicial = null,
+}: { elegirTurno?: boolean; inicial?: ReporteElegido | null } = {}) {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
   const reloj = useTurnoActual();
-  const [elegido, setElegido] = useState<{ fecha: string; turno: Turno }>(() => ({
-    fecha: toDateOnly(reloj.fecha),
-    turno: reloj.turno,
-  }));
+  /** Llegada desde el panel con un reporte elegido: fecha y turno
+   * preseleccionados y ese reporte abierto. */
+  const desdePanel = elegirTurno ? inicial : null;
+  const [elegido, setElegido] = useState<{ fecha: string; turno: Turno }>(() =>
+    desdePanel?.fecha && desdePanel.turno
+      ? { fecha: desdePanel.fecha, turno: desdePanel.turno }
+      : { fecha: toDateOnly(reloj.fecha), turno: reloj.turno },
+  );
   // En AMBOS modos el reporte es del par elegido (que parte en el turno del
   // reloj): en Terreno esto habilita la carga histórica del supervisor (hasta
   // 30 días, la ventana del backend), igual que en el panel.
@@ -398,9 +424,9 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
     [reportes],
   );
 
-  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [historialAbierto, setHistorialAbierto] = useState(() => desdePanel?.reporteId != null);
   /** Id del reporte abierto: un índice apuntaría a otro tras un refetch. */
-  const [detalleId, setDetalleId] = useState<string | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(desdePanel?.reporteId ?? null);
   const detalle = detalleId == null ? null : (anteriores.find((r) => r.id === detalleId) ?? null);
   const { data: cambios, isLoading: cargandoCambios } = useReporteCambios(detalle?.id ?? null);
   const editarReporte = useEditReporteDiario();
@@ -417,8 +443,10 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   };
 
   // Si el reporte abierto desaparece tras un refetch, se cierra sin dejar un
-  // borrador colgando (los setState de render sobre el mismo componente son válidos).
-  if (detalleId != null && detalle == null) abrirDetalle(null);
+  // borrador colgando (los setState de render sobre el mismo componente son
+  // válidos). Solo con el historial YA cargado: mientras baja, el detalle
+  // preabierto desde el panel aún no está en la lista y no hay que cerrarlo.
+  if (detalleId != null && reportes !== undefined && detalle == null) abrirDetalle(null);
 
   const abrirEdicion = (r: ReporteAnterior) => {
     setAvisoGuardado(null);
@@ -506,9 +534,11 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
   const secciones = useMemo(() => seccionesDelFormulario(prod), [prod]);
 
   const crear = useCreateReporteDiario();
-  /** El turno ELEGIDO ya tiene reporte en el historial cargado. */
+  /** El turno ELEGIDO ya tiene TU reporte en el historial cargado. Cada
+   * supervisor envía el suyo: el reporte de otro no bloquea el tuyo (dos
+   * cuadrillas del mismo turno son dos reportes distintos). */
   const yaReportado = (reportes ?? []).some(
-    (r) => r.fecha.slice(0, 10) === hasta && r.turno === ctx.turno,
+    (r) => r.fecha.slice(0, 10) === hasta && r.turno === ctx.turno && r.supervisorId === user?.id,
   );
   const hayErrorDeEntero = [
     ...Object.values(prod),
@@ -829,8 +859,8 @@ export function ReporteDiarioView({ elegirTurno = false }: { elegirTurno?: boole
         <Hint>
           <span className="block text-center font-semibold">
             {elegirTurno
-              ? `El turno ${ctx.turno} de ese día ya tiene reporte: ábrelo en el historial para corregirlo`
-              : `El turno ${ctx.turno} del ${ctx.fecha.toLocaleDateString('es-CL')} ya fue reportado`}
+              ? `Ya cargaste a tu nombre el reporte del turno ${ctx.turno} de ese día: ábrelo en el historial para corregirlo`
+              : `Ya enviaste tu reporte del turno ${ctx.turno} del ${ctx.fecha.toLocaleDateString('es-CL')}: ábrelo en el historial para corregirlo`}
           </span>
         </Hint>
       )}

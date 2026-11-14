@@ -45,6 +45,12 @@ export async function listCambiosReporteDiario(
   }
 }
 
+/** Eliminación definitiva (solo ADMIN): el backend deja el resumen del
+ * reporte como traza en el Registro de actividad. */
+export async function deleteReporteDiario(id: string): Promise<void> {
+  await api.delete(`/api/reporte-diario/${encodeURIComponent(id)}`);
+}
+
 export async function listPlantas(): Promise<Planta[]> {
   const res = await api.get<ApiResponse<Planta[]>>('/api/plantas');
   return res.data.data;

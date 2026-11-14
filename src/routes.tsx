@@ -41,7 +41,7 @@ import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ReportesView } from './views/ReportesView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { VencimientosView } from './views/VencimientosView';
-import { ReporteDiarioView } from './views/ReporteDiarioView';
+import { ReporteDiarioCargarView, ReporteDiarioView } from './views/ReporteDiarioView';
 import { RegistroEquipoView } from './views/RegistroEquipoView';
 
 export const router = createBrowserRouter([
@@ -158,7 +158,7 @@ export const router = createBrowserRouter([
                   { path: '/reportes-diarios', element: <ReportesDiariosAdminView /> },
                   // El formulario de Terreno con fecha y turno a elección: para
                   // cargar o corregir el reporte de un turno que ya pasó.
-                  { path: '/reportes-diarios/cargar', element: <ReporteDiarioView elegirTurno /> },
+                  { path: '/reportes-diarios/cargar', element: <ReporteDiarioCargarView /> },
                   // Registro de mantenciones del taller (filtros y detalle), con
                   // cierre de las que quedaron sin terminar; destino del aviso
                   // «Orden de trabajo completada» del administrador.
