@@ -187,8 +187,8 @@ export interface UseShiftProjectionResult {
   abiertasActual: TarjetaTurno[];
   abiertasAnterior: TarjetaTurno[];
   cerradas: TarjetaTurno[];
-  /** `abiertasActual` más los livianos que YO cerré en este turno — las que
-   * entran en el reporte de salida. */
+  /** Los pesados abiertos en este turno — los que entran en el reporte de
+   * salida (las camionetas no van). */
   enCurso: TarjetaTurno[];
   /** Livianos: van aparte, abiertos sin importar el turno (se cierran cuando
    * se carga combustible, a veces 24 o 48 h después y por otro supervisor). */
@@ -280,12 +280,9 @@ export function useShiftProjection({
   const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
   const livianosAbiertos = tarjetas.filter((t) => t.liviano && t.estado === 'curso');
   const livianosCerrados = tarjetas.filter((t) => t.liviano && t.estado === 'cerrada');
-  // Un liviano entra en el reporte del turno en que se CIERRA, y solo en el
-  // de quien lo cerró (el servidor busca por `closedShiftId`).
-  const enCurso = [
-    ...abiertasActual,
-    ...livianosCerrados.filter((t) => t.cerradaEnActual && t.cerradaPorId != null && t.cerradaPorId === userId),
-  ];
+  // Solo pesados: las camionetas no «salen» por turno (quedan abiertas hasta
+  // la carga de combustible) y no van al reporte de salida (13/11/2026).
+  const enCurso = abiertasActual;
 
   // Ids de cierre pendientes, por el id de la tarjeta que cierran — usado
   // para las dos correcciones de `disponibles` de abajo.

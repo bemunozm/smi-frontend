@@ -269,6 +269,8 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     reporteUltimo: null,
     reporteError: null,
     reportePuedeReenviar: false,
+    reporteCubre: () => true,
+    motivoSinCierre: () => null,
     enviarReporte: enviarReporteMock,
     isEnviandoReporte: false,
     reporteUrl: reporteUrlMock,
@@ -501,12 +503,40 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Sin enviar')).toBeTruthy();
     });
 
-    it('"Enviar ahora" llama a enviarReporte() del hook, nunca escribe estado local', () => {
+    it('al enviar pregunta si están todos los equipos; «Sí, son todos» llama a enviarReporte() del hook', () => {
       renderView('desktop', { verReporte: true });
 
-      fireEvent.click(screen.getByRole('button', { name: /Enviar ahora/ }));
+      expect(screen.getByText('¿Están todos los equipos que salen en este turno?')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Sí, son todos: enviar/ }));
 
       expect(enviarReporteMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('«Me falta agregar equipos» cierra la hoja sin enviar', () => {
+      renderView('desktop', { verReporte: true });
+
+      fireEvent.click(screen.getByRole('button', { name: /me falta agregar equipos/ }));
+
+      expect(enviarReporteMock).not.toHaveBeenCalled();
+      expect(setVerReporte).toHaveBeenCalledWith(false);
+    });
+
+    it('sin el reporte enviado, el pesado no se puede cerrar y dice por qué', () => {
+      const motivo = 'Primero envía el reporte de salida: la administración tiene que saber qué equipos salieron.';
+      renderView('phone', { motivoSinCierre: (t) => (t.id === 'c1' ? motivo : null) });
+
+      const boton = screen.getByRole('button', { name: /Cerrar tarjeta de CA-011/ });
+      expect(boton.hasAttribute('disabled')).toBe(true);
+      expect(screen.getByText(motivo)).toBeTruthy();
+    });
+
+    it('en escritorio el botón Cerrar también queda bloqueado, con el motivo en el título', () => {
+      const motivo = 'Primero envía el reporte de salida: la administración tiene que saber qué equipos salieron.';
+      renderView('desktop', { motivoSinCierre: () => motivo });
+
+      const boton = screen.getByRole('button', { name: /Cerrar tarjeta de CA-011/ });
+      expect(boton.hasAttribute('disabled')).toBe(true);
+      expect(boton.getAttribute('title')).toBe(motivo);
     });
 
     /**
@@ -562,7 +592,7 @@ describe('RegistroEquipoView', () => {
       expect(link.getAttribute('href')).toBe('/api/shift-reports/rep-1/file');
     });
 
-    it('"enviado" con `reportePuedeReenviar`, ofrece "Reenviar con N equipos"', () => {
+    it('"enviado" con `reportePuedeReenviar`, ofrece reenviar con la misma confirmación', () => {
       renderView('desktop', {
         reporteEstado: 'enviado',
         reporteUltimo: { id: 'rep-1', requestedAt: '2026-09-24T08:41:00.000Z', cardCount: 1, emailStatus: 'SENT' },
@@ -571,7 +601,8 @@ describe('RegistroEquipoView', () => {
         enCurso: [TARJETA_ABIERTA, { ...TARJETA_ABIERTA, id: 'c9' }],
       });
 
-      fireEvent.click(screen.getByRole('button', { name: /Reenviar con 2 equipos/ }));
+      expect(screen.getByText(/Se reenvía con 2 equipos/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Sí, son todos: reenviar/ }));
       expect(enviarReporteMock).toHaveBeenCalledTimes(1);
     });
   });
@@ -930,14 +961,35 @@ describe('RegistroEquipoView', () => {
       expect(setCerrandoId).toHaveBeenCalledWith('l-c1');
     });
 
-    it('el cierre de un liviano pide km final, sin AdBlue, y entra en el reporte de este turno', () => {
+    it('explica cómo funcionan: no abrir una ya abierta y cerrar solo al cargar combustible', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      verLivianos();
+
+      expect(screen.getByText('Cómo funcionan las camionetas')).toBeTruthy();
+      expect(screen.getByText(/no abras otra ni la toques/)).toBeTruthy();
+      expect(screen.getByText(/Ciérrala solo cuando le eches combustible/)).toBeTruthy();
+      expect(screen.getByText(/Solo si le echaste combustible\. Si no, déjala abierta\./)).toBeTruthy();
+    });
+
+    it('en Livianos no aparece el reporte de salida a la administración', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      expect(screen.getByText('Falta avisar a la administración')).toBeTruthy();
+
+      verLivianos();
+
+      expect(screen.queryByText('Falta avisar a la administración')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Enviar reporte de salida/ })).toBeNull();
+    });
+
+    it('el cierre de un liviano pide km final, sin AdBlue, y recuerda que es solo con la carga', () => {
       renderView('desktop', { cerrandoId: 'l-c1', cerrando: LIVIANO_ABIERTO, finalNum: 45300, horasMaquina: 180 });
 
       expect(screen.getByText('Kilometraje final')).toBeTruthy();
       expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
       expect(screen.getByText('180 km')).toBeTruthy();
       expect(screen.queryByText(/AdBlue/)).toBeNull();
-      expect(screen.getByText(/Entra en tu reporte de salida del turno/)).toBeTruthy();
+      expect(screen.getByText(/Ciérrala solo si le echaste combustible/)).toBeTruthy();
+      expect(screen.queryByText(/reporte de salida del turno/)).toBeNull();
       // La foto del surtidor sigue siendo obligatoria.
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });

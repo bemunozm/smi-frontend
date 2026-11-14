@@ -141,6 +141,7 @@ export function RegistroEquipoView() {
     adBlueCierre,
     adBlueIncompletoCierre,
     edicion,
+    motivoSinCierre,
     isCerrando,
     foto,
     verReporte,
@@ -292,8 +293,20 @@ export function RegistroEquipoView() {
     <Card>
       <CardHead
         titulo="Abrir camioneta"
-        bajada="Queda abierta hasta la carga de combustible. La puede cerrar cualquier supervisor, en otro turno."
+        bajada="Abre solo una camioneta que vas a usar y que no tenga tarjeta abierta."
       />
+      <div className="flex flex-col gap-1.5 rounded-2xl bg-[#f5f6f8] px-3.5 py-3 text-[13px] leading-snug text-muted-foreground">
+        <b className="text-[13.5px] text-foreground">Cómo funcionan las camionetas</b>
+        <span>
+          • Si la camioneta que vas a usar <b className="text-foreground">ya tiene una tarjeta abierta</b> (aparece
+          en «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
+        </span>
+        <span>
+          • <b className="text-foreground">Ciérrala solo cuando le eches combustible</b>, con el km, los litros y la
+          foto del surtidor. Puede cerrarla cualquier supervisor, aunque la haya abierto otro.
+        </span>
+        <span>• Las camionetas no van en el reporte de salida a la administración.</span>
+      </div>
       {disponiblesLivianos.length === 0 ? (
         <Hint>Todas las camionetas operativas ya tienen una tarjeta abierta.</Hint>
       ) : (
@@ -421,7 +434,7 @@ export function RegistroEquipoView() {
       <>
         Preparado a las <b className="tabular">{fmtTime(reporteUltimo.requestedAt)}</b> con{' '}
         <b>{plural(reporteUltimo.cardCount, 'equipo', 'equipos')}</b>. {lineaEstadoCorreo(reporteUltimo.emailStatus)}.
-        {reportePuedeReenviar && ' Se agregaron equipos desde entonces.'}
+        {reportePuedeReenviar && ' Se agregaron equipos desde entonces: reenvíalo para poder cerrarlos.'}
       </>
     ) : reporteEstado === 'en-cola' ? (
       <>
@@ -432,7 +445,8 @@ export function RegistroEquipoView() {
     ) : (
       <>
         <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
-        {enCurso.length === 1 ? 'salió' : 'salieron'} en este turno y la administración todavía no lo sabe.
+        {enCurso.length === 1 ? 'salió' : 'salieron'} en este turno y la administración todavía no lo sabe. Envíalo
+        cuando hayas agregado todos los equipos que salen: hasta entonces no podrás cerrarlos.
       </>
     );
 
@@ -473,6 +487,39 @@ export function RegistroEquipoView() {
           Ver reporte
         </Boton>
       )}
+    </div>
+  );
+
+  /**
+   * El envío pide confirmar que están TODOS los equipos que salen en el turno:
+   * el reporte es obligatorio y lo que se agregue después hay que reenviarlo
+   * antes de poder cerrarlo. «Me falta agregar» vuelve al formulario.
+   */
+  const confirmacionReporte = (reenvio: boolean) => (
+    <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] px-3.5 py-3">
+      <p className="m-0 text-[15px] font-semibold text-foreground">
+        ¿Están todos los equipos que salen en este turno?
+      </p>
+      <p className="m-0 text-[13px] text-muted-foreground">
+        {reenvio ? 'Se reenvía' : 'Se envía'} con {plural(enCurso.length, 'equipo', 'equipos')}. Si sale otro
+        después, tendrás que agregarlo y reenviar el reporte antes de cerrarlo.
+      </p>
+      <Boton
+        variante="acento"
+        ancho
+        className="min-h-[56px] !rounded-[18px] !text-[16px]"
+        disabled={isEnviandoReporte}
+        onClick={() => {
+          enviarReporte();
+          setVerReporte(false);
+        }}
+      >
+        {isEnviandoReporte ? 'Enviando…' : reenvio ? 'Sí, son todos: reenviar' : 'Sí, son todos: enviar'}{' '}
+        <ArrowRight className="h-[19px] w-[19px]" />
+      </Boton>
+      <Boton variante="contorno" ancho onClick={() => setVerReporte(false)}>
+        No, me falta agregar equipos
+      </Boton>
     </div>
   );
 
@@ -534,9 +581,19 @@ export function RegistroEquipoView() {
             <span>· cerrada {t.cerradaA}</span>
           </div>
         ) : (
-          <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
-            Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
-          </Boton>
+          <>
+            <Boton
+              variante="contorno"
+              ancho
+              disabled={motivoSinCierre(t) != null}
+              aria-label={motivoSinCierre(t) ? `Cerrar tarjeta de ${t.equipo}. ${motivoSinCierre(t)}` : undefined}
+              onClick={() => abrirCierre(t.id)}
+            >
+              {motivoSinCierre(t) ? <Lock className="h-[17px] w-[17px]" /> : null}
+              Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
+            </Boton>
+            {motivoSinCierre(t) && <Hint>{motivoSinCierre(t)}</Hint>}
+          </>
         )}
         {botonEditar(t, true)}
         {t.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />}
@@ -589,7 +646,15 @@ export function RegistroEquipoView() {
             <div className="flex justify-end gap-2">
               {botonEditar(t, false)}
               {!cerrada && (
-                <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirCierre(t.id)}>
+                <Boton
+                  variante="contorno"
+                  className="!min-h-10 !text-[13.5px]"
+                  disabled={motivoSinCierre(t) != null}
+                  title={motivoSinCierre(t) ?? undefined}
+                  aria-label={motivoSinCierre(t) ? `Cerrar tarjeta de ${t.equipo}. ${motivoSinCierre(t)}` : undefined}
+                  onClick={() => abrirCierre(t.id)}
+                >
+                  {motivoSinCierre(t) ? <Lock className="h-4 w-4" /> : null}
                   Cerrar
                 </Boton>
               )}
@@ -714,7 +779,6 @@ export function RegistroEquipoView() {
 
   const tarjetaLiviano = (t: TarjetaTurno) => {
     const cerrada = t.estado === 'cerrada';
-    const enMiReporte = enCurso.some((x) => x.id === t.id);
     return (
       <Tarjeta key={t.id}>
         <div className="flex items-start justify-between gap-2.5">
@@ -746,16 +810,16 @@ export function RegistroEquipoView() {
               Cerró <b className="text-foreground">{t.cerradaPor ?? 'otro supervisor'}</b>
               {t.cerradaA && <> · {t.cerradaA}</>}
             </span>
-            {enMiReporte && (
-              <span className="font-semibold text-[var(--success-soft-foreground)]">
-                Entra en tu reporte de salida de este turno.
-              </span>
-            )}
           </div>
         ) : (
-          <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
-            Cerrar con la carga <ArrowRight className="h-[19px] w-[19px]" />
-          </Boton>
+          <>
+            <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
+              Cerrar con la carga <ArrowRight className="h-[19px] w-[19px]" />
+            </Boton>
+            <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+              Solo si le echaste combustible. Si no, déjala abierta.
+            </p>
+          </>
         )}
         {t.sinSincronizar && (
           <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
@@ -1065,7 +1129,8 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          Entra en tu reporte de salida del turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
+          Ciérrala solo si le echaste combustible. Queda a tu nombre en el turno <b>{ctx.turno}</b> del{' '}
+          <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}
 
@@ -1198,7 +1263,10 @@ export function RegistroEquipoView() {
         en el tono de su estado.
         Sin tarjetas en el turno no hay nada que avisar.
       */}
-      {(reporteEstado !== 'sin-enviar' || enCurso.length > 0) && <div className="mb-4">{panelReporte}</div>}
+      {/* Solo en Pesados: las camionetas no van al reporte de salida. */}
+      {claseVista === 'pesados' && (reporteEstado !== 'sin-enviar' || enCurso.length > 0) && (
+        <div className="mb-4">{panelReporte}</div>
+      )}
 
       <VistaSplit
         formulario={
@@ -1377,20 +1445,7 @@ export function RegistroEquipoView() {
             </span>
           </div>
 
-          {reporteEstado === 'sin-enviar' && (
-            <Boton
-              variante="acento"
-              ancho
-              className="min-h-[60px] !rounded-[18px] !text-[17px]"
-              disabled={isEnviandoReporte}
-              onClick={() => {
-                enviarReporte();
-                setVerReporte(false);
-              }}
-            >
-              {isEnviandoReporte ? 'Enviando…' : 'Enviar ahora'} <ArrowRight className="h-[19px] w-[19px]" />
-            </Boton>
-          )}
+          {reporteEstado === 'sin-enviar' && confirmacionReporte(false)}
 
           {reporteEstado === 'en-cola' && (
             <div className="flex items-center gap-2.5 rounded-2xl bg-[var(--warning-soft)] px-3.5 py-3 text-sm font-medium text-[var(--warning-soft-foreground)]">
@@ -1430,20 +1485,7 @@ export function RegistroEquipoView() {
                   Necesitas señal para descargar el PDF.
                 </p>
               )}
-              {reportePuedeReenviar && (
-                <Boton
-                  variante="contorno"
-                  ancho
-                  disabled={isEnviandoReporte}
-                  onClick={() => {
-                    enviarReporte();
-                    setVerReporte(false);
-                  }}
-                >
-                  {isEnviandoReporte ? 'Enviando…' : `Reenviar con ${plural(enCurso.length, 'equipo', 'equipos')}`}{' '}
-                  <ArrowRight className="h-[19px] w-[19px]" />
-                </Boton>
-              )}
+              {reportePuedeReenviar && confirmacionReporte(true)}
             </>
           )}
         </Hoja>

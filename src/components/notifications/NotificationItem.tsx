@@ -59,6 +59,14 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
       return;
     }
 
+    // Equipos que quedaron abiertos al terminar el turno: se cierran desde el
+    // Informe diario.
+    if (notificacion.tipo === NOTIF_TIPOS.SHIFT_OPEN_CARDS) {
+      navigate('/terreno/registro');
+      onAfterClick?.();
+      return;
+    }
+
     if (
       notificacion.tipo === NOTIF_TIPOS.CHECKLIST_SUBMITTED ||
       notificacion.tipo === NOTIF_TIPOS.CHECKLIST_REVIEWED
