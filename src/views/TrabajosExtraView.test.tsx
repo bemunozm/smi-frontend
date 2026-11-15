@@ -104,7 +104,7 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
   fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
   fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '112' } });
   completarFila(1, { actividad: 'Soltar material', lugar: 'Transporte', horas: '12' });
-  fireEvent.change(screen.getByLabelText('Descripción de la tarea'), {
+  fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), {
     target: { value: 'Carga de material extra' },
   });
   // Los campos del report: folio y la foto obligatoria.
@@ -402,6 +402,7 @@ describe('TrabajosExtraView', () => {
     expect((screen.getByLabelText('Tipo de la actividad 1') as HTMLInputElement).value).toBe('Planta · automático');
     // Puede abarcar varias plantas: se marcan las que correspondan.
     const grupo = screen.getByRole('group', { name: 'Plantas de la actividad 1' });
+    expect(within(grupo).getByText(/Selecciona 1 o más/)).toBeTruthy();
     // Solo las cinco plantas de silos, con su nombre largo (P.P. producto, P.R. rechazo).
     expect(within(grupo).getAllByRole('button').map((b) => b.textContent)).toEqual([
       'P.P.1Planta 1',
@@ -531,6 +532,20 @@ describe('TrabajosExtraView', () => {
     expect('fotoKey' in op.payload).toBe(false);
   });
 
+  it('la descripción de la tarea es opcional: sin ella el report se registra igual', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op.payload.descripcion).toBe('');
+    expect(screen.queryByText('Describí la tarea')).toBeNull();
+  });
+
   it('la fecha por defecto es hoy y NO viaja en el payload (conserva la hora real de captura)', async () => {
     renderConRegistro();
 
@@ -585,7 +600,7 @@ describe('TrabajosExtraView', () => {
     fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
     completarFila(1, { actividad: 'Soltar material', lugar: 'Variado', horas: '0.3' });
-    fireEvent.change(screen.getByLabelText('Descripción de la tarea'), { target: { value: 'Despeje' } });
+    fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), { target: { value: 'Despeje' } });
     fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4510' } });
     elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
@@ -606,7 +621,7 @@ describe('TrabajosExtraView', () => {
 
     await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringContaining('Guardado')));
     await waitFor(() =>
-      expect((screen.getByLabelText('Descripción de la tarea') as HTMLTextAreaElement).value).toBe(''),
+      expect((screen.getByLabelText(/^Descripción de la tarea/) as HTMLTextAreaElement).value).toBe(''),
     );
     expect((screen.getByRole('button', { name: 'Registrar trabajo' }) as HTMLButtonElement).disabled).toBe(false);
     expect(toastDangerMock).not.toHaveBeenCalled();

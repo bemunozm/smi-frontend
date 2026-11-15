@@ -76,7 +76,7 @@ export function opcionesPlantasSilos(elegidas: readonly string[]): { nombre: str
 }
 
 export const AYUDA_PLANTAS_SILOS =
-  'P.P. es producto planta y P.R. es producto rechazo. Marca todas las que correspondan: en planta 2 a veces van P.P.2 y P.R.2 juntas.';
+  'P.P. es producto planta y P.R. es producto rechazo. Marca solo las que se limpiaron: puede ser una o varias.';
 
 /** Máximo de la descripción de una actividad (mismo tope que el servidor). */
 export const DESCRIPCION_ACTIVIDAD_MAX = 300;
@@ -151,7 +151,13 @@ const camposTrabajoExtra = z
       .min(1, 'Agregá al menos una actividad')
       .max(12, 'Máximo 12 actividades por report'),
     otraActividad: z.string().optional(),
-    descripcion: z.string().min(3, 'Describí la tarea'),
+    /** Opcional (pedido del 15/11/2026): cada actividad ya trae su propia
+     * descripción, y exigir también un resumen trababa el envío. El servidor
+     * guarda `''` cuando no viene. */
+    descripcion: z
+      .string()
+      .optional()
+      .transform((v) => v?.trim() ?? ''),
     observaciones: z.string().optional(),
     /** `YYYY-MM-DD` del trabajo — por defecto hoy; una fecha pasada es la
      * carga histórica. Solo viaja al backend cuando difiere de hoy (ver

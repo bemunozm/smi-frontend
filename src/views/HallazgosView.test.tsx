@@ -136,7 +136,7 @@ describe('HallazgosView', () => {
     renderView();
 
     expect(screen.getByText('· opcional')).toBeTruthy();
-    expect(screen.queryByText('· requerida')).toBeNull();
+    expect(screen.queryByText('· obligatoria')).toBeNull();
     expect(screen.getByText('Foto del hallazgo')).toBeTruthy();
   });
 

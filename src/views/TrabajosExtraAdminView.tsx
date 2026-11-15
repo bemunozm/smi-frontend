@@ -586,7 +586,9 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                     {fila.lugar === 'PLANTA' ? (
                       // Una limpieza de silos puede abarcar varias plantas: se marcan todas.
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-medium text-foreground">¿En qué plantas?</span>
+                        <span className="text-sm font-medium text-foreground">
+                          ¿En qué plantas? <span className="font-normal text-muted-foreground">· Selecciona 1 o más</span>
+                        </span>
                         <ToggleButtonGroup
                           aria-label={`Plantas de la actividad ${i + 1}`}
                           className="flex-wrap"
