@@ -167,7 +167,7 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(dialog).getByText('P. Rojas')).toBeTruthy();
     expect(within(dialog).getByText('Nocturno')).toBeTruthy();
     expect(within(dialog).getByText('Otro: Rescate de camión')).toBeTruthy();
-    expect(within(dialog).getByText('Con apoyo del cargador')).toBeTruthy();
+    expect(within(dialog).getByText(/Con apoyo del cargador/)).toBeTruthy();
     expect(within(dialog).getByText('2,5 h')).toBeTruthy();
   });
 
@@ -264,7 +264,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
     fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción de la actividad'), { target: { value: 'Romana 2' } });
-    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.change(within(dialog).getByLabelText(/^Descripción general y.u observaciones/), { target: { value: 'Carga de material' } });
     fireEvent.change(within(dialog).getByLabelText('Fecha y hora del trabajo'), {
       target: { value: '2026-10-05T21:15' },
     });
@@ -338,7 +338,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Transporte' }));
     fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción de la actividad'), { target: { value: 'Romana 2' } });
-    fireEvent.change(within(dialog).getByLabelText('Descripción'), { target: { value: 'Carga de material' } });
+    fireEvent.change(within(dialog).getByLabelText(/^Descripción general y.u observaciones/), { target: { value: 'Carga de material' } });
     fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));

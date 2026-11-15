@@ -58,6 +58,7 @@ import {
   destinoLabel,
   AYUDA_PLANTAS_SILOS,
   opcionesPlantasSilos,
+  descripcionYObservaciones,
   plantasDeFila,
   tipoAlCambiarActividad,
   trabajoExtraEdicionSchema,
@@ -212,18 +213,14 @@ function DetalleTrabajoModal({
                 ) : null}
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
-                    Descripción
+                    Descripción y observaciones
                   </span>
-                  <p className="text-sm text-foreground">{trabajo.descripcion}</p>
+                  <p className="text-sm whitespace-pre-line text-foreground">
+                    {descripcionYObservaciones(trabajo) || (
+                      <span className="text-muted-foreground">Sin descripción ni observaciones.</span>
+                    )}
+                  </p>
                 </div>
-                {trabajo.observaciones ? (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
-                      Observaciones
-                    </span>
-                    <p className="text-sm text-foreground">{trabajo.observaciones}</p>
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </Modal.Body>
@@ -659,15 +656,19 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 ) : null}
               </div>
 
+              {/* Un solo campo (15/11/2026); las observaciones aparte solo
+                  aparecen en un report anterior que ya las tenga. */}
               <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
-                <Label>Descripción</Label>
-                <TextArea placeholder="Qué se hizo…" rows={3} />
+                <Label>Descripción general y/u observaciones (opcional)</Label>
+                <TextArea placeholder="Resumen del trabajo, novedades, detenciones…" rows={3} />
               </TextField>
 
-              <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
-                <Label>Observaciones (opcional)</Label>
-                <TextArea placeholder=" " rows={2} />
-              </TextField>
+              {trabajo?.observaciones ? (
+                <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
+                  <Label>Observaciones</Label>
+                  <TextArea placeholder=" " rows={2} />
+                </TextField>
+              ) : null}
 
               {/* Foto del report en papel — obligatoria: el trabajo se cobra
                   contra el report. */}

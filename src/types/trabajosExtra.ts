@@ -78,6 +78,21 @@ export function opcionesPlantasSilos(elegidas: readonly string[]): { nombre: str
 export const AYUDA_PLANTAS_SILOS =
   'P.P. es producto planta y P.R. es producto rechazo. Marca solo las que se limpiaron: puede ser una o varias.';
 
+/**
+ * Descripción general y observaciones en un solo texto (desde el 15/11/2026
+ * el formulario las pide en un único campo; los reports anteriores las
+ * tienen aparte). `''` si no hay ninguna.
+ */
+export function descripcionYObservaciones(t: {
+  descripcion?: string | null;
+  observaciones?: string | null;
+}): string {
+  return [t.descripcion, t.observaciones]
+    .map((texto) => texto?.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
 /** Máximo de la descripción de una actividad (mismo tope que el servidor). */
 export const DESCRIPCION_ACTIVIDAD_MAX = 300;
 
