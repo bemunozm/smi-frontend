@@ -21,6 +21,7 @@ import { ENDPOINTS, isEndpointKey, type EndpointKey, type HttpParams } from './e
 import { compressPhoto } from './photo';
 import { getCurrentUserId, requestSync } from './replay';
 import { DomainError } from '../lib/api-error';
+import { FOTO_ILEGIBLE } from '../lib/photo-reading';
 import type { QueryKeyName } from '../lib/query-keys';
 import {
   isAcceptedUploadType,
@@ -500,9 +501,16 @@ interface ArchivoGuardable {
  * acá, mientras la persona todavía puede elegir otro.
  */
 async function prepararArchivo(file: File): Promise<ArchivoGuardable> {
-  const guardable: ArchivoGuardable = file.type.startsWith('image/')
-    ? await compressPhoto(file)
-    : { data: await file.arrayBuffer(), mime: file.type || 'application/octet-stream', name: file.name };
+  let guardable: ArchivoGuardable;
+  try {
+    guardable = file.type.startsWith('image/')
+      ? await compressPhoto(file)
+      : { data: await file.arrayBuffer(), mime: file.type || 'application/octet-stream', name: file.name };
+  } catch {
+    // El teléfono quitó el permiso sobre el archivo elegido (`NotReadableError`
+    // en Android): el mensaje del navegador sale en inglés y no dice qué hacer.
+    throw new DomainError(FOTO_ILEGIBLE, { code: 'FILE_NOT_READABLE' });
+  }
   if (!isAcceptedUploadType(guardable.mime)) {
     throw new DomainError(UPLOAD_TYPE_ERROR_MESSAGE, { code: 'FILE_TYPE_NOT_ALLOWED' });
   }

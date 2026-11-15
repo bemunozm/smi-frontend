@@ -7,7 +7,7 @@ const { fuelReadingOcrMock, readCaptureDateMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../api/OcrAPI', () => ({ fuelReadingOcr: fuelReadingOcrMock }));
-vi.mock('./photo-reading', () => ({ readCaptureDate: readCaptureDateMock }));
+vi.mock('./photo-reading', () => ({ readCaptureDate: readCaptureDateMock, FOTO_ILEGIBLE: 'foto ilegible' }));
 vi.mock('@heroui/react', () => ({ toast: { danger: vi.fn() } }));
 
 import { usePhotoCaptureFlow } from './usePhotoCaptureFlow';
@@ -161,5 +161,41 @@ describe('usePhotoCaptureFlow — umbral de autollenado', () => {
 
     expect(onReading).not.toHaveBeenCalled();
     expect(result.current.ocr?.fueraDeRango).toBe(true);
+  });
+});
+
+describe('usePhotoCaptureFlow — foto que el teléfono deja de dar acceso', () => {
+  it('copia la foto a memoria al elegirla: después ya no depende del archivo de la galería', async () => {
+    stubOnline(false);
+    const original = onlineArchivo();
+    const { result } = renderHook(() => usePhotoCaptureFlow(vi.fn()));
+
+    await act(async () => {
+      await result.current.handleSelectPhoto(original);
+    });
+
+    const guardada = result.current.file!;
+    expect(guardada).not.toBe(original);
+    expect(guardada.name).toBe('surtidor.jpg');
+    expect(guardada.type).toBe('image/jpeg');
+    // Aunque el original ya no se pueda leer, la copia sí.
+    vi.spyOn(original, 'arrayBuffer').mockRejectedValue(new DOMException('x', 'NotReadableError'));
+    await expect(guardada.arrayBuffer()).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('si ya no se puede leer al elegirla, avisa en español y no queda la foto puesta', async () => {
+    stubOnline(false);
+    const { toast } = await import('@heroui/react');
+    const ilegible = onlineArchivo();
+    vi.spyOn(ilegible, 'arrayBuffer').mockRejectedValue(new DOMException('x', 'NotReadableError'));
+    const { result } = renderHook(() => usePhotoCaptureFlow(vi.fn()));
+
+    await act(async () => {
+      await result.current.handleSelectPhoto(ilegible);
+    });
+
+    expect(toast.danger).toHaveBeenCalledWith('foto ilegible');
+    expect(result.current.file).toBeNull();
+    expect(result.current.isReadingPhoto).toBe(false);
   });
 });

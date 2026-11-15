@@ -104,7 +104,7 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
   fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
   fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '112' } });
   completarFila(1, { actividad: 'Soltar material', lugar: 'Transporte', horas: '12' });
-  fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), {
+  fireEvent.change(screen.getByLabelText(/^Descripción general y.u observaciones/), {
     target: { value: 'Carga de material extra' },
   });
   // Los campos del report: folio y la foto obligatoria.
@@ -181,9 +181,10 @@ describe('TrabajosExtraView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
     fireEvent.click(screen.getByRole('button', { name: /Ver detalle/ }));
 
+    // Un report anterior con las dos: se ven juntas, en un solo bloque.
     const ventana = within(screen.getByRole('dialog'));
-    expect(ventana.getByText('Carga de material')).toBeTruthy();
-    expect(ventana.getByText('Neumático trasero pinchado a media tarea')).toBeTruthy();
+    expect(ventana.getByText('Descripción y observaciones')).toBeTruthy();
+    expect(ventana.getByText(/Carga de material\s+Neumático trasero pinchado a media tarea/)).toBeTruthy();
 
     fireEvent.click(ventana.getByText('Volver al historial'));
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Ver detalle/ })).toBeTruthy();
@@ -536,7 +537,7 @@ describe('TrabajosExtraView', () => {
     renderConRegistro();
 
     completarFormularioValido();
-    fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/^Descripción general y.u observaciones/), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));
@@ -544,6 +545,13 @@ describe('TrabajosExtraView', () => {
     if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
     expect(op.payload.descripcion).toBe('');
     expect(screen.queryByText('Describí la tarea')).toBeNull();
+  });
+
+  it('descripción y observaciones van en un solo campo: un report nuevo no pide observaciones aparte', () => {
+    renderConRegistro();
+
+    expect(screen.getByLabelText(/^Descripción general y.u observaciones \(opcional\)/)).toBeTruthy();
+    expect(screen.queryByLabelText('Observaciones')).toBeNull();
   });
 
   it('la fecha por defecto es hoy y NO viaja en el payload (conserva la hora real de captura)', async () => {
@@ -600,7 +608,7 @@ describe('TrabajosExtraView', () => {
     fireEvent.change(screen.getByLabelText('Horómetro inicial'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
     completarFila(1, { actividad: 'Soltar material', lugar: 'Variado', horas: '0.3' });
-    fireEvent.change(screen.getByLabelText(/^Descripción de la tarea/), { target: { value: 'Despeje' } });
+    fireEvent.change(screen.getByLabelText(/^Descripción general y.u observaciones/), { target: { value: 'Despeje' } });
     fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4510' } });
     elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
@@ -621,7 +629,7 @@ describe('TrabajosExtraView', () => {
 
     await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringContaining('Guardado')));
     await waitFor(() =>
-      expect((screen.getByLabelText(/^Descripción de la tarea/) as HTMLTextAreaElement).value).toBe(''),
+      expect((screen.getByLabelText(/^Descripción general y.u observaciones/) as HTMLTextAreaElement).value).toBe(''),
     );
     expect((screen.getByRole('button', { name: 'Registrar trabajo' }) as HTMLButtonElement).disabled).toBe(false);
     expect(toastDangerMock).not.toHaveBeenCalled();

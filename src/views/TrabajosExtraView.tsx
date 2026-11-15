@@ -16,6 +16,7 @@ import {
   destinoLabel,
   AYUDA_PLANTAS_SILOS,
   opcionesPlantasSilos,
+  descripcionYObservaciones,
   plantasDeFila,
   tipoAlCambiarActividad,
   type TrabajoExtraForm,
@@ -520,19 +521,16 @@ export function TrabajosExtraView() {
         )}
       </div>
 
-      {(
-        [
-          ['Descripción de la tarea', detalle.descripcion, 'Sin descripción.'],
-          ['Observaciones', detalle.observaciones, 'Sin observaciones.'],
-        ] as const
-      ).map(([titulo, texto, vacio]) => (
-        <div key={titulo} className="flex flex-col gap-1.5">
-          <GrupoHead titulo={titulo} />
-          <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
-            {texto?.trim() || <span className="text-muted-foreground">{vacio}</span>}
-          </p>
-        </div>
-      ))}
+      {/* Un solo bloque: los reports anteriores tenían las observaciones
+          aparte y se muestran juntas, una debajo de la otra. */}
+      <div className="flex flex-col gap-1.5">
+        <GrupoHead titulo="Descripción y observaciones" />
+        <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
+          {descripcionYObservaciones(detalle) || (
+            <span className="text-muted-foreground">Sin descripción ni observaciones.</span>
+          )}
+        </p>
+      </div>
 
       {detalle.fotoUrl && (
         <div className="flex flex-col gap-1.5">
@@ -992,13 +990,24 @@ function FormularioTrabajo({
           </Campo>
         )}
 
-        <Campo label="Descripción de la tarea (opcional)" error={errors.descripcion?.message}>
-          <Textarea rows={3} placeholder="Resumen del trabajo completo" {...register('descripcion')} />
+        {/* Un solo campo para la descripción general y las observaciones
+            (pedido del 15/11/2026): cada actividad ya trae su descripción, y
+            dos cajas de texto libre confundían. Va en `descripcion`. */}
+        <Campo
+          label="Descripción general y/u observaciones (opcional)"
+          hint="Lo que se hizo en general y los incidentes que respalden el cobro: una detención, un neumático pinchado."
+          error={errors.descripcion?.message}
+        >
+          <Textarea rows={3} placeholder="Resumen del trabajo, novedades, detenciones…" {...register('descripcion')} />
         </Campo>
 
-        <Campo label="Observaciones" hint="Incidentes que respalden el cobro: una detención, un neumático pinchado.">
-          <Textarea rows={2} placeholder="Novedades, detenciones, etc." {...register('observaciones')} />
-        </Campo>
+        {/* Un report anterior con observaciones aparte las sigue mostrando
+            para poder corregirlas; los nuevos ya no las piden. */}
+        {inicial.observaciones ? (
+          <Campo label="Observaciones">
+            <Textarea rows={2} {...register('observaciones')} />
+          </Campo>
+        ) : null}
 
         {foto && (
           <>

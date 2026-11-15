@@ -84,6 +84,19 @@ describe('foto o archivo que el servidor rechazaría: se rechaza AL GUARDAR, no 
     expect(await db.blobs.count()).toBe(0);
   });
 
+  it('una foto que el teléfono ya no deja leer: avisa en español qué hacer, sin guardar nada', async () => {
+    const ilegible = archivo(1024);
+    vi.spyOn(ilegible, 'arrayBuffer').mockRejectedValue(new DOMException('x', 'NotReadableError'));
+
+    await expect(enqueueCreateHallazgo('u1', HALLAZGO_INPUT, ilegible)).rejects.toMatchObject({
+      name: 'DomainError',
+      code: 'FILE_NOT_READABLE',
+      message: expect.stringMatching(/Vuelve a elegirla/) as unknown,
+    });
+    expect(await db.outbox.count()).toBe(0);
+    expect(await db.blobs.count()).toBe(0);
+  });
+
   it('una foto válida (PNG) pasa', async () => {
     await enqueueCreateHallazgo('u1', HALLAZGO_INPUT, archivo(1024, 'image/png'));
 

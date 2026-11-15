@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { toast } from '@heroui/react';
 
 import { fuelReadingOcr, type FuelReadingOcrResult } from '../api/OcrAPI';
-import { readCaptureDate } from './photo-reading';
+import { FOTO_ILEGIBLE, readCaptureDate } from './photo-reading';
 
 /** Mismo shape que `OcrAPI.ts#SIN_SUGERENCIA` (privado ahí) — "no hay
  * sugerencia" para cuando ni siquiera se intenta el OCR (sin señal) o
@@ -58,6 +59,13 @@ export type SugerenciaOcr = FuelReadingOcrResult & {
   fueraDeRango?: boolean;
 };
 
+/** Copia el contenido de la foto a un `File` en memoria, que ya no depende
+ * del permiso sobre el archivo original de la galería. */
+async function copiarAMemoria(file: File): Promise<File> {
+  const bytes = await file.arrayBuffer();
+  return new File([bytes], file.name, { type: file.type, lastModified: file.lastModified });
+}
+
 export interface UsePhotoCaptureFlowResult {
   file: File | null;
   isReadingPhoto: boolean;
@@ -100,11 +108,26 @@ export function usePhotoCaptureFlow(
   const [isReadingPhoto, setIsReadingPhoto] = useState(false);
   const [captureDate, setCaptureDate] = useState<Date | null>(null);
   const [ocr, setOcr] = useState<SugerenciaOcr | null>(null);
-  const handleSelectPhoto = async (selected: File) => {
-    setFile(selected);
+  const handleSelectPhoto = async (elegida: File) => {
+    // Se ve de inmediato; la copia en memoria la reemplaza enseguida.
+    setFile(elegida);
     setOcr(null);
     setCaptureDate(null);
     setIsReadingPhoto(true);
+    // Copia la foto a memoria AHORA: el `File` de la galería es solo una
+    // referencia, y Android puede quitar el permiso de leerla antes de que se
+    // registre (caso real, 15/11/2026: «The requested file could not be
+    // read…» al apretar «Registrar trabajo» un rato después).
+    let selected: File;
+    try {
+      selected = await copiarAMemoria(elegida);
+    } catch {
+      setFile(null);
+      setIsReadingPhoto(false);
+      toast.danger(FOTO_ILEGIBLE);
+      return;
+    }
+    setFile(selected);
     try {
       const [fecha, lectura] = await Promise.all([
         readCaptureDate(selected),

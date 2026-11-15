@@ -168,7 +168,8 @@ describe('RegistrarCargaCombustibleModal', () => {
 
     const [vars, options] = mutateMock.mock.calls[0];
     expect(vars.input).toMatchObject({ equipoId: 'eq_1', litros: 80, tipo: 'PETROLEO' });
-    expect(vars.foto).toBe(FILE);
+    // Una copia en memoria de la foto elegida (no la referencia a la galería).
+    expect(vars.foto).toMatchObject({ name: FILE.name, type: FILE.type, size: FILE.size });
     // La key de la foto la escribe el replay al subirla: no viaja en el body.
     expect('fotoKey' in vars.input).toBe(false);
     expect('fotoUrl' in vars.input).toBe(false);

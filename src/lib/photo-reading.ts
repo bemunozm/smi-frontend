@@ -9,6 +9,11 @@
 
 const DEFAULT_FRESH_THRESHOLD_HOURS = 24;
 
+/** Lo que ve el usuario cuando el teléfono no deja leer la foto elegida
+ * (`NotReadableError` de Android: se quitó el permiso sobre el archivo). */
+export const FOTO_ILEGIBLE =
+  'No se pudo leer la foto: el teléfono ya no da acceso a ese archivo. Vuelve a elegirla o tómala de nuevo.';
+
 /**
  * `DateTimeOriginal` de EXIF NO incluye offset de zona horaria (a diferencia
  * de `OffsetTimeOriginal`, un tag aparte que muchas cámaras/celulares no
