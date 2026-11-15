@@ -1044,7 +1044,7 @@ export function RegistroEquipoView() {
     opcionesOperadorEdicion.unshift({ valor: operadorActual.operatorId, titulo: operadorActual.operador });
   }
 
-  // --- Eliminar tarjeta cerrada ---------------------------------------------
+  // --- Eliminar tarjeta (abierta o cerrada) ---------------------------------
 
   const eliminarTarjeta = useDeleteShiftCard();
   /** Por qué no se puede eliminar la tarjeta en edición; `null` si se puede.
@@ -1056,7 +1056,7 @@ export function RegistroEquipoView() {
     return null;
   };
   const eliminarEnEdicion =
-    edicion.editando && edicion.esCerrada
+    edicion.editando != null
       ? {
           motivo: motivoSinEliminar(edicion.editando),
           isEliminando: eliminarTarjeta.isPending,
