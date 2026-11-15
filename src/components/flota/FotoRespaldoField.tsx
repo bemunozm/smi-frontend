@@ -83,7 +83,8 @@ export function FotoRespaldoField({
       <p className="mb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
         Foto de respaldo{' '}
         {requerida ? (
-          <span className="text-(--danger)">· requerida</span>
+          // Neutro, no rojo: en rojo parecía un error aun con la foto puesta.
+          <span className="text-foreground">· obligatoria</span>
         ) : (
           <span className="text-(--muted)">· opcional</span>
         )}

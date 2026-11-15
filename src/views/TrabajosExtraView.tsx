@@ -921,7 +921,7 @@ function FormularioTrabajo({
                     aria-label={`Plantas de la actividad ${i + 1}`}
                     className="flex flex-col gap-1.5"
                   >
-                    <Label requerido>¿En qué plantas?</Label>
+                    <Label requerido>¿En qué plantas? · Selecciona 1 o más</Label>
                     <div className="flex flex-wrap gap-2">
                       {opcionesPlantasSilos(fila.plantas ?? []).map(({ nombre, detalle }) => {
                         const elegidas = fila.plantas ?? [];
@@ -992,7 +992,7 @@ function FormularioTrabajo({
           </Campo>
         )}
 
-        <Campo label="Descripción de la tarea" error={errors.descripcion?.message}>
+        <Campo label="Descripción de la tarea (opcional)" error={errors.descripcion?.message}>
           <Textarea rows={3} placeholder="Resumen del trabajo completo" {...register('descripcion')} />
         </Campo>
 

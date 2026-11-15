@@ -262,12 +262,20 @@ export function Form({ children, className = '' }: { children: ReactNode; classN
 
 /* ---------- Campos ---------- */
 
+/**
+ * Marca «Obligatorio» de un campo: gris neutro, NO rojo. En rojo parecía un
+ * error («falta rellenar algo») aunque el campo ya estuviera completo; el rojo
+ * queda solo para los errores reales (pedido del 15/11/2026).
+ */
+const MARCA_OBLIGATORIO =
+  'rounded-md bg-[var(--default)] px-1.5 py-px text-[10.5px] font-normal tracking-[0.06em] text-[var(--default-foreground)] not-italic';
+
 export function Label({ children, requerido }: { children: ReactNode; requerido?: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-2 text-[11.5px] font-bold tracking-[0.08em] text-[var(--label-color)] uppercase">
       {children}
       {requerido && (
-        <em className="rounded-md bg-[var(--danger-soft)] px-1.5 py-px text-[10.5px] font-normal tracking-[0.06em] text-[var(--danger)] not-italic">
+        <em className={MARCA_OBLIGATORIO}>
           Obligatorio
         </em>
       )}
@@ -340,7 +348,7 @@ export function Campo({
           <label className="campo-flotante__label" htmlFor={children.props.id ?? idCampo}>
             <span className="campo-flotante__texto">{label}</span>
             {requerido && (
-              <em className="shrink-0 rounded-md bg-[var(--danger-soft)] px-1.5 py-px text-[10.5px] font-normal tracking-[0.06em] text-[var(--danger)] not-italic">
+              <em className={`shrink-0 ${MARCA_OBLIGATORIO}`}>
                 Obligatorio
               </em>
             )}
