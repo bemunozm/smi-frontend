@@ -70,7 +70,7 @@ export interface UseEditarTarjetaResult {
   setForm: (cambio: (actual: EdicionTarjetaState) => EdicionTarjetaState) => void;
   /** Tarjeta ya cerrada: el horómetro final, los litros y el AdBlue también se editan. */
   esCerrada: boolean;
-  /** Cerrada Y con turno conocido: se puede corregir si salió DIURNO o NOCTURNO. */
+  /** Con turno conocido (abierta o cerrada): se puede corregir si salió DIURNO o NOCTURNO. */
   editaTurno: boolean;
   /** Opciones del selector de máquina (misma clase pesado/liviano que la tarjeta). */
   opcionesEquipo: { valor: string; titulo: string; detalle: string }[];
@@ -140,9 +140,9 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
 
   const editando = tarjetas.find((t) => t.id === editandoId) ?? null;
   const esCerrada = editando?.estado === 'cerrada';
-  // El turno solo se corrige si se sabe cuál es (una tarjeta vieja sin
-  // `shift` no lo trae); el servidor igual lo exige cerrada.
-  const editaTurno = esCerrada && editando != null && turnoDeTarjeta(editando) != null;
+  // El turno se corrige en abiertas y cerradas, pero solo si se sabe cuál es
+  // (una tarjeta vieja sin `shift` no lo trae).
+  const editaTurno = editando != null && turnoDeTarjeta(editando) != null;
   const opcionesEquipo = useMemo(() => {
     if (!editando) return [];
     // Misma clase que la tarjeta: un pesado va en horas y exige operador, un
@@ -183,7 +183,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
-    (esCerrada && !form.equipoId) ||
+    !form.equipoId ||
     (esCerrada &&
       (finalNum == null ||
         litrosNum == null ||
@@ -221,11 +221,11 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
     const base = estadoDeBase(editando);
     const nuevo: EditShiftCardBody = {
       operatorId: form.operatorId,
+      equipoId: form.equipoId,
+      ...(editaTurno ? { turno: form.turno as ShiftType } : {}),
       valorInicial: inicialNum,
       ...(esCerrada
         ? {
-            equipoId: form.equipoId,
-            ...(editaTurno ? { turno: form.turno as ShiftType } : {}),
             valorFinal: finalNum ?? undefined,
             fuelLiters: litrosNum ?? undefined,
             adBlue: form.adBlue,
@@ -236,9 +236,10 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
     };
     const campos: (keyof EditShiftCardBody)[] = [
       ...(pideOperador ? (['operatorId'] as const) : []),
-      'valorInicial',
-      ...(esCerrada ? (['equipoId', 'valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
+      'equipoId',
       ...(editaTurno ? (['turno'] as const) : []),
+      'valorInicial',
+      ...(esCerrada ? (['valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
       'observaciones',
     ];
     const diff = diferenciaEdicion(base, nuevo, campos);
@@ -338,9 +339,20 @@ async function armarPatchDeTarjeta({
 
   const { operatorId, valorInicial, turno, equipoId, ...deCierre } = diff.cambios;
 
-  let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial });
+  // Equipo y turno viven TAMBIÉN en la apertura pendiente (su `shiftType`):
+  // si la tarjeta todavía no viajó, se corrigen ahí mismo.
+  let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial, equipoId, turno });
   if (aperturaId && Object.keys(aperturaPendiente).length > 0) {
-    const resultado = await patchOpenCardOp(aperturaId, userId, aperturaPendiente);
+    const resultado = await patchOpenCardOp(
+      aperturaId,
+      userId,
+      sinUndefined({
+        operatorId: aperturaPendiente.operatorId,
+        valorInicial: aperturaPendiente.valorInicial,
+        equipoId: aperturaPendiente.equipoId,
+        shiftType: aperturaPendiente.turno,
+      }),
+    );
     if (resultado === 'updated') aperturaPendiente = {};
   }
   let cierrePendiente: EditShiftCardBody = sinUndefined(deCierre);
@@ -355,10 +367,10 @@ async function armarPatchDeTarjeta({
     if (resultado === 'updated') cierrePendiente = {};
   }
 
-  // Turno y equipo no viven en las operaciones pendientes de apertura/cierre:
-  // van siempre por PATCH — la cola ya lo pone detrás de lo que siga
-  // pendiente para esta tarjeta, así que el servidor los aplica al final.
-  const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente, ...sinUndefined({ turno, equipoId }) };
+  // Lo que la apertura pendiente no absorbió (o si no la hay) va por PATCH —
+  // la cola ya lo pone detrás de lo que siga pendiente para esta tarjeta,
+  // así que el servidor lo aplica al final.
+  const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente };
   const campos = Object.keys(body);
   if (campos.length === 0) return null;
   return { params: { id: tarjetaId }, body, expected: precondicion(diff.esperado, campos) };

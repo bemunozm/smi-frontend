@@ -47,9 +47,10 @@ export interface DeleteShiftCardVars {
 }
 
 /**
- * Elimina una tarjeta cerrada (dueño o ADMIN). Online directo, con
- * confirmación en la vista: el servidor arrastra la carga de combustible del
- * cierre y avisa al administrador, así que refresca lo mismo que un cierre.
+ * Elimina una tarjeta, abierta o cerrada (dueño o ADMIN). Online directo,
+ * con confirmación en la vista: el servidor arrastra la carga de combustible
+ * del cierre (si la hay), libera el equipo si seguía en uso y avisa al
+ * administrador, así que refresca lo mismo que un cierre.
  */
 export function useDeleteShiftCard() {
   const queryClient = useQueryClient();

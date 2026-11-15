@@ -300,6 +300,26 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     });
   });
 
+  it('abierta: turno y equipo también se corrigen, con su precondición', async () => {
+    const abiertaConTurno: TarjetaTurno = { ...abierta, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO' };
+    const { result } = render(abiertaConTurno);
+    act(() => result.current.abrirEdicion('c1'));
+    expect(result.current.editaTurno).toBe(true);
+    act(() => result.current.setForm((f) => ({ ...f, turno: 'NOCTURNO', equipoId: 'e2' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const [op] = await opsActuales();
+    expect(op).toMatchObject({
+      type: 'httpWrite',
+      endpoint: 'shiftCard.edit',
+      body: { turno: 'NOCTURNO', equipoId: 'e2' },
+      expected: { turno: 'DIURNO', equipoId: 'e1' },
+    });
+  });
+
   it('una tarjeta vieja sin turno conocido no ofrece corregirlo', () => {
     const { result } = render(cerrada);
     act(() => result.current.abrirEdicion('c1'));
@@ -439,6 +459,30 @@ describe('useEditarTarjeta — tarjeta que todavía vive en el outbox', () => {
       payload: { operatorId: 'op-2', valorInicial: 105, equipoId: 'e1' },
     });
     expect(listChangesMock).not.toHaveBeenCalled();
+  });
+
+  it('turno y equipo se corrigen EN la apertura pendiente (el turno es su shiftType)', async () => {
+    await db.outbox.put(openOp());
+    const abiertaConTurno: TarjetaTurno = {
+      ...abierta,
+      turnoFecha: '2026-09-24',
+      turnoTipo: 'DIURNO',
+      sinSincronizar: true,
+    };
+    const { result } = render(abiertaConTurno, [openOp()]);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, turno: 'NOCTURNO', equipoId: 'e2' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const ops = await opsActuales();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      type: 'openCard',
+      payload: { equipoId: 'e2', shiftType: 'NOCTURNO', shiftDate: '2026-09-24' },
+    });
   });
 
   it('lo que no cabe en la apertura (observaciones) va como PATCH que depende de ella', async () => {
