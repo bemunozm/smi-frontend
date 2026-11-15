@@ -1169,12 +1169,25 @@ describe('RegistroEquipoView', () => {
       expect(ventana.getByRole('button', { name: 'Nocturno' })).toBeTruthy();
     });
 
-    it('una tarjeta abierta no ofrece eliminar ni corregir máquina o turno', () => {
-      renderView('desktop', { edicion: { ...EDICION_INACTIVA, editando: TARJETA_ABIERTA } });
+    it('una tarjeta abierta también ofrece corregir máquina y turno, y eliminar', () => {
+      renderView('desktop', {
+        edicion: {
+          ...EDICION_INACTIVA,
+          editando: { ...TARJETA_ABIERTA, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO' },
+          editaTurno: true,
+          opcionesEquipo: [{ valor: 'e-ca011', titulo: 'CA-011', detalle: 'Cargador' }],
+          form: { ...EDICION_INACTIVA.form, equipoId: 'e-ca011', turno: 'DIURNO' },
+        },
+      });
 
       const ventana = within(screen.getByRole('dialog'));
-      expect(ventana.queryByText(/Eliminar tarjeta/)).toBeNull();
-      expect(ventana.queryByRole('group', { name: 'Turno en que salió' })).toBeNull();
+      expect(ventana.getByLabelText(/^Equipo/)).toBeTruthy();
+      expect(ventana.getByRole('group', { name: 'Turno en que salió' })).toBeTruthy();
+      fireEvent.click(ventana.getByRole('button', { name: /Eliminar tarjeta de CA-011/ }));
+      // En una abierta la confirmación avisa que el equipo queda libre.
+      expect(ventana.getByText(/el equipo queda libre/)).toBeTruthy();
+      fireEvent.click(ventana.getByRole('button', { name: /Sí, eliminar tarjeta/ }));
+      expect(eliminarTarjetaMock).toHaveBeenCalledWith({ id: 'c1', equipoCodigo: 'CA-011' }, expect.anything());
     });
   });
 });

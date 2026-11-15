@@ -162,10 +162,11 @@ async function adminCloseCard(id: string, input: AdminCloseShiftCardInput): Prom
 const DeleteShiftCardResponseSchema = z.object({ data: z.null(), message: z.string() });
 
 /**
- * Elimina una tarjeta CERRADA (`DELETE /api/shift-cards/:id`) — dueño o
- * ADMIN. El servidor arrastra la carga de combustible nacida de su cierre y
- * deja el rastro en el registro de actividad. Online directo: eliminar es
- * excepcional y pide confirmación, no viaja por el outbox.
+ * Elimina una tarjeta, abierta o cerrada (`DELETE /api/shift-cards/:id`) —
+ * dueño o ADMIN. El servidor arrastra la carga de combustible nacida de su
+ * cierre (si la hay), libera el equipo si seguía en uso y deja el rastro en
+ * el registro de actividad. Online directo: eliminar es excepcional y pide
+ * confirmación, no viaja por el outbox.
  */
 async function deleteCard(id: string): Promise<void> {
   try {

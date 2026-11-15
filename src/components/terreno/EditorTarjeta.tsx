@@ -51,7 +51,7 @@ export function EditorTarjeta({
   edicion: UseEditarTarjetaResult;
   /** Opciones del selector de operador. */
   operadores: { valor: string; titulo: string }[];
-  /** «Eliminar tarjeta» (solo cerradas) — sin la acción, el botón no existe. */
+  /** «Eliminar tarjeta» (abierta o cerrada) — sin la acción, el botón no existe. */
   eliminar?: EliminarTarjetaAccion;
 }) {
   const { editando, form, setForm } = edicion;
@@ -80,32 +80,28 @@ export function EditorTarjeta({
         <AvisoEdicion />
       )}
       <Form>
-        {edicion.esCerrada && (
-          <>
-            <Campo label="Equipo">
-              <Selector
-                etiqueta="Equipo"
-                valor={form.equipoId}
-                onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
-                opciones={edicion.opcionesEquipo}
-                tituloTabular
-              />
-            </Campo>
-            {edicion.editaTurno && (
-              <div className="flex flex-col gap-1.5">
-                <Label>Turno en que salió</Label>
-                <Segmentado
-                  etiqueta="Turno en que salió"
-                  valor={form.turno}
-                  onChange={(turno) => setForm((f) => ({ ...f, turno }))}
-                  opciones={[
-                    { valor: 'DIURNO', label: 'Diurno' },
-                    { valor: 'NOCTURNO', label: 'Nocturno' },
-                  ]}
-                />
-              </div>
-            )}
-          </>
+        <Campo label="Equipo">
+          <Selector
+            etiqueta="Equipo"
+            valor={form.equipoId}
+            onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
+            opciones={edicion.opcionesEquipo}
+            tituloTabular
+          />
+        </Campo>
+        {edicion.editaTurno && (
+          <div className="flex flex-col gap-1.5">
+            <Label>Turno en que salió</Label>
+            <Segmentado
+              etiqueta="Turno en que salió"
+              valor={form.turno}
+              onChange={(turno) => setForm((f) => ({ ...f, turno }))}
+              opciones={[
+                { valor: 'DIURNO', label: 'Diurno' },
+                { valor: 'NOCTURNO', label: 'Nocturno' },
+              ]}
+            />
+          </div>
         )}
         {!liviano && (
           <Campo label="Operador">
@@ -179,14 +175,15 @@ export function EditorTarjeta({
         </Boton>
 
         {eliminar &&
-          edicion.esCerrada &&
           (confirmandoEliminar ? (
             <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-[var(--danger)] bg-[var(--danger-soft)] px-3.5 py-3">
               <p className="m-0 text-[15px] font-semibold text-foreground">
                 ¿Eliminar la tarjeta de {editando.equipo}?
               </p>
               <p className="m-0 text-[13px] text-muted-foreground">
-                Se borra definitivamente, junto con la carga de combustible de su cierre. Se avisará al administrador.
+                {edicion.esCerrada
+                  ? 'Se borra definitivamente, junto con la carga de combustible de su cierre. Se avisará al administrador.'
+                  : 'Se borra definitivamente y el equipo queda libre para abrir otra tarjeta. Se avisará al administrador.'}
               </p>
               <Boton
                 ancho

@@ -642,11 +642,12 @@ async function patchOp<T extends OutboxOp>(
   });
 }
 
-/** Cambia el operador / horómetro inicial de una apertura todavía pendiente. */
+/** Cambia operador / equipo / turno (`shiftType`) / lectura inicial de una
+ * apertura todavía pendiente. */
 export function patchOpenCardOp(
   id: string,
   userId: string,
-  patch: Partial<Pick<OpenShiftCardInput, 'operatorId' | 'valorInicial'>>,
+  patch: Partial<Pick<OpenShiftCardInput, 'operatorId' | 'valorInicial' | 'equipoId' | 'shiftType'>>,
 ): Promise<PatchOutcome> {
   return patchOp<OpenCardOp>(id, userId, 'openCard', (op) => ({ ...op, payload: { ...op.payload, ...patch } }));
 }
