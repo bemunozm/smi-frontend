@@ -663,16 +663,25 @@ export function patchCloseCardOp(
   }));
 }
 
-/** Cambia operador / horómetros / litros / AdBlue / observaciones de un
- * backfill (`registerClosedCard`) todavía pendiente — la tarjeta completa vive
- * en UNA operación, así que todos los campos editables se corrigen acá. */
+/** Cambia operador / equipo / turno / horómetros / litros / AdBlue /
+ * observaciones de un backfill (`registerClosedCard`) todavía pendiente — la
+ * tarjeta completa vive en UNA operación, así que todos los campos editables
+ * se corrigen acá (el turno de la tarjeta es el `shiftType` del payload). */
 export function patchRegisterClosedCardOp(
   id: string,
   userId: string,
   patch: Partial<
     Pick<
       RegisterClosedShiftCardInput,
-      'operatorId' | 'valorInicial' | 'valorFinal' | 'fuelLiters' | 'adBlue' | 'adBlueLiters' | 'observaciones'
+      | 'operatorId'
+      | 'equipoId'
+      | 'shiftType'
+      | 'valorInicial'
+      | 'valorFinal'
+      | 'fuelLiters'
+      | 'adBlue'
+      | 'adBlueLiters'
+      | 'observaciones'
     >
   >,
 ): Promise<PatchOutcome> {

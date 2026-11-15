@@ -15,9 +15,17 @@ vi.mock('./useOnlineStatus', () => ({ useOnlineStatus: () => enLinea }));
 import { useEditarTarjeta } from './useEditarTarjeta';
 import type { TarjetaTurno } from './shift-register-helpers';
 import { db, type OutboxOp } from '../offline/db';
+import type { Equipment } from '../types/equipment';
+
+const EQUIPOS = [
+  { id: 'e1', internalCode: 'EX-005', type: 'Excavadora', equipmentClass: 'HEAVY' },
+  { id: 'e2', internalCode: 'EX-002', type: 'Excavadora', equipmentClass: 'HEAVY' },
+  { id: 'l1', internalCode: 'CM-001', type: 'Camioneta', equipmentClass: 'LIGHT' },
+] as unknown as Equipment[];
 
 const abierta: TarjetaTurno = {
   id: 'c1',
+  equipoId: 'e1',
   equipo: 'EX-005',
   tipo: 'Excavadora',
   operador: 'Patricio Rojas',
@@ -49,7 +57,9 @@ async function opsActuales(): Promise<OutboxOp[]> {
 }
 
 function render(tarjeta: TarjetaTurno, ops: OutboxOp[] = []) {
-  return renderHook(() => useEditarTarjeta({ tarjetas: [tarjeta], ops, userId: 'u1' }), { wrapper: wrapper() });
+  return renderHook(() => useEditarTarjeta({ tarjetas: [tarjeta], ops, userId: 'u1', equipos: EQUIPOS }), {
+    wrapper: wrapper(),
+  });
 }
 
 function openOp(): OutboxOp {
@@ -270,6 +280,48 @@ describe('useEditarTarjeta — tarjeta ya en el servidor', () => {
     expect(result.current.puedeGuardar).toBe(true);
   });
 
+  it('cerrada: cambiar turno y equipo viaja en el PATCH con su valor base como precondición', async () => {
+    const conTurno: TarjetaTurno = { ...cerrada, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO' };
+    const { result } = render(conTurno);
+    act(() => result.current.abrirEdicion('c1'));
+    expect(result.current.editaTurno).toBe(true);
+    act(() => result.current.setForm((f) => ({ ...f, turno: 'NOCTURNO', equipoId: 'e2' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const [op] = await opsActuales();
+    expect(op).toMatchObject({
+      type: 'httpWrite',
+      endpoint: 'shiftCard.edit',
+      body: { turno: 'NOCTURNO', equipoId: 'e2' },
+      expected: { turno: 'DIURNO', equipoId: 'e1' },
+    });
+  });
+
+  it('una tarjeta vieja sin turno conocido no ofrece corregirlo', () => {
+    const { result } = render(cerrada);
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.editaTurno).toBe(false);
+  });
+
+  it('el selector de máquina lista solo equipos de la misma clase, ordenados por código', () => {
+    const { result } = render({ ...cerrada, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO' });
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.opcionesEquipo.map((o) => o.valor)).toEqual(['e2', 'e1']);
+  });
+
+  it('la máquina actual aparece aunque el catálogo (offline) no la tenga', () => {
+    const fueraDeCatalogo: TarjetaTurno = { ...cerrada, equipoId: 'e9', equipo: 'EX-009' };
+    const { result } = render(fueraDeCatalogo);
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.opcionesEquipo[0]).toMatchObject({ valor: 'e9', titulo: 'EX-009' });
+  });
+
   it('el historial se pide solo con señal y para una tarjeta que el servidor conoce', async () => {
     const { result } = render(abierta);
     act(() => result.current.abrirEdicion('c1'));
@@ -321,6 +373,25 @@ describe('useEditarTarjeta — backfill (registerClosedCard) todavía en el outb
       payload: { operatorId: 'op-2', valorInicial: 100, valorFinal: 140, fuelLiters: 35, equipoId: 'e1' },
     });
     expect(result.current.guardado).toBe(true);
+  });
+
+  it('turno y equipo también se corrigen EN la operación (el turno es su shiftType)', async () => {
+    await db.outbox.put(registerClosedOp());
+    const conTurno: TarjetaTurno = { ...cerradaBackfill, turnoFecha: '2026-09-22', turnoTipo: 'DIURNO' };
+    const { result } = render(conTurno, [registerClosedOp()]);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, turno: 'NOCTURNO', equipoId: 'e2' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const ops = await opsActuales();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      type: 'registerClosedCard',
+      payload: { shiftType: 'NOCTURNO', shiftDate: '2026-09-22', equipoId: 'e2' },
+    });
   });
 });
 
@@ -418,6 +489,29 @@ describe('useEditarTarjeta — tarjeta que todavía vive en el outbox', () => {
     // La apertura ya viajó: solo el operador necesita un PATCH, detrás del cierre.
     expect(ops[1]).toMatchObject({ type: 'httpWrite', body: { operatorId: 'op-2' }, dependsOn: ['close-1'] });
     expect(ops).toHaveLength(2);
+  });
+
+  it('turno y equipo no caben en el cierre pendiente: van por PATCH detrás de él', async () => {
+    await db.outbox.put(closeOp());
+    const pendiente: TarjetaTurno = { ...cerrada, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO', sinSincronizar: true };
+    const { result } = render(pendiente, [closeOp()]);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, turno: 'NOCTURNO', equipoId: 'e2' })));
+
+    await act(async () => {
+      await result.current.guardar();
+    });
+
+    const ops = await opsActuales();
+    expect(ops[0]).toMatchObject({ type: 'closeCard' });
+    expect((ops[0] as { payload: { input: object } }).payload.input).not.toHaveProperty('turno');
+    expect((ops[0] as { payload: { input: object } }).payload.input).not.toHaveProperty('equipoId');
+    expect(ops[1]).toMatchObject({
+      type: 'httpWrite',
+      body: { turno: 'NOCTURNO', equipoId: 'e2' },
+      expected: { turno: 'DIURNO', equipoId: 'e1' },
+      dependsOn: ['close-1'],
+    });
   });
 
   it('un cierre en vuelo (syncing) no se toca: el cambio se encola como PATCH detrás de él', async () => {

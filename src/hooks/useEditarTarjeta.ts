@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useCambiosTarjeta } from './useShiftCards';
 import { LITROS_MAX } from './useCierreForm';
@@ -14,10 +14,15 @@ import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import type { OutboxOp } from '../offline/db';
 import { patchCloseCardOp, patchOpenCardOp, patchRegisterClosedCardOp } from '../offline/outbox';
 import type { EntradaCambios } from '../types/cambios';
-import type { EditShiftCardBody } from '../types/shift';
+import type { Equipment } from '../types/equipment';
+import type { EditShiftCardBody, ShiftType } from '../types/shift';
 
 export interface EdicionTarjetaState {
   operatorId: string;
+  /** Qué máquina salió — solo editable en una tarjeta ya cerrada. */
+  equipoId: string;
+  /** DIURNO | NOCTURNO — solo editable en una tarjeta ya cerrada. */
+  turno: string;
   inicial: string;
   final: string;
   litros: string;
@@ -26,9 +31,17 @@ export interface EdicionTarjetaState {
   observaciones: string;
 }
 
+/** El turno de la tarjeta si lo trae y es del vocabulario; una tarjeta vieja
+ * sin `shift` no lo tiene y su turno no se edita. */
+function turnoDeTarjeta(t: TarjetaTurno): ShiftType | undefined {
+  return t.turnoTipo === 'DIURNO' || t.turnoTipo === 'NOCTURNO' ? t.turnoTipo : undefined;
+}
+
 function estadoInicial(t: TarjetaTurno): EdicionTarjetaState {
   return {
     operatorId: t.operatorId ?? '',
+    equipoId: t.equipoId,
+    turno: turnoDeTarjeta(t) ?? '',
     inicial: formatDecimalInput(t.inicial),
     final: formatDecimalInput(t.final),
     // 3 decimales, como el surtidor: con 2, guardar sin cambios redondeaba 48,493 a 48,49.
@@ -43,6 +56,8 @@ export interface UseEditarTarjetaParams {
   tarjetas: TarjetaTurno[];
   ops: OutboxOp[];
   userId: string | undefined;
+  /** Catálogo completo de equipos — las opciones del selector de máquina. */
+  equipos: Equipment[];
 }
 
 export interface UseEditarTarjetaResult {
@@ -55,6 +70,10 @@ export interface UseEditarTarjetaResult {
   setForm: (cambio: (actual: EdicionTarjetaState) => EdicionTarjetaState) => void;
   /** Tarjeta ya cerrada: el horómetro final, los litros y el AdBlue también se editan. */
   esCerrada: boolean;
+  /** Cerrada Y con turno conocido: se puede corregir si salió DIURNO o NOCTURNO. */
+  editaTurno: boolean;
+  /** Opciones del selector de máquina (misma clase pesado/liviano que la tarjeta). */
+  opcionesEquipo: { valor: string; titulo: string; detalle: string }[];
   /** La tarjeta todavía no llegó al servidor: el cambio se aplica antes de
    * enviarla (no hay aviso al administrador ni historial). */
   soloEnElEquipo: boolean;
@@ -76,6 +95,8 @@ export interface UseEditarTarjetaResult {
 
 const SIN_FORM: EdicionTarjetaState = {
   operatorId: '',
+  equipoId: '',
+  turno: '',
   inicial: '',
   final: '',
   litros: '',
@@ -99,7 +120,7 @@ function sinUndefined<T extends object>(obj: T): T {
  * versionar). Lo que no cabe ahí —o si el replay ya la tiene en vuelo— se
  * encola como `PATCH` con solo los campos tocados y su precondición.
  */
-export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaParams): UseEditarTarjetaResult {
+export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTarjetaParams): UseEditarTarjetaResult {
   const enLinea = useOnlineStatus();
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setFormState] = useState<EdicionTarjetaState>(SIN_FORM);
@@ -119,6 +140,26 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
 
   const editando = tarjetas.find((t) => t.id === editandoId) ?? null;
   const esCerrada = editando?.estado === 'cerrada';
+  // El turno solo se corrige si se sabe cuál es (una tarjeta vieja sin
+  // `shift` no lo trae); el servidor igual lo exige cerrada.
+  const editaTurno = esCerrada && editando != null && turnoDeTarjeta(editando) != null;
+  const opcionesEquipo = useMemo(() => {
+    if (!editando) return [];
+    // Misma clase que la tarjeta: un pesado va en horas y exige operador, un
+    // liviano va en km — cruzarlos cambiaría las reglas (y el backend lo
+    // rechaza igual).
+    const liviano = editando.liviano === true;
+    const opciones = equipos
+      .filter((e) => (e.equipmentClass === 'LIGHT') === liviano)
+      .map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))
+      .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es-CL', { numeric: true }));
+    // La máquina actual siempre aparece, aunque el catálogo (cacheado
+    // offline) todavía no la tenga.
+    if (!opciones.some((o) => o.valor === editando.equipoId)) {
+      opciones.unshift({ valor: editando.equipoId, titulo: editando.equipo, detalle: editando.tipo });
+    }
+    return opciones;
+  }, [equipos, editando]);
   // Un liviano (camioneta) no lleva operador: lo maneja quien la saca
   // (administrador, supervisor, mantenedor…). Solo el pesado lo exige.
   const pideOperador = editando != null && !editando.liviano;
@@ -142,7 +183,13 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
-    (esCerrada && (finalNum == null || litrosNum == null || litrosNum < 0 || litrosNum > LITROS_MAX || revisionLitros.error != null)) ||
+    (esCerrada && !form.equipoId) ||
+    (esCerrada &&
+      (finalNum == null ||
+        litrosNum == null ||
+        litrosNum < 0 ||
+        litrosNum > LITROS_MAX ||
+        revisionLitros.error != null)) ||
     (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
   const faltante = !esCerrada
     ? null
@@ -177,6 +224,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
       valorInicial: inicialNum,
       ...(esCerrada
         ? {
+            equipoId: form.equipoId,
+            ...(editaTurno ? { turno: form.turno as ShiftType } : {}),
             valorFinal: finalNum ?? undefined,
             fuelLiters: litrosNum ?? undefined,
             adBlue: form.adBlue,
@@ -188,7 +237,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     const campos: (keyof EditShiftCardBody)[] = [
       ...(pideOperador ? (['operatorId'] as const) : []),
       'valorInicial',
-      ...(esCerrada ? (['valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
+      ...(esCerrada ? (['equipoId', 'valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
+      ...(editaTurno ? (['turno'] as const) : []),
       'observaciones',
     ];
     const diff = diferenciaEdicion(base, nuevo, campos);
@@ -222,6 +272,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId }: UseEditarTarjetaPara
     form,
     setForm: (cambio) => setFormState(cambio),
     esCerrada,
+    editaTurno,
+    opcionesEquipo,
     soloEnElEquipo,
     adBlue,
     finalInvalido,
@@ -266,9 +318,17 @@ async function armarPatchDeTarjeta({
   // que TODOS los campos tocados se corrigen ahí; si el replay ya la tiene en
   // vuelo (`maybe-sent`/`missing`), cae al PATCH normal de abajo.
   if (registroCerradoId) {
-    const { adBlue: conAdBlue, adBlueLiters: litrosAdBlue, observaciones, ...resto } = diff.cambios;
+    const {
+      adBlue: conAdBlue,
+      adBlueLiters: litrosAdBlue,
+      observaciones,
+      turno: turnoBackfill,
+      ...resto
+    } = diff.cambios;
     const resultado = await patchRegisterClosedCardOp(registroCerradoId, userId, {
       ...resto,
+      // El turno de la tarjeta es el `shiftType` del payload del backfill.
+      ...(turnoBackfill !== undefined ? { shiftType: turnoBackfill } : {}),
       ...(conAdBlue !== undefined ? { adBlue: conAdBlue, adBlueLiters: conAdBlue ? litrosAdBlue : undefined } : {}),
       ...(conAdBlue === undefined && litrosAdBlue !== undefined ? { adBlueLiters: litrosAdBlue } : {}),
       ...(observaciones !== undefined ? { observaciones: observaciones || undefined } : {}),
@@ -276,7 +336,7 @@ async function armarPatchDeTarjeta({
     if (resultado === 'updated') return null;
   }
 
-  const { operatorId, valorInicial, ...deCierre } = diff.cambios;
+  const { operatorId, valorInicial, turno, equipoId, ...deCierre } = diff.cambios;
 
   let aperturaPendiente: EditShiftCardBody = sinUndefined({ operatorId, valorInicial });
   if (aperturaId && Object.keys(aperturaPendiente).length > 0) {
@@ -295,7 +355,10 @@ async function armarPatchDeTarjeta({
     if (resultado === 'updated') cierrePendiente = {};
   }
 
-  const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente };
+  // Turno y equipo no viven en las operaciones pendientes de apertura/cierre:
+  // van siempre por PATCH — la cola ya lo pone detrás de lo que siga
+  // pendiente para esta tarjeta, así que el servidor los aplica al final.
+  const body: EditShiftCardBody = { ...aperturaPendiente, ...cierrePendiente, ...sinUndefined({ turno, equipoId }) };
   const campos = Object.keys(body);
   if (campos.length === 0) return null;
   return { params: { id: tarjetaId }, body, expected: precondicion(diff.esperado, campos) };
@@ -306,6 +369,8 @@ async function armarPatchDeTarjeta({
 function estadoDeBase(t: TarjetaTurno): EditShiftCardBody {
   return {
     operatorId: t.operatorId ?? '',
+    equipoId: t.equipoId,
+    turno: turnoDeTarjeta(t),
     valorInicial: t.inicial,
     valorFinal: t.final,
     fuelLiters: t.litros,

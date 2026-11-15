@@ -1,10 +1,33 @@
-import { ArrowRight, Check, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, Check, Lock, Trash2 } from 'lucide-react';
 
 import type { UseEditarTarjetaResult } from '../../hooks/useEditarTarjeta';
-import { parseDecimal } from '../../lib/decimal';
+import { parseDecimal } from '../../lib/decimal';
 import { AYUDA_LITROS } from '../../lib/litros';
 import { AdBlueCampos } from './AdBlueCampos';
-import { AvisoEdicion, Boton, Calculado, Campo, Form, Hint, HistorialCambios, Input, Selector, Textarea } from './ui';
+import {
+  AvisoEdicion,
+  Boton,
+  Calculado,
+  Campo,
+  Form,
+  Hint,
+  HistorialCambios,
+  Input,
+  Label,
+  Segmentado,
+  Selector,
+  Textarea,
+} from './ui';
+
+/** Acción «Eliminar tarjeta» — la arma la vista (mutación online + cierre de
+ * modales); acá solo se dibujan el botón y su confirmación en dos pasos. */
+export interface EliminarTarjetaAccion {
+  /** `null` si se puede eliminar; si no, por qué no (se muestra como hint). */
+  motivo: string | null;
+  eliminar: () => void;
+  isEliminando: boolean;
+}
 
 function diferenciaHoras(inicial: string, final: string): number | null {
   const a = parseDecimal(inicial);
@@ -23,19 +46,26 @@ const fmt = (n: number) => n.toLocaleString('es-CL', { minimumFractionDigits: 1,
 export function EditorTarjeta({
   edicion,
   operadores,
+  eliminar,
 }: {
   edicion: UseEditarTarjetaResult;
   /** Opciones del selector de operador. */
   operadores: { valor: string; titulo: string }[];
+  /** «Eliminar tarjeta» (solo cerradas) — sin la acción, el botón no existe. */
+  eliminar?: EliminarTarjetaAccion;
 }) {
   const { editando, form, setForm } = edicion;
+  // La confirmación de eliminar vuelve al botón al cambiar de tarjeta: que
+  // el «¿Eliminar esta tarjeta?» de una no quede armado para la siguiente.
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
+  const editandoId = editando?.id;
+  useEffect(() => setConfirmandoEliminar(false), [editandoId]);
   if (!editando) return null;
 
   const liviano = editando.liviano === true;
   const lectura = liviano ? 'Kilometraje' : 'Horómetro';
   const unidad = liviano ? 'km' : 'h';
-  const horas =
-    edicion.esCerrada && !edicion.finalInvalido ? diferenciaHoras(form.inicial, form.final) : null;
+  const horas = edicion.esCerrada && !edicion.finalInvalido ? diferenciaHoras(form.inicial, form.final) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -50,6 +80,33 @@ export function EditorTarjeta({
         <AvisoEdicion />
       )}
       <Form>
+        {edicion.esCerrada && (
+          <>
+            <Campo label="Equipo">
+              <Selector
+                etiqueta="Equipo"
+                valor={form.equipoId}
+                onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
+                opciones={edicion.opcionesEquipo}
+                tituloTabular
+              />
+            </Campo>
+            {edicion.editaTurno && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Turno en que salió</Label>
+                <Segmentado
+                  etiqueta="Turno en que salió"
+                  valor={form.turno}
+                  onChange={(turno) => setForm((f) => ({ ...f, turno }))}
+                  opciones={[
+                    { valor: 'DIURNO', label: 'Diurno' },
+                    { valor: 'NOCTURNO', label: 'Nocturno' },
+                  ]}
+                />
+              </div>
+            )}
+          </>
+        )}
         {!liviano && (
           <Campo label="Operador">
             <Selector
@@ -120,6 +177,46 @@ export function EditorTarjeta({
         <Boton variante="contorno" ancho onClick={edicion.cerrarEdicion}>
           {edicion.guardado ? 'Listo' : 'Cancelar'}
         </Boton>
+
+        {eliminar &&
+          edicion.esCerrada &&
+          (confirmandoEliminar ? (
+            <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-[var(--danger)] bg-[var(--danger-soft)] px-3.5 py-3">
+              <p className="m-0 text-[15px] font-semibold text-foreground">
+                ¿Eliminar la tarjeta de {editando.equipo}?
+              </p>
+              <p className="m-0 text-[13px] text-muted-foreground">
+                Se borra definitivamente, junto con la carga de combustible de su cierre. Se avisará al administrador.
+              </p>
+              <Boton
+                ancho
+                className="!bg-[var(--danger)] !text-white"
+                disabled={eliminar.isEliminando}
+                onClick={eliminar.eliminar}
+              >
+                {eliminar.isEliminando ? 'Eliminando…' : 'Sí, eliminar tarjeta'}
+                <Trash2 className="h-[18px] w-[18px]" />
+              </Boton>
+              <Boton variante="contorno" ancho onClick={() => setConfirmandoEliminar(false)}>
+                No, conservarla
+              </Boton>
+            </div>
+          ) : (
+            <>
+              <Boton
+                variante="contorno"
+                ancho
+                className="!text-[var(--danger)]"
+                disabled={eliminar.motivo != null}
+                title={eliminar.motivo ?? undefined}
+                aria-label={`Eliminar tarjeta de ${editando.equipo}${eliminar.motivo ? `. ${eliminar.motivo}` : ''}`}
+                onClick={() => setConfirmandoEliminar(true)}
+              >
+                <Trash2 className="h-4 w-4" /> Eliminar tarjeta
+              </Boton>
+              {eliminar.motivo && <Hint>{eliminar.motivo}</Hint>}
+            </>
+          ))}
       </Form>
 
       {edicion.historialDisponible ? (
@@ -130,4 +227,3 @@ export function EditorTarjeta({
     </div>
   );
 }
-

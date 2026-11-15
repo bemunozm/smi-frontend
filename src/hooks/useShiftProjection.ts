@@ -24,6 +24,7 @@ function mapOpenOpToTarjeta(
   const liviano = equipo?.equipmentClass === 'LIGHT';
   return {
     id: op.id,
+    equipoId: op.payload.equipoId,
     equipo: equipo?.internalCode ?? '—',
     tipo: equipo?.type ?? '—',
     operador: operador?.name ?? (op.payload.operatorId ? 'Operador' : SIN_CONDUCTOR),
@@ -89,6 +90,7 @@ function mapRegisterClosedOpToTarjeta(
   const liviano = equipo?.equipmentClass === 'LIGHT';
   return {
     id: op.id,
+    equipoId: op.payload.equipoId,
     equipo: equipo?.internalCode ?? '—',
     tipo: equipo?.type ?? '—',
     operador: operador?.name ?? (op.payload.operatorId ? 'Operador' : SIN_CONDUCTOR),

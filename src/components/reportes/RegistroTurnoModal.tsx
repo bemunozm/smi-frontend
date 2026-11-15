@@ -8,6 +8,7 @@ import { EditorTarjeta } from '../terreno/EditorTarjeta';
 import { turnoLabel } from '../../config/flota-colors';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useEditarTarjeta } from '../../hooks/useEditarTarjeta';
+import { useEquipment } from '../../hooks/useEquipment';
 import { useOperators } from '../../hooks/useOperators';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useShiftReportCards } from '../../hooks/useShiftReports';
@@ -55,16 +56,26 @@ function FilaTarjeta({ tarjeta, onEditar }: { tarjeta: TarjetaTurno; onEditar?: 
           label={tarjeta.liviano ? 'Kilometraje' : 'Horómetro'}
           value={`${NUM_CL_1.format(tarjeta.inicial)} → ${tarjeta.final != null ? NUM_CL_1.format(tarjeta.final) : '—'}`}
         />
-        <Dato label={tarjeta.liviano ? 'Recorrido' : 'Horas máquina'} value={uso != null ? `${NUM_CL_1.format(uso)} ${unidad}` : '—'} />
+        <Dato
+          label={tarjeta.liviano ? 'Recorrido' : 'Horas máquina'}
+          value={uso != null ? `${NUM_CL_1.format(uso)} ${unidad}` : '—'}
+        />
         <Dato label="Combustible" value={tarjeta.litros != null ? `${NUM_CL_1.format(tarjeta.litros)} L` : '—'} />
         <Dato
           label="AdBlue"
-          value={tarjeta.adBlue ? (tarjeta.adBlueLitros != null ? `${NUM_CL_1.format(tarjeta.adBlueLitros)} L` : 'Sí') : 'No'}
+          value={
+            tarjeta.adBlue ? (tarjeta.adBlueLitros != null ? `${NUM_CL_1.format(tarjeta.adBlueLitros)} L` : 'Sí') : 'No'
+          }
         />
       </dl>
       {tarjeta.observaciones ? <p className="m-0 text-sm text-foreground">{tarjeta.observaciones}</p> : null}
       {tarjeta.pumpPhotoUrl ? (
-        <a className="text-xs text-(--accent) hover:underline" href={tarjeta.pumpPhotoUrl} rel="noreferrer" target="_blank">
+        <a
+          className="text-xs text-(--accent) hover:underline"
+          href={tarjeta.pumpPhotoUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
           Ver foto del surtidor
         </a>
       ) : null}
@@ -85,12 +96,13 @@ export function RegistroTurnoModal({ reporte, onClose }: { reporte: ShiftReportL
   const ops = useOutboxOps(user?.id);
   const puedeEditar = usePermissions().can('shiftCard.edit');
   const { data: operadores = [] } = useOperators({ isActive: true });
+  const { data: equipos = [] } = useEquipment();
 
   const tarjetas = useMemo(() => {
     const ctx = contextoTurno(new Date());
     return (cards ?? []).map((card) => mapCardToTarjeta(card, ctx));
   }, [cards]);
-  const edicion = useEditarTarjeta({ tarjetas, ops, userId: user?.id });
+  const edicion = useEditarTarjeta({ tarjetas, ops, userId: user?.id, equipos });
 
   const opcionesOperador = operadores.map((o) => ({ valor: o.id, titulo: o.name }));
   const actual = edicion.editando;

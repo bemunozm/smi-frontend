@@ -19,6 +19,8 @@ export type EstadoReporte = 'sin-enviar' | 'en-cola' | 'requiere-atencion' | 'en
 
 export interface TarjetaTurno {
   id: string;
+  /** `Equipment.id` — para corregir qué máquina salió (editor de cerradas). */
+  equipoId: string;
   equipo: string;
   tipo: string;
   operador: string;
@@ -168,6 +170,7 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
   const liviano = card.equipo.equipmentClass === 'LIGHT';
   return {
     id: card.id,
+    equipoId: card.equipoId,
     equipo: card.equipo.internalCode,
     tipo: card.equipo.type,
     operador: card.operatorName || (liviano ? SIN_CONDUCTOR : 'Operador'),

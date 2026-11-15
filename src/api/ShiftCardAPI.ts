@@ -1,4 +1,5 @@
 import type { AxiosRequestConfig } from 'axios';
+import { z } from 'zod';
 
 import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
@@ -158,6 +159,23 @@ async function adminCloseCard(id: string, input: AdminCloseShiftCardInput): Prom
   }
 }
 
+const DeleteShiftCardResponseSchema = z.object({ data: z.null(), message: z.string() });
+
+/**
+ * Elimina una tarjeta CERRADA (`DELETE /api/shift-cards/:id`) — dueño o
+ * ADMIN. El servidor arrastra la carga de combustible nacida de su cierre y
+ * deja el rastro en el registro de actividad. Online directo: eliminar es
+ * excepcional y pide confirmación, no viaja por el outbox.
+ */
+async function deleteCard(id: string): Promise<void> {
+  try {
+    const response = await axiosInstance.delete(`/api/shift-cards/${encodeURIComponent(id)}`);
+    DeleteShiftCardResponseSchema.parse(response.data);
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo eliminar la tarjeta.');
+  }
+}
+
 export const ShiftCardAPI = {
   listChanges,
   openCard,
@@ -165,6 +183,7 @@ export const ShiftCardAPI = {
   adminCloseCard,
   registerClosedCard,
   updateCard,
+  deleteCard,
   listMine,
   listShiftsByDate,
 };

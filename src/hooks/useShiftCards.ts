@@ -40,6 +40,33 @@ export function useAdminCloseShiftCard() {
   });
 }
 
+export interface DeleteShiftCardVars {
+  id: string;
+  /** Solo para el toast. */
+  equipoCodigo: string;
+}
+
+/**
+ * Elimina una tarjeta cerrada (dueño o ADMIN). Online directo, con
+ * confirmación en la vista: el servidor arrastra la carga de combustible del
+ * cierre y avisa al administrador, así que refresca lo mismo que un cierre.
+ */
+export function useDeleteShiftCard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: DeleteShiftCardVars) => ShiftCardAPI.deleteCard(id),
+    onSuccess: (_data, { equipoCodigo }) => {
+      for (const queryKey of [EQUIPMENT_KEY, SHIFT_CARDS_KEY, HOROMETRO_KEY, DASHBOARD_KEY]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      toast.success('Tarjeta eliminada', { description: equipoCodigo });
+    },
+    onError: (error: Error) => {
+      toast.danger(error.message);
+    },
+  });
+}
+
 /**
  * Tarjetas propias del Módulo A — SIN filtros en la key: es la misma URL
  * estable (`GET /api/shift-cards/mine`) que expone el backend, cacheada
@@ -49,11 +76,7 @@ export function useAdminCloseShiftCard() {
 export function useShiftCardsMine(
   opciones: { refetchInterval?: number; refetchOnWindowFocus?: boolean; enabled?: boolean } = {},
 ) {
-  return useQuery({
-    queryKey: SHIFT_CARDS_MINE_KEY,
-    queryFn: ShiftCardAPI.listMine,
-    ...opciones,
-  });
+  return useQuery({ queryKey: SHIFT_CARDS_MINE_KEY, queryFn: ShiftCardAPI.listMine, ...opciones });
 }
 
 /** Historial de cambios de una tarjeta ya enviada. Solo con señal y con un `id`
