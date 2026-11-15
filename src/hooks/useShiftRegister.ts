@@ -194,7 +194,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
     liviano: true,
   });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx: turno.ctx, userId: user?.id });
-  const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id });
+  const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id, equipos });
   const reporte = useExitReportState({
     tarjetasServidor,
     ctx: turno.ctx,

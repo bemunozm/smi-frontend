@@ -4,6 +4,7 @@ import { agruparPorTurno, registradaDespues, rotuloTurno, type TarjetaTurno } fr
 
 const tarjeta = (extra: Partial<TarjetaTurno>): TarjetaTurno => ({
   id: extra.id ?? 'x',
+  equipoId: 'e1',
   equipo: 'SEM 06',
   tipo: 'CF',
   operador: 'Flavio Bustamante',

@@ -27,6 +27,7 @@ import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { PastShiftDialog } from '../components/terreno/PastShiftDialog';
 import { PastShiftQuickEntry } from '../components/terreno/PastShiftQuickEntry';
 import { useDailyChecklists } from '../hooks/useDailyChecklists';
+import { useDeleteShiftCard } from '../hooks/useShiftCards';
 import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -173,9 +174,7 @@ export function RegistroEquipoView() {
   const claseVista: Clase = modoPasado ? 'pesados' : clase;
   /** Lo que el turno pasado elegido YA tiene registrado — para el aviso del
    * banner (el diálogo hace su propia consulta mientras se elige). */
-  const { data: turnosPasados } = usePastShiftSummary(
-    modoPasado ? { fecha: ctx.fecha, turno: ctx.turno } : null,
-  );
+  const { data: turnosPasados } = usePastShiftSummary(modoPasado ? { fecha: ctx.fecha, turno: ctx.turno } : null);
   const tarjetasYaRegistradas = (turnosPasados ?? []).flatMap((t) => t.cards);
   const reporteYaEnviado = (turnosPasados ?? []).some((t) => t.exitReports.length > 0);
 
@@ -207,11 +206,7 @@ export function RegistroEquipoView() {
               valor={equipoElegido?.id ?? ''}
               onChange={(id) => {
                 const eq = disponibles.find((x) => x.id === id);
-                setApertura((a) => ({
-                  ...a,
-                  equipoId: id,
-                  horometro: formatDecimalInput(eq?.currentHourmeter, 1),
-                }));
+                setApertura((a) => ({ ...a, equipoId: id, horometro: formatDecimalInput(eq?.currentHourmeter, 1) }));
               }}
               opciones={disponibles.map((e) => ({
                 valor: e.id,
@@ -265,8 +260,7 @@ export function RegistroEquipoView() {
               recordatorio de a qué turno se está agregando, porque el
               formulario puede quedar a media pantalla del encabezado. */}
           <Hint>
-            Se agrega al turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>, a nombre de{' '}
-            <b>{supervisor}</b>.
+            Se agrega al turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>, a nombre de <b>{supervisor}</b>.
           </Hint>
 
           <Boton
@@ -298,8 +292,8 @@ export function RegistroEquipoView() {
       <div className="flex flex-col gap-1.5 rounded-2xl bg-[#f5f6f8] px-3.5 py-3 text-[13px] leading-snug text-muted-foreground">
         <b className="text-[13.5px] text-foreground">Cómo funcionan las camionetas</b>
         <span>
-          • Si la camioneta que vas a usar <b className="text-foreground">ya tiene una tarjeta abierta</b> (aparece
-          en «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
+          • Si la camioneta que vas a usar <b className="text-foreground">ya tiene una tarjeta abierta</b> (aparece en
+          «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
         </span>
         <span>
           • <b className="text-foreground">Ciérrala solo cuando le eches combustible</b>, con el km, los litros y la
@@ -361,8 +355,8 @@ export function RegistroEquipoView() {
           </Campo>
 
           <Hint>
-            Se abre a nombre de <b>{supervisor}</b>, en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>. No
-            hace falta operador: la maneja el supervisor.
+            Se abre a nombre de <b>{supervisor}</b>, en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>. No hace
+            falta operador: la maneja el supervisor.
           </Hint>
 
           <Boton
@@ -441,7 +435,9 @@ export function RegistroEquipoView() {
         <b>{plural(enCurso.length, 'equipo', 'equipos')}</b>. En cola: se enviará solo cuando vuelva la señal.
       </>
     ) : reporteEstado === 'requiere-atencion' ? (
-      <>{reporteError?.message ?? 'El servidor rechazó el reporte — revisa el detalle en el panel de sincronización.'}</>
+      <>
+        {reporteError?.message ?? 'El servidor rechazó el reporte — revisa el detalle en el panel de sincronización.'}
+      </>
     ) : (
       <>
         <b className="text-white">{plural(enCurso.length, 'equipo', 'equipos')}</b>{' '}
@@ -475,7 +471,12 @@ export function RegistroEquipoView() {
       <p className={`m-0 text-sm leading-snug ${esUrgente ? 'text-white/85' : ''}`}>{reporteResumen}</p>
       {reporteEstado === 'sin-enviar' ? (
         <>
-          <Boton variante="acento" ancho className="min-h-[60px] !rounded-[18px] !text-[17px] shadow-[0_0_0_4px_rgba(29,78,216,.35)]" onClick={() => setVerReporte(true)}>
+          <Boton
+            variante="acento"
+            ancho
+            className="min-h-[60px] !rounded-[18px] !text-[17px] shadow-[0_0_0_4px_rgba(29,78,216,.35)]"
+            onClick={() => setVerReporte(true)}
+          >
             Enviar reporte de salida <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           <p className="m-0 text-[12.5px] text-white/85">
@@ -497,12 +498,10 @@ export function RegistroEquipoView() {
    */
   const confirmacionReporte = (reenvio: boolean) => (
     <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-[var(--accent)] bg-[var(--accent-soft)] px-3.5 py-3">
-      <p className="m-0 text-[15px] font-semibold text-foreground">
-        ¿Están todos los equipos que salen en este turno?
-      </p>
+      <p className="m-0 text-[15px] font-semibold text-foreground">¿Están todos los equipos que salen en este turno?</p>
       <p className="m-0 text-[13px] text-muted-foreground">
-        {reenvio ? 'Se reenvía' : 'Se envía'} con {plural(enCurso.length, 'equipo', 'equipos')}. Si sale otro
-        después, tendrás que agregarlo y reenviar el reporte antes de cerrarlo.
+        {reenvio ? 'Se reenvía' : 'Se envía'} con {plural(enCurso.length, 'equipo', 'equipos')}. Si sale otro después,
+        tendrás que agregarlo y reenviar el reporte antes de cerrarlo.
       </p>
       <Boton
         variante="acento"
@@ -637,7 +636,11 @@ export function RegistroEquipoView() {
           <td className={`${TD} tabular text-right font-semibold`}>{cerrada ? fmt(t.final! - t.inicial) : '—'}</td>
           <td className={`${TD} tabular text-right`}>{fmtLitros(t.litros)}</td>
           <td className={TD}>
-            {cerrada ? <Camera className="h-4 w-4 text-[var(--success-soft-foreground)]" /> : <span className="text-[#9aa2ad]">—</span>}
+            {cerrada ? (
+              <Camera className="h-4 w-4 text-[var(--success-soft-foreground)]" />
+            ) : (
+              <span className="text-[#9aa2ad]">—</span>
+            )}
           </td>
           <td className={TD}>
             <Chip tono={cerrada ? 'success' : 'info'}>{cerrada ? 'Cerrada' : 'En curso'}</Chip>
@@ -690,12 +693,12 @@ export function RegistroEquipoView() {
   const bajadaCierre = cerrando?.liviano
     ? `Abierta por ${cerrando.supervisor} · ${cerrando.abiertaEl ?? ''}`
     : cerrando
-    ? `${cerrando.operador} · Turno ${rotuloTurno(
-        cerrando,
-        `${ctx.turno} ${ctx.fechaCorta}`,
-        `${anterior.turno} ${fechaAnterior}`,
-      )}`
-    : '';
+      ? `${cerrando.operador} · Turno ${rotuloTurno(
+          cerrando,
+          `${ctx.turno} ${ctx.fechaCorta}`,
+          `${anterior.turno} ${fechaAnterior}`,
+        )}`
+      : '';
 
   /**
    * Un bloque de turno: separador + tarjetas (o tabla en escritorio). Los dos
@@ -770,8 +773,7 @@ export function RegistroEquipoView() {
         veTodo ? 'Sin tarjetas abiertas en este turno.' : 'No tienes tarjetas abiertas en este turno.',
       )}
 
-      {abiertasAnterior.length > 0 &&
-        bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
+      {abiertasAnterior.length > 0 && bloque(anterior.turno, fechaAnterior, abiertasAnterior, '')}
     </>
   );
 
@@ -846,14 +848,17 @@ export function RegistroEquipoView() {
         detalle={livianosAbiertos.length ? plural(livianosAbiertos.length, 'tarjeta', 'tarjetas') : undefined}
       />
       <div className={`grid gap-3 ${esEscritorio ? 'grid-cols-2' : ''}`}>
-        {livianosAbiertos.length
-          ? livianosAbiertos.map(tarjetaLiviano)
-          : vacioLivianos('No hay camionetas abiertas.')}
+        {livianosAbiertos.length ? livianosAbiertos.map(tarjetaLiviano) : vacioLivianos('No hay camionetas abiertas.')}
       </div>
       {livianosCerrados.length > 0 && (
         <>
-          <GrupoHead titulo="Cerradas · últimas 48 h" detalle={plural(livianosCerrados.length, 'tarjeta', 'tarjetas')} />
-          <div className={`grid gap-3 ${esEscritorio ? 'grid-cols-2' : ''}`}>{livianosCerrados.map(tarjetaLiviano)}</div>
+          <GrupoHead
+            titulo="Cerradas · últimas 48 h"
+            detalle={plural(livianosCerrados.length, 'tarjeta', 'tarjetas')}
+          />
+          <div className={`grid gap-3 ${esEscritorio ? 'grid-cols-2' : ''}`}>
+            {livianosCerrados.map(tarjetaLiviano)}
+          </div>
         </>
       )}
     </>
@@ -896,60 +901,57 @@ export function RegistroEquipoView() {
         cerradas,
         { tipo: ctx.turno, fecha: toDateOnly(ctx.fecha) },
         { tipo: anterior.turno, fecha: toDateOnly(anterior.fecha) },
-      )
-        .map((g) => (
-          <div key={g.clave} className="flex flex-col gap-2.5">
-            <GrupoHead
-              titulo={`TURNO ${g.tipo} · ${fechaCorta(fromDateOnly(g.fecha))}`}
-              detalle={plural(g.ts.length, 'tarjeta', 'tarjetas')}
-            />
-            {g.ts.map((t) => (
-              <Tarjeta key={t.id}>
-                <div className="flex items-start justify-between gap-2.5">
-                  <div>
-                    <div className="tabular text-[17px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
-                    <div className="text-[13px] text-muted-foreground">
-                      {t.tipo} · {t.operador}
-                    </div>
-                  </div>
-                  <Chip tono="success">Cerrada</Chip>
-                </div>
-                <Cifras
-                  items={[
-                    { label: 'Inicial', valor: fmt(t.inicial) },
-                    { label: 'Final', valor: fmt(t.final) },
-                    { label: 'Horas', valor: fmt(t.final! - t.inicial), destacado: true },
-                    { label: 'Litros', valor: fmtLitros(t.litros) },
-                    { label: 'AdBlue', valor: t.adBlue ? fmtLitros(t.adBlueLitros) : '—' },
-                  ]}
-                />
-                {t.sinSincronizar && <MarcaSinSincronizar />}
-                {t.edicionSinSincronizar && (
-                  <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />
-                )}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] text-muted-foreground">
-                    {registradaDespues(t) ? (
-                      <>
-                        Turno pasado · cargada el <span className="tabular">{registradaDespues(t)}</span>
-                      </>
-                    ) : (
-                      <>
-                        Cerrada a las <span className="tabular">{t.cerradaA}</span>
-                      </>
-                    )}
-                  </span>
-                  <div className="flex gap-2">
-                    {botonEditar(t, false)}
-                    <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
-                      Ver detalle <ChevronRight className="h-4 w-4" />
-                    </Boton>
+      ).map((g) => (
+        <div key={g.clave} className="flex flex-col gap-2.5">
+          <GrupoHead
+            titulo={`TURNO ${g.tipo} · ${fechaCorta(fromDateOnly(g.fecha))}`}
+            detalle={plural(g.ts.length, 'tarjeta', 'tarjetas')}
+          />
+          {g.ts.map((t) => (
+            <Tarjeta key={t.id}>
+              <div className="flex items-start justify-between gap-2.5">
+                <div>
+                  <div className="tabular text-[17px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
+                  <div className="text-[13px] text-muted-foreground">
+                    {t.tipo} · {t.operador}
                   </div>
                 </div>
-              </Tarjeta>
-            ))}
-          </div>
-        ))
+                <Chip tono="success">Cerrada</Chip>
+              </div>
+              <Cifras
+                items={[
+                  { label: 'Inicial', valor: fmt(t.inicial) },
+                  { label: 'Final', valor: fmt(t.final) },
+                  { label: 'Horas', valor: fmt(t.final! - t.inicial), destacado: true },
+                  { label: 'Litros', valor: fmtLitros(t.litros) },
+                  { label: 'AdBlue', valor: t.adBlue ? fmtLitros(t.adBlueLitros) : '—' },
+                ]}
+              />
+              {t.sinSincronizar && <MarcaSinSincronizar />}
+              {t.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={t.edicionRequiereAtencion} />}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] text-muted-foreground">
+                  {registradaDespues(t) ? (
+                    <>
+                      Turno pasado · cargada el <span className="tabular">{registradaDespues(t)}</span>
+                    </>
+                  ) : (
+                    <>
+                      Cerrada a las <span className="tabular">{t.cerradaA}</span>
+                    </>
+                  )}
+                </span>
+                <div className="flex gap-2">
+                  {botonEditar(t, false)}
+                  <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => setDetalleCerrada(t)}>
+                    Ver detalle <ChevronRight className="h-4 w-4" />
+                  </Boton>
+                </div>
+              </div>
+            </Tarjeta>
+          ))}
+        </div>
+      ))
     );
 
   const vistaDetalleCerrada = detalleCerrada && (
@@ -996,9 +998,13 @@ export function RegistroEquipoView() {
                   <Camera className="h-4 w-4" /> Adjunta
                 </span>
               ) : detalleCerrada.sinSincronizar ? (
-                <span key="foto" className="text-[var(--warning-soft-foreground)]">Se sube al sincronizar</span>
+                <span key="foto" className="text-[var(--warning-soft-foreground)]">
+                  Se sube al sincronizar
+                </span>
               ) : (
-                <span key="foto" className="text-muted-foreground">Sin foto</span>
+                <span key="foto" className="text-muted-foreground">
+                  Sin foto
+                </span>
               ),
             ],
           ]}
@@ -1025,9 +1031,7 @@ export function RegistroEquipoView() {
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Observaciones" />
         <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px]">
-          {detalleCerrada.observaciones?.trim() || (
-            <span className="text-muted-foreground">Sin observaciones.</span>
-          )}
+          {detalleCerrada.observaciones?.trim() || <span className="text-muted-foreground">Sin observaciones.</span>}
         </p>
       </div>
     </div>
@@ -1039,6 +1043,38 @@ export function RegistroEquipoView() {
   if (operadorActual?.operatorId && !opcionesOperadorEdicion.some((o) => o.valor === operadorActual.operatorId)) {
     opcionesOperadorEdicion.unshift({ valor: operadorActual.operatorId, titulo: operadorActual.operador });
   }
+
+  // --- Eliminar tarjeta cerrada ---------------------------------------------
+
+  const eliminarTarjeta = useDeleteShiftCard();
+  /** Por qué no se puede eliminar la tarjeta en edición; `null` si se puede.
+   * Online directo (no viaja por el outbox): sin señal el botón dice por qué. */
+  const motivoSinEliminar = (t: TarjetaTurno): string | null => {
+    if (edicion.soloEnElEquipo) return 'Todavía no se envió: se descarta desde el panel de sincronización.';
+    if (!enLinea) return 'Para eliminarla hace falta señal.';
+    if (t.sinSincronizar || t.edicionSinSincronizar) return 'Tiene cambios sin sincronizar: espera a que se envíen.';
+    return null;
+  };
+  const eliminarEnEdicion =
+    edicion.editando && edicion.esCerrada
+      ? {
+          motivo: motivoSinEliminar(edicion.editando),
+          isEliminando: eliminarTarjeta.isPending,
+          eliminar: () => {
+            const t = edicion.editando;
+            if (!t) return;
+            eliminarTarjeta.mutate(
+              { id: t.id, equipoCodigo: t.equipo },
+              {
+                onSuccess: () => {
+                  edicion.cerrarEdicion();
+                  setDetalleCerrada(null);
+                },
+              },
+            );
+          },
+        }
+      : undefined;
 
   // --- Cierre de tarjeta ----------------------------------------------------
 
@@ -1106,11 +1142,7 @@ export function RegistroEquipoView() {
         requerido
         unidad="L"
         litros
-        hint={
-          cerrando.liviano
-            ? AYUDA_LITROS
-            : `${AYUDA_LITROS} Cero si no cargó en el turno.`
-        }
+        hint={cerrando.liviano ? AYUDA_LITROS : `${AYUDA_LITROS} Cero si no cargó en el turno.`}
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}
       >
@@ -1160,9 +1192,7 @@ export function RegistroEquipoView() {
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
       {!foto.file && (
-        <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-          Falta la foto del surtidor para cerrar.
-        </p>
+        <p className="m-0 text-center text-[12.5px] text-muted-foreground">Falta la foto del surtidor para cerrar.</p>
       )}
     </>
   );
@@ -1309,7 +1339,14 @@ export function RegistroEquipoView() {
                       aria-label="Cancelar"
                       className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
                     >
-                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      >
                         <path d="M18 6 6 18M6 6l12 12" />
                       </svg>
                     </button>
@@ -1326,7 +1363,6 @@ export function RegistroEquipoView() {
         }
         historial={claseVista === 'livianos' ? historialLivianos : historial}
       />
-
 
       {!esEscritorio && cerrando && (
         <Hoja
@@ -1347,9 +1383,7 @@ export function RegistroEquipoView() {
           setHistorialAbierto(abierto);
           if (!abierto) setDetalleCerrada(null);
         }}
-        titulo={
-          detalleCerrada ? `${detalleCerrada.equipo} · ${detalleCerrada.tipo}` : 'Historial de cerradas'
-        }
+        titulo={detalleCerrada ? `${detalleCerrada.equipo} · ${detalleCerrada.tipo}` : 'Historial de cerradas'}
         detalle={
           detalleCerrada
             ? `Turno ${turnoDe(detalleCerrada)} · ${
@@ -1369,14 +1403,10 @@ export function RegistroEquipoView() {
         titulo={edicion.editando ? `Editar · ${edicion.editando.equipo} · ${edicion.editando.tipo}` : ''}
         detalle={edicion.editando ? turnoDe(edicion.editando) : undefined}
       >
-        <EditorTarjeta edicion={edicion} operadores={opcionesOperadorEdicion} />
+        <EditorTarjeta edicion={edicion} operadores={opcionesOperadorEdicion} eliminar={eliminarEnEdicion} />
       </ModalTerreno>
 
-      <PastShiftDialog
-        abierto={dialogoPasado}
-        onAbiertoChange={setDialogoPasado}
-        onConfirmar={elegirTurnoPasado}
-      />
+      <PastShiftDialog abierto={dialogoPasado} onAbiertoChange={setDialogoPasado} onConfirmar={elegirTurnoPasado} />
 
       {verReporte && (
         <Hoja
@@ -1386,7 +1416,10 @@ export function RegistroEquipoView() {
           onCerrar={() => setVerReporte(false)}
         >
           <div className="overflow-hidden rounded-2xl border border-border">
-            <div className="flex items-center justify-between gap-2.5 px-3.5 py-3 text-white" style={{ background: 'var(--terreno-head)' }}>
+            <div
+              className="flex items-center justify-between gap-2.5 px-3.5 py-3 text-white"
+              style={{ background: 'var(--terreno-head)' }}
+            >
               <div>
                 <b className="block text-sm">SIMA SPA</b>
                 <span className="text-[11.5px] tracking-[0.1em] text-white/65 uppercase">
@@ -1427,9 +1460,7 @@ export function RegistroEquipoView() {
                         <span className="text-[12.5px] text-muted-foreground">{t.tipo}</span>
                       </td>
                       <td className={TD}>{t.operador}</td>
-                      <td className={`${TD} tabular text-right`}>
-                        {t.liviano ? fmtKm(t.inicial) : fmt(t.inicial)}
-                      </td>
+                      <td className={`${TD} tabular text-right`}>{t.liviano ? fmtKm(t.inicial) : fmt(t.inicial)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1440,8 +1471,8 @@ export function RegistroEquipoView() {
           <div className="flex items-start gap-2.5 rounded-2xl bg-[#f5f6f8] px-3 py-2.5 text-[13px] text-muted-foreground">
             <Mail className="h-[18px] w-[18px] shrink-0 text-foreground" />
             <span>
-              <b className="text-foreground">Destinatarios:</b> la administración (aviso en el sistema y correo con
-              el PDF adjunto). Nunca a los clientes finales de SIMA.
+              <b className="text-foreground">Destinatarios:</b> la administración (aviso en el sistema y correo con el
+              PDF adjunto). Nunca a los clientes finales de SIMA.
             </span>
           </div>
 

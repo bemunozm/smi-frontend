@@ -210,10 +210,15 @@ export interface CloseShiftCardInput {
 /**
  * Body de `PATCH /api/shift-cards/:id`: solo los campos que cambiaron. Los
  * de cierre (`valorFinal`, `fuelLiters`, `adBlue`, `adBlueLiters`) solo
- * aplican a una tarjeta ya cerrada (si no, 409 `CARD_NOT_CLOSED`).
+ * aplican a una tarjeta ya cerrada (si no, 409 `CARD_NOT_CLOSED`); `turno` y
+ * `equipoId` también exigen tarjeta cerrada — el servidor mueve la tarjeta
+ * al turno del mismo día con el otro tipo, o a la otra máquina (misma clase
+ * pesado/liviano), arrastrando la carga de combustible vinculada.
  */
 export type EditShiftCardBody = {
   operatorId?: string;
+  equipoId?: string;
+  turno?: ShiftType;
   valorInicial?: number;
   valorFinal?: number;
   fuelLiters?: number;
