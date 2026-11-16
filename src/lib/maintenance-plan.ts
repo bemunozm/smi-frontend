@@ -4,6 +4,7 @@ import {
   type PlanItemKind,
   type SaveMaintenancePlanInput,
 } from '../types/maintenance-plan';
+import { fmtDecimales } from './format';
 
 /**
  * Borrador de una pauta de mantención mientras se edita en la ventana: la
@@ -173,4 +174,19 @@ export function aEntrada(b: PautaBorrador): SaveMaintenancePlanInput {
 /** `2.100 h` / `15.000 km`. */
 export function fmtContador(n: number, unit: 'h' | 'km'): string {
   return `${n.toLocaleString('es-CL')} ${unit}`;
+}
+
+/** «+38 h atrasado»: cuánto se pasó la próxima mantención (`remaining` negativo). */
+export function textoAtraso(remaining: number, unit: 'h' | 'km'): string {
+  return `+${fmtDecimales(-remaining, 1)} ${unit} atrasado`;
+}
+
+/**
+ * Lo que falta para la próxima mantención: «faltan 150 h», «toca ahora» o, si
+ * contada desde el último cambio real ya se pasó, «+38 h atrasado».
+ */
+export function textoFaltante(remaining: number, unit: 'h' | 'km'): string {
+  if (remaining < 0) return textoAtraso(remaining, unit);
+  if (remaining === 0) return 'toca ahora';
+  return `faltan ${fmtContador(remaining, unit)}`;
 }

@@ -1,4 +1,5 @@
 import { fmtDecimales } from '../../../lib/format';
+import { textoAtraso } from '../../../lib/maintenance-plan';
 import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 
 export type Tono = 'atrasado' | 'alerta' | 'normal';
@@ -51,7 +52,7 @@ export function lectura(valor: number | null, unidad: 'h' | 'km'): string | null
 /** «+38 h atrasado» o «150 h»; `null` sin pendientes (sin pauta o sin lectura). */
 export function textoPendientes(fila: MaintenanceBoardRow): string | null {
   if (fila.remaining == null) return null;
-  if (fila.remaining < 0) return `+${fmtDecimales(-fila.remaining, 1)} ${fila.unit} atrasado`;
+  if (fila.remaining < 0) return textoAtraso(fila.remaining, fila.unit);
   return lectura(fila.remaining, fila.unit);
 }
 

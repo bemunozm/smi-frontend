@@ -11,6 +11,7 @@ import {
   leerNumero,
   problemaDe,
   quitarHito,
+  textoFaltante,
   type PautaBorrador,
 } from './maintenance-plan';
 
@@ -104,5 +105,15 @@ describe('aEntrada', () => {
       alertBefore: null,
       items: [{ id: 'a', kind: 'ACEITE', description: 'Aceite motor', quantity: 24, unit: 'LT', milestones: [250, 2000] }],
     });
+  });
+});
+
+describe('textoFaltante', () => {
+  it('lo que falta, lo que toca y lo atrasado (contado desde el último cambio)', () => {
+    expect(textoFaltante(150, 'h')).toBe('faltan 150 h');
+    expect(textoFaltante(1500, 'km')).toBe('faltan 1.500 km');
+    expect(textoFaltante(0, 'h')).toBe('toca ahora');
+    expect(textoFaltante(-38, 'h')).toBe('+38 h atrasado');
+    expect(textoFaltante(-12.5, 'km')).toBe('+12,5 km atrasado');
   });
 });
