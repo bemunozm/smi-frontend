@@ -69,6 +69,11 @@ function FilaTarjeta({ tarjeta, onEditar }: { tarjeta: TarjetaTurno; onEditar?: 
           }
         />
       </dl>
+      {tarjeta.motivoSinCarga ? (
+        <p className="m-0 text-sm text-foreground">
+          <span className="font-semibold">Sin carga de combustible:</span> {tarjeta.motivoSinCarga}
+        </p>
+      ) : null}
       {tarjeta.observaciones ? <p className="m-0 text-sm text-foreground">{tarjeta.observaciones}</p> : null}
       {tarjeta.pumpPhotoUrl ? (
         <a

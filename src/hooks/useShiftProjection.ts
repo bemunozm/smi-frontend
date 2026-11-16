@@ -64,6 +64,7 @@ function overlayCloseOp(
     adBlue: op.payload.input.adBlue ?? false,
     adBlueLitros: op.payload.input.adBlueLiters,
     observaciones: op.payload.input.observaciones ?? base.observaciones,
+    motivoSinCarga: op.payload.input.noFuelReason,
     cerradaA: new Date(op.payload.input.capturedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
     cerradaIso: op.payload.input.capturedAt,
     sinSincronizar: true,

@@ -140,6 +140,8 @@ export function RegistroEquipoView() {
     litrosError,
     litrosAviso,
     fotoRequerida,
+    motivoRequerido,
+    faltaMotivo,
     adBlueCierre,
     adBlueIncompletoCierre,
     edicion,
@@ -297,9 +299,9 @@ export function RegistroEquipoView() {
           «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
         </span>
         <span>
-          • <b className="text-foreground">Ciérrala cuando le eches combustible</b>, con el km, los litros y la foto
-          del surtidor. Si no se pudo cargar (por ejemplo, un corte de luz), se cierra igual solo con el km. Puede
-          cerrarla cualquier supervisor, aunque la haya abierto otro.
+          • <b className="text-foreground">Ciérrala al cargar combustible</b>, con el km, los litros y la foto del
+          surtidor. También se puede cerrar sin carga: basta el km y el motivo por el que no se cargó (por ejemplo,
+          un corte de luz). Puede cerrarla cualquier supervisor, aunque la haya abierto otro.
         </span>
         <span>• Las camionetas no van en el reporte de salida a la administración.</span>
       </div>
@@ -1030,6 +1032,15 @@ export function RegistroEquipoView() {
         </div>
       ) : null}
 
+      {detalleCerrada.motivoSinCarga?.trim() ? (
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Motivo sin carga de combustible" />
+          <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px]">
+            {detalleCerrada.motivoSinCarga}
+          </p>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1.5">
         <GrupoHead titulo="Observaciones" />
         <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px]">
@@ -1154,6 +1165,19 @@ export function RegistroEquipoView() {
         <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
       </Campo>
 
+      {/* Sin litros hay que justificar por qué no se cargó (pedido del
+          cliente, 16/11/2026): queda en la tarjeta y en el reporte. */}
+      {motivoRequerido && (
+        <Campo label="Motivo sin carga de combustible" requerido hint="Por ejemplo: corte de luz, surtidor sin combustible o no le tocaba cargar.">
+          <Textarea
+            rows={2}
+            placeholder="¿Por qué no se cargó combustible?"
+            value={cierre.motivoSinCarga}
+            onChange={(e) => setCierre((c) => ({ ...c, motivoSinCarga: e.target.value }))}
+          />
+        </Campo>
+      )}
+
       {!cerrando.liviano && (
         <AdBlueCampos
           adBlue={cierre.adBlue}
@@ -1166,8 +1190,8 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          Ciérrala cuando le eches combustible. Si no se pudo cargar (por ejemplo, un corte de luz), puedes cerrarla
-          igual sin litros ni foto. Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
+          Ciérrala al cargar combustible, con los litros y la foto. Si no se cargó, ciérrala solo con el km e indica el
+          motivo. Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}
 
@@ -1185,6 +1209,7 @@ export function RegistroEquipoView() {
         onClick={confirmarCierre}
         disabled={
           (fotoRequerida && !foto.file) ||
+          faltaMotivo ||
           foto.isReadingPhoto ||
           isCerrando ||
           finalNum == null ||
@@ -1199,6 +1224,11 @@ export function RegistroEquipoView() {
       {fotoRequerida && !foto.file && (
         <p className="m-0 text-center text-[12.5px] text-muted-foreground">
           Con combustible cargado falta la foto del surtidor para cerrar.
+        </p>
+      )}
+      {faltaMotivo && (
+        <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+          Sin combustible cargado, escribe el motivo para cerrar.
         </p>
       )}
     </>
