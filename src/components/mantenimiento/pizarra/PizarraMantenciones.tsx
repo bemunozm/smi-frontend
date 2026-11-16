@@ -25,6 +25,11 @@ const TONO_CLASE = {
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
 
+// Filas alternadas (gris marcado/blanco) con separador más fuerte; las celdas de HeroUI son transparentes, así que
+// el hover se fuerza a un gris más oscuro que la franja para que se lea sobre ambos tonos.
+const CEBRA_FILA =
+  'even:bg-default/60 odd:bg-surface [&_.table__cell]:border-border! [&_.table__cell]:hover:bg-default!';
+
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
   const texto = textoPendientes(fila);
@@ -263,7 +268,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   className="min-w-full"
                 >
                   {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="border-b! border-border! [&_.table__column]:bg-default!">
+                  <Table.Header className="[&_.table__column]:border-b-2 [&_.table__column]:border-border [&_.table__column]:bg-default!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
@@ -373,10 +378,6 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
     </div>
   );
 }
-
-// Filas alternadas (gris/blanco) con separador más marcado; las celdas son transparentes, así que el hover
-// de HeroUI se ve sobre ambos tonos.
-const CEBRA_FILA = 'even:bg-surface-secondary odd:bg-surface [&_.table__cell]:border-border!';
 
 function Dato({ titulo, children, className = '' }: { titulo: string; children: ReactNode; className?: string }) {
   return (
