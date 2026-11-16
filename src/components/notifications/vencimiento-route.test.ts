@@ -17,6 +17,17 @@ describe('rutaDeVencimiento', () => {
     expect(rutaDeVencimiento(aviso('light-service.due'), 'ADMIN')).toBe('/equipos/eq_1');
   });
 
+  it('la preventiva de pauta lleva al mantenedor a sus órdenes y al admin al detalle de la mantención', () => {
+    const data = { equipmentId: 'eq_1', ordenId: 'ot_1' };
+    expect(rutaDeVencimiento(aviso('preventive-service.due', data), 'MANTENEDOR')).toBe('/mantenimiento/ordenes');
+    expect(rutaDeVencimiento(aviso('preventive-service.due', data), 'ADMIN')).toBe('/mantenciones?id=ot_1');
+  });
+
+  it('la preventiva sin orden en el aviso cae a la ficha del equipo', () => {
+    expect(rutaDeVencimiento(aviso('preventive-service.due'), 'ADMIN')).toBe('/equipos/eq_1');
+    expect(rutaDeVencimiento(aviso('preventive-service.due', null), 'ADMIN')).toBe('/mantenciones');
+  });
+
   it('sin equipo en el aviso, al calendario de todos los livianos', () => {
     expect(rutaDeVencimiento(aviso('document.expiring', null), 'ADMIN')).toBe('/equipos/vencimientos');
     expect(rutaDeVencimiento(aviso('document.expiring', null), 'MANTENEDOR')).toBe('/mantenimiento/vencimientos');
