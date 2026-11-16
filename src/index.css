@@ -83,6 +83,9 @@
   --warning-soft-foreground: #92590a;
   /* Amarillo real para el ícono de «cerca de la mantención»: --warning se lee café. */
   --alert-yellow: #ca8a04;
+  /* Fondo amarillo de verdad para la burbuja de «Próxima mantención» de la pizarra: --warning-soft se lee crema.
+     El ícono va encima en --warning-soft-foreground (≈ 4,5:1), porque es la única señal del estado. */
+  --alert-yellow-soft: #fde68a;
 
   --danger: #b01818;
   --danger-foreground: #ffffff;
@@ -449,6 +452,7 @@
   --color-accent-foreground: var(--accent-soft-foreground);
   --color-border: var(--border);
   --color-alert-yellow: var(--alert-yellow);
+  --color-alert-yellow-soft: var(--alert-yellow-soft);
   --color-pizarra-1: var(--pizarra-col-1);
   --color-pizarra-2: var(--pizarra-col-2);
   --color-pizarra-3: var(--pizarra-col-3);

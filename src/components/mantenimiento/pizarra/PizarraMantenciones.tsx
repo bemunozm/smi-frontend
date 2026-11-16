@@ -74,9 +74,16 @@ function ConIcono({ icono, children }: { icono: 'reloj' | 'fecha'; children: Rea
 
 // Burbujas de estado de los pendientes: solo el ícono, para que la columna se lea como números; el estado en
 // palabras va en el tooltip y en el aria-label (el disparador del Tooltip de HeroUI es enfocable con teclado).
+// Como el ícono es la única señal, va oscuro sobre su fondo (≥ 3:1): rojo sobre rojo suave (≈ 5,5:1) y café sobre
+// amarillo (≈ 4,5:1), con un amarillo de verdad para que la burbuja se lea amarilla.
 const BURBUJA = {
   atrasado: { texto: 'Atrasado', fondo: 'bg-danger-soft', Icono: TriangleAlert, color: 'text-danger' },
-  alerta: { texto: 'Próxima mantención', fondo: 'bg-warning-soft', Icono: CircleAlert, color: 'text-alert-yellow' },
+  alerta: {
+    texto: 'Próxima mantención',
+    fondo: 'bg-alert-yellow-soft',
+    Icono: CircleAlert,
+    color: 'text-warning-soft-foreground',
+  },
 } as const;
 
 function BurbujaEstado({ estado }: { estado: keyof typeof BURBUJA }) {
@@ -94,7 +101,11 @@ function BurbujaEstado({ estado }: { estado: keyof typeof BURBUJA }) {
   );
 }
 
-function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
+/**
+ * `conEtiqueta` (tarjetas del teléfono): en táctil el tooltip no se abre con un toque, así que el estado se escribe
+ * al lado de la burbuja. En la tabla de escritorio queda solo el ícono con su tooltip.
+ */
+function Pendientes({ fila, conEtiqueta = false }: { fila: MaintenanceBoardRow; conEtiqueta?: boolean }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
   const texto = textoPendientes(fila);
   if (texto == null) return <span className="text-muted-foreground">{SIN_LECTURA}</span>;
@@ -104,6 +115,12 @@ function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
       {/* Atrasado: burbuja roja con triángulo; alerta (dentro del aviso): burbuja amarilla con exclamación; normal:
           solo el número. */}
       {estado !== 'normal' ? <BurbujaEstado estado={estado} /> : null}
+      {/* aria-hidden: el lector de pantalla ya lo oye en el aria-label de la burbuja. */}
+      {estado !== 'normal' && conEtiqueta ? (
+        <span aria-hidden="true" className={`text-xs ${TONO_CLASE[estado]}`}>
+          {BURBUJA[estado].texto}
+        </span>
+      ) : null}
       <span className={`tabular-nums ${TONO_CLASE[estado]}`}>{texto}</span>
       {/* Sin último cambio el número sale de los hitos absolutos: se avisa
           para que nadie lo tome por exacto. */}
@@ -309,7 +326,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                       </ConIcono>
                     </Dato>
                     <Dato titulo={textos.pendientes}>
-                      <Pendientes fila={fila} />
+                      <Pendientes conEtiqueta fila={fila} />
                     </Dato>
                   </dl>
                   <dl className="m-0 grid grid-cols-2 gap-2 text-sm">

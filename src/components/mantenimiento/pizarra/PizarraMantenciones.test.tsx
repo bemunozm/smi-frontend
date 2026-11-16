@@ -381,7 +381,8 @@ describe('PizarraMantenciones', () => {
     expect(screen.getByText('Falló la pizarra')).toBeTruthy();
   });
 
-  it('horas pendientes: burbuja roja (atrasado) y amarilla (alerta) solo con ícono; normal solo el número', () => {
+  it('horas pendientes en escritorio: burbuja roja (atrasado) y amarilla (alerta) solo con ícono; normal solo el número', () => {
+    escritorio.value = true;
     boardHook.mockReturnValue({
       data: [
         filaPizarra({ equipmentId: 'a1', internalCode: 'ATR', remaining: -5 }),
@@ -406,15 +407,35 @@ describe('PizarraMantenciones', () => {
     const alerta = screen.getByTestId('pizarra-fila-a2');
     expect(within(alerta).getByText('40 h').className).toContain('text-warning-soft-foreground');
     const burbujaAmarilla = within(alerta).getByRole('button', { name: 'Próxima mantención' });
-    expect(burbujaAmarilla.className).toContain('bg-warning-soft');
+    expect(burbujaAmarilla.className).toContain('bg-alert-yellow-soft');
     expect(burbujaAmarilla.textContent).toBe('');
-    expect(burbujaAmarilla.querySelector('svg.text-alert-yellow')).toBeTruthy();
+    expect(burbujaAmarilla.querySelector('svg.text-warning-soft-foreground')).toBeTruthy();
     expect(alerta.querySelector('svg.text-danger')).toBeNull();
     expect(within(alerta).queryByText('Próxima mantención')).toBeNull();
 
     const normal = screen.getByTestId('pizarra-fila-a3');
-    expect(normal.querySelector('svg.text-danger, svg.text-alert-yellow')).toBeNull();
+    expect(normal.querySelector('svg.text-danger, svg.text-warning-soft-foreground')).toBeNull();
     expect(within(normal).queryByRole('button', { name: /Atrasado|Próxima mantención/ })).toBeNull();
+  });
+
+  it('en el teléfono el estado se escribe al lado de la burbuja (el tooltip no se abre con un toque)', () => {
+    boardHook.mockReturnValue({
+      data: [
+        filaPizarra({ equipmentId: 'a1', internalCode: 'ATR', remaining: -5 }),
+        filaPizarra({ equipmentId: 'a2', internalCode: 'ALE', remaining: 40, alertBefore: 50 }),
+        filaPizarra({ equipmentId: 'a3', internalCode: 'NOR', remaining: 300, alertBefore: 50 }),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    renderPizarra();
+
+    const atrasado = screen.getByTestId('pizarra-fila-a1');
+    expect(within(atrasado).getByRole('button', { name: 'Atrasado' }).textContent).toBe('');
+    expect(within(atrasado).getByText('Atrasado')).toBeTruthy();
+    expect(within(screen.getByTestId('pizarra-fila-a2')).getByText('Próxima mantención')).toBeTruthy();
+    expect(within(screen.getByTestId('pizarra-fila-a3')).queryByText(/Atrasado|Próxima mantención/)).toBeNull();
   });
 
   it('la tabla pinta de gris las columnas alternadas, con o sin último cambio, y lleva íconos', () => {
