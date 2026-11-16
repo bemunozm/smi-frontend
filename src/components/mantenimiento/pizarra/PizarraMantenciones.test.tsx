@@ -165,19 +165,46 @@ function renderPizarra(entrada = '/mantenciones', onVerRegistro = vi.fn()) {
 }
 
 const tarjetas = () => screen.getAllByTestId(/^pizarra-fila-/).map((f) => f.getAttribute('data-testid'));
+const sinPauta = () => screen.queryAllByTestId(/^pizarra-sin-pauta-/).map((f) => f.getAttribute('data-testid'));
 
 describe('PizarraMantenciones', () => {
-  it('el panel de pesados muestra solo los pesados, lo atrasado arriba y sin pauta al final', () => {
+  it('el panel de pesados muestra solo los pesados con pauta, lo atrasado arriba; los sin pauta van aparte', () => {
     renderPizarra();
 
-    expect(tarjetas()).toEqual(['pizarra-fila-p2', 'pizarra-fila-p1', 'pizarra-fila-p3']);
+    expect(tarjetas()).toEqual(['pizarra-fila-p2', 'pizarra-fila-p1']);
     const atrasado = screen.getByTestId('pizarra-fila-p2');
-    expect(within(atrasado).getByText('+38 h atrasado')).toBeTruthy();
+    expect(within(atrasado).getByText('+38 h')).toBeTruthy();
     expect(within(atrasado).getByText('estimado')).toBeTruthy();
     expect(within(atrasado).getByText('Vencida')).toBeTruthy();
     // El pronóstico del equipo con datos de uso.
     expect(within(screen.getByTestId('pizarra-fila-p1')).getByText(/vie 27-11/)).toBeTruthy();
-    expect(within(screen.getByTestId('pizarra-fila-p3')).getByText('Sin pauta')).toBeTruthy();
+    // El sin pauta queda en su sección, no en la pizarra.
+    const seccion = screen.getByRole('region', { name: 'Equipos sin pauta asignada' });
+    expect(within(seccion).getByTestId('pizarra-sin-pauta-p3')).toBeTruthy();
+    expect(within(seccion).getByText('SANY 01')).toBeTruthy();
+  });
+
+  it('en escritorio los sin pauta salen de la tabla principal a su propia tabla con «Asignar pauta»', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const principal = screen.getByRole('grid', { name: 'Pizarra de equipos pesados' });
+    expect(within(principal).queryByText('SANY 01')).toBeNull();
+    const tabla = screen.getByRole('grid', { name: 'Equipos sin pauta asignada' });
+    for (const nombre of ['Equipo', 'Horómetro actual', 'Estado']) {
+      expect(within(tabla).getByRole('columnheader', { name: nombre })).toBeTruthy();
+    }
+    const fila = within(tabla).getByTestId('pizarra-sin-pauta-p3');
+    fireEvent.click(within(fila).getByRole('button', { name: 'Asignar pauta' }));
+    expect(screen.getByTestId('modal-pauta').getAttribute('data-equipo')).toBe('p3');
+  });
+
+  it('sin equipos sin pauta la sección no aparece', () => {
+    boardHook.mockReturnValue({ data: [FILAS[0]], isPending: false, isError: false, error: null });
+    renderPizarra();
+
+    expect(sinPauta()).toEqual([]);
+    expect(screen.queryByText('Equipos sin pauta asignada')).toBeNull();
   });
 
   it('al pasar a livianos cambia a km y sin pronóstico dice «Sin datos de uso»', () => {
@@ -206,6 +233,7 @@ describe('PizarraMantenciones', () => {
     escritorio.value = true;
     renderPizarra();
 
+    const principal = screen.getByRole('grid', { name: 'Pizarra de equipos pesados' });
     for (const nombre of [
       'Equipo',
       'Horas cambio',
@@ -216,16 +244,31 @@ describe('PizarraMantenciones', () => {
       'Horas pendientes',
       'Fecha estimada de mantención',
     ]) {
-      expect(screen.getByRole('columnheader', { name: nombre })).toBeTruthy();
+      expect(within(principal).getByRole('columnheader', { name: nombre })).toBeTruthy();
     }
-    expect(within(screen.getByTestId('pizarra-fila-p2')).getByText('+38 h atrasado')).toBeTruthy();
+    expect(within(screen.getByTestId('pizarra-fila-p2')).getByText('+38 h')).toBeTruthy();
   });
 
-  it('sin último cambio, el ADMIN ve «Registrar mantención anterior» y lo abre con el equipo', () => {
+  it('sin último cambio, la tabla trae un botón en cada columna y los dos abren el mismo modal', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const celdas = screen.getByTestId('pizarra-fila-p2').querySelectorAll('td');
+    // Columnas 2 (fecha) y 3 (horómetro): un botón cada una, sin colSpan.
+    expect(within(celdas[2] as HTMLElement).getByRole('button', { name: 'Registrar fecha' })).toBeTruthy();
+    expect(within(celdas[3] as HTMLElement).getByRole('button', { name: 'Registrar horómetro' })).toBeTruthy();
+    expect([...celdas].some((td) => td.hasAttribute('colspan'))).toBe(false);
+
+    fireEvent.click(within(celdas[3] as HTMLElement).getByRole('button', { name: 'Registrar horómetro' }));
+    expect(screen.getByTestId('modal-anterior').getAttribute('data-equipo')).toBe('p2');
+  });
+
+  it('sin último cambio, el ADMIN ve «Registrar fecha» y lo abre con el equipo', () => {
     renderPizarra();
 
     const fila = screen.getByTestId('pizarra-fila-p2');
-    fireEvent.click(within(fila).getByRole('button', { name: 'Registrar mantención anterior' }));
+    expect(within(fila).getByRole('button', { name: 'Registrar horómetro' })).toBeTruthy();
+    fireEvent.click(within(fila).getByRole('button', { name: 'Registrar fecha' }));
     const modal = screen.getByTestId('modal-anterior');
     expect(modal.getAttribute('data-equipo')).toBe('p2');
     expect(modal.getAttribute('data-control-unit')).toBe('HOURS');
@@ -237,12 +280,12 @@ describe('PizarraMantenciones', () => {
     expect(modal.getAttribute('data-lectura-obligatoria')).toBe('true');
   });
 
-  it('un liviano abre «Registrar mantención anterior» sin pauta pero con lectura obligatoria', () => {
+  it('un liviano abre «Registrar km» sin pauta pero con lectura obligatoria', () => {
     renderPizarra();
     fireEvent.click(screen.getByRole('radio', { name: 'Equipos livianos' }));
-    fireEvent.click(
-      within(screen.getByTestId('pizarra-fila-l1')).getByRole('button', { name: 'Registrar mantención anterior' }),
-    );
+    const liviano = screen.getByTestId('pizarra-fila-l1');
+    expect(within(liviano).getByRole('button', { name: 'Registrar fecha' })).toBeTruthy();
+    fireEvent.click(within(liviano).getByRole('button', { name: 'Registrar km' }));
     const modal = screen.getByTestId('modal-anterior');
     expect(modal.getAttribute('data-pauta')).toBe('null');
     expect(modal.getAttribute('data-lectura-obligatoria')).toBe('true');
@@ -260,19 +303,23 @@ describe('PizarraMantenciones', () => {
     expect(within(screen.getByRole('dialog')).getByText('Mantención a realizar · SEM 09')).toBeTruthy();
   });
 
-  it('la SECRETARIA no ve «Registrar mantención anterior» ni «Asignar pauta»', () => {
+  it('la SECRETARIA no ve los botones de registrar ni «Asignar pauta»', () => {
     rol.value = 'SECRETARIA';
+    escritorio.value = true;
     renderPizarra();
 
-    expect(screen.queryByRole('button', { name: 'Registrar mantención anterior' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Asignar pauta' })).toBeNull();
-    expect(screen.getByTestId('pizarra-fila-p2')).toBeTruthy();
+    for (const nombre of ['Registrar fecha', 'Registrar horómetro', 'Asignar pauta']) {
+      expect(screen.queryByRole('button', { name: nombre })).toBeNull();
+    }
+    const celdas = screen.getByTestId('pizarra-fila-p2').querySelectorAll('td');
+    expect(celdas[2]?.textContent).toBe('—');
+    expect(celdas[3]?.textContent).toBe('—');
   });
 
   it('un pesado sin pauta ofrece «Asignar pauta» al ADMIN', () => {
     renderPizarra();
 
-    fireEvent.click(within(screen.getByTestId('pizarra-fila-p3')).getByRole('button', { name: 'Asignar pauta' }));
+    fireEvent.click(within(screen.getByTestId('pizarra-sin-pauta-p3')).getByRole('button', { name: 'Asignar pauta' }));
     expect(screen.getByTestId('modal-pauta').getAttribute('data-equipo')).toBe('p3');
   });
 
@@ -294,10 +341,9 @@ describe('PizarraMantenciones', () => {
 
   it('un liviano muestra el servicio de 10.000 km; un sin pauta no tiene mantención que ver', () => {
     renderPizarra();
-    const verSinPauta = within(screen.getByTestId('pizarra-fila-p3')).getByRole('button', {
-      name: 'Ver mantención a realizar',
-    });
-    expect(verSinPauta.hasAttribute('disabled') || verSinPauta.getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(
+      within(screen.getByTestId('pizarra-sin-pauta-p3')).queryByRole('button', { name: 'Ver mantención a realizar' }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole('radio', { name: 'Equipos livianos' }));
     fireEvent.click(
@@ -335,7 +381,7 @@ describe('PizarraMantenciones', () => {
     expect(screen.getByText('Falló la pizarra')).toBeTruthy();
   });
 
-  it('horas pendientes: atrasado en rojo con triángulo, alerta en chip amarillo con exclamación y normal sin ícono', () => {
+  it('horas pendientes: burbuja roja (atrasado) y amarilla (alerta) solo con ícono; normal solo el número', () => {
     boardHook.mockReturnValue({
       data: [
         filaPizarra({ equipmentId: 'a1', internalCode: 'ATR', remaining: -5 }),
@@ -349,31 +395,51 @@ describe('PizarraMantenciones', () => {
     renderPizarra();
 
     const atrasado = screen.getByTestId('pizarra-fila-a1');
-    expect(within(atrasado).getByText('+5 h atrasado').className).toContain('text-danger');
-    expect(atrasado.querySelector('svg.text-danger')).toBeTruthy();
+    expect(within(atrasado).getByText('+5 h').className).toContain('text-danger');
+    // La burbuja dice su estado en el aria-label (y en el tooltip), no con texto visible.
+    const burbujaRoja = within(atrasado).getByRole('button', { name: 'Atrasado' });
+    expect(burbujaRoja.className).toContain('bg-danger-soft');
+    expect(burbujaRoja.textContent).toBe('');
+    expect(burbujaRoja.querySelector('svg.text-danger')).toBeTruthy();
+    expect(within(atrasado).queryByText(/atrasado/i)).toBeNull();
+
     const alerta = screen.getByTestId('pizarra-fila-a2');
     expect(within(alerta).getByText('40 h').className).toContain('text-warning-soft-foreground');
-    expect(within(alerta).getByText('40 h').parentElement?.className).toContain('bg-warning-soft');
-    expect(alerta.querySelector('svg.text-alert-yellow')).toBeTruthy();
+    const burbujaAmarilla = within(alerta).getByRole('button', { name: 'Próxima mantención' });
+    expect(burbujaAmarilla.className).toContain('bg-warning-soft');
+    expect(burbujaAmarilla.textContent).toBe('');
+    expect(burbujaAmarilla.querySelector('svg.text-alert-yellow')).toBeTruthy();
     expect(alerta.querySelector('svg.text-danger')).toBeNull();
+    expect(within(alerta).queryByText('Próxima mantención')).toBeNull();
+
     const normal = screen.getByTestId('pizarra-fila-a3');
     expect(normal.querySelector('svg.text-danger, svg.text-alert-yellow')).toBeNull();
+    expect(within(normal).queryByRole('button', { name: /Atrasado|Próxima mantención/ })).toBeNull();
   });
 
-  it('la tabla pinta de gris las columnas por índice lógico aunque haya celda con colSpan, y lleva íconos', () => {
+  it('la tabla pinta de gris las columnas alternadas, con o sin último cambio, y lleva íconos', () => {
     escritorio.value = true;
     renderPizarra();
 
-    // p1 tiene último cambio (9 celdas); p2 no (8 celdas, una con colSpan 2): ambas con el mismo gris de partida.
+    // Con y sin último cambio la fila tiene las mismas 9 celdas, gris desde la primera.
+    const alternadas = [true, false, true, false, true, false, true, false, true];
     const conCambio = screen.getByTestId('pizarra-fila-p1').querySelectorAll('td');
-    expect([...conCambio].map((td) => td.hasAttribute('data-gris'))).toEqual([
-      true, false, true, false, true, false, true, false, true,
-    ]);
+    expect([...conCambio].map((td) => td.hasAttribute('data-gris'))).toEqual(alternadas);
     const sinCambio = screen.getByTestId('pizarra-fila-p2').querySelectorAll('td');
-    expect([...sinCambio].map((td) => td.hasAttribute('data-gris'))).toEqual([
-      true, false, true, true, false, true, false, true,
-    ]);
+    expect([...sinCambio].map((td) => td.hasAttribute('data-gris'))).toEqual(alternadas);
     // Íconos decorativos junto a los valores.
     expect(screen.getByTestId('pizarra-fila-p1').querySelectorAll('svg[aria-hidden="true"]').length).toBeGreaterThan(5);
+  });
+
+  it('la cabecera es un bloque de color por columna, del azul al verde', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const principal = screen.getByRole('grid', { name: 'Pizarra de equipos pesados' });
+    const colores = within(principal)
+      .getAllByRole('columnheader')
+      .map((th) => th.className.match(/bg-pizarra-(\d)/)?.[1]);
+    expect(colores).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    expect(within(principal).getByRole('columnheader', { name: 'Equipo' }).className).toContain('text-white');
   });
 });

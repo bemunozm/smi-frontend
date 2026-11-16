@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, Chip, Spinner, Table, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Button, Card, Chip, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
 import { CalendarDays, CircleAlert, ClipboardList, Clock, History, TriangleAlert } from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
@@ -12,7 +12,7 @@ import type { MaintenanceForecastRow } from '../../../types/maintenance-forecast
 import { MantencionAnteriorModal } from '../MantencionAnteriorModal';
 import { PautaMantencionModal } from '../PautaMantencionModal';
 import { MantencionARealizarModal } from './MantencionARealizarModal';
-import { etiquetas, fechaCorta, lectura, ordenarFilas, textoPendientes, tono } from './pizarra';
+import { etiquetas, fechaCorta, lectura, separarSinPauta, textoPendientes, tono } from './pizarra';
 
 type Panel = 'pesados' | 'livianos';
 
@@ -25,14 +25,41 @@ const TONO_CLASE = {
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
 
-// Columnas alternadas (gris desde la primera) por índice lógico de columna, no por `nth-child`: la celda con colSpan
-// de «Registrar mantención anterior» correría los colores. Las celdas de HeroUI traen fondo propio con más
-// especificidad, por eso el gris va con `!` y solo si la fila no está en hover; el hover verde (tinte del token
-// success) va sobre todas las celdas de la fila y le gana al gris.
-const CEBRA_COLUMNAS = '[&_td]:border-b-0! [&:not(:hover)_td[data-gris]]:bg-default/70! hover:[&_td]:bg-success/15!';
+// Columnas alternadas (gris desde la primera) por índice lógico de columna, no por `nth-child`, para no depender de
+// cuántas celdas trae cada fila. Las celdas de HeroUI traen fondo propio con más especificidad, por eso el gris va
+// con `!` y solo si la fila no está en hover; el hover verde (tinte del token success) va sobre todas las celdas de
+// la fila y le gana al gris. El relieve (luz arriba, sombra fina abajo y a la derecha) separa cada celda sin rayar.
+const CEBRA_COLUMNAS =
+  '[&_td]:border-b-0! [&_td]:shadow-pizarra-celda [&:not(:hover)_td[data-gris]]:bg-default/70! hover:[&_td]:bg-success/15!';
 
-/** Columnas pares (0, 2, 4…) en gris; la celda con colSpan 2 toma el color de su primera columna. */
+/** Columnas pares (0, 2, 4…) en gris. */
 const fondoColumna = (indice: number) => (indice % 2 === 0 ? { 'data-gris': '' } : {});
+
+// Cabecera tipo tabla de precios: cada columna es un bloque propio (color del degradado azul → turquesa → verde,
+// texto blanco en negrita, esquinas de arriba redondeadas y relieve). El borde blanco a los lados hace de separación
+// entre bloques; `z-1` deja la sombra por encima de la primera fila del cuerpo. El `::after` es la rayita separadora
+// de HeroUI, que acá sobra.
+const BLOQUE_CABECERA =
+  'z-1 border-x-2 border-surface rounded-t-lg! rounded-b-none! py-3! text-xs font-bold! text-white! shadow-pizarra-cabecera after:hidden';
+
+/** Los nueve pasos del degradado (tokens de `index.css`), escritos enteros para que Tailwind los encuentre. */
+const COLOR_CABECERA = [
+  'bg-pizarra-1!',
+  'bg-pizarra-2!',
+  'bg-pizarra-3!',
+  'bg-pizarra-4!',
+  'bg-pizarra-5!',
+  'bg-pizarra-6!',
+  'bg-pizarra-7!',
+  'bg-pizarra-8!',
+  'bg-pizarra-9!',
+] as const;
+
+/** Clases del bloque de cabecera en el paso `paso` (0 a 8) del degradado. */
+const cabecera = (paso: number) => `${BLOQUE_CABECERA} ${COLOR_CABECERA[paso]}`;
+
+/** La tabla de sin pauta tiene cuatro columnas: toma pasos repartidos para recorrer igual todo el degradado. */
+const PASOS_SIN_PAUTA = [0, 3, 6, 8] as const;
 
 /** Ícono chico, atenuado y decorativo antes del valor (reloj para horas/km, calendario para fechas). */
 function ConIcono({ icono, children }: { icono: 'reloj' | 'fecha'; children: ReactNode }) {
@@ -45,24 +72,43 @@ function ConIcono({ icono, children }: { icono: 'reloj' | 'fecha'; children: Rea
   );
 }
 
+// Burbujas de estado de los pendientes: solo el ícono, para que la columna se lea como números; el estado en
+// palabras va en el tooltip y en el aria-label (el disparador del Tooltip de HeroUI es enfocable con teclado).
+const BURBUJA = {
+  atrasado: { texto: 'Atrasado', fondo: 'bg-danger-soft', Icono: TriangleAlert, color: 'text-danger' },
+  alerta: { texto: 'Próxima mantención', fondo: 'bg-warning-soft', Icono: CircleAlert, color: 'text-alert-yellow' },
+} as const;
+
+function BurbujaEstado({ estado }: { estado: keyof typeof BURBUJA }) {
+  const { texto, fondo, Icono, color } = BURBUJA[estado];
+  return (
+    <Tooltip delay={200}>
+      <Tooltip.Trigger
+        aria-label={texto}
+        className={`inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 ${fondo}`}
+      >
+        <Icono aria-hidden="true" className={`size-3.5 ${color}`} />
+      </Tooltip.Trigger>
+      <Tooltip.Content>{texto}</Tooltip.Content>
+    </Tooltip>
+  );
+}
+
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
   const texto = textoPendientes(fila);
   if (texto == null) return <span className="text-muted-foreground">{SIN_LECTURA}</span>;
+  const estado = tono(fila);
   return (
-    <span
-      className={`inline-flex flex-wrap items-center gap-1.5 ${
-        tono(fila) === 'alerta' ? 'rounded-full bg-warning-soft px-2 py-0.5' : ''
-      }`}
-    >
-      {/* Atrasado: triángulo rojo; alerta (dentro del aviso): chip amarillo con exclamación; normal: sin ícono. */}
-      {tono(fila) === 'atrasado' ? <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0 text-danger" /> : null}
-      {tono(fila) === 'alerta' ? <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-alert-yellow" /> : null}
-      <span className={`tabular-nums ${TONO_CLASE[tono(fila)]}`}>{texto}</span>
+    <div className="flex flex-wrap items-center gap-1.5">
+      {/* Atrasado: burbuja roja con triángulo; alerta (dentro del aviso): burbuja amarilla con exclamación; normal:
+          solo el número. */}
+      {estado !== 'normal' ? <BurbujaEstado estado={estado} /> : null}
+      <span className={`tabular-nums ${TONO_CLASE[estado]}`}>{texto}</span>
       {/* Sin último cambio el número sale de los hitos absolutos: se avisa
           para que nadie lo tome por exacto. */}
       {fila.estimated ? <span className="text-xs text-muted-foreground italic">estimado</span> : null}
-    </span>
+    </div>
   );
 }
 
@@ -93,18 +139,26 @@ function FechaEstimadaCelda({ fila, pronostico }: { fila: MaintenanceBoardRow; p
   return <span className="text-muted-foreground">{lineaPronostico(pronostico) ?? '—'}</span>;
 }
 
-/** Código y qué equipo es; los fuera de servicio lo dicen además de verse atenuados. */
-function Equipo({ fila }: { fila: MaintenanceBoardRow }) {
+function ChipInoperativo() {
+  return (
+    <Chip color="danger" size="sm" variant="soft">
+      Inoperativo
+    </Chip>
+  );
+}
+
+/**
+ * Código y qué equipo es; los fuera de servicio lo dicen además de verse
+ * atenuados (salvo `sinEstado`: la tabla de sin pauta lo muestra en su propia
+ * columna).
+ */
+function Equipo({ fila, sinEstado = false }: { fila: MaintenanceBoardRow; sinEstado?: boolean }) {
   const detalle = [fila.type, [fila.brand, fila.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
   return (
     <span className="flex flex-col">
       <span className="flex flex-wrap items-center gap-2">
         <span className="font-mono font-semibold whitespace-nowrap text-foreground">{fila.internalCode}</span>
-        {fila.status === 'OUT_OF_SERVICE' ? (
-          <Chip color="danger" size="sm" variant="soft">
-            Inoperativo
-          </Chip>
-        ) : null}
+        {fila.status === 'OUT_OF_SERVICE' && !sinEstado ? <ChipInoperativo /> : null}
       </span>
       {detalle ? <span className="text-xs text-muted-foreground">{detalle}</span> : null}
     </span>
@@ -138,15 +192,17 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
   const [anterior, setAnterior] = useState<MaintenanceBoardRow | null>(null);
   const [pauta, setPauta] = useState<MaintenanceBoardRow | null>(null);
 
-  const filas = useMemo(
+  // Los sin pauta van a su propia sección debajo: no tienen números que comparar con el resto.
+  const { conPauta: filas, sinPauta: filasSinPauta } = useMemo(
     () =>
-      ordenarFilas(
+      separarSinPauta(
         (data ?? []).filter((f) =>
           panel === 'livianos' ? f.equipmentClass === 'LIGHT' : f.equipmentClass === 'HEAVY',
         ),
       ),
     [data, panel],
   );
+  const cargada = !isPending && !isError;
 
   const cambiarPanel = (siguiente: Panel) => {
     const nuevos = new URLSearchParams(params);
@@ -155,37 +211,31 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
     setParams(nuevos, { replace: true });
   };
 
-  const botonAnterior = (fila: MaintenanceBoardRow): ReactNode =>
+  // Sin último cambio, cada columna («Fecha último cambio» y la lectura) trae su propio botón con texto corto que
+  // cabe en la celda. Los dos abren el mismo modal, que pide fecha y lectura juntas: al guardar se llenan ambas.
+  const botonRegistrar = (fila: MaintenanceBoardRow, que: 'fecha' | 'lectura'): ReactNode =>
     esAdmin ? (
       <Button onPress={() => setAnterior(fila)} size="sm" variant="secondary">
-        <History className="size-4" />
-        Registrar mantención anterior
+        {que === 'fecha' ? <CalendarDays className="size-4" /> : <Clock className="size-4" />}
+        {que === 'fecha' ? 'Registrar fecha' : fila.unit === 'km' ? 'Registrar km' : 'Registrar horómetro'}
       </Button>
     ) : (
       <span className="text-muted-foreground">—</span>
     );
 
-  const sinPauta = (fila: MaintenanceBoardRow): ReactNode => (
-    <span className="flex flex-wrap items-center gap-2">
-      <Chip size="sm" variant="soft">
-        Sin pauta
-      </Chip>
-      {esAdmin && fila.equipmentClass === 'HEAVY' ? (
-        <Button onPress={() => setPauta(fila)} size="sm" variant="secondary">
-          Asignar pauta
-        </Button>
-      ) : null}
-    </span>
-  );
+  // «Asignar pauta» es solo para pesados: los livianos tienen su servicio fijo de 10.000 km.
+  const botonAsignarPauta = (fila: MaintenanceBoardRow, className?: string): ReactNode =>
+    esAdmin && fila.equipmentClass === 'HEAVY' ? (
+      <Button className={className} onPress={() => setPauta(fila)} size="sm" variant="secondary">
+        <ClipboardList className="size-4" />
+        Asignar pauta
+      </Button>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
 
   const botonVer = (fila: MaintenanceBoardRow, className?: string) => (
-    <Button
-      className={className}
-      isDisabled={fila.source === 'SIN_PAUTA'}
-      onPress={() => setVerItems(fila)}
-      size="sm"
-      variant="tertiary"
-    >
+    <Button className={className} onPress={() => setVerItems(fila)} size="sm" variant="tertiary">
       <ClipboardList className="size-4" />
       Ver mantención a realizar
     </Button>
@@ -227,13 +277,17 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
             </p>
           ) : null}
 
-          {!isPending && !isError && filas.length === 0 ? (
+          {cargada && filas.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
-              {panel === 'livianos' ? 'No hay equipos livianos en la flota.' : 'No hay equipos pesados en la flota.'}
+              {filasSinPauta.length > 0
+                ? 'Ningún equipo tiene pauta asignada todavía.'
+                : panel === 'livianos'
+                  ? 'No hay equipos livianos en la flota.'
+                  : 'No hay equipos pesados en la flota.'}
             </p>
           ) : null}
 
-          {!isPending && !isError && filas.length > 0 && !esEscritorio ? (
+          {cargada && filas.length > 0 && !esEscritorio ? (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {filas.map((fila) => (
                 <li
@@ -241,10 +295,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   data-testid={`pizarra-fila-${fila.equipmentId}`}
                   key={fila.equipmentId}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <Equipo fila={fila} />
-                    {fila.source === 'SIN_PAUTA' ? sinPauta(fila) : null}
-                  </div>
+                  <Equipo fila={fila} />
                   {/* Lo que se mira en la pizarra: dónde está, cuándo toca y cuánto falta. */}
                   <dl className="m-0 grid grid-cols-3 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
                     <Dato titulo={textos.actual}>
@@ -261,55 +312,59 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                       <Pendientes fila={fila} />
                     </Dato>
                   </dl>
-                  {fila.source !== 'SIN_PAUTA' ? (
-                    <dl className="m-0 grid grid-cols-2 gap-2 text-sm">
-                      <Dato titulo={textos.cambio}>
-                        <ConIcono icono="reloj">
-                          <span className="tabular-nums">{lectura(fila.interval, fila.unit) ?? '—'}</span>
-                        </ConIcono>
-                      </Dato>
-                      <Dato titulo="Fecha estimada">
-                        <ConIcono icono="fecha">
-                          <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
-                        </ConIcono>
-                      </Dato>
-                      <Dato className="col-span-2" titulo="Último cambio">
-                        {fila.lastChange ? (
-                          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 tabular-nums">
-                            <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
-                            <span aria-hidden="true">·</span>
-                            <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
-                          </span>
-                        ) : (
-                          botonAnterior(fila)
-                        )}
-                      </Dato>
-                    </dl>
-                  ) : null}
+                  <dl className="m-0 grid grid-cols-2 gap-2 text-sm">
+                    <Dato titulo={textos.cambio}>
+                      <ConIcono icono="reloj">
+                        <span className="tabular-nums">{lectura(fila.interval, fila.unit) ?? '—'}</span>
+                      </ConIcono>
+                    </Dato>
+                    <Dato titulo="Fecha estimada">
+                      <ConIcono icono="fecha">
+                        <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                      </ConIcono>
+                    </Dato>
+                    <Dato className="col-span-2" titulo="Último cambio">
+                      {fila.lastChange ? (
+                        <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 tabular-nums">
+                          <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
+                          <span aria-hidden="true">·</span>
+                          <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                        </span>
+                      ) : esAdmin ? (
+                        <span className="flex flex-wrap gap-2">
+                          {botonRegistrar(fila, 'fecha')}
+                          {botonRegistrar(fila, 'lectura')}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </Dato>
+                  </dl>
                   {botonVer(fila, 'w-full')}
                 </li>
               ))}
             </ul>
           ) : null}
 
-          {!isPending && !isError && filas.length > 0 && esEscritorio ? (
+          {cargada && filas.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
                 <Table.Content
                   aria-label={panel === 'livianos' ? 'Pizarra de equipos livianos' : 'Pizarra de equipos pesados'}
                   className="min-w-full"
                 >
-                  {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="[&_th]:after:hidden [&_th]:border-b-2 [&_th]:border-border [&_th]:bg-border!">
-                    <Table.Column isRowHeader>Equipo</Table.Column>
-                    <Table.Column>{textos.cambio}</Table.Column>
-                    <Table.Column>Fecha último cambio</Table.Column>
-                    <Table.Column>{textos.ultimo}</Table.Column>
-                    <Table.Column>{textos.proximo}</Table.Column>
-                    <Table.Column>{textos.actual}</Table.Column>
-                    <Table.Column>{textos.pendientes}</Table.Column>
-                    <Table.Column>Fecha estimada de mantención</Table.Column>
-                    <Table.Column>
+                  <Table.Header>
+                    <Table.Column className={cabecera(0)} isRowHeader>
+                      Equipo
+                    </Table.Column>
+                    <Table.Column className={cabecera(1)}>{textos.cambio}</Table.Column>
+                    <Table.Column className={cabecera(2)}>Fecha último cambio</Table.Column>
+                    <Table.Column className={cabecera(3)}>{textos.ultimo}</Table.Column>
+                    <Table.Column className={cabecera(4)}>{textos.proximo}</Table.Column>
+                    <Table.Column className={cabecera(5)}>{textos.actual}</Table.Column>
+                    <Table.Column className={cabecera(6)}>{textos.pendientes}</Table.Column>
+                    <Table.Column className={cabecera(7)}>Fecha estimada de mantención</Table.Column>
+                    <Table.Column className={cabecera(8)}>
                       <span className="sr-only">Acciones</span>
                     </Table.Column>
                   </Table.Header>
@@ -325,32 +380,23 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                           <Equipo fila={fila} />
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(1)}>
-                          {fila.source === 'SIN_PAUTA' ? (
-                            sinPauta(fila)
+                          <ConIcono icono="reloj">{lectura(fila.interval, fila.unit) ?? '—'}</ConIcono>
+                        </Table.Cell>
+                        {/* Sin último cambio, cada columna lleva su botón (es lo que falta para contar desde ahí). */}
+                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(2)}>
+                          {fila.lastChange ? (
+                            <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
                           ) : (
-                            <ConIcono icono="reloj">{lectura(fila.interval, fila.unit) ?? '—'}</ConIcono>
+                            botonRegistrar(fila, 'fecha')
                           )}
                         </Table.Cell>
-                        {fila.lastChange ? (
-                          <>
-                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(2)}>
-                              <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
-                            </Table.Cell>
-                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(3)}>
-                              <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
-                            </Table.Cell>
-                          </>
-                        ) : (
-                          // Sin último cambio las dos columnas se juntan en el botón
-                          // para cargarlo: es lo que falta para contar desde ahí.
-                          <Table.Cell className="text-sm" colSpan={2} {...fondoColumna(2)}>
-                            {fila.source === 'SIN_PAUTA' ? (
-                              <span className="text-muted-foreground">—</span>
-                            ) : (
-                              botonAnterior(fila)
-                            )}
-                          </Table.Cell>
-                        )}
+                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(3)}>
+                          {fila.lastChange ? (
+                            <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                          ) : (
+                            botonRegistrar(fila, 'lectura')
+                          )}
+                        </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(4)}>
                           <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
                         </Table.Cell>
@@ -377,6 +423,89 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
           ) : null}
         </Card.Content>
       </Card>
+
+      {/* Los equipos sin pauta no tienen nada que contar: quedan aparte, debajo, esperando que se les asigne una. */}
+      {cargada && filasSinPauta.length > 0 ? (
+        <section aria-labelledby="pizarra-sin-pauta-titulo" className="flex flex-col gap-3">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="m-0 text-base font-semibold text-foreground" id="pizarra-sin-pauta-titulo">
+              Equipos sin pauta asignada
+            </h2>
+            <p className="m-0 text-sm text-muted-foreground">
+              Todavía no tienen plan de mantención. Asígnales una pauta para empezar a seguirlos en la pizarra.
+            </p>
+          </div>
+          <Card>
+            <Card.Content>
+              {esEscritorio ? (
+                <Table variant="secondary">
+                  <Table.ScrollContainer>
+                    <Table.Content aria-label="Equipos sin pauta asignada" className="min-w-full">
+                      <Table.Header>
+                        <Table.Column className={cabecera(PASOS_SIN_PAUTA[0])} isRowHeader>
+                          Equipo
+                        </Table.Column>
+                        <Table.Column className={cabecera(PASOS_SIN_PAUTA[1])}>{textos.actual}</Table.Column>
+                        <Table.Column className={cabecera(PASOS_SIN_PAUTA[2])}>Estado</Table.Column>
+                        <Table.Column className={cabecera(PASOS_SIN_PAUTA[3])}>
+                          <span className="sr-only">Acciones</span>
+                        </Table.Column>
+                      </Table.Header>
+                      <Table.Body>
+                        {filasSinPauta.map((fila) => (
+                          <Table.Row
+                            className={`${CEBRA_COLUMNAS} ${atenuada(fila)}`}
+                            data-testid={`pizarra-sin-pauta-${fila.equipmentId}`}
+                            id={fila.equipmentId}
+                            key={fila.equipmentId}
+                          >
+                            <Table.Cell className="text-sm" {...fondoColumna(0)}>
+                              <Equipo fila={fila} sinEstado />
+                            </Table.Cell>
+                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(1)}>
+                              <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                            </Table.Cell>
+                            <Table.Cell className="text-sm" {...fondoColumna(2)}>
+                              {fila.status === 'OUT_OF_SERVICE' ? (
+                                <ChipInoperativo />
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </Table.Cell>
+                            <Table.Cell className="text-right" {...fondoColumna(3)}>
+                              {botonAsignarPauta(fila)}
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table.Content>
+                  </Table.ScrollContainer>
+                </Table>
+              ) : (
+                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                  {filasSinPauta.map((fila) => (
+                    <li
+                      className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 ${atenuada(fila)}`}
+                      data-testid={`pizarra-sin-pauta-${fila.equipmentId}`}
+                      key={fila.equipmentId}
+                    >
+                      <Equipo fila={fila} />
+                      <dl className="m-0 grid grid-cols-1 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                        <Dato titulo={textos.actual}>
+                          <ConIcono icono="reloj">
+                            <span className="font-semibold tabular-nums">{actual(fila)}</span>
+                          </ConIcono>
+                        </Dato>
+                      </dl>
+                      {esAdmin && fila.equipmentClass === 'HEAVY' ? botonAsignarPauta(fila, 'w-full') : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card.Content>
+          </Card>
+        </section>
+      ) : null}
 
       <MantencionARealizarModal fila={verItems} onClose={() => setVerItems(null)} />
 

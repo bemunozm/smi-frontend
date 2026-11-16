@@ -1,5 +1,4 @@
 import { fmtDecimales } from '../../../lib/format';
-import { textoAtraso } from '../../../lib/maintenance-plan';
 import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 
 export type Tono = 'atrasado' | 'alerta' | 'normal';
@@ -33,6 +32,23 @@ export function ordenarFilas(filas: readonly MaintenanceBoardRow[]): Maintenance
 }
 
 /**
+ * Separa la pizarra en dos: los equipos con algo que seguir (pauta o liviano)
+ * van a la tabla principal, y los sin pauta a su propia sección debajo, porque
+ * no tienen números que comparar y solo esperan que se les asigne una. Las dos
+ * listas salen ya ordenadas.
+ */
+export function separarSinPauta(filas: readonly MaintenanceBoardRow[]): {
+  conPauta: MaintenanceBoardRow[];
+  sinPauta: MaintenanceBoardRow[];
+} {
+  const ordenadas = ordenarFilas(filas);
+  return {
+    conPauta: ordenadas.filter((f) => f.source !== 'SIN_PAUTA'),
+    sinPauta: ordenadas.filter((f) => f.source === 'SIN_PAUTA'),
+  };
+}
+
+/**
  * Color de los pendientes: rojo fuerte si ya pasó, rojo si entró al margen de
  * aviso de la pauta (el mismo que dispara la orden preventiva). Sin margen
  * configurado, solo lo que toca ahora se marca.
@@ -49,10 +65,14 @@ export function lectura(valor: number | null, unidad: 'h' | 'km'): string | null
   return valor == null ? null : `${fmtDecimales(valor, 1)} ${unidad}`;
 }
 
-/** «+38 h atrasado» o «150 h»; `null` sin pendientes (sin pauta o sin lectura). */
+/**
+ * «+38 h» (atrasado) o «150 h»; `null` sin pendientes (sin pauta o sin
+ * lectura). El «atrasado» ya no va en el texto: lo dice la burbuja roja de al
+ * lado (con su tooltip), así la columna queda solo con números.
+ */
 export function textoPendientes(fila: MaintenanceBoardRow): string | null {
   if (fila.remaining == null) return null;
-  if (fila.remaining < 0) return textoAtraso(fila.remaining, fila.unit);
+  if (fila.remaining < 0) return `+${lectura(-fila.remaining, fila.unit)}`;
   return lectura(fila.remaining, fila.unit);
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { filaPizarra } from './fixtures';
-import { ordenarFilas, tono } from './pizarra';
+import { ordenarFilas, separarSinPauta, textoPendientes, tono } from './pizarra';
 
 const codigos = (filas: { internalCode: string }[]) => filas.map((f) => f.internalCode);
 
@@ -57,5 +57,28 @@ describe('tono', () => {
   it('sin margen de aviso configurado, solo lo que toca ahora es alerta', () => {
     expect(tono(filaPizarra({ remaining: 0, alertBefore: null }))).toBe('alerta');
     expect(tono(filaPizarra({ remaining: 5, alertBefore: null }))).toBe('normal');
+  });
+});
+
+describe('separarSinPauta', () => {
+  it('los sin pauta van aparte y las dos listas salen ordenadas', () => {
+    const filas = [
+      filaPizarra({ internalCode: 'SIN-B', source: 'SIN_PAUTA', remaining: null, dueAt: null, interval: null }),
+      filaPizarra({ internalCode: 'OK', remaining: 300 }),
+      filaPizarra({ internalCode: 'SIN-A', source: 'SIN_PAUTA', remaining: null, dueAt: null, interval: null }),
+      filaPizarra({ internalCode: 'ATR', remaining: -10 }),
+      filaPizarra({ internalCode: 'LIV', source: 'LIVIANO', unit: 'km', remaining: 5000 }),
+    ];
+    const { conPauta, sinPauta } = separarSinPauta(filas);
+    expect(codigos(conPauta)).toEqual(['ATR', 'OK', 'LIV']);
+    expect(codigos(sinPauta)).toEqual(['SIN-A', 'SIN-B']);
+  });
+});
+
+describe('textoPendientes', () => {
+  it('atrasado es solo el número con «+» (el estado lo dice la burbuja); sin lectura es null', () => {
+    expect(textoPendientes(filaPizarra({ remaining: -216 }))).toBe('+216 h');
+    expect(textoPendientes(filaPizarra({ remaining: 87 }))).toBe('87 h');
+    expect(textoPendientes(filaPizarra({ remaining: null }))).toBeNull();
   });
 });
