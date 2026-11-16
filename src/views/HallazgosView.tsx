@@ -24,6 +24,8 @@ import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
+import { opcionesEquipoPorClase } from '../lib/equipos-por-clase';
+import type { EquipmentClass } from '../types/equipment';
 import {
   Automatico,
   Automaticos,
@@ -108,6 +110,8 @@ const estadoLabel: Record<string, string> = {
 export function HallazgosView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { data: equipos = [] } = useEquipment();
+  // Pesados primero, después livianos (pedido del cliente, 16/11/2026).
+  const opcionesEquipo = opcionesEquipoPorClase(equipos, 'HEAVY', (e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }));
   const { hallazgos } = useHallazgosProjection();
   const { registrar, isGuardando } = useRegistrarHallazgo();
 
@@ -174,7 +178,7 @@ export function HallazgosView() {
                 tituloTabular
                 valor={watch('equipoId') ?? ''}
                 onChange={(id) => setValue('equipoId', id, { shouldValidate: true })}
-                opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+                opciones={opcionesEquipo}
               />
             </Campo>
           ) : (
@@ -454,7 +458,7 @@ function EditorHallazgo({
   onCerrar,
 }: {
   hallazgo: Hallazgo;
-  equipos: { id: string; internalCode: string; type: string }[];
+  equipos: { id: string; internalCode: string; type: string; equipmentClass: EquipmentClass }[];
   onCerrar: () => void;
 }) {
   const { guardar: guardarCambio, isGuardando: isActualizando } = useEditarHallazgo();
@@ -504,7 +508,7 @@ function EditorHallazgo({
               tituloTabular
               valor={form.equipoId ?? ''}
               onChange={(equipoId) => setForm((f) => ({ ...f, equipoId }))}
-              opciones={equipos.map((e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
+              opciones={opcionesEquipoPorClase(equipos, 'HEAVY', (e) => ({ valor: e.id, titulo: e.internalCode, detalle: e.type }))}
             />
           </Campo>
         )}

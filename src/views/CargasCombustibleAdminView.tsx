@@ -31,6 +31,7 @@ import { canDeleteCombustible, canEditCombustible } from '../lib/permissions';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import type { RegistroCombustible } from '../types/combustible';
 import type { EquipmentClass } from '../types/equipment';
+import { pesadosPrimero } from '../lib/equipos-por-clase';
 
 const TIPO_LABEL: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
 
@@ -290,10 +291,13 @@ export function CargasCombustibleAdminView() {
   const equipos = useMemo(() => {
     const porId = new Map<string, string>();
     for (const c of cargas) porId.set(c.equipoId, c.equipo?.internalCode ?? c.equipoId);
-    return [...porId.entries()]
-      .map(([id, codigo]) => ({ id, codigo }))
-      .sort((a, b) => a.codigo.localeCompare(b.codigo));
-  }, [cargas]);
+    // Pesados primero, después livianos (pedido del cliente, 16/11/2026).
+    return pesadosPrimero(
+      [...porId.entries()]
+        .map(([id, codigo]) => ({ id, codigo, equipmentClass: clasePorEquipo.get(id) }))
+        .sort((a, b) => a.codigo.localeCompare(b.codigo)),
+    );
+  }, [cargas, clasePorEquipo]);
 
   const supervisores = useMemo(
     () =>

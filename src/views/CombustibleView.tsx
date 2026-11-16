@@ -4,6 +4,7 @@ import { ArrowRight, ImageIcon } from 'lucide-react';
 import { combustibleFormSchema, type CombustibleForm, type CombustibleFormInput } from '../types/combustible';
 import { useCombustibleList, useCreateCombustible } from '../hooks/useCombustible';
 import { useEquipment } from '../hooks/useEquipment';
+import { gruposPorClase } from '../lib/equipos-por-clase';
 import { assetUrl } from '../api/UploadsAPI';
 import { formatDecimalInput } from '../lib/decimal';
 import { validarLitros } from '../lib/litros';
@@ -82,10 +83,15 @@ export function CombustibleView() {
       <Card className="space-y-4">
         <SelectField label="Equipo" error={errors.equipoId?.message} {...register('equipoId')}>
           <option value="">Seleccioná…</option>
-          {equipos.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.internalCode} — {e.type}
-            </option>
+          {/* Pesados primero, después livianos (pedido del cliente, 16/11/2026). */}
+          {gruposPorClase(equipos).map((g) => (
+            <optgroup key={g.clase} label={g.titulo}>
+              {g.equipos.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.internalCode} — {e.type}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </SelectField>
 

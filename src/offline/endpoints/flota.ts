@@ -88,7 +88,8 @@ export const FLOTA_ENDPOINTS = defineDomain<FlotaEndpointMap>({
     path: (params) => `/api/equipment/${param(params, 'id')}`,
     failMessage: 'No se pudo actualizar el equipo.',
     parse: parseWith(EquipmentSchema),
-    invalidate: ['equipment'],
+    // Renombrar el código mueve las órdenes y actividades que lo guardan como texto.
+    invalidate: ['equipment', 'ordenes', 'actividades'],
     label: (params) => etiqueta('Edición de equipo', cachedName('equipment', params.id)),
     notFoundIsDone: false,
     carriesFiles: true,

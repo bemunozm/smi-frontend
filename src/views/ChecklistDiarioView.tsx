@@ -42,6 +42,7 @@ import {
   useSubmitDailyChecklist,
 } from '../hooks/useDailyChecklists';
 import { useEquipment } from '../hooks/useEquipment';
+import { opcionesEquipoPorClase } from '../lib/equipos-por-clase';
 import { usePermissions } from '../hooks/usePermissions';
 import { fmtNum } from '../lib/format';
 import { fechaCorta, fromDateOnly, toDateOnly } from '../lib/turno';
@@ -147,15 +148,17 @@ export function ChecklistDiarioView() {
 
   const opcionesEquipo: OpcionSelector[] = useMemo(
     () =>
-      (equipos ?? [])
-        .slice()
-        .sort((a, b) => a.internalCode.localeCompare(b.internalCode))
-        .map((e) => ({
+      // Pesados primero, después livianos (pedido del cliente, 16/11/2026).
+      opcionesEquipoPorClase(
+        (equipos ?? []).slice().sort((a, b) => a.internalCode.localeCompare(b.internalCode)),
+        'HEAVY',
+        (e) => ({
           valor: e.id,
           titulo: e.internalCode,
           detalle: e.type,
           ...(enviadosPorEquipo.has(e.id) ? { motivo: 'Checklist de hoy ya enviado' } : {}),
-        })),
+        }),
+      ),
     [equipos, enviadosPorEquipo],
   );
 

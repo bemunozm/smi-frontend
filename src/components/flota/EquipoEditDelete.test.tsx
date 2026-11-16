@@ -94,6 +94,26 @@ beforeEach(() => {
   saveMutateMock.mockReset();
 });
 
+describe('EditEquipoModal — código interno', () => {
+  it('se puede cambiar: avisa el código anterior y lo manda en el PATCH en mayúsculas', async () => {
+    renderModal(EQUIPO);
+
+    const codigo = screen.getByLabelText('Código interno') as HTMLInputElement;
+    expect(codigo.disabled).toBe(false);
+    expect(codigo.value).toBe('EX-001');
+    expect(screen.queryByText(/Antes era/)).toBeNull();
+
+    fireEvent.change(codigo, { target: { value: 'excavadora grande' } });
+    expect(screen.getByText(/Antes era EX-001/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(saveMutateMock).toHaveBeenCalledTimes(1));
+    const [{ input }] = saveMutateMock.mock.calls[0] as [{ input: Record<string, unknown> }];
+    expect(input.internalCode).toBe('EXCAVADORA GRANDE');
+  });
+});
+
 describe('EditEquipoModal — lectura del equipo (horómetro/km)', () => {
   it('muestra la lectura guardada, avisa al cambiarla y la manda en el PATCH', async () => {
     renderModal(EQUIPO);
