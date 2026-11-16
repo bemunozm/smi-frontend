@@ -25,10 +25,10 @@ const TONO_CLASE = {
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
 
-// Filas alternadas (gris marcado/blanco) con separador más fuerte; las celdas de HeroUI son transparentes, así que
-// el hover se fuerza a un gris más oscuro que la franja para que se lea sobre ambos tonos.
+// Filas alternadas (gris marcado/blanco) con divisores verticales entre columnas y sin líneas horizontales. Las
+// celdas de HeroUI son transparentes, así que el hover se fuerza a un gris más oscuro que la franja.
 const CEBRA_FILA =
-  'even:bg-default/70 odd:bg-surface [&_td]:border-border! hover:[&_td]:bg-border!';
+  'even:bg-default/70 odd:bg-surface [&_td]:border-b-0! [&_td:not(:last-child)]:border-r [&_td:not(:last-child)]:border-r-foreground/20 hover:[&_td]:bg-border!';
 
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
@@ -268,7 +268,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   className="min-w-full"
                 >
                   {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="[&_th]:border-b-2 [&_th]:border-border [&_th]:bg-border!">
+                  <Table.Header className="[&_th]:border-b-2 [&_th]:border-border [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-r-foreground/20 [&_th]:bg-border!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
