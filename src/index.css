@@ -81,6 +81,8 @@
   --warning-soft: #fdebc8;
   --warning-soft-hover: #fbdfa6;
   --warning-soft-foreground: #92590a;
+  /* Amarillo real para el ícono de «cerca de la mantención»: --warning se lee café. */
+  --alert-yellow: #ca8a04;
 
   --danger: #b01818;
   --danger-foreground: #ffffff;
@@ -419,6 +421,7 @@
   --color-accent: var(--accent-soft);
   --color-accent-foreground: var(--accent-soft-foreground);
   --color-border: var(--border);
+  --color-alert-yellow: var(--alert-yellow);
   --color-destructive: var(--danger);
   --color-destructive-foreground: var(--danger-foreground);
 }

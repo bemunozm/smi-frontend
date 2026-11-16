@@ -335,7 +335,7 @@ describe('PizarraMantenciones', () => {
     expect(screen.getByText('Falló la pizarra')).toBeTruthy();
   });
 
-  it('horas pendientes: atrasado en rojo con triángulo, alerta en ámbar con exclamación y normal sin ícono', () => {
+  it('horas pendientes: atrasado en rojo con triángulo, alerta en chip amarillo con exclamación y normal sin ícono', () => {
     boardHook.mockReturnValue({
       data: [
         filaPizarra({ equipmentId: 'a1', internalCode: 'ATR', remaining: -5 }),
@@ -352,11 +352,12 @@ describe('PizarraMantenciones', () => {
     expect(within(atrasado).getByText('+5 h atrasado').className).toContain('text-danger');
     expect(atrasado.querySelector('svg.text-danger')).toBeTruthy();
     const alerta = screen.getByTestId('pizarra-fila-a2');
-    expect(within(alerta).getByText('40 h').className).toContain('text-warning');
-    expect(alerta.querySelector('svg.text-warning')).toBeTruthy();
+    expect(within(alerta).getByText('40 h').className).toContain('text-warning-soft-foreground');
+    expect(within(alerta).getByText('40 h').parentElement?.className).toContain('bg-warning-soft');
+    expect(alerta.querySelector('svg.text-alert-yellow')).toBeTruthy();
     expect(alerta.querySelector('svg.text-danger')).toBeNull();
     const normal = screen.getByTestId('pizarra-fila-a3');
-    expect(normal.querySelector('svg.text-danger, svg.text-warning')).toBeNull();
+    expect(normal.querySelector('svg.text-danger, svg.text-alert-yellow')).toBeNull();
   });
 
   it('la tabla pinta de gris las columnas por índice lógico aunque haya celda con colSpan, y lleva íconos', () => {

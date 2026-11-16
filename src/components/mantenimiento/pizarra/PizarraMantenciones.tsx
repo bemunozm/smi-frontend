@@ -18,7 +18,7 @@ type Panel = 'pesados' | 'livianos';
 
 const TONO_CLASE = {
   atrasado: 'font-bold text-danger',
-  alerta: 'font-semibold text-warning',
+  alerta: 'font-semibold text-warning-soft-foreground',
   normal: 'text-foreground',
 } as const;
 
@@ -50,10 +50,14 @@ function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   const texto = textoPendientes(fila);
   if (texto == null) return <span className="text-muted-foreground">{SIN_LECTURA}</span>;
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      {/* Atrasado: triángulo rojo; alerta (dentro del aviso): círculo de exclamación ámbar; normal: sin ícono. */}
+    <span
+      className={`inline-flex flex-wrap items-center gap-1.5 ${
+        tono(fila) === 'alerta' ? 'rounded-full bg-warning-soft px-2 py-0.5' : ''
+      }`}
+    >
+      {/* Atrasado: triángulo rojo; alerta (dentro del aviso): chip amarillo con exclamación; normal: sin ícono. */}
       {tono(fila) === 'atrasado' ? <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0 text-danger" /> : null}
-      {tono(fila) === 'alerta' ? <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning" /> : null}
+      {tono(fila) === 'alerta' ? <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-alert-yellow" /> : null}
       <span className={`tabular-nums ${TONO_CLASE[tono(fila)]}`}>{texto}</span>
       {/* Sin último cambio el número sale de los hitos absolutos: se avisa
           para que nadie lo tome por exacto. */}
@@ -271,11 +275,11 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                       </Dato>
                       <Dato className="col-span-2" titulo="Último cambio">
                         {fila.lastChange ? (
-                          <ConIcono icono="fecha">
-                            <span className="tabular-nums">
-                              {fechaCorta(fila.lastChange.doneAt)} · {lectura(fila.lastChange.counterAt, fila.unit)}
-                            </span>
-                          </ConIcono>
+                          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 tabular-nums">
+                            <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
+                            <span aria-hidden="true">·</span>
+                            <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                          </span>
                         ) : (
                           botonAnterior(fila)
                         )}
