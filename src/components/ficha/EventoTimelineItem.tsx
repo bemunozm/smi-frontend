@@ -1,4 +1,5 @@
-import { Card, Chip } from '@heroui/react';
+import { Card } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { eventoTipoColor, eventoTipoLabel, hallazgoEstadoLabel, isOneOf } from '../../config/ficha-colors';
 import {

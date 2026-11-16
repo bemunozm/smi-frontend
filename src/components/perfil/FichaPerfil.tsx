@@ -1,4 +1,5 @@
-import { Avatar, Card, Chip, Modal } from '@heroui/react';
+import { Avatar, Card, Modal } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { roleChipColor } from '../../config/role-colors';
 import { useCurrentUser } from '../../hooks/useCurrentUser';

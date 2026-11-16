@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Button, Chip, Modal, Spinner } from '@heroui/react';
+import { Button, Modal, Spinner } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 import { ArrowLeft, Download, Pencil, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../../api/ShiftReportAPI';

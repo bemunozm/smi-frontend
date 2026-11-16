@@ -4,7 +4,6 @@ import {
   AlertDialog,
   Button,
   Card,
-  Chip,
   Label,
   ListBox,
   Modal,
@@ -13,6 +12,7 @@ import {
   Spinner,
   Table,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';

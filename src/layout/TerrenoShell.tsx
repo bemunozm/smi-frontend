@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
+import { Avatar, Button, Dropdown, Label } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import type { Key } from '@heroui/react';
 import { Download, LayoutDashboard, LogOut, UserRound } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';

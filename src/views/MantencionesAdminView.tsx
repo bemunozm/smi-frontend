@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Card,
-  Chip,
   Label,
   ListBox,
   Modal,
@@ -14,6 +13,7 @@ import {
   TextField,
   Input,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { SquareKanban, Table2 } from 'lucide-react';
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';

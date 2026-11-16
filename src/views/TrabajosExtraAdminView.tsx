@@ -4,7 +4,6 @@ import {
   AlertDialog,
   Button,
   Card,
-  Chip,
   DateField,
   DateRangePicker,
   Input,
@@ -20,6 +19,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { Group } from 'react-aria-components/Group';
 import type { DateValue } from 'react-aria-components/Calendar';
 

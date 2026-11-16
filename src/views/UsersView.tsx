@@ -4,7 +4,6 @@ import { Controller, useForm } from 'react-hook-form';
 import {
   AlertDialog,
   Button,
-  Chip,
   Dropdown,
   FieldError,
   Input,
@@ -17,6 +16,7 @@ import {
   Table,
   TextField,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';

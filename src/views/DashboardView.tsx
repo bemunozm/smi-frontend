@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Chip, Spinner, Table } from '@heroui/react';
+import { Button, Card, Spinner, Table } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import {
   Bar,
   BarChart,
@@ -149,26 +150,13 @@ interface KpiCardProps {
   value: string;
   hint: string;
   hintTone?: 'muted' | 'warning';
-  /** Marca discreta de que la card consume datos de otro dominio (Terreno,
-   * Inventario, Mantención) y no de `/api/dashboard/*`. Ver `RealDataChip`. */
-  isReal?: boolean;
   /** Abre el popup de detalle: con `onOpen` la card entera es un botón
    * (requiere `ariaLabel`); sin él es una card informativa estática. */
   onOpen?: () => void;
   ariaLabel?: string;
 }
 
-/** Indicador discreto de que la card se alimenta del dominio original (Terreno,
- * Inventario, Mantención) y no del módulo `/api/dashboard/*`. */
-function RealDataChip() {
-  return (
-    <Chip className="shrink-0" color="success" size="sm" variant="soft">
-      Real
-    </Chip>
-  );
-}
-
-function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, onOpen, ariaLabel }: KpiCardProps) {
+function KpiCard({ label, value, hint, hintTone = 'muted', onOpen, ariaLabel }: KpiCardProps) {
   const interactiva = Boolean(onOpen);
   const contenido = (
     <Card
@@ -179,7 +167,6 @@ function KpiCard({ label, value, hint, hintTone = 'muted', isReal = false, onOpe
             <Card.Description className="text-[11px] font-semibold tracking-wider text-(--eyebrow-color) uppercase">
               {label}
             </Card.Description>
-            {isReal ? <RealDataChip /> : null}
           </div>
           <Card.Title className="font-display text-[26px] font-semibold tracking-[-0.02em] text-foreground">
             {value}
@@ -310,7 +297,6 @@ function TrabajosExtraKpiCard() {
     <>
       <KpiCard
         hint={`${NUM_CL.format(trabajos.length)} ${trabajos.length === 1 ? 'trabajo registrado' : 'trabajos registrados'}`}
-        isReal
         ariaLabel="Ver trabajos extraordinarios recientes"
         label="HM Trabajos extraordinarios"
         onOpen={() => setAbierto(true)}
@@ -385,7 +371,6 @@ function ProximasMantencionesKpiCard() {
       <KpiCard
         hint="Dentro de su ventana de aviso"
         hintTone={cantidad > 0 ? 'warning' : 'muted'}
-        isReal
         ariaLabel="Ver próximas mantenciones"
         label="Próximas mantenciones"
         onOpen={() => setAbierto(true)}
@@ -485,7 +470,6 @@ function InsumosBajoMinimoKpiCard() {
       <KpiCard
         hint={rows.length > 0 ? 'Requieren reposición' : 'Stock dentro de rango'}
         hintTone={rows.length > 0 ? 'warning' : 'muted'}
-        isReal
         ariaLabel="Ver ítems bajo mínimo"
         label="Ítems bajo mínimo"
         onOpen={() => setAbierto(true)}
@@ -551,7 +535,6 @@ function HallazgosAbiertosKpiCard() {
       <KpiCard
         hint={hallazgosCriticidadHint(data.porPrioridad)}
         hintTone={data.porPrioridad.critica > 0 ? 'warning' : 'muted'}
-        isReal
         ariaLabel="Ver hallazgos abiertos"
         label="Hallazgos abiertos"
         onOpen={() => setAbierto(true)}
@@ -603,7 +586,6 @@ function HallazgosRecientesSection() {
       <Card.Header>
         <div className="flex items-center justify-between gap-2">
           <Card.Title>Hallazgos recientes</Card.Title>
-          <RealDataChip />
         </div>
         <Card.Description>Últimos reportes de terreno, sin importar su estado.</Card.Description>
       </Card.Header>
@@ -1311,7 +1293,6 @@ function InsumosBajoStockSection() {
                 Ver inventario →
               </Button>
             ) : null}
-            <RealDataChip />
           </div>
         </div>
         <Card.Description>

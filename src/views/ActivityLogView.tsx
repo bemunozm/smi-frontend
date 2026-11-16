@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Chip, Label, ListBox, Modal, RangeCalendar, Select, Spinner, Table } from '@heroui/react';
+import { Button, Card, Label, ListBox, Modal, RangeCalendar, Select, Spinner, Table } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';

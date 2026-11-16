@@ -6,7 +6,6 @@ import {
   AlertDialog,
   Button,
   Card,
-  Chip,
   Drawer,
   Dropdown,
   FieldError,
@@ -21,6 +20,7 @@ import {
   Table,
   TextField,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
