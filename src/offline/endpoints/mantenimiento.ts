@@ -153,7 +153,9 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     parse: parseWith(OrdenTrabajoSchema),
     // 'hallazgos': completar cierra el hallazgo ligado; cancelar lo reabre.
     // 'equipment': el cierre puede dejar la unidad Operativa/Inoperativa.
-    invalidate: ['ordenes', 'hallazgos', 'equipment'],
+    // 'maintenancePlans': cerrar una preventiva escribe el último cambio real
+    // (el ancla) — la pizarra, la próxima mantención y el pronóstico cambian.
+    invalidate: ['ordenes', 'hallazgos', 'equipment', 'maintenancePlans'],
     label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
