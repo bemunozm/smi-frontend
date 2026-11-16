@@ -41,6 +41,12 @@ export function groupWorkshopBoard(ordenes: readonly OrdenTrabajo[]): WorkshopBo
   return { backlog, inProgress, finished };
 }
 
+/** Preventiva de pauta (nace del ciclo de mantenciones, con su checklist de
+ * tareas): se registra y se consulta con el checklist, no con la bitácora. */
+export function esChecklistPauta(orden: OrdenTrabajo): boolean {
+  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
+}
+
 /** Días que una operación finalizada se queda en la columna «Finalizadas»
  * del tablero; las más antiguas pasan al historial. */
 export const FINISHED_RECENT_DAYS = 7;

@@ -135,16 +135,19 @@ function OperationDetail({
 export function ViewOperationModal({
   orden,
   equipment,
+  ancho = true,
 }: {
   orden: OrdenTrabajo;
   equipment: readonly EquipmentRef[] | undefined;
+  /** `false` en una celda de tabla: el botón al ancho de su texto. */
+  ancho?: boolean;
 }) {
   const navigate = useNavigate();
   const [abierto, setAbierto] = useState(false);
 
   return (
     <>
-      <Boton ancho variante="contorno" onClick={() => setAbierto(true)}>
+      <Boton ancho={ancho} variante="contorno" onClick={() => setAbierto(true)}>
         Ver operación
       </Boton>
       <ModalTerreno

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@heroui/react';
 import { ArrowRight, Clock, History, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
-import { Boton, Chip, Input, Segmentado, Tarjeta } from '../components/terreno/ui';
+import { Boton, Chip, Segmentado, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -25,7 +26,7 @@ import type { HallazgoDeEquipo } from '../types/hallazgos';
 import {
   FINISHED_RECENT_DAYS,
   buildWorkshopStats,
-  equipmentLabel,
+  esChecklistPauta,
   formatDate,
   findEquipment,
   groupWorkshopBoard,
@@ -129,15 +130,6 @@ function TituloOrden({ children }: { children: React.ReactNode }) {
 /** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
 function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
   return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
-}
-
-/**
- * Orden preventiva nacida de la pauta por horómetro/km: su tarjeta es un
- * CHECKLIST (las operaciones del hito como tareas), no el flujo iniciar →
- * finalizar de las correctivas.
- */
-function esChecklistPauta(orden: OrdenTrabajo): boolean {
-  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
 }
 
 /**
@@ -245,9 +237,7 @@ function FindingCard({
   );
 }
 
-type MarcaDe = ReturnType<typeof usePendingWrites>['marcaDe'];
-
-/** Tarjeta de una operación finalizada (o cancelada): en el tablero y en el historial. */
+/** Tarjeta de una operación finalizada (o cancelada) en el tablero. */
 function FinishedCard({
   orden,
   fleet,
@@ -255,7 +245,7 @@ function FinishedCard({
 }: {
   orden: OrdenTrabajo;
   fleet: readonly EquipmentRef[] | undefined;
-  marca: ReturnType<MarcaDe>;
+  marca: ReturnType<ReturnType<typeof usePendingWrites>['marcaDe']>;
 }) {
   return (
     <BoardCard muted>
@@ -282,86 +272,6 @@ function FinishedCard({
   );
 }
 
-/** Cuántas tarjetas del historial se dibujan de una vez. */
-const HISTORIAL_PAGINA = 30;
-
-/**
- * Historial de finalizadas: las operaciones cerradas hace más de
- * `FINISHED_RECENT_DAYS` días, que ya no ocupan la columna del tablero. El
- * botón «Historial» de arriba (junto a «Crear orden») lo despliega encima del
- * tablero (no en un pop-up: cada tarjeta abre su propio «Ver operación»), con
- * búsqueda por equipo u operación y de a `HISTORIAL_PAGINA` tarjetas.
- */
-function HistorialFinalizadas({
-  ordenes,
-  fleet,
-  marcaDe,
-  onCerrar,
-}: {
-  ordenes: readonly OrdenTrabajo[];
-  fleet: readonly EquipmentRef[] | undefined;
-  marcaDe: MarcaDe;
-  onCerrar: () => void;
-}) {
-  const [busqueda, setBusqueda] = useState('');
-  const [visibles, setVisibles] = useState(HISTORIAL_PAGINA);
-  const texto = busqueda.trim().toLowerCase();
-  const lista = texto
-    ? ordenes.filter(
-        (orden) =>
-          orden.titulo.toLowerCase().includes(texto) ||
-          equipmentLabel(orden.equipoId, fleet).toLowerCase().includes(texto),
-      )
-    : ordenes;
-
-  return (
-    <section
-      aria-label="Historial de finalizadas"
-      className="flex flex-col gap-3.5 rounded-3xl border border-border bg-card/60 p-4"
-    >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h3 className="m-0 text-[18px] font-bold tracking-[-0.01em] text-foreground">Historial de finalizadas</h3>
-          <p className="m-0 text-[14px] text-[var(--label-color)]">
-            Operaciones cerradas hace más de {FINISHED_RECENT_DAYS} días, de la más reciente a la más antigua.
-          </p>
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
-          <Input
-            aria-label="Buscar en el historial"
-            className="sm:w-72"
-            onChange={(event) => {
-              setBusqueda(event.target.value);
-              setVisibles(HISTORIAL_PAGINA);
-            }}
-            placeholder="Buscar por equipo u operación…"
-            value={busqueda}
-          />
-          <Boton onClick={onCerrar} variante="contorno">
-            Ocultar historial
-          </Boton>
-        </div>
-      </div>
-      {lista.length === 0 ? (
-        <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[15px] text-[var(--label-color)]">
-          Ninguna operación del historial calza con la búsqueda.
-        </p>
-      ) : (
-        <div className="grid items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {lista.slice(0, visibles).map((orden) => (
-            <FinishedCard fleet={fleet} key={orden.id} marca={marcaDe('orden', orden.id)} orden={orden} />
-          ))}
-        </div>
-      )}
-      {lista.length > visibles ? (
-        <Boton ancho onClick={() => setVisibles((n) => n + HISTORIAL_PAGINA)} variante="contorno">
-          Mostrar más ({lista.length - visibles} restantes)
-        </Boton>
-      ) : null}
-    </section>
-  );
-}
-
 /**
  * Sub-vista "Órdenes" del taller (diseño Mantenedor Taller): los hallazgos
  * reportados llegan como OT PENDIENTE/ASIGNADA a la bandeja, "Iniciar
@@ -380,10 +290,12 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const board = useMemo(() => groupWorkshopBoard(ordenes ?? []), [ordenes]);
-  // La columna «Finalizadas» muestra solo la última semana; lo anterior va al
-  // historial, que se despliega aparte para no alargar el tablero sin fin.
+  // La columna «Finalizadas» muestra solo la última semana; el historial
+  // completo es otra pantalla, en tabla (`/mantenimiento/ordenes/historial`).
+  // Solo en el taller: en el panel, la «Vista registro» de Mantenciones ya es
+  // ese historial (con más filtros) y un segundo botón llevaría al mismo lugar.
   const finalizadas = useMemo(() => splitFinished(board.finished), [board.finished]);
-  const [verHistorial, setVerHistorial] = useState(false);
+  const navigate = useNavigate();
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
   // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
   // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
@@ -436,10 +348,10 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
           <span aria-hidden className="grow" />
         )}
         <div className="flex flex-wrap items-center gap-2.5">
-          {finalizadas.history.length > 0 ? (
-            <Boton aria-expanded={verHistorial} onClick={() => setVerHistorial((v) => !v)} variante="contorno">
+          {contexto === 'taller' && board.finished.length > 0 ? (
+            <Boton onClick={() => void navigate('/mantenimiento/ordenes/historial')} variante="contorno">
               <History aria-hidden className="h-4 w-4" />
-              {verHistorial ? 'Ocultar historial' : `Historial (${finalizadas.history.length})`}
+              Historial
             </Boton>
           ) : null}
           {canCreate ? <CreateOperationModal /> : null}
@@ -496,14 +408,6 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
         // Tablet es el dispositivo principal del taller: las TRES columnas se
         // quedan en pantalla desde md (834px de una tablet vertical incluida).
         <div className="flex flex-col gap-3.5">
-          {verHistorial && finalizadas.history.length > 0 ? (
-            <HistorialFinalizadas
-              fleet={fleet}
-              marcaDe={pendientes.marcaDe}
-              onCerrar={() => setVerHistorial(false)}
-              ordenes={finalizadas.history}
-            />
-          ) : null}
           {!tresColumnas && (
             <Segmentado
               etiqueta="Columna del tablero"

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
 
@@ -293,7 +293,7 @@ function renderView() {
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
 
-  it('las finalizadas de hace más de 7 días van al historial, que se despliega aparte', () => {
+  it('las finalizadas de hace más de 7 días salen de la columna; «Historial» lleva a la tabla completa', () => {
     ordenesExtra = [
       orden({
         id: 'ot-vieja',
@@ -308,29 +308,31 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
         updatedAt: '2026-09-20T10:00:00.000Z',
       }),
     ];
-    renderView();
+    render(
+      <MemoryRouter initialEntries={['/mantenimiento/ordenes']}>
+        <Routes>
+          <Route element={<OrdenesTrabajoView />} path="/mantenimiento/ordenes" />
+          <Route element={<p>Pantalla de historial</p>} path="/mantenimiento/ordenes/historial" />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const finished = screen.getByRole('region', { name: 'Finalizadas' });
     expect(within(finished).getByText('Engrase general y cambio de pernos')).toBeTruthy();
     expect(within(finished).queryByText('Cambio de neumáticos traseros')).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Historial de finalizadas' })).toBeNull();
 
-    // El botón vive arriba, junto a «Crear orden», no al pie de la columna.
-    expect(within(finished).queryByRole('button', { name: /Historial/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Historial (1)' }));
-    const historial = screen.getByRole('region', { name: 'Historial de finalizadas' });
-    expect(within(historial).getByText('Cambio de neumáticos traseros')).toBeTruthy();
-
-    fireEvent.change(within(historial).getByLabelText('Buscar en el historial'), { target: { value: 'pluma' } });
-    expect(within(historial).getByText('Ninguna operación del historial calza con la búsqueda.')).toBeTruthy();
-
-    fireEvent.click(within(historial).getByRole('button', { name: 'Ocultar historial' }));
-    expect(screen.queryByRole('region', { name: 'Historial de finalizadas' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }));
+    expect(screen.getByText('Pantalla de historial')).toBeTruthy();
   });
 
-  it('sin finalizadas antiguas no ofrece historial', () => {
-    renderView();
-    expect(screen.queryByRole('button', { name: /Historial/ })).toBeNull();
+  it('en el panel del administrador no hay «Historial»: la «Vista registro» ya es ese historial', () => {
+    render(
+      <MemoryRouter>
+        <OrdenesTrabajoView contexto="panel" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('region', { name: 'Finalizadas' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Historial' })).toBeNull();
   });
   it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
     renderView();
