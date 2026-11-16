@@ -186,11 +186,12 @@ export interface AdminCloseShiftCardInput {
 export interface CloseShiftCardInput {
   closeClientId: string;
   valorFinal: number;
-  /** Litros cargados al cierre — obligatorio, 0 permitido. */
+  /** Litros cargados al cierre — 0 si no se cargó (p. ej. un corte de luz). */
   fuelLiters: number;
   /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` (ver
-   * `api/UploadsAPI.ts#uploadFile`). */
-  tmpPhotoKey: string;
+   * `api/UploadsAPI.ts#uploadFile`). Solo obligatoria con litros > 0: sin
+   * carga la tarjeta se cierra sin foto (16/11/2026). */
+  tmpPhotoKey?: string;
   /** AdBlue cargado en el turno. Opcional: un cierre ya encolado antes de que
    * existiera el campo sigue siendo válido. */
   adBlue?: boolean;

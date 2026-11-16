@@ -47,6 +47,9 @@ export interface UseCierreFormResult {
   litrosError: string | null;
   /** Muchos litros para una camioneta: se avisa, no bloquea. */
   litrosAviso: string | null;
+  /** `true` si se escribieron litros: entonces la foto del surtidor es
+   * obligatoria. Sin combustible se cierra sin foto. */
+  fotoRequerida: boolean;
   /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
   adBlueCierre: ResultadoAdBlue;
   /** `true` si se marcó AdBlue y los litros todavía no sirven. */
@@ -86,6 +89,9 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const validacionLitros = validarLitros(cierre.litros, { liviano: !!cerrando?.liviano });
   const litrosError = validacionLitros.error;
   const litrosAviso = validacionLitros.aviso;
+  // El combustible es opcional (corte de luz, 16/11/2026): la foto del
+  // surtidor solo se exige cuando se escriben litros.
+  const fotoRequerida = (validacionLitros.valor ?? 0) > 0;
 
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
@@ -102,7 +108,15 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   };
 
   const cerrar = async () => {
-    if (!cerrando || finalNum == null || finalInvalido || litrosError || adBlueIncompletoCierre || !foto.file || isCerrando)
+    if (
+      !cerrando ||
+      finalNum == null ||
+      finalInvalido ||
+      litrosError ||
+      adBlueIncompletoCierre ||
+      (fotoRequerida && !foto.file) ||
+      isCerrando
+    )
       return;
     if (!userId) return;
 
@@ -124,7 +138,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
           shiftDate: toDateOnly(ctx.fecha),
           shiftType: ctx.turno,
         },
-        foto.file,
+        foto.file ?? null,
       );
       setCerrandoId(null);
       foto.resetPhoto();
@@ -135,5 +149,5 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, fotoRequerida, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

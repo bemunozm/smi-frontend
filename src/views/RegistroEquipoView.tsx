@@ -139,6 +139,7 @@ export function RegistroEquipoView() {
     finalInvalido,
     litrosError,
     litrosAviso,
+    fotoRequerida,
     adBlueCierre,
     adBlueIncompletoCierre,
     edicion,
@@ -296,8 +297,9 @@ export function RegistroEquipoView() {
           «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
         </span>
         <span>
-          • <b className="text-foreground">Ciérrala solo cuando le eches combustible</b>, con el km, los litros y la
-          foto del surtidor. Puede cerrarla cualquier supervisor, aunque la haya abierto otro.
+          • <b className="text-foreground">Ciérrala cuando le eches combustible</b>, con el km, los litros y la foto
+          del surtidor. Si no se pudo cargar (por ejemplo, un corte de luz), se cierra igual solo con el km. Puede
+          cerrarla cualquier supervisor, aunque la haya abierto otro.
         </span>
         <span>• Las camionetas no van en el reporte de salida a la administración.</span>
       </div>
@@ -816,10 +818,10 @@ export function RegistroEquipoView() {
         ) : (
           <>
             <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
-              Cerrar con la carga <ArrowRight className="h-[19px] w-[19px]" />
+              Cerrar camioneta <ArrowRight className="h-[19px] w-[19px]" />
             </Boton>
             <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-              Solo si le echaste combustible. Si no, déjala abierta.
+              Al echarle combustible, o sin carga si hubo un corte de luz.
             </p>
           </>
         )}
@@ -1126,23 +1128,26 @@ export function RegistroEquipoView() {
         litros: el OCR los completa desde la foto y el supervisor los revisa
         (y corrige) después, en vez de escribirlos para que la foto los pise.
       */}
+      {/* El combustible es opcional (16/11/2026): con un corte de luz no se
+          puede cargar y la tarjeta se cierra igual. La foto del surtidor solo
+          se exige cuando se escriben litros. */}
       <FotoRespaldoField
         file={foto.file}
         isReadingPhoto={foto.isReadingPhoto}
         captureDate={foto.captureDate}
         onSelect={foto.handleSelectPhoto}
         onClear={foto.handleClearPhoto}
+        requerida={fotoRequerida}
         title="Foto del surtidor"
-        subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+        subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
         staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
       />
 
       <Campo
-        label="Combustible cargado"
-        requerido
+        label="Combustible cargado (opcional)"
         unidad="L"
         litros
-        hint={cerrando.liviano ? AYUDA_LITROS : `${AYUDA_LITROS} Cero si no cargó en el turno.`}
+        hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}
       >
@@ -1161,8 +1166,8 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          Ciérrala solo si le echaste combustible. Queda a tu nombre en el turno <b>{ctx.turno}</b> del{' '}
-          <b>{ctx.fechaCorta}</b>.
+          Ciérrala cuando le eches combustible. Si no se pudo cargar (por ejemplo, un corte de luz), puedes cerrarla
+          igual sin litros ni foto. Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}
 
@@ -1179,7 +1184,7 @@ export function RegistroEquipoView() {
         ancho
         onClick={confirmarCierre}
         disabled={
-          !foto.file ||
+          (fotoRequerida && !foto.file) ||
           foto.isReadingPhoto ||
           isCerrando ||
           finalNum == null ||
@@ -1191,8 +1196,10 @@ export function RegistroEquipoView() {
         {isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'}
         <ArrowRight className="h-[19px] w-[19px]" />
       </Boton>
-      {!foto.file && (
-        <p className="m-0 text-center text-[12.5px] text-muted-foreground">Falta la foto del surtidor para cerrar.</p>
+      {fotoRequerida && !foto.file && (
+        <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+          Con combustible cargado falta la foto del surtidor para cerrar.
+        </p>
       )}
     </>
   );

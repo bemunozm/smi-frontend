@@ -101,18 +101,20 @@ describe('MiCamionetaView (mantenedor)', () => {
     listMineMock.mockResolvedValue([tarjeta('mant_1')]);
     renderCard();
 
-    expect(await screen.findByRole('button', { name: /Cargar combustible y cerrar/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Cerrar camioneta/ })).toBeTruthy();
     expect(screen.getByText('CM-001')).toBeTruthy();
     expect(screen.getByText('En uso')).toBeTruthy();
     expect(screen.getByText('45.120 km')).toBeTruthy();
     // Se ve qué camioneta es: abre su ficha en el taller.
     expect(screen.getByRole('button', { name: /Ver camioneta/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Cargar combustible y cerrar/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Cerrar camioneta/ }));
     expect(await screen.findByText('Kilometraje final')).toBeTruthy();
     // El cierre va en la misma vista, con Cancelar para volver.
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
-    expect(screen.getByText('Falta la foto del surtidor para cerrar.')).toBeTruthy();
+    // El combustible es opcional (corte de luz): sin litros no pide la foto.
+    expect(screen.getByText('Combustible cargado (opcional)')).toBeTruthy();
+    expect(screen.queryByText(/falta la foto del surtidor/)).toBeNull();
   });
 
   it('la camioneta abierta por OTRA persona no es «mi camioneta»', async () => {
@@ -121,6 +123,6 @@ describe('MiCamionetaView (mantenedor)', () => {
     renderCard();
 
     expect(await screen.findByText('Usar una camioneta')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Cargar combustible y cerrar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Cerrar camioneta/ })).toBeNull();
   });
 });

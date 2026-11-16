@@ -203,7 +203,7 @@ export function MiCamionetaView({
         {!cerrandoMia && (
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
             <Boton className="sm:flex-1 lg:flex-none" onClick={() => cierre.abrirCierre(mia.id)}>
-              <Fuel className="size-[18px]" aria-hidden /> Cargar combustible y cerrar
+              <Fuel className="size-[18px]" aria-hidden /> Cerrar camioneta
             </Boton>
             {conFicha && equipoEnUso && (
               <Boton variante="contorno" onClick={() => navigate(`/mantenimiento/equipos/${equipoEnUso.id}`)}>
@@ -219,11 +219,11 @@ export function MiCamionetaView({
   const formCierre = cerrandoLiviano && cierre.cerrando && (
     <Card>
       <CardHead
-        titulo={cerrandoAjena ? `Cerrar ${cerrandoLiviano.equipo}` : 'Cargar combustible y cerrar'}
+        titulo={cerrandoAjena ? `Cerrar ${cerrandoLiviano.equipo}` : 'Cerrar la camioneta'}
         bajada={
           cerrandoAjena
-            ? `La abrió ${cerrandoLiviano.supervisor}. Kilometraje final, litros y la foto del surtidor.`
-            : 'Kilometraje final, litros y la foto del surtidor.'
+            ? `La abrió ${cerrandoLiviano.supervisor}. Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.`
+            : 'Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.'
         }
         extra={
           <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.setCerrandoId(null)}>
@@ -264,16 +264,16 @@ export function MiCamionetaView({
           captureDate={cierre.foto.captureDate}
           onSelect={cierre.foto.handleSelectPhoto}
           onClear={cierre.foto.handleClearPhoto}
+          requerida={cierre.fotoRequerida}
           title="Foto del surtidor"
-          subtitle="Debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+          subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
           staleQuestion="¿Es la carga de esta camioneta?"
         />
         <Campo
-          label="Combustible cargado"
-          requerido
+          label="Combustible cargado (opcional)"
           unidad="L"
           litros
-          hint={AYUDA_LITROS}
+          hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
           error={cierre.litrosError ?? undefined}
           aviso={cierre.litrosAviso ?? undefined}
         >
@@ -295,7 +295,7 @@ export function MiCamionetaView({
           ancho
           onClick={() => void cierre.cerrar()}
           disabled={
-            !cierre.foto.file ||
+            (cierre.fotoRequerida && !cierre.foto.file) ||
             cierre.foto.isReadingPhoto ||
             cierre.isCerrando ||
             cierre.finalNum == null ||
@@ -305,9 +305,9 @@ export function MiCamionetaView({
         >
           {cierre.isCerrando ? 'Cerrando…' : 'Cerrar tarjeta'} <ArrowRight className="size-[19px]" />
         </Boton>
-        {!cierre.foto.file && (
+        {cierre.fotoRequerida && !cierre.foto.file && (
           <p className="m-0 text-center text-[12.5px] text-[var(--label-color)]">
-            Falta la foto del surtidor para cerrar.
+            Con combustible cargado falta la foto del surtidor para cerrar.
           </p>
         )}
       </Form>
@@ -395,7 +395,7 @@ export function MiCamionetaView({
               </span>
             </div>
             <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.abrirCierre(t.id)}>
-              <Fuel className="size-4" aria-hidden /> Cargar combustible y cerrar
+              <Fuel className="size-4" aria-hidden /> Cerrar camioneta
             </Boton>
           </div>
         ))}

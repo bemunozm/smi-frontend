@@ -126,6 +126,7 @@ function buildCloseCardOp(
   input: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
   seq: number,
   timestamp: number,
+  conFoto: boolean,
 ): CloseCardOp {
   return {
     id: input.closeClientId,
@@ -133,9 +134,10 @@ function buildCloseCardOp(
     v: 1,
     userId,
     payload: { cardId, input },
-    status: 'pending_upload',
+    // Sin foto (cierre sin combustible) no hay nada que subir antes del POST.
+    status: conFoto ? 'pending_upload' : 'pending',
     attempts: 0,
-    photoId: input.closeClientId,
+    ...(conFoto ? { photoId: input.closeClientId } : {}),
     seq,
     entityKey: shiftCardEntity(cardId),
     dependsOn: [cardId],
@@ -168,21 +170,25 @@ export async function enqueueCloseCard(
   userId: string,
   cardId: string,
   input: Omit<CloseShiftCardInput, 'tmpPhotoKey'>,
-  photo: File,
+  /** `null` en un cierre sin combustible: la foto del surtidor solo se exige
+   * con litros cargados. */
+  photo: File | null,
 ): Promise<void> {
-  const compressed = await prepararArchivo(photo);
+  const compressed = photo ? await prepararArchivo(photo) : null;
 
   await conCuota(() =>
     db.transaction('rw', db.outbox, db.blobs, async () => {
       const timestamp = now();
-      await db.blobs.put({
-        id: input.closeClientId,
-        data: compressed.data,
-        mime: compressed.mime,
-        name: compressed.name,
-        createdAt: timestamp,
-      });
-      await db.outbox.put(buildCloseCardOp(userId, cardId, input, await nextSeq(), timestamp));
+      if (compressed) {
+        await db.blobs.put({
+          id: input.closeClientId,
+          data: compressed.data,
+          mime: compressed.mime,
+          name: compressed.name,
+          createdAt: timestamp,
+        });
+      }
+      await db.outbox.put(buildCloseCardOp(userId, cardId, input, await nextSeq(), timestamp, compressed != null));
     }),
   );
   requestSync();
@@ -285,7 +291,7 @@ export async function enqueueClosedCardPair(
         name: compressed.name,
         createdAt: timestamp,
       });
-      await db.outbox.put(buildCloseCardOp(userId, open.id, close, seqApertura + 1, timestamp));
+      await db.outbox.put(buildCloseCardOp(userId, open.id, close, seqApertura + 1, timestamp, true));
     }),
   );
   requestSync();

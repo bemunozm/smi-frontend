@@ -565,7 +565,7 @@ describe('useShiftRegister', () => {
     });
   });
 
-  it('cerrar() no hace nada sin foto (guardia silenciosa)', async () => {
+  it('cerrar() con litros y sin foto no hace nada (guardia silenciosa)', async () => {
     mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
     mockFotoFile = null;
     const { Wrapper } = withQueryClient();
@@ -574,13 +574,37 @@ describe('useShiftRegister', () => {
 
     await waitFor(() => expect(result.current.abiertasActual).toHaveLength(1));
     act(() => result.current.abrirCierre('c1'));
-    act(() => result.current.setCierre((c) => ({ ...c, final: '130' })));
+    act(() => result.current.setCierre((c) => ({ ...c, final: '130', litros: '40' })));
+    expect(result.current.fotoRequerida).toBe(true);
 
     await act(async () => {
       await result.current.cerrar();
     });
 
     expect(enqueueCloseCardMock).not.toHaveBeenCalled();
+  });
+
+  it('sin combustible (corte de luz) cierra sin foto: 0 L y sin archivo', async () => {
+    mockApis({ tarjetas: [CARD_ABIERTA_ACTUAL] });
+    mockFotoFile = null;
+    enqueueCloseCardMock.mockResolvedValueOnce(undefined);
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.abiertasActual).toHaveLength(1));
+    act(() => result.current.abrirCierre('c1'));
+    act(() => result.current.setCierre((c) => ({ ...c, final: '130' })));
+    expect(result.current.fotoRequerida).toBe(false);
+
+    await act(async () => {
+      await result.current.cerrar();
+    });
+
+    const [, cardId, input, foto] = enqueueCloseCardMock.mock.calls[0]!;
+    expect(cardId).toBe('c1');
+    expect(input).toMatchObject({ valorFinal: 130, fuelLiters: 0 });
+    expect(foto).toBeNull();
   });
 
   it('veTodo es true solo para ADMIN', async () => {
