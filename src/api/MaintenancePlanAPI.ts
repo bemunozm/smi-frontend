@@ -8,6 +8,7 @@ import {
   type MaintenancePlanView,
   type MaintenanceStatusRow,
 } from '../types/maintenance-plan';
+import { MaintenanceBoardListResponseSchema, type MaintenanceBoardRow } from '../types/maintenance-board';
 
 /**
  * Lecturas de las pautas de mantención. La escritura (guardar la pauta) va por
@@ -31,6 +32,16 @@ export const MaintenancePlanAPI = {
       return MaintenanceStatusListResponseSchema.parse(response.data).data;
     } catch (error: unknown) {
       throw toDomainError(error, 'No se pudo cargar el estado de las mantenciones.');
+    }
+  },
+
+  /** La pizarra de mantenciones: una fila por equipo, con o sin pauta. */
+  async board(): Promise<MaintenanceBoardRow[]> {
+    try {
+      const response = await axiosInstance.get('/api/maintenance-plans/board');
+      return MaintenanceBoardListResponseSchema.parse(response.data).data;
+    } catch (error: unknown) {
+      throw toDomainError(error, 'No se pudo cargar la pizarra de mantenciones.');
     }
   },
 

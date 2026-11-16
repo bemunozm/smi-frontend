@@ -14,9 +14,11 @@ import {
   TextField,
   Input,
 } from '@heroui/react';
-import { SquareKanban, Table2 } from 'lucide-react';
+import { ArrowLeft, SquareKanban, Table2 } from 'lucide-react';
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
+
+import { PizarraMantenciones } from '../components/mantenimiento/pizarra/PizarraMantenciones';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -423,9 +425,13 @@ function EditarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onClos
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
- * Registro de mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA):
- * por defecto las órdenes de trabajo COMPLETADAS del taller —preventivas o
- * correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
+ * Mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA). Por defecto,
+ * la pizarra de mantenciones (`PizarraMantenciones`): el estado de cada equipo
+ * como la pizarra blanca de faena. «Ver registro de mantención» lleva al
+ * registro (`?vista=registro`) y «Volver a la pizarra» lo deshace.
+ *
+ * El registro muestra por defecto las órdenes de trabajo COMPLETADAS del
+ * taller —preventivas o correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
  * popup (tareas, intervenciones, insumos). «Sin terminar» muestra las que el
  * taller dejó abiertas, para cerrarlas si el mantenedor se olvidó
  * (`FinalizarMantencionModal`). Es también el destino del aviso «Orden de
@@ -452,6 +458,9 @@ export function MantencionesAdminView() {
   // URL compartida le cambian la pantalla.
   const esAdmin = role === 'ADMIN';
   const vistaTablero = esAdmin && params.get('vista') === 'tablero';
+  // Sin `vista` manda la pizarra. Cualquier `vista` (también un `?vista=tablero`
+  // compartido a la SECRETARIA) lleva al registro, como antes de la pizarra.
+  const vistaPizarra = !params.get('vista');
 
   // `equipoId` de la OT es soft-ref: puede traer el id del equipo o su código.
   const codigoDe = (equipoRef: string) =>
@@ -511,29 +520,44 @@ export function MantencionesAdminView() {
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">Mantenciones</h1>
           <p className="text-sm text-muted-foreground">
-            {vistaTablero
-              ? 'El tablero del taller tal como lo ve el mantenedor: órdenes esperando, en proceso y finalizadas. Desde acá también puedes crear una.'
-              : estadoFiltro === 'completadas'
-                ? 'Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.'
-                : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
+            {vistaPizarra
+              ? 'La pizarra de mantenciones: cuándo fue el último cambio de cada equipo, cuándo toca el próximo y cuánto le falta. Lo atrasado y lo que está por vencer, en rojo.'
+              : vistaTablero
+                ? 'El tablero del taller tal como lo ve el mantenedor: órdenes esperando, en proceso y finalizadas. Desde acá también puedes crear una.'
+                : estadoFiltro === 'completadas'
+                  ? 'Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.'
+                  : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {esAdmin ? (
-            <Button onPress={() => setFiltro('vista', vistaTablero ? '' : 'tablero', '')} size="sm" variant="secondary">
-              {vistaTablero ? <Table2 className="size-4" /> : <SquareKanban className="size-4" />}
-              {vistaTablero ? 'Vista registro' : 'Vista tablero'}
+        {vistaPizarra ? null : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onPress={() => setFiltro('vista', '', '')} size="sm" variant="tertiary">
+              <ArrowLeft className="size-4" />
+              Volver a la pizarra
             </Button>
-          ) : null}
-          {!vistaTablero ? (
-            <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-              {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
-            </Chip>
-          ) : null}
-        </div>
+            {esAdmin ? (
+              // Sin `vista` se vuelve a la pizarra: del tablero se regresa al registro.
+              <Button
+                onPress={() => setFiltro('vista', vistaTablero ? 'registro' : 'tablero', '')}
+                size="sm"
+                variant="secondary"
+              >
+                {vistaTablero ? <Table2 className="size-4" /> : <SquareKanban className="size-4" />}
+                {vistaTablero ? 'Vista registro' : 'Vista tablero'}
+              </Button>
+            ) : null}
+            {!vistaTablero ? (
+              <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
+                {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
+              </Chip>
+            ) : null}
+          </div>
+        )}
       </div>
 
-      {vistaTablero ? (
+      {vistaPizarra ? (
+        <PizarraMantenciones onVerRegistro={() => setFiltro('vista', 'registro', '')} />
+      ) : vistaTablero ? (
         <OrdenesTrabajoView contexto="panel" />
       ) : (
         <Card>

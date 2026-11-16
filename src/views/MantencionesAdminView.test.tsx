@@ -46,6 +46,18 @@ vi.mock('./OrdenesTrabajoView', () => ({
   ),
 }));
 
+// La pizarra tiene sus propios tests (`PizarraMantenciones.test.tsx`); acá
+// solo importa que sea la vista por defecto y que su botón lleve al registro.
+vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
+  PizarraMantenciones: ({ onVerRegistro }: { onVerRegistro: () => void }) => (
+    <div data-testid="pizarra">
+      <button onClick={onVerRegistro} type="button">
+        Ver registro de mantención
+      </button>
+    </div>
+  ),
+}));
+
 import { MantencionesAdminView } from './MantencionesAdminView';
 
 const tarea = (over: Record<string, unknown>) => ({
@@ -112,7 +124,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderView(entrada = '/mantenciones') {
+/** El registro quedó detrás de `?vista=registro`: la pizarra es la vista por defecto. */
+const REGISTRO = '/mantenciones?vista=registro';
+
+function renderView(entrada = REGISTRO) {
   return render(
     <MemoryRouter initialEntries={[entrada]}>
       <MantencionesAdminView />
@@ -121,6 +136,29 @@ function renderView(entrada = '/mantenciones') {
 }
 
 describe('MantencionesAdminView', () => {
+  it('por defecto muestra la pizarra, y «Ver registro de mantención» lleva al registro y vuelve', () => {
+    renderView('/mantenciones');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByText('Registro')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    expect(screen.queryByTestId('pizarra')).toBeNull();
+    expect(screen.getByText('Registro')).toBeTruthy();
+    expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a la pizarra' }));
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByText('Registro')).toBeNull();
+  });
+
+  it('el detalle de una mantención (?id=, destino de la notificación) abre también sobre la pizarra', () => {
+    renderView('/mantenciones?id=ot2');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('Reparación de frenos')).toBeTruthy();
+  });
+
   it('lista SOLO las órdenes completadas, con equipo, tipo y quién la hizo', () => {
     renderView();
 
@@ -187,14 +225,14 @@ describe('MantencionesAdminView', () => {
   });
 
   it('abre el detalle directo con ?id= (el destino de la notificación de mantención)', () => {
-    renderView('/mantenciones?id=ot2');
+    renderView(`${REGISTRO}&id=ot2`);
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Reparación de frenos')).toBeTruthy();
   });
 
   it('«Sin terminar» lista las órdenes que el taller dejó abiertas', () => {
-    renderView('/mantenciones?estado=sin-terminar');
+    renderView(`${REGISTRO}&estado=sin-terminar`);
     const filas = screen.getAllByTestId(/mantencion-fila-/);
     expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['mantencion-fila-ot3']);
     expect(within(filas[0]).getByText('En proceso')).toBeTruthy();
@@ -202,7 +240,7 @@ describe('MantencionesAdminView', () => {
 
   it('SECRETARIA cierra una orden sin terminar: qué se hizo y cómo queda el equipo, sin insumos', () => {
     rol.value = 'SECRETARIA';
-    renderView('/mantenciones?estado=sin-terminar&id=ot3');
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot3`);
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
 
     const dialog = screen.getByRole('dialog');
@@ -225,7 +263,7 @@ describe('MantencionesAdminView', () => {
 
   it('una orden completada se edita (título, prioridad) pero no se vuelve a finalizar', () => {
     rol.value = 'SECRETARIA';
-    renderView('/mantenciones?id=ot1');
+    renderView(`${REGISTRO}&id=ot1`);
     const detalle = screen.getByRole('dialog');
     expect(within(detalle).queryByRole('button', { name: 'Marcar como finalizada' })).toBeNull();
     fireEvent.click(within(detalle).getByRole('button', { name: 'Editar' }));
