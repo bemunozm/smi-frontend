@@ -58,6 +58,11 @@ export function MantencionARealizarModal({ fila, onClose }: { fila: MaintenanceB
                   <p className="m-0 rounded-xl bg-surface-secondary px-3 py-2.5 text-[15px] font-semibold">
                     Servicio de 10.000 km
                   </p>
+                ) : fila.counter == null ? (
+                  // Sin lectura no hay próximo hito: no es que la pauta esté vacía.
+                  <p className="text-sm text-muted-foreground">
+                    Sin lectura: no se puede calcular la próxima mantención.
+                  </p>
                 ) : fila.items.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     La pauta no tiene operaciones marcadas para este hito.
