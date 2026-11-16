@@ -1,9 +1,10 @@
-import { Button, Chip, Modal } from '@heroui/react';
+import { Button, Modal } from '@heroui/react';
 
 import { fmtDecimales, fmtNum } from '../../../lib/format';
 import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 import { planItemKindLabel, type PlanItemKind } from '../../../types/maintenance-plan';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../../flota/modal-styles';
+import { Chip } from '../../ui/Chip';
 import { lectura } from './pizarra';
 
 const KIND_COLOR: Record<string, 'accent' | 'warning' | 'success' | 'default'> = {

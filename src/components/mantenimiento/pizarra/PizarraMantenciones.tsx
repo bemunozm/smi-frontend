@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, Chip, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
+import { Button, Card, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
 import { CalendarDays, CircleAlert, ClipboardList, Clock, History, SquareKanban, TriangleAlert } from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
@@ -11,6 +11,7 @@ import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 import type { MaintenanceForecastRow } from '../../../types/maintenance-forecast';
 import { MantencionAnteriorModal } from '../MantencionAnteriorModal';
 import { PautaMantencionModal } from '../PautaMantencionModal';
+import { Chip } from '../../ui/Chip';
 import { MantencionARealizarModal } from './MantencionARealizarModal';
 import { etiquetas, fechaCorta, lectura, separarSinPauta, textoPendientes, tono } from './pizarra';
 
