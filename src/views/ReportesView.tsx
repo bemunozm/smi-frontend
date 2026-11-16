@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Button, Card, Chip, Spinner, Table } from '@heroui/react';
-import { Download, Eye } from 'lucide-react';
+import { AlertDialog, Button, Card, Chip, Spinner, Table } from '@heroui/react';
+import { Download, Eye, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import { RegistroTurnoModal } from '../components/reportes/RegistroTurnoModal';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
-import { useShiftReports } from '../hooks/useShiftReports';
+import { usePermissions } from '../hooks/usePermissions';
+import { useDeleteShiftReport, useShiftReports } from '../hooks/useShiftReports';
 import { turnoLabel } from '../config/flota-colors';
+import { canDeleteShiftReport } from '../lib/permissions';
 import { fromDateOnly } from '../lib/turno';
 import type { ShiftReportListItem } from '../types/shift';
 
@@ -47,50 +49,62 @@ function EstadoCorreo({ reporte }: { reporte: ShiftReportListItem }) {
 }
 
 /**
- * Un reporte en tablet y celular: la tabla de siete columnas obligaba a
- * desplazarse hacia los lados; acá todo cabe en el ancho y el PDF es un botón.
+ * Tablet y celular: la misma tabla que el Informe de producción diaria, con
+ * las columnas esenciales (fecha, turno, supervisor, equipos, enviado). La
+ * fila abre el registro, y ahí están el PDF y «Eliminar registro».
  */
-function TarjetaReporte({ reporte, onVer }: { reporte: ShiftReportListItem; onVer: () => void }) {
+function TablaCompacta({
+  reportes,
+  onVer,
+  puedeEliminar,
+}: {
+  reportes: ShiftReportListItem[];
+  onVer: (reporte: ShiftReportListItem) => void;
+  puedeEliminar: boolean;
+}) {
   return (
-    <li
-      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
-      data-testid={`reporte-fila-${reporte.id}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col">
-          <span className="text-[15px] font-semibold text-foreground">
-            {formatDia(reporte.shiftDate)} · <span>{turnoLabel(reporte.shiftType)}</span>
-          </span>
-          <span className="text-sm text-muted-foreground">{reporte.supervisor ?? '—'}</span>
-        </div>
-        <EstadoCorreo reporte={reporte} />
-      </div>
-      <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
-        <div className="flex flex-col">
-          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Equipos</dt>
-          <dd className="m-0 font-mono font-semibold text-foreground">{reporte.cardCount}</dd>
-        </div>
-        <div className="flex flex-col">
-          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Enviado</dt>
-          <dd className="m-0 text-foreground">{formatEnviado(reporte.createdAt)}</dd>
-        </div>
-      </dl>
-      <div className="grid grid-cols-2 gap-2">
-        <Button className="min-h-11" onPress={onVer} variant="secondary">
-          <Eye aria-hidden size={16} />
-          Ver registro
-        </Button>
-        <a
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-(--accent) hover:bg-default"
-          href={ShiftReportAPI.fileUrl(reporte.id)}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <Download aria-hidden size={16} />
-          Descargar PDF
-        </a>
-      </div>
-    </li>
+    <div className="flex flex-col gap-2">
+      <p className="m-0 text-xs text-muted-foreground">
+        {puedeEliminar
+          ? 'Toca un envío para ver su registro, descargar el PDF o eliminarlo.'
+          : 'Toca un envío para ver su registro o descargar el PDF.'}
+      </p>
+      <Table variant="secondary">
+        <Table.ScrollContainer>
+          <Table.Content aria-label="Informe diario equipos" className="min-w-full">
+            <Table.Header>
+              <Table.Column isRowHeader>Fecha</Table.Column>
+              <Table.Column>Turno</Table.Column>
+              <Table.Column>Supervisor</Table.Column>
+              <Table.Column className="text-right">Equipos</Table.Column>
+              <Table.Column>Enviado</Table.Column>
+            </Table.Header>
+            <Table.Body>
+              {reportes.map((reporte) => (
+                <Table.Row
+                  className="cursor-pointer"
+                  data-testid={`reporte-fila-${reporte.id}`}
+                  key={reporte.id}
+                  onAction={() => onVer(reporte)}
+                >
+                  <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
+                    {formatDia(reporte.shiftDate)}
+                  </Table.Cell>
+                  <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(reporte.shiftType)}</Table.Cell>
+                  <Table.Cell className="text-sm whitespace-nowrap">{reporte.supervisor ?? '—'}</Table.Cell>
+                  <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
+                    {reporte.cardCount}
+                  </Table.Cell>
+                  <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
+                    {formatEnviado(reporte.createdAt)}
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
+    </div>
   );
 }
 
@@ -101,14 +115,20 @@ function TarjetaReporte({ reporte, onVer }: { reporte: ShiftReportListItem; onVe
  * supervisor a cargo. «Ver registro» abre las tarjetas del turno
  * (`RegistroTurnoModal`; el administrador puede corregirlas). Cada fila descarga el MISMO PDF que genera el envío
  * (`GET /api/shift-reports/:id/file`, URL firmada; el navegador manda la
- * cookie solo, por eso es un `<a>` y no un fetch).
+ * cookie solo, por eso es un `<a>` y no un fetch). «Eliminar» (solo ADMIN)
+ * borra un envío duplicado, previa confirmación y con traza en el Registro de
+ * actividad; las tarjetas del turno no se tocan.
  */
 export function ReportesView() {
   const { data, isPending, isError, error } = useShiftReports();
   const reportes = data ?? [];
-  // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
+  // En escritorio, la tabla completa con sus acciones; en tablet y celular, la
+  // tabla compacta (`TablaCompacta`).
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const [abierto, setAbierto] = useState<ShiftReportListItem | null>(null);
+  const [eliminando, setEliminando] = useState<ShiftReportListItem | null>(null);
+  const puedeEliminar = canDeleteShiftReport(usePermissions().role);
+  const eliminar = useDeleteShiftReport();
 
   return (
     <div className="flex flex-col gap-6">
@@ -156,11 +176,7 @@ export function ReportesView() {
           ) : null}
 
           {!isPending && !isError && reportes.length > 0 && !esEscritorio ? (
-            <ul className="m-0 flex list-none flex-col gap-3 p-0">
-              {reportes.map((reporte) => (
-                <TarjetaReporte key={reporte.id} onVer={() => setAbierto(reporte)} reporte={reporte} />
-              ))}
-            </ul>
+            <TablaCompacta onVer={setAbierto} puedeEliminar={puedeEliminar} reportes={reportes} />
           ) : null}
 
           {!isPending && !isError && reportes.length > 0 && esEscritorio ? (
@@ -176,6 +192,7 @@ export function ReportesView() {
                     <Table.Column>Correo</Table.Column>
                     <Table.Column>Registro</Table.Column>
                     <Table.Column>PDF</Table.Column>
+                    {puedeEliminar ? <Table.Column>Eliminar</Table.Column> : null}
                   </Table.Header>
                   <Table.Body>
                     {reportes.map((reporte) => (
@@ -211,6 +228,19 @@ export function ReportesView() {
                             Descargar PDF
                           </a>
                         </Table.Cell>
+                        {puedeEliminar ? (
+                          <Table.Cell className="whitespace-nowrap">
+                            <Button
+                              aria-label={`Eliminar el envío de ${reporte.supervisor ?? 'este supervisor'}`}
+                              isIconOnly
+                              onPress={() => setEliminando(reporte)}
+                              size="sm"
+                              variant="danger-soft"
+                            >
+                              <Trash2 aria-hidden size={15} />
+                            </Button>
+                          </Table.Cell>
+                        ) : null}
                       </Table.Row>
                     ))}
                   </Table.Body>
@@ -221,7 +251,69 @@ export function ReportesView() {
         </Card.Content>
       </Card>
 
-      <RegistroTurnoModal reporte={abierto} onClose={() => setAbierto(null)} />
+      <RegistroTurnoModal
+        reporte={abierto}
+        onClose={() => setAbierto(null)}
+        onEliminar={
+          puedeEliminar && abierto
+            ? () => {
+                setEliminando(abierto);
+                setAbierto(null);
+              }
+            : undefined
+        }
+      />
+
+      <AlertDialog.Backdrop
+        isOpen={eliminando !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-105">
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>¿Eliminar este envío?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    El envío del {eliminando ? formatDia(eliminando.shiftDate) : ''} (
+                    {eliminando ? turnoLabel(eliminando.shiftType) : ''}) de{' '}
+                    {eliminando?.supervisor ?? 'este supervisor'}, enviado el{' '}
+                    {eliminando ? formatEnviado(eliminando.createdAt) : ''}, se eliminará definitivamente junto con su
+                    PDF. Las tarjetas del turno no se tocan y el borrado quedará anotado en el Registro de actividad.
+                    Esta acción no se puede deshacer.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button onPress={close} variant="tertiary">
+                    Cancelar
+                  </Button>
+                  <Button
+                    isPending={eliminar.isPending}
+                    onPress={() => {
+                      if (!eliminando) return;
+                      eliminar.mutate(eliminando.id, {
+                        onSuccess: () => {
+                          close();
+                          setEliminando(null);
+                        },
+                      });
+                    }}
+                    variant="danger"
+                  >
+                    {eliminar.isPending ? <Spinner color="current" size="sm" /> : 'Eliminar'}
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }

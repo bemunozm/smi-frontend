@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Button, Chip, Modal, Spinner } from '@heroui/react';
-import { ArrowLeft, Download, Pencil } from 'lucide-react';
+import { ArrowLeft, Download, Pencil, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../flota/modal-styles';
@@ -88,9 +88,18 @@ function FilaTarjeta({ tarjeta, onEditar }: { tarjeta: TarjetaTurno; onEditar?: 
  * operador, horómetros, combustible, AdBlue), además del PDF. En un caso
  * extremo el administrador corrige una tarjeta con el mismo editor de Terreno
  * (`useEditarTarjeta` + `EditorTarjeta`): el cambio queda en su historial. El
- * PDF no se regenera — sigue siendo lo que se envió.
+ * PDF no se regenera — sigue siendo lo que se envió. `onEliminar` (solo ADMIN)
+ * borra el envío, pensado para duplicados; la confirmación la pide la vista.
  */
-export function RegistroTurnoModal({ reporte, onClose }: { reporte: ShiftReportListItem | null; onClose: () => void }) {
+export function RegistroTurnoModal({
+  reporte,
+  onClose,
+  onEliminar,
+}: {
+  reporte: ShiftReportListItem | null;
+  onClose: () => void;
+  onEliminar?: (() => void) | undefined;
+}) {
   const { data: cards, isPending, isError, error } = useShiftReportCards(reporte?.id ?? null);
   const { user } = useCurrentUser();
   const ops = useOutboxOps(user?.id);
@@ -178,7 +187,13 @@ export function RegistroTurnoModal({ reporte, onClose }: { reporte: ShiftReportL
             )}
           </Modal.Body>
           {reporte && !actual ? (
-            <Modal.Footer>
+            <Modal.Footer className="flex flex-wrap items-center justify-between gap-3">
+              {onEliminar ? (
+                <Button onPress={onEliminar} variant="danger">
+                  <Trash2 aria-hidden size={15} />
+                  Eliminar registro
+                </Button>
+              ) : null}
               <a
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-(--accent) hover:underline"
                 href={ShiftReportAPI.fileUrl(reporte.id)}

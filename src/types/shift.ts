@@ -288,3 +288,6 @@ export const ShiftReportListResponseSchema = z.object({
   data: z.array(ShiftReportListItemSchema),
   message: z.string(),
 });
+
+/** `DELETE /api/shift-reports/:id` (solo ADMIN). */
+export const DeleteShiftReportResponseSchema = z.object({ data: z.null(), message: z.string() });

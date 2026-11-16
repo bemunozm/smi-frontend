@@ -3,13 +3,29 @@ import { render, cleanup, screen, within, fireEvent } from '@testing-library/rea
 
 import type { ShiftReportListItem } from '../types/shift';
 
-const { reportesHook } = vi.hoisted(() => ({ reportesHook: vi.fn() }));
+const { reportesHook, eliminarMutate, permisos, escritorio } = vi.hoisted(() => ({
+  reportesHook: vi.fn(),
+  eliminarMutate: vi.fn(),
+  permisos: { role: 'ADMIN' as string | null },
+  escritorio: { value: true },
+}));
 
-vi.mock('../hooks/useShiftReports', () => ({ useShiftReports: () => reportesHook() }));
-// El modal tiene su propio test (`RegistroTurnoModal.test.tsx`): acá solo importa qué reporte abre.
+vi.mock('../hooks/useShiftReports', () => ({
+  useShiftReports: () => reportesHook(),
+  useDeleteShiftReport: () => ({ mutate: eliminarMutate, isPending: false }),
+}));
+vi.mock('../hooks/usePermissions', () => ({ usePermissions: () => ({ role: permisos.role, can: () => true }) }));
+vi.mock('../hooks/useMediaQuery', () => ({ DESKTOP_QUERY: 'desktop', useMediaQuery: () => escritorio.value }));
+// El modal tiene su propio test (`RegistroTurnoModal.test.tsx`): acá solo importa qué reporte abre
+// y que ofrezca «Eliminar registro» solo cuando la vista se lo pasa.
 vi.mock('../components/reportes/RegistroTurnoModal', () => ({
-  RegistroTurnoModal: ({ reporte }: { reporte: ShiftReportListItem | null }) =>
-    reporte ? <div role="dialog">Registro de {reporte.id}</div> : null,
+  RegistroTurnoModal: ({ reporte, onEliminar }: { reporte: ShiftReportListItem | null; onEliminar?: () => void }) =>
+    reporte ? (
+      <div role="dialog">
+        Registro de {reporte.id}
+        {onEliminar ? <button onClick={onEliminar}>Eliminar registro</button> : null}
+      </div>
+    ) : null,
 }));
 
 import { ReportesView } from './ReportesView';
@@ -42,6 +58,8 @@ const ok = (data: ShiftReportListItem[]) => ({ data, isPending: false, isError: 
 
 beforeEach(() => {
   reportesHook.mockReturnValue(ok(LISTA));
+  permisos.role = 'ADMIN';
+  escritorio.value = true;
 });
 
 afterEach(() => {
@@ -75,7 +93,7 @@ describe('ReportesView', () => {
     render(<ReportesView />);
     const fila = screen.getByTestId('reporte-fila-r1');
     fireEvent.click(within(fila).getByRole('button', { name: /Ver registro/ }));
-    expect(screen.getByRole('dialog').textContent).toBe('Registro de r1');
+    expect(screen.getByRole('dialog').textContent).toContain('Registro de r1');
   });
 
   it('muestra el estado del correo de cada envío', () => {
@@ -95,5 +113,48 @@ describe('ReportesView', () => {
     reportesHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Falló Reportes') });
     render(<ReportesView />);
     expect(screen.getByText('Falló Reportes')).toBeTruthy();
+  });
+
+  it('el administrador elimina un envío duplicado previa confirmación', () => {
+    render(<ReportesView />);
+    fireEvent.click(within(screen.getByTestId('reporte-fila-r1')).getByRole('button', { name: /Eliminar el envío/ }));
+
+    const confirmacion = screen.getByRole('alertdialog');
+    expect(confirmacion.textContent).toContain('Ana Soto');
+    expect(eliminarMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(within(confirmacion).getByRole('button', { name: 'Eliminar' }));
+    expect(eliminarMutate).toHaveBeenCalledWith('r1', expect.anything());
+  });
+
+  it('la secretaria no ve la opción de eliminar', () => {
+    permisos.role = 'SECRETARIA';
+    render(<ReportesView />);
+    expect(screen.queryByRole('columnheader', { name: 'Eliminar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Eliminar el envío/ })).toBeNull();
+  });
+
+  describe('en celular', () => {
+    beforeEach(() => {
+      escritorio.value = false;
+    });
+
+    it('muestra una tabla con fecha, turno, supervisor, equipos y enviado (sin tarjetas)', () => {
+      render(<ReportesView />);
+      const columnas = screen.getAllByRole('columnheader').map((c) => c.textContent);
+      expect(columnas).toEqual(['Fecha', 'Turno', 'Supervisor', 'Equipos', 'Enviado']);
+      expect(within(screen.getByTestId('reporte-fila-r1')).getByText('Ana Soto')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: /Descargar PDF/ })).toBeNull();
+    });
+
+    it('tocar una fila abre su registro, y desde ahí el administrador lo elimina', () => {
+      render(<ReportesView />);
+      fireEvent.click(within(screen.getByTestId('reporte-fila-r1')).getByText('Ana Soto'));
+      expect(screen.getByRole('dialog').textContent).toContain('Registro de r1');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Eliminar registro' }));
+      fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Eliminar' }));
+      expect(eliminarMutate).toHaveBeenCalledWith('r1', expect.anything());
+    });
   });
 });

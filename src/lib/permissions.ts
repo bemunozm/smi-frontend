@@ -136,6 +136,12 @@ export function canDeleteReporteDiario(role: Role | null | undefined): boolean {
   return role === ADMIN;
 }
 
+/** Eliminar un envío del Informe diario equipos (reporte de salida
+ * duplicado): `DELETE /api/shift-reports/:id` es solo ADMIN. */
+export function canDeleteShiftReport(role: Role | null | undefined): boolean {
+  return role === ADMIN;
+}
+
 /**
  * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
  * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un
