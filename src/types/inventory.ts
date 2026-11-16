@@ -60,6 +60,10 @@ export const MOVEMENT_REASONS = [
   'ACTIVITY',
   'EXTRAORDINARY_WORK',
   'TRANSFER',
+  // Salida automática: AdBlue declarado al cerrar una tarjeta de turno o en
+  // una carga manual (smi-backend `AdBlueStockService`). No se ofrece en el
+  // formulario manual (`REASONS_BY_DIRECTION`).
+  'ADBLUE_LOAD',
 ] as const;
 export type MovementReason = (typeof MOVEMENT_REASONS)[number];
 
@@ -250,6 +254,7 @@ export const MOVEMENT_REASON_LABELS: Record<MovementReason, string> = {
   ACTIVITY: 'Consumo en actividad',
   EXTRAORDINARY_WORK: 'Consumo en trabajo extraordinario',
   TRANSFER: 'Traspaso entre sucursales',
+  ADBLUE_LOAD: 'Carga de AdBlue a equipo',
 };
 
 /** Motivos que ofrece el formulario manual, por dirección. */
