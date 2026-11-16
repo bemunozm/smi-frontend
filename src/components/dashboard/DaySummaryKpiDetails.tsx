@@ -3,12 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Spinner, Table } from '@heroui/react';
 
 import { KpiDetailModal } from './KpiDetailModal';
-import { useDashboardVueltas } from '../../hooks/useDashboard';
-import { useKardex } from '../../hooks/useInventory';
+import { adBlueDisponible, conSigno } from './adblue-disponible';
+import { useDashboardAdBlue, useDashboardVueltas } from '../../hooks/useDashboard';
 import { NUM_CL, NUM_CL_1, formatDia } from '../../lib/dashboard-format';
-import { toDateOnly } from '../../lib/turno';
-import { MovementKindChip, movementKind } from '../inventario/shared';
-import { MOVEMENT_REASON_LABELS, UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 import type { ResumenDia } from '../../types/dashboard';
 
 /** Las cinco tarjetas de colores del resumen del día; cada una abre su popup de detalle. */
@@ -20,6 +17,13 @@ const ROW_LISTA = 'flex flex-wrap items-center gap-2 border-t border-border py-2
 /** Fila que expande/colapsa su detalle (clic y Enter vía `onAction`). */
 const ROW_TOGGLE = 'cursor-pointer hover:bg-surface-secondary';
 const HORA = new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit' });
+const FECHA_HORA = new Intl.DateTimeFormat('es-CL', {
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 /** Set de equipos con su fila de detalle expandida (toggle por `internalCode`). */
 function useExpandedRows() {
@@ -43,9 +47,10 @@ function rangoHoras(entrada?: string, salida?: string | null): string {
  * Popups de detalle de las KPI cards de colores del «Resumen del día». HM y
  * Diésel desglosan `operacionPorEquipo` (la misma fuente de los totales de la
  * card); Reports lista el día completo (la card corta en 3 equipos); Producción
- * suma los camiones del endpoint de vueltas; AdBlue muestra el kardex del día
- * del ítem. Los modales cerrados no se montan (react-aria), así que las
- * consultas extra (vueltas, kardex) solo corren con el popup abierto.
+ * suma los camiones del endpoint de vueltas; AdBlue muestra el saldo disponible
+ * y TODAS las cargas declaradas. Los modales cerrados no se montan
+ * (react-aria), así que las consultas extra (vueltas, AdBlue) solo corren con
+ * el popup abierto.
  */
 export function DaySummaryKpiDetails({
   open,
@@ -95,18 +100,12 @@ export function DaySummaryKpiDetails({
       <KpiDetailModal
         isOpen={open === 'adblue'}
         onOpenChange={cerrar}
-        title={`AdBlue – ${dia}`}
+        title="AdBlue disponible"
         // Las cargas de AdBlue viven en Cargas de combustible (con su filtro
-        // «Solo con AdBlue»); el saldo/kardex del ítem sigue adentro del popup.
+        // «Solo con AdBlue»).
         verTodoTo="/cargas-combustible"
       >
-        <AdBlueDetail
-          adBlue={data.adBlue}
-          adBlueDia={data.adBlueDia}
-          enabled={open === 'adblue'}
-          fecha={data.fecha}
-          past={past}
-        />
+        <AdBlueDetail enabled={open === 'adblue'} past={past} />
       </KpiDetailModal>
     </>
   );
@@ -397,103 +396,99 @@ function turnoAdBlue(c: { turno: string | null; origen: 'TARJETA' | 'MANUAL' }):
   return c.origen === 'MANUAL' ? 'Manual' : '—';
 }
 
-/** Cargas de AdBlue del día + (si el ítem existe) saldo y kardex del ítem. */
-function AdBlueDetail({
-  adBlue,
-  adBlueDia,
-  fecha,
-  enabled,
-  past,
-}: {
-  adBlue: ResumenDia['adBlue'];
-  adBlueDia: ResumenDia['adBlueDia'];
-  fecha: string;
-  enabled: boolean;
-  past: boolean;
-}) {
-  // El kardex solo con el popup abierto Y con ítem en el catálogo.
-  const { data, isPending, isError, error } = useKardex(enabled && adBlue ? adBlue.itemId : null);
-  const unidad = adBlue ? (UNIT_SYMBOLS[adBlue.unidad as UnitOfMeasure] ?? adBlue.unidad) : '';
-  const delDia = (data?.movements ?? []).filter((m) => toDateOnly(new Date(m.occurredAt)) === fecha);
+/** De dónde salió la carga, legible: «Cierre de tarjeta · Día» o «Carga manual». */
+function origenAdBlue(c: { turno: string | null; origen: 'TARJETA' | 'MANUAL' }): string {
+  if (c.origen === 'MANUAL') return 'Carga manual';
+  return `Cierre de tarjeta · ${turnoAdBlue(c)}`;
+}
+
+/**
+ * Popup «AdBlue disponible»: el saldo vivo del ítem AdBlue (en negativo si
+ * se cargó más de lo que había en bodega) y TODAS las cargas declaradas, de
+ * la más reciente a la más antigua, cada una restando su litros.
+ */
+function AdBlueDetail({ enabled, past }: { enabled: boolean; past: boolean }) {
+  const { data, isPending, isError, error } = useDashboardAdBlue(enabled);
+
+  if (isPending) {
+    return (
+      <div className="flex justify-center py-6">
+        <Spinner color="accent" size="sm" />
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <p className="text-sm text-danger-soft-foreground" role="alert">
+        {error instanceof Error ? error.message : 'No se pudo cargar el AdBlue disponible.'}
+      </p>
+    );
+  }
+
+  const disponible = data.saldo ? adBlueDisponible(data.saldo) : null;
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-0.5" data-testid="adblue-saldo">
+        <span className="text-sm font-medium text-foreground">
+          {data.saldo ? data.saldo.nombre : 'Saldo en Inventario'}
+        </span>
+        {disponible ? (
+          <>
+            <span
+              className={`font-mono text-2xl font-semibold ${disponible.negativo ? 'text-danger' : 'text-foreground'}`}
+            >
+              {`${disponible.valor} ${disponible.unidad}`}
+              {disponible.enUnidades ? (
+                <span className="ms-2 text-sm font-normal text-muted-foreground">= {disponible.enUnidades}</span>
+              ) : null}
+            </span>
+            {disponible.negativo ? (
+              <span className="text-xs text-danger-soft-foreground">
+                Saldo negativo: se cargó más AdBlue del que figura en bodega. Registra la reposición o haz un conteo
+                físico en Inventario.
+              </span>
+            ) : null}
+            {past ? (
+              <span className="text-xs text-muted-foreground">Es el saldo de hoy, no el del día consultado.</span>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Sin ítem AdBlue en Inventario: crea el ítem para llevar el saldo disponible.
+          </span>
+        )}
+      </div>
+
       <div className="flex flex-col">
-        <h4 className="mb-1.5 text-sm font-semibold text-foreground">Cargas del {formatDia(fecha)}</h4>
-        {!adBlueDia ? (
-          <p className="text-sm text-muted-foreground">Detalle no disponible en este payload.</p>
-        ) : adBlueDia.cargas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin cargas de AdBlue este día.</p>
+        <h4 className="mb-1.5 text-sm font-semibold text-foreground">Cargas de AdBlue</h4>
+        {data.cargas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aún no hay cargas de AdBlue registradas.</p>
         ) : (
           <>
-            {adBlueDia.cargas.map((c, i) => (
-              <div className={ROW_LISTA} data-testid={`adblue-carga-${c.internalCode}-${i}`} key={`${c.hora}-${i}`}>
-                <span className="font-mono text-xs text-muted-foreground">{HORA.format(new Date(c.hora))}</span>
-                <span className="font-mono text-sm text-foreground">{c.internalCode}</span>
-                <span className="text-xs text-muted-foreground">{turnoAdBlue(c)}</span>
-                <span className="text-xs text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
-                <span className="ms-auto font-mono text-sm font-semibold text-foreground">
-                  {NUM_CL_1.format(c.litros)} L
-                </span>
-              </div>
-            ))}
+            <div className="max-h-96 overflow-y-auto pe-1">
+              {data.cargas.map((c) => (
+                <div className={ROW_LISTA} data-testid={`adblue-carga-${c.id}`} key={`${c.origen}-${c.id}`}>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {FECHA_HORA.format(new Date(c.fecha))}
+                  </span>
+                  <span className="font-mono text-sm text-foreground">{c.internalCode}</span>
+                  <span className="text-xs text-muted-foreground">{origenAdBlue(c)}</span>
+                  <span className="text-xs text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
+                  <span className="ms-auto font-mono text-sm font-semibold text-danger">{conSigno(-c.litros)} L</span>
+                </div>
+              ))}
+            </div>
             <div className="flex items-center gap-2 border-t border-border pt-2.5">
-              <span className="text-sm font-semibold text-foreground">TOTAL</span>
+              <span className="text-sm font-semibold text-foreground">
+                TOTAL CARGADO ({data.cargas.length} {data.cargas.length === 1 ? 'carga' : 'cargas'})
+              </span>
               <span className="ms-auto font-mono text-sm font-semibold text-foreground">
-                {NUM_CL_1.format(adBlueDia.total)} L
+                {conSigno(-data.totalCargado)} L
               </span>
             </div>
           </>
         )}
       </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{adBlue ? adBlue.nombre : 'Saldo en Inventario'}</span>
-        {adBlue ? (
-          <span className="font-mono text-sm text-foreground">
-            {`Saldo actual: ${NUM_CL_1.format(adBlue.stock)} ${unidad}`}
-            {adBlue.stockLitros != null ? ` = ${NUM_CL_1.format(adBlue.stockLitros)} L` : ''}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            Sin ítem AdBlue en Inventario: crea el ítem para llevar también el saldo disponible.
-          </span>
-        )}
-        {adBlue && past ? (
-          <span className="text-xs text-muted-foreground">
-            El saldo es el vivo de Inventario; los movimientos listados sí son los del día consultado.
-          </span>
-        ) : null}
-      </div>
-      {adBlue ? (
-        <div className="flex flex-col">
-          <h4 className="mb-1.5 text-sm font-semibold text-foreground">Movimientos del {formatDia(fecha)}</h4>
-          {isPending ? (
-            <div className="flex justify-center py-4">
-              <Spinner color="accent" size="sm" />
-            </div>
-          ) : null}
-          {isError ? (
-            <p className="text-sm text-danger-soft-foreground" role="alert">
-              {error instanceof Error ? error.message : 'No se pudo cargar el kardex del ítem.'}
-            </p>
-          ) : null}
-          {!isPending && !isError && delDia.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin movimientos este día.</p>
-          ) : null}
-          {delDia.map((m) => (
-            <div className={ROW_LISTA} data-testid={`adblue-mov-${m.id}`} key={m.id}>
-              <span className="font-mono text-xs text-muted-foreground">{HORA.format(new Date(m.occurredAt))}</span>
-              <MovementKindChip kind={movementKind(m)} />
-              <span className="text-xs text-muted-foreground">{MOVEMENT_REASON_LABELS[m.reason]}</span>
-              {m.equipment ? (
-                <span className="font-mono text-xs text-muted-foreground">{m.equipment.internalCode}</span>
-              ) : null}
-              <span className="ms-auto font-mono text-sm font-semibold text-foreground">
-                {`${m.direction === 'IN' ? '+' : '−'}${NUM_CL_1.format(m.quantity)} ${unidad}`}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

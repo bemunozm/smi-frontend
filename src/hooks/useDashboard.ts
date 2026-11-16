@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import {
+  getDashboardAdBlue,
   getDashboardEquipos,
   getDashboardHoy,
   getDashboardMantenedores,
@@ -106,6 +107,16 @@ export function useDashboardVueltas(rango: RangoDashboard, enabled = true) {
     queryKey: [...DASHBOARD_KEY, 'vueltas', rango],
     queryFn: () => getDashboardVueltas(rango),
     enabled,
+  });
+}
+
+/** Popup «AdBlue disponible»: saldo vivo + todas las cargas. Solo se pide con el popup abierto. */
+export function useDashboardAdBlue(enabled: boolean) {
+  return useQuery({
+    queryKey: [...DASHBOARD_KEY, 'adblue'],
+    queryFn: getDashboardAdBlue,
+    enabled,
+    staleTime: 30_000,
   });
 }
 

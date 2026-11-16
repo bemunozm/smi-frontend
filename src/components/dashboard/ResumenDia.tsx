@@ -12,8 +12,8 @@ import type { MaintenanceStatusRow } from '../../types/maintenance-plan';
 import { DaySummaryKpiDetails, type DaySummaryKpi } from './DaySummaryKpiDetails';
 import { FlotaDiaCarrusel } from './FlotaDiaCarrusel';
 import { rowToEquipment } from './equipment-row';
+import { adBlueDisponible } from './adblue-disponible';
 import type { ResumenDia as ResumenDiaData } from '../../types/dashboard';
-import { UNIT_SYMBOLS, type UnitOfMeasure } from '../../types/inventory';
 
 const MAX_REPORTS_EQUIPOS = 3;
 
@@ -75,7 +75,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
   const [detalle, setDetalle] = useState<DaySummaryKpi | null>(null);
   const vueltasTotal = produccion.internos + produccion.minaCaleta + produccion.mineras;
   const extra = reports.porEquipo.length - MAX_REPORTS_EQUIPOS;
-  const unidadAdBlue = adBlue ? (UNIT_SYMBOLS[adBlue.unidad as UnitOfMeasure] ?? adBlue.unidad) : '';
+  const disponibleAdBlue = adBlue ? adBlueDisponible(adBlue) : null;
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
@@ -141,34 +141,28 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
 
       <KpiTile
         bg={RESUMEN_CARD_BG.adBlue}
-        // Lo que CAMBIA con la operación es lo cargado en el día; el saldo de
-        // inventario queda como línea secundaria (y en el popup). Un payload
-        // cacheado sin `adBlueDia` cae a la tarjeta de saldo anterior.
-        big={adBlueDia ? NUM_CL_1.format(adBlueDia.total) : adBlue ? NUM_CL_1.format(adBlue.stock) : '—'}
+        // Lo que se gestiona es cuánto AdBlue QUEDA: el saldo vivo del ítem,
+        // que las cargas declaradas van restando. Puede ser negativo (se cargó
+        // más de lo que figura en bodega) y se muestra tal cual, con su signo.
+        big={disponibleAdBlue ? disponibleAdBlue.valor : '—'}
         fecha={fecha}
-        fechaLabel={adBlueDia ? undefined : pasado ? 'saldo actual' : undefined}
-        label={adBlueDia ? 'AdBlue cargado' : 'AdBlue'}
-        onOpen={adBlueDia || adBlue ? () => setDetalle('adblue') : undefined}
+        fechaLabel={pasado ? 'saldo actual' : undefined}
+        label="AdBlue disponible"
+        // Abre aunque no exista el ítem: el popup igual lista las cargas.
+        onOpen={() => setDetalle('adblue')}
         testId="kpi-adblue"
-        unit={adBlueDia ? 'L' : adBlue ? unidadAdBlue : undefined}
+        unit={disponibleAdBlue?.unidad}
       >
-        {adBlueDia ? (
+        {disponibleAdBlue ? (
           <>
-            <span>
-              {NUM_CL_1.format(adBlueDia.dia)} Día + {NUM_CL_1.format(adBlueDia.noche)} Noche
-            </span>
-            <span>
-              {adBlue
-                ? `Saldo: ${NUM_CL_1.format(adBlue.stock)} ${unidadAdBlue}${
-                    adBlue.stockLitros != null ? ` = ${NUM_CL_1.format(adBlue.stockLitros)} L` : ''
-                  }`
-                : 'Saldo: sin ítem en Inventario'}
-            </span>
-          </>
-        ) : adBlue ? (
-          <>
-            <span>{adBlue.nombre}</span>
-            {adBlue.stockLitros != null ? <span>= {NUM_CL_1.format(adBlue.stockLitros)} L</span> : null}
+            {disponibleAdBlue.enUnidades ? <span>= {disponibleAdBlue.enUnidades}</span> : null}
+            {disponibleAdBlue.negativo ? (
+              <span>
+                <Chip color="danger" size="sm" variant="soft">
+                  Saldo negativo
+                </Chip>
+              </span>
+            ) : null}
           </>
         ) : (
           <>
@@ -180,6 +174,11 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
             <span>Crea el ítem AdBlue en Inventario</span>
           </>
         )}
+        {adBlueDia ? (
+          <span>
+            Cargado el {formatDia(fecha)}: {NUM_CL_1.format(adBlueDia.total)} L
+          </span>
+        ) : null}
       </KpiTile>
 
       <DaySummaryKpiDetails data={data} onClose={() => setDetalle(null)} open={detalle} past={pasado} />

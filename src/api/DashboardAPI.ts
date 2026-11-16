@@ -2,6 +2,8 @@ import { axiosInstance as api } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import type { ApiResponse } from '../types/api';
 import {
+  AdBlueHistorialSchema,
+  type AdBlueHistorial,
   MantenedoresSchema,
   MetricasEquipoSchema,
   ResumenDiaSchema,
@@ -73,5 +75,14 @@ export async function getDashboardResumenDia(fecha?: string): Promise<ResumenDia
     return ResumenDiaSchema.parse(res.data.data);
   } catch (error: unknown) {
     throw toDomainError(error, 'No se pudo cargar el resumen del día.');
+  }
+}
+
+export async function getDashboardAdBlue(): Promise<AdBlueHistorial> {
+  try {
+    const res = await api.get<ApiResponse<AdBlueHistorial>>('/api/dashboard/adblue');
+    return AdBlueHistorialSchema.parse(res.data.data);
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo cargar el AdBlue disponible.');
   }
 }
