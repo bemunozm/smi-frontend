@@ -15,9 +15,7 @@ const { avisarMock } = vi.hoisted(() => ({ avisarMock: vi.fn() }));
 vi.mock('../offline/submit-write', async (importOriginal) =>
   (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
 );
-vi.mock('@heroui/react', () => ({
-  toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() },
-}));
+vi.mock('@heroui/react', () => ({ toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock('../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: avisarMock }));
 
 import { toast } from '@heroui/react';
@@ -87,9 +85,7 @@ describe('useFinishTask', () => {
       body: { estado: 'COMPLETADA' },
       dependsOn: ['op-intervencion'],
     });
-    expect(toast.success).toHaveBeenCalledWith('Operación finalizada', {
-      description: ORDEN.titulo,
-    });
+    expect(toast.success).toHaveBeenCalledWith('Operación finalizada', { description: ORDEN.titulo });
   });
 
   it('el estado declarado del equipo viaja en el MISMO PATCH del cierre (equipmentStatus)', async () => {
@@ -97,11 +93,7 @@ describe('useFinishTask', () => {
     submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
 
     const { result } = renderHook(() => useFinishTask(), { wrapper });
-    result.current.mutate({
-      orden: ORDEN,
-      intervencion: INTERVENCION_INPUT,
-      equipmentStatus: 'OUT_OF_SERVICE',
-    });
+    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, equipmentStatus: 'OUT_OF_SERVICE' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const [, second] = submitWriteMock.mock.calls;
@@ -109,6 +101,28 @@ describe('useFinishTask', () => {
     expect(second[1]).toEqual({
       params: { id: 'ot-1' },
       body: { estado: 'COMPLETADA', equipmentStatus: 'OUT_OF_SERVICE' },
+      dependsOn: ['op-intervencion'],
+    });
+  });
+
+  it('la lectura de la mantención viaja en el PATCH a COMPLETADA (no en la intervención)', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }, 'op-intervencion'));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
+
+    const { result } = renderHook(() => useFinishTask(), { wrapper });
+    result.current.mutate({
+      orden: ORDEN,
+      intervencion: INTERVENCION_INPUT,
+      equipmentStatus: 'OPERATIONAL',
+      lecturaMantencion: 1000,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [first, second] = submitWriteMock.mock.calls;
+    expect(first[1].body).not.toHaveProperty('lecturaMantencion');
+    expect(second[1]).toEqual({
+      params: { id: 'ot-1' },
+      body: { estado: 'COMPLETADA', equipmentStatus: 'OPERATIONAL', lecturaMantencion: 1000 },
       dependsOn: ['op-intervencion'],
     });
   });
@@ -188,8 +202,6 @@ describe('useLogOperation', () => {
     expect(first[1]).toEqual({ params: {}, body: { ...input, id: createdId } });
     expect(second[0]).toBe('orden.update');
     expect(second[1]).toEqual({ params: { id: createdId }, body: { estado: 'EN_PROCESO' } });
-    expect(toast.success).toHaveBeenCalledWith('Operación iniciada', {
-      description: ORDEN.titulo,
-    });
+    expect(toast.success).toHaveBeenCalledWith('Operación iniciada', { description: ORDEN.titulo });
   });
 });

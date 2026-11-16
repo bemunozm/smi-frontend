@@ -32,8 +32,8 @@ vi.mock('../hooks/usePermissions', async () => {
 vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({
     data: [
-      { id: 'e1', internalCode: 'SEM 02' },
-      { id: 'e2', internalCode: 'WA470' },
+      { id: 'e1', internalCode: 'SEM 02', controlUnit: 'HOURS', currentHourmeter: 512, currentMileage: null },
+      { id: 'e2', internalCode: 'WA470', controlUnit: 'HOURS', currentHourmeter: null, currentMileage: null },
     ],
   }),
 }));
@@ -266,9 +266,50 @@ describe('MantencionesAdminView', () => {
         orden: expect.objectContaining({ id: 'ot3' }),
         intervencion: { tipo: 'PREVENTIVA', detalle: 'Cambio de filtros' },
         equipmentStatus: 'OUT_OF_SERVICE',
+        // Preventiva: la lectura de la mantención, prellenada con el horómetro actual.
+        lecturaMantencion: 512,
       },
       expect.anything(),
     );
+  });
+
+  it('finalizar una PREVENTIVA exige la lectura de la mantención (acepta coma decimal)', () => {
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot3`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    const lectura = within(dialog).getByLabelText('Horómetro al momento de la mantención (h)') as HTMLInputElement;
+    expect(lectura.value).toBe('512');
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de filtros' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+
+    fireEvent.change(lectura, { target: { value: '' } });
+    const finalizar = within(dialog).getByRole('button', { name: 'Finalizar mantención' });
+    expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(true);
+
+    fireEvent.change(lectura, { target: { value: '510,5' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+    expect(finalizarMock).toHaveBeenCalledWith(
+      expect.objectContaining({ lecturaMantencion: 510.5, equipmentStatus: 'OPERATIONAL' }),
+      expect.anything(),
+    );
+  });
+
+  it('finalizar una CORRECTIVA no pide ni envía la lectura de la mantención', () => {
+    ordenesHook.mockReturnValue(
+      ok([orden({ id: 'ot5', equipoId: 'e2', titulo: 'Frenos', tipo: 'CORRECTIVA', estado: 'EN_PROCESO' })]),
+    );
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot5`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText(/al momento de la mantención/)).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Pastillas nuevas' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+
+    expect(finalizarMock).toHaveBeenCalledTimes(1);
+    expect(finalizarMock.mock.calls[0]![0]).not.toHaveProperty('lecturaMantencion');
   });
 
   it('una orden completada se edita (título, prioridad) pero no se vuelve a finalizar', () => {

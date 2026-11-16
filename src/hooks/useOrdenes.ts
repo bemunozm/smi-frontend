@@ -147,7 +147,9 @@ export function useToggleTarea() {
  * Completar una tarea del checklist preventivo: marca + qué se hizo + foto de
  * respaldo (la cola la sube y la inyecta como `fotoKey`). El backend escribe
  * el registro del ciclo y mueve la orden solo (primera tarea → EN_PROCESO,
- * todas → COMPLETADA) — acá no se toca el estado.
+ * todas → COMPLETADA) — acá no se toca el estado. Con la ÚLTIMA tarea de una
+ * OT de pauta viaja `lecturaMantencion`: la lectura con la que el backend
+ * cuenta el próximo cambio (solo la aplica al cruzar a COMPLETADA).
  */
 export function useCompletarTarea() {
   return useQueuedMutation<
@@ -160,12 +162,18 @@ export function useCompletarTarea() {
       /** Insumos usados en la tarea — salen SIEMPRE de la bodega de faena. */
       insumos?: { insumoId: string; cantidad: number }[];
       branchId?: string;
+      lecturaMantencion?: number;
     }
   >({
     endpoint: 'orden.toggleTarea',
-    build: ({ ordenId, tareaId, notas, foto, insumos, branchId }) => ({
+    build: ({ ordenId, tareaId, notas, foto, insumos, branchId, lecturaMantencion }) => ({
       params: { ordenId, tareaId },
-      body: { hecha: true, notas, ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}) },
+      body: {
+        hecha: true,
+        notas,
+        ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}),
+        ...(lecturaMantencion != null ? { lecturaMantencion } : {}),
+      },
       ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
     }),
     onSent: () => {

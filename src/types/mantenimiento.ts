@@ -144,6 +144,9 @@ export const CreateMantencionHistoricaSchema = z.object({
 });
 export type CreateMantencionHistoricaInput = z.infer<typeof CreateMantencionHistoricaSchema>;
 
+/** Mismo rango que valida el backend (0 a 1.000.000). */
+const LecturaMantencionSchema = z.number().min(0).max(1_000_000);
+
 /** `PATCH /api/mantenimiento/ordenes/:id` body — parcial. Un campo omitido es
  * "sin cambio"; `asignadoAId: null` desasigna la orden (el DTO del backend acepta
  * `null` en un campo opcional). */
@@ -156,13 +159,22 @@ export const UpdateOrdenSchema = z.object({
    * actualiza en Flota en la misma transacción. Solo junto a `estado:
    * COMPLETADA` — fuera de ese cruce responde 400. */
   equipmentStatus: z.enum(EQUIPMENT_STATUS).optional(),
+  /** Lectura (h o km) al momento de la mantención de una OT PREVENTIVA: el
+   * backend cuenta el próximo cambio desde ahí. Igual que `equipmentStatus`,
+   * solo junto a `estado: COMPLETADA`. */
+  lecturaMantencion: LecturaMantencionSchema.optional(),
 });
 export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 
 /** `PATCH /api/mantenimiento/ordenes/:ordenId/tareas/:tareaId` body. `notas`
  * y la foto (que la cola inyecta como `fotoKey`) son del checklist del
  * taller: al completar una tarea de una orden preventiva de la pauta. */
-export const ToggleTareaSchema = z.object({ hecha: z.boolean(), notas: z.string().optional() });
+export const ToggleTareaSchema = z.object({
+  hecha: z.boolean(),
+  notas: z.string().optional(),
+  /** Con la última tarea de una OT de pauta (la que la completa). */
+  lecturaMantencion: LecturaMantencionSchema.optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Intervención (bitácora de una OT)

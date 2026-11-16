@@ -58,10 +58,11 @@ import {
 export interface MantenimientoEndpointMap {
   'orden.create': { params: NoParams; body: WithId<CreateOrdenInput>; result: OrdenTrabajo };
   /** `equipmentStatus` (solo junto a `estado: COMPLETADA`): cómo queda la
-   * unidad al cerrar — el backend la actualiza en Flota en la misma transacción. */
+   * unidad al cerrar — el backend la actualiza en Flota en la misma transacción.
+   * `lecturaMantencion` (idem): la lectura de la mantención de una OT preventiva. */
   'orden.update': {
     params: { id: string };
-    body: Partial<OrdenFields> & { equipmentStatus?: EquipmentStatus };
+    body: Partial<OrdenFields> & { equipmentStatus?: EquipmentStatus; lecturaMantencion?: number };
     result: OrdenTrabajo;
   };
   /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición).
@@ -76,14 +77,12 @@ export interface MantenimientoEndpointMap {
       /** Insumos usados en ESTA tarea — el backend los descuenta del stock. */
       insumos?: { insumoId: string; cantidad: number }[];
       branchId?: string;
+      /** Solo con la última tarea de una OT de pauta: la lectura de la mantención. */
+      lecturaMantencion?: number;
     };
     result: Tarea;
   };
-  'intervencion.create': {
-    params: { ordenId: string };
-    body: WithId<CreateIntervencionInput>;
-    result: Intervencion;
-  };
+  'intervencion.create': { params: { ordenId: string }; body: WithId<CreateIntervencionInput>; result: Intervencion };
   'actividad.create': { params: NoParams; body: WithId<CreateActividadInput>; result: Actividad };
   'actividad.update': { params: { id: string }; body: Partial<UpdateActividadInput>; result: Actividad };
   'umbral.create': { params: NoParams; body: WithId<CreateUmbralInput>; result: Umbral };
@@ -102,11 +101,7 @@ export interface MantenimientoEndpointMap {
   /** Checklist diario de un equipo, enviado entero al supervisor. Las fotos
    * de cada ítem viajan como archivos y el replay las pone en
    * `entries.i.photoKeys.j`. */
-  'dailyChecklist.submit': {
-    params: NoParams;
-    body: WithId<SubmitDailyChecklistInput>;
-    result: DailyChecklistDetail;
-  };
+  'dailyChecklist.submit': { params: NoParams; body: WithId<SubmitDailyChecklistInput>; result: DailyChecklistDetail };
   /** Corregir un checklist rechazado y reenviarlo. Las fotos nuevas viajan
    * como archivos (`entries.i.photoKeys.j`); las conservadas, por su id. */
   'dailyChecklist.resubmit': {
@@ -115,17 +110,9 @@ export interface MantenimientoEndpointMap {
     result: DailyChecklistDetail;
   };
   /** «Asignar mantenciones» de un liviano (`PUT`, last-write-wins). */
-  'lightVehicleConfig.save': {
-    params: { equipmentId: string };
-    body: LightConfig;
-    result: LightConfigView;
-  };
+  'lightVehicleConfig.save': { params: { equipmentId: string }; body: LightConfig; result: LightConfigView };
   /** Módulo 3: el supervisor acepta (libera el equipo) o rechaza con comentario. */
-  'dailyChecklist.review': {
-    params: { id: string };
-    body: ReviewDailyChecklistInput;
-    result: DailyChecklistDetail;
-  };
+  'dailyChecklist.review': { params: { id: string }; body: ReviewDailyChecklistInput; result: DailyChecklistDetail };
 }
 
 export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
@@ -158,8 +145,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
   },
   'orden.toggleTarea': {
     method: 'PATCH',
-    path: (params) =>
-      `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
+    path: (params) => `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
     failMessage: 'No se pudo actualizar la tarea.',
     parse: parseWith(TareaSchema),
     // `maintenancePlans`: completar una tarea preventiva escribe el registro
@@ -296,8 +282,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     failMessage: 'No se pudo guardar la validación del checklist.',
     parse: parseWith(DailyChecklistDetailSchema),
     invalidate: ['dailyChecklists'],
-    label: (_params, body) =>
-      body.decision === 'ACCEPTED' ? 'Checklist aceptado' : 'Checklist rechazado',
+    label: (_params, body) => (body.decision === 'ACCEPTED' ? 'Checklist aceptado' : 'Checklist rechazado'),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(dailyChecklistEntity, params.id),

@@ -55,6 +55,7 @@ export function useFinishTask() {
       intervencion,
       foto,
       equipmentStatus,
+      lecturaMantencion,
     }: {
       orden: OrdenTrabajo;
       intervencion: CreateIntervencionInput;
@@ -64,6 +65,9 @@ export function useFinishTask() {
       /** Cómo queda la unidad (Operativo/Inoperativo) — va en el MISMO PATCH
        * del cierre y el backend la aplica en esa transacción. */
       equipmentStatus?: EquipmentStatus;
+      /** Solo OT PREVENTIVA: la lectura al momento de la mantención. Va en el
+       * PATCH a COMPLETADA porque el backend solo la acepta en ese cruce. */
+      lecturaMantencion?: number;
     }) => {
       const registered = await writeQueued('intervencion.create', {
         params: { ordenId: orden.id },
@@ -72,7 +76,11 @@ export function useFinishTask() {
       });
       const completed = await writeQueued('orden.update', {
         params: { id: orden.id },
-        body: { estado: 'COMPLETADA', ...(equipmentStatus ? { equipmentStatus } : {}) },
+        body: {
+          estado: 'COMPLETADA',
+          ...(equipmentStatus ? { equipmentStatus } : {}),
+          ...(lecturaMantencion != null ? { lecturaMantencion } : {}),
+        },
         // Si la intervención queda rechazada en la hoja de sync (p. ej. 409
         // por stock insuficiente), el PATCH queda retenido detrás de ella y
         // un descarte lo arrastra — nunca una orden COMPLETADA sin su cierre.

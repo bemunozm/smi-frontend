@@ -3,11 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OrdenTrabajo, Tarea } from '../../types/mantenimiento';
 import { PreventiveChecklistModal, tareasHechas } from './PreventiveChecklistModal';
+import type { EquipmentRef } from './workshop';
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
-vi.mock('../../hooks/useOrdenes', () => ({
-  useCompletarTarea: () => ({ mutate: mutateMock, isPending: false }),
-}));
+vi.mock('../../hooks/useOrdenes', () => ({ useCompletarTarea: () => ({ mutate: mutateMock, isPending: false }) }));
 
 // Insumos de Faena (`useInsumosFaena`): se mockean las lecturas de abajo,
 // igual que en `FinishTaskModal.test.tsx`.
@@ -53,15 +52,7 @@ afterEach(() => {
 });
 
 function tarea(over: Partial<Tarea> & Pick<Tarea, 'id' | 'texto'>): Tarea {
-  return {
-    hecha: false,
-    posicion: 0,
-    notas: null,
-    fotoUrl: null,
-    hechaPorNombre: null,
-    hechaAt: null,
-    ...over,
-  };
+  return { hecha: false, posicion: 0, notas: null, fotoUrl: null, hechaPorNombre: null, hechaAt: null, ...over };
 }
 
 const ORDEN: OrdenTrabajo = {
@@ -93,14 +84,20 @@ const ORDEN: OrdenTrabajo = {
   updatedAt: '2026-10-10T12:00:00.000Z',
 };
 
-const FLEET = [
-  { id: 'eq-1', internalCode: 'EX-014', brand: 'CAT', model: '320' },
+const FLEET: EquipmentRef[] = [
+  {
+    id: 'eq-1',
+    internalCode: 'EX-014',
+    brand: 'CAT',
+    model: '320',
+    controlUnit: 'HOURS',
+    currentHourmeter: 251.5,
+    currentMileage: null,
+  },
 ];
 
-function abrir(orden: OrdenTrabajo = ORDEN, soloLectura = false) {
-  render(
-    <PreventiveChecklistModal equipment={FLEET} orden={orden} soloLectura={soloLectura} />,
-  );
+function abrir(orden: OrdenTrabajo = ORDEN, soloLectura = false, equipment: EquipmentRef[] = FLEET) {
+  render(<PreventiveChecklistModal equipment={equipment} orden={orden} soloLectura={soloLectura} />);
   fireEvent.click(screen.getByRole('button', { name: soloLectura ? /Ver mantención/ : /Registrar mantención/ }));
 }
 
@@ -156,6 +153,8 @@ describe('PreventiveChecklistModal', () => {
       tareaId: 'ta-2',
       notas: 'Filtro nuevo instalado',
       foto: mockFile,
+      // Última tarea pendiente de una OT de pauta: la lectura prellenada viaja.
+      lecturaMantencion: 251.5,
     });
   });
 
@@ -175,9 +174,71 @@ describe('PreventiveChecklistModal', () => {
     fireEvent.change(screen.getByPlaceholderText(/Se cambió el aceite/), {
       target: { value: 'Filtro nuevo instalado' },
     });
-    expect(screen.getByRole('button', { name: /Guardar tarea/ }).hasAttribute('disabled')).toBe(
-      true,
-    );
+    expect(screen.getByRole('button', { name: /Guardar tarea/ }).hasAttribute('disabled')).toBe(true);
+  });
+
+  describe('lectura de la mantención (última tarea de una OT de pauta)', () => {
+    const LECTURA = /Horómetro al momento de la mantención \(h\)/;
+
+    function completarConNotas() {
+      fireEvent.change(screen.getByPlaceholderText(/Se cambió el aceite/), {
+        target: { value: 'Filtro nuevo instalado' },
+      });
+    }
+
+    it('se prellena con el horómetro actual y acepta coma decimal', () => {
+      mockFile = new File(['x'], 'filtro.jpg', { type: 'image/jpeg' });
+      abrir();
+      fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
+
+      const campo = screen.getByLabelText(LECTURA) as HTMLInputElement;
+      expect(campo.value).toBe('251,5');
+      fireEvent.change(campo, { target: { value: '250,5' } });
+      completarConNotas();
+      fireEvent.click(screen.getByRole('button', { name: /Guardar tarea/ }));
+
+      expect(mutateMock.mock.calls[0]![0]).toMatchObject({ tareaId: 'ta-2', lecturaMantencion: 250.5 });
+    });
+
+    it('es obligatoria: sin lectura conocida queda vacía y no deja guardar', () => {
+      mockFile = new File(['x'], 'filtro.jpg', { type: 'image/jpeg' });
+      abrir(ORDEN, false, [{ ...FLEET[0]!, currentHourmeter: null }]);
+      fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
+
+      const campo = screen.getByLabelText(LECTURA) as HTMLInputElement;
+      expect(campo.value).toBe('');
+      completarConNotas();
+      expect(screen.getByRole('button', { name: /Guardar tarea/ }).hasAttribute('disabled')).toBe(true);
+
+      fireEvent.change(campo, { target: { value: '252' } });
+      expect(screen.getByRole('button', { name: /Guardar tarea/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('un liviano por km la pide en kilómetros', () => {
+      abrir(ORDEN, false, [{ ...FLEET[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 }]);
+      fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
+
+      const campo = screen.getByLabelText(/Kilometraje al momento de la mantención \(km\)/) as HTMLInputElement;
+      expect(campo.value).toBe('84306');
+    });
+
+    it('una tarea que NO es la última no la pide ni la envía', () => {
+      mockFile = new File(['x'], 'filtro.jpg', { type: 'image/jpeg' });
+      const dosPendientes = { ...ORDEN, tareas: ORDEN.tareas.map((t) => ({ ...t, hecha: false })) };
+      abrir(dosPendientes);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Completar' })[0]!);
+
+      expect(screen.queryByLabelText(LECTURA)).toBeNull();
+      completarConNotas();
+      fireEvent.click(screen.getByRole('button', { name: /Guardar tarea/ }));
+      expect(mutateMock.mock.calls[0]![0]).not.toHaveProperty('lecturaMantencion');
+    });
+
+    it('una orden sin pauta (sin vuelta) no la pide', () => {
+      abrir({ ...ORDEN, pautaCycle: null, pautaMilestone: null });
+      fireEvent.click(screen.getByRole('button', { name: 'Completar' }));
+      expect(screen.queryByLabelText(LECTURA)).toBeNull();
+    });
   });
 
   it('en solo lectura no se puede completar nada', () => {
