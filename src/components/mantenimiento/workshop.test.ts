@@ -6,6 +6,7 @@ import {
   equipmentLabel,
   formatDate,
   groupWorkshopBoard,
+  splitFinished,
 } from './workshop';
 
 /** OT mínima válida; cada test pisa solo lo que le importa. */
@@ -62,6 +63,29 @@ describe('groupWorkshopBoard', () => {
     ]);
     expect(board.inProgress.map((o) => o.id)).toEqual(['p-nueva', 'p-vieja']);
     expect(board.finished.map((o) => o.id)).toEqual(['f-nueva', 'f-vieja']);
+  });
+});
+
+describe('splitFinished', () => {
+  it('deja en el tablero las de los últimos 7 días y manda el resto al historial', () => {
+    const now = new Date('2026-11-16T12:00:00.000Z');
+    const { recent, history } = splitFinished(
+      [
+        orden({ id: 'hoy', estado: 'COMPLETADA', updatedAt: '2026-11-16T09:00:00.000Z' }),
+        orden({ id: 'justo-7', estado: 'COMPLETADA', updatedAt: '2026-11-09T12:00:00.000Z' }),
+        orden({ id: 'hace-8', estado: 'CANCELADA', updatedAt: '2026-11-08T11:00:00.000Z' }),
+        orden({ id: 'hace-un-mes', estado: 'COMPLETADA', updatedAt: '2026-10-16T08:00:00.000Z' }),
+      ],
+      now,
+    );
+    expect(recent.map((o) => o.id)).toEqual(['hoy', 'justo-7']);
+    expect(history.map((o) => o.id)).toEqual(['hace-8', 'hace-un-mes']);
+  });
+
+  it('una fecha ilegible se queda a la vista', () => {
+    const { recent, history } = splitFinished([orden({ id: 'x', estado: 'COMPLETADA', updatedAt: 'no-es-fecha' })]);
+    expect(recent.map((o) => o.id)).toEqual(['x']);
+    expect(history).toEqual([]);
   });
 });
 
