@@ -28,6 +28,13 @@ import { parseDecimal } from '../../lib/decimal';
 import { equipmentLabel, lecturaMantencion, leerLecturaMantencion, type EquipmentRef } from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
+/** La intervención sin el horómetro (la clave fuera, no en `undefined`). */
+function sinHorometro(values: CreateIntervencionInput): CreateIntervencionInput {
+  const copia = { ...values };
+  delete copia.horometro;
+  return copia;
+}
+
 /**
  * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
  * insumos (SelectorBuscable con grupos y stock en Faena) + horómetro.
@@ -123,7 +130,10 @@ export function FinishTaskModal({
     finishTask.mutate(
       {
         orden,
-        intervencion: values,
+        // En km la lectura NO va como horómetro de la intervención (columna en
+        // horas): solo viaja como `lecturaMantencion`.
+        intervencion:
+          esPreventiva && campoLectura.unidad === 'km' ? sinHorometro(values) : values,
         foto: foto.file,
         equipmentStatus: equipoFinal,
         ...(lectura != null ? { lecturaMantencion: lectura } : {}),
@@ -287,7 +297,7 @@ export function FinishTaskModal({
                   error={errors.horometro?.message}
                   hint={
                     esPreventiva
-                      ? 'Desde esta lectura se cuenta el próximo cambio de la pauta.'
+                      ? 'Desde esta lectura se cuenta la próxima mantención.'
                       : 'Opcional — la lectura del medidor al cerrar.'
                   }
                   label={esPreventiva ? campoLectura.label : 'Horómetro de cierre'}

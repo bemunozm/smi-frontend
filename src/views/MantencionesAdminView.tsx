@@ -357,7 +357,7 @@ function FinalizarMantencionModal({
                     value={lectura}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Desde esta lectura se cuenta el próximo cambio de la pauta.
+                    Desde esta lectura se cuenta la próxima mantención.
                   </p>
                 </div>
               ) : null}

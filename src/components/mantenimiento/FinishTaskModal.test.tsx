@@ -353,6 +353,23 @@ describe('FinishTaskModal', () => {
       expect(campo.value).toBe('84306');
     });
 
+    it('en km la lectura viaja solo como lecturaMantencion: NO como horómetro de la intervención', async () => {
+      openModal(ORDEN, [
+        { ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 },
+      ]);
+      fillDetalle();
+      elegirComoQueda();
+      submitForm();
+
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      const call = mutateMock.mock.calls[0][0] as {
+        lecturaMantencion?: number;
+        intervencion: object;
+      };
+      expect(call.lecturaMantencion).toBe(84306);
+      expect(call.intervencion).not.toHaveProperty('horometro');
+    });
+
     it('una correctiva no la pide ni la envía', async () => {
       openModal(CORRECTIVA);
       expect(screen.queryByLabelText(LECTURA_H)).toBeNull();
