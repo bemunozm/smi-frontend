@@ -17,6 +17,7 @@ import {
 import { Chip } from '../components/ui/Chip';
 
 import { useEquipment } from '../hooks/useEquipment';
+import { OpcionesEquipoPorClase } from '../components/flota/OpcionesEquipoPorClase';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
@@ -310,12 +311,7 @@ function CrearHallazgoModal({ onClose }: { onClose: () => void }) {
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
-                      {(equipos ?? []).map((equipo) => (
-                        <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
-                          {equipo.internalCode}
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
+                      <OpcionesEquipoPorClase equipos={equipos ?? []} />
                     </ListBox>
                   </Select.Popover>
                 </Select>
@@ -458,12 +454,7 @@ function EditarHallazgoModal({ hallazgo, onClose }: { hallazgo: Hallazgo; onClos
                   </Select.Trigger>
                   <Select.Popover>
                     <ListBox>
-                      {(equipos ?? []).map((equipo) => (
-                        <ListBox.Item id={equipo.id} key={equipo.id} textValue={equipo.internalCode}>
-                          {equipo.internalCode}
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
+                      <OpcionesEquipoPorClase equipos={equipos ?? []} />
                     </ListBox>
                   </Select.Popover>
                 </Select>

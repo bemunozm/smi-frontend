@@ -121,8 +121,8 @@ describe('toUpdateEquipmentPayload', () => {
     expect(payload.licensePlate).toBeNull();
     expect(payload.year).toBeNull();
     expect(payload.homeBranchId).toBeNull();
-    // El código interno no es editable — el builder de update ni lo recibe.
-    expect('internalCode' in payload).toBe(false);
+    // El código interno se puede cambiar (16/11/2026): viaja normalizado.
+    expect(payload.internalCode).toBe(valido.internalCode.trim().toUpperCase());
   });
 
   it('normaliza y manda el valor cuando el campo viene informado', () => {

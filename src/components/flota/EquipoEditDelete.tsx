@@ -148,9 +148,11 @@ export function EquipoPhotoBanner({
 interface CamposProps {
   control: Control<EquipmentFormValues>;
   errors: FieldErrors<EquipmentFormValues>;
-  /** El código interno es la clave de negocio: se fija al crear y el backend
-   * no lo edita. */
+  /** Al crear el código va en blanco y con foco; al editar se puede cambiar
+   * (16/11/2026) y se avisa que el equipo pasa a verse con el código nuevo. */
   internalCodeEditable: boolean;
+  /** Código GUARDADO del equipo en edición (`undefined` en creación). */
+  codigoOriginal?: string;
   /** Sucursal asignada HOY al equipo que se está editando (`undefined` en
    * creación). Existe para el caso borde de la sucursal base: el selector
    * solo ofrece sucursales activas, pero si el equipo quedó homed a una que
@@ -190,6 +192,7 @@ export function CamposEquipo({
   control,
   errors,
   internalCodeEditable,
+  codigoOriginal,
   currentHomeBranchId,
   operatorId,
   onOperatorIdChange,
@@ -253,7 +256,6 @@ export function CamposEquipo({
             render={({ field }) => (
               <TextField
                 fullWidth
-                isDisabled={!internalCodeEditable}
                 isInvalid={!!errors.internalCode}
                 name={field.name}
                 onBlur={field.onBlur}
@@ -262,7 +264,13 @@ export function CamposEquipo({
               >
                 <Label>Código interno</Label>
                 <Input autoFocus={internalCodeEditable} placeholder="EX-001" />
-                {errors.internalCode ? <FieldError>{errors.internalCode.message}</FieldError> : null}
+                {errors.internalCode ? (
+                  <FieldError>{errors.internalCode.message}</FieldError>
+                ) : codigoOriginal && field.value.trim().toUpperCase() !== codigoOriginal ? (
+                  <p className="m-0 text-xs text-muted-foreground">
+                    Antes era {codigoOriginal}. Todo el historial del equipo pasa a verse con el código nuevo.
+                  </p>
+                ) : null}
               </TextField>
             )}
           />
@@ -720,6 +728,7 @@ export function EditEquipoModal({ equipo, isOpen, onOpenChange }: EquipoModalPro
                       currentHomeBranchId={equipo.homeBranchId}
                       currentOperator={equipo.operator}
                       errors={errors}
+                      codigoOriginal={equipo.internalCode}
                       internalCodeEditable={false}
                       lecturaOriginal={lecturaGuardada(equipo)}
                       usoEnCurso={equipo.openShift != null}

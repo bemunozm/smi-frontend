@@ -82,6 +82,7 @@ const ESCRITURAS_DE_CAMPOS = ['equipment.update', 'equipment.status'] as const;
 type CamposDeEquipo = Omit<UpdateEquipmentInput, 'photoKey'>;
 
 const CAMPOS_DE_EQUIPO = [
+  'internalCode',
   'licensePlate',
   'equipmentClass',
   'type',

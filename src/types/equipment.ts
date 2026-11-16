@@ -302,9 +302,9 @@ export interface CreateEquipmentInput {
  * en el equipo y sube al sincronizar, y el replay escribe la key resultante en
  * `photoKey`. Solo QUITAR la foto viaja en el body (`photoKey: null`).
  *
- * Body de `PATCH /api/equipment/:id` — el código interno no es editable en
- * el backend (es la clave de negocio que usan Terreno/Mantenimiento/Inventario).
- * A diferencia de `CreateEquipmentInput`, estos cuatro campos aceptan `null`
+ * Body de `PATCH /api/equipment/:id`. El código interno se puede cambiar
+ * (16/11/2026): el backend mueve en la misma transacción las órdenes y
+ * actividades que lo guardan como texto. A diferencia de `CreateEquipmentInput`, estos cuatro campos aceptan `null`
  * explícito (ver `toUpdateEquipmentPayload`): en UPDATE es la única forma de
  * limpiar un valor ya guardado, y el backend los marca `@IsOptional()` sin
  * `forbidNonWhitelisted` bloquear un `null`.
@@ -313,6 +313,7 @@ export type UpdateEquipmentInput = Omit<
   CreateEquipmentInput,
   'internalCode' | 'licensePlate' | 'year' | 'homeBranchId'
 > & {
+  internalCode?: string;
   licensePlate?: string | null;
   year?: number | null;
   homeBranchId?: string | null;
@@ -368,6 +369,7 @@ export function toEquipmentPayload(values: EquipmentFormValues): CreateEquipment
  */
 export function toUpdateEquipmentPayload(values: EquipmentFormValues): Omit<UpdateEquipmentInput, 'photoKey'> {
   return {
+    internalCode: values.internalCode.trim().toUpperCase(),
     licensePlate: values.licensePlate.trim() ? values.licensePlate.trim().toUpperCase() : null,
     equipmentClass: values.equipmentClass,
     type: values.type.trim(),

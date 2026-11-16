@@ -35,7 +35,7 @@ export function guardarPrimeroClase(valor: PrimeroClase): void {
  * grupo se mantiene el orden recibido. Si todos son de una sola clase, igual
  * se rotula el grupo (deja claro qué se está viendo).
  */
-export function opcionesEquipoPorClase<T extends { equipmentClass: EquipmentClass }>(
+export function opcionesEquipoPorClase<T extends { equipmentClass?: EquipmentClass | null }>(
   equipos: readonly T[],
   primero: PrimeroClase,
   opcion: (equipo: T) => OpcionSelector,
@@ -43,7 +43,40 @@ export function opcionesEquipoPorClase<T extends { equipmentClass: EquipmentClas
   const orden: EquipmentClass[] = primero === 'LIGHT' ? ['LIGHT', 'HEAVY'] : ['HEAVY', 'LIGHT'];
   return orden.flatMap((clase) =>
     equipos
-      .filter((e) => e.equipmentClass === clase)
+      // Sin clase conocida va con los pesados (la clase por defecto del catálogo).
+      .filter((e) => (e.equipmentClass === 'LIGHT' ? 'LIGHT' : 'HEAVY') === clase)
       .map((e) => ({ ...opcion(e), grupo: TITULO_GRUPO[clase] })),
   );
+}
+
+/** Título del grupo de una clase («Equipos pesados» / «Equipos livianos»). */
+export function tituloGrupoClase(clase: EquipmentClass): string {
+  return TITULO_GRUPO[clase];
+}
+
+/**
+ * Pesados primero y después livianos (pedido del cliente, 16/11/2026): en los
+ * selectores que traen las dos clases se separan de un vistazo. Dentro de
+ * cada clase se mantiene el orden recibido. Un equipo sin clase conocida va
+ * con los pesados (la clase por defecto del catálogo).
+ */
+export function pesadosPrimero<T extends { equipmentClass?: EquipmentClass | null }>(equipos: readonly T[]): T[] {
+  const rango = (e: T) => (e.equipmentClass === 'LIGHT' ? 1 : 0);
+  return equipos
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => rango(a.e) - rango(b.e) || a.i - b.i)
+    .map(({ e }) => e);
+}
+
+/** Pesados y livianos agrupados de a clase, en ese orden. */
+export function gruposPorClase<T extends { equipmentClass?: EquipmentClass | null }>(
+  equipos: readonly T[],
+): { clase: EquipmentClass; titulo: string; equipos: T[] }[] {
+  return (['HEAVY', 'LIGHT'] as const)
+    .map((clase) => ({
+      clase,
+      titulo: TITULO_GRUPO[clase],
+      equipos: equipos.filter((e) => (e.equipmentClass === 'LIGHT' ? 'LIGHT' : 'HEAVY') === clase),
+    }))
+    .filter((g) => g.equipos.length > 0);
 }
