@@ -70,6 +70,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     seccion: 'Administración',
     soloSiUsaCamioneta: true,
   },
+  // Contratistas que el supervisor marca en el reporte diario de producción
+  // (pedido del cliente, 16/11/2026: el administrador las agrega y quita).
+  {
+    label: 'Empresas externas',
+    to: '/empresas-externas',
+    roles: [ROLES.ADMIN],
+    seccion: 'Administración',
+  },
   // --- Reportes (vistas del administrador, no las de Terreno) ---------------
   // Reportes de salida de turno (equipos usados en el día, por supervisor).
   { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },

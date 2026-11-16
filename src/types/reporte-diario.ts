@@ -31,6 +31,26 @@ export const EmpresaExternaSchema = z.object({
 });
 export type EmpresaExterna = z.infer<typeof EmpresaExternaSchema>;
 
+/** Empresa externa en el CRUD del administrador (`GET /api/empresas-externas/admin`):
+ * también las desactivadas, con cuántos reportes la usan. */
+export const EmpresaExternaAdminSchema = EmpresaExternaSchema.extend({
+  reportes: z.number().int(),
+});
+export type EmpresaExternaAdmin = z.infer<typeof EmpresaExternaAdminSchema>;
+
+export const EmpresasExternasAdminResponseSchema = z.object({
+  data: z.array(EmpresaExternaAdminSchema),
+  message: z.string(),
+});
+export const EmpresaExternaResponseSchema = z.object({
+  data: EmpresaExternaSchema.passthrough(),
+  message: z.string(),
+});
+export const EliminarEmpresaExternaResponseSchema = z.object({
+  data: z.object({ eliminada: z.boolean(), desactivada: z.boolean() }),
+  message: z.string(),
+});
+
 export const ReporteDiarioSchema = z.object({
   id: z.string(),
   fecha: z.string(),

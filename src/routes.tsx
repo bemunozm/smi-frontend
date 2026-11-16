@@ -26,6 +26,7 @@ import { MiCamionetaView } from './views/MiCamionetaView';
 import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
 import { OperadoresView } from './views/OperadoresView';
+import { EmpresasExternasView } from './views/EmpresasExternasView';
 import { ProfileView } from './views/ProfileView';
 import { UsersView } from './views/UsersView';
 import { TerrenoLayout } from './layout/TerrenoLayout';
@@ -137,6 +138,11 @@ export const router = createBrowserRouter([
               {
                 element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
                 children: [{ path: '/mi-camioneta', element: <MiCamionetaView /> }],
+              },
+              // Empresas externas del reporte diario: solo el administrador.
+              {
+                element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
+                children: [{ path: '/empresas-externas', element: <EmpresasExternasView /> }],
               },
               // Lo que la SECRETARIA completa o corrige cuando un supervisor se
               // olvida (pedido del cliente). Lo que no puede —eliminar, cambiar
