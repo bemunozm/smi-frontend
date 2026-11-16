@@ -11,13 +11,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  * la lectura de lo pendiente (`offline/outbox`) se reemplazan por dobles; la cola
  * real se prueba en `offline/*.test.ts`.
  */
-const { cambiosMock, escriturasMock } = vi.hoisted(() => ({ cambiosMock: vi.fn(), escriturasMock: vi.fn() }));
+const { cambiosMock, escriturasMock } = vi.hoisted(() => ({
+  cambiosMock: vi.fn(),
+  escriturasMock: vi.fn(),
+}));
 
 vi.mock('../offline/submit-write', async (importOriginal) =>
   (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
 );
 vi.mock('../offline/outbox', () => ({ cambiosPendientes: cambiosMock, escriturasPendientes: escriturasMock }));
-vi.mock('@heroui/react', () => ({ toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock('@heroui/react', () => ({
+  toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 
 import { toast } from '@heroui/react';
 import { DomainError } from '../lib/api-error';
@@ -41,7 +46,12 @@ import {
   useTransferStock,
   useUpdateItem,
 } from './useInventory';
-import { useCreateOperator, useDeleteOperator, useToggleOperatorActive, useUpdateOperator } from './useOperators';
+import {
+  useCreateOperator,
+  useDeleteOperator,
+  useToggleOperatorActive,
+  useUpdateOperator,
+} from './useOperators';
 import { useActualizarOrden, useCompletarTarea, useCrearOrden, useToggleTarea } from './useOrdenes';
 import { useCrearUmbral } from './useUmbrales';
 
@@ -221,7 +231,10 @@ describe('Inventario', () => {
 
     await correr(useCreateItem, { sku: 'FIL-001', name: 'Filtro de aceite', unit: 'UNIT', type: 'PART' });
 
-    expect(ultimaEscritura()).toMatchObject({ endpoint: 'item.create', input: { body: { sku: 'FIL-001', id: UUID } } });
+    expect(ultimaEscritura()).toMatchObject({
+      endpoint: 'item.create',
+      input: { body: { sku: 'FIL-001', id: UUID } },
+    });
     expect(toast.success).toHaveBeenCalledWith('Ítem creado', { description: 'FIL-001 · Filtro de aceite' });
   });
 
@@ -284,13 +297,7 @@ describe('Inventario', () => {
   });
 
   describe('movimientos', () => {
-    const salida = {
-      itemId: 'it_1',
-      branchId: 'br_1',
-      direction: 'OUT' as const,
-      reason: 'ACTIVITY' as const,
-      quantity: 8,
-    };
+    const salida = { itemId: 'it_1', branchId: 'br_1', direction: 'OUT' as const, reason: 'ACTIVITY' as const, quantity: 8 };
     const movimiento = (resultingBalance: number) => ({ branchId: 'br_1', resultingBalance });
 
     it('el id del movimiento lo genera el cliente', async () => {
@@ -298,10 +305,7 @@ describe('Inventario', () => {
 
       await correr(useCreateMovement, { input: salida, item: ITEM });
 
-      expect(ultimaEscritura()).toMatchObject({
-        endpoint: 'movement.create',
-        input: { body: { ...salida, id: UUID } },
-      });
+      expect(ultimaEscritura()).toMatchObject({ endpoint: 'movement.create', input: { body: { ...salida, id: UUID } } });
     });
 
     it('enviado y bajo el mínimo: el aviso lo dice en el momento', async () => {
@@ -319,7 +323,9 @@ describe('Inventario', () => {
 
       await correr(useCreateMovement, { input: { ...salida, quantity: 1 }, item: ITEM });
 
-      expect(toast.success).toHaveBeenCalledWith('Movimiento registrado', { description: 'Saldo en esta bodega: 9 u' });
+      expect(toast.success).toHaveBeenCalledWith('Movimiento registrado', {
+        description: 'Saldo en esta bodega: 9 u',
+      });
     });
 
     it('en cola no hay saldo que mostrar: texto genérico', async () => {
@@ -332,8 +338,7 @@ describe('Inventario', () => {
     });
 
     it('una salida sin existencia (INSUFFICIENT_STOCK) muestra lo disponible y lo pedido que dice el servidor', async () => {
-      const mensaje =
-        'Existencia insuficiente de "Aceite" en Casa Matriz: disponible 16, solicitado 20. Hay 5 en otras sucursales.';
+      const mensaje = 'Existencia insuficiente de "Aceite" en Casa Matriz: disponible 16, solicitado 20. Hay 5 en otras sucursales.';
       submitWriteMock.mockRejectedValueOnce(new DomainError(mensaje, { code: 'INSUFFICIENT_STOCK', status: 409 }));
 
       await correr(useCreateMovement, { input: salida, item: ITEM }, 'error');
@@ -346,14 +351,13 @@ describe('Inventario', () => {
     const traspaso = { itemId: 'it_1', sourceBranchId: 'br_1', destinationBranchId: 'br_2', quantity: 3 };
 
     it('el id es el del movimiento de salida; enviado usa los nombres de bodega del servidor', async () => {
-      submitWriteMock.mockResolvedValueOnce(enviado({ sourceBranchName: 'Centro', destinationBranchName: 'Faena' }));
+      submitWriteMock.mockResolvedValueOnce(
+        enviado({ sourceBranchName: 'Centro', destinationBranchName: 'Faena' }),
+      );
 
       await correr(useTransferStock, traspaso);
 
-      expect(ultimaEscritura()).toMatchObject({
-        endpoint: 'stock.transfer',
-        input: { body: { ...traspaso, id: UUID } },
-      });
+      expect(ultimaEscritura()).toMatchObject({ endpoint: 'stock.transfer', input: { body: { ...traspaso, id: UUID } } });
       expect(toast.success).toHaveBeenCalledWith('Traspaso registrado: de Centro a Faena');
     });
 
@@ -507,11 +511,7 @@ describe('Inventario', () => {
     });
 
     it('sin nada que cambiar no escribe ni avisa', async () => {
-      await correr(useSaveItemWithMinimums, {
-        item: ITEM_CON_STOCK,
-        input: sinCambios,
-        minimums: { br_1: '4', br_2: '0' },
-      });
+      await correr(useSaveItemWithMinimums, { item: ITEM_CON_STOCK, input: sinCambios, minimums: { br_1: '4', br_2: '0' } });
 
       expect(submitWriteMock).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
@@ -527,10 +527,7 @@ describe('Categorías', () => {
 
     await correr(useCreateCategory, 'Filtros');
 
-    expect(ultimaEscritura()).toMatchObject({
-      endpoint: 'category.create',
-      input: { body: { name: 'Filtros', id: UUID } },
-    });
+    expect(ultimaEscritura()).toMatchObject({ endpoint: 'category.create', input: { body: { name: 'Filtros', id: UUID } } });
     expect(toast.success).toHaveBeenCalledWith('Categoría creada', { description: 'Filtros' });
   });
 
@@ -636,10 +633,7 @@ describe('Mantenimiento', () => {
       origen: 'MANUAL',
     });
 
-    expect(ultimaEscritura()).toMatchObject({
-      endpoint: 'orden.create',
-      input: { body: { equipoId: 'eq_1', id: UUID } },
-    });
+    expect(ultimaEscritura()).toMatchObject({ endpoint: 'orden.create', input: { body: { equipoId: 'eq_1', id: UUID } } });
     expect(toast.success).toHaveBeenCalledWith('Orden de trabajo creada', { description: 'Cambio de aceite' });
   });
 
@@ -754,10 +748,7 @@ describe('Mantenimiento', () => {
 
     await correr(useCrearUmbral, { tipoEquipo: 'Excavadora', tipoMantencion: 'Aceite', umbralHoras: 250 });
 
-    expect(ultimaEscritura()).toMatchObject({
-      endpoint: 'umbral.create',
-      input: { body: { umbralHoras: 250, id: UUID } },
-    });
+    expect(ultimaEscritura()).toMatchObject({ endpoint: 'umbral.create', input: { body: { umbralHoras: 250, id: UUID } } });
   });
 
   it('crear una actividad lleva el id del cliente', async () => {
@@ -765,10 +756,7 @@ describe('Mantenimiento', () => {
 
     await correr(useCrearActividad, { descripcion: 'Revisar frenos', origen: 'MANUAL' });
 
-    expect(ultimaEscritura()).toMatchObject({
-      endpoint: 'actividad.create',
-      input: { body: { descripcion: 'Revisar frenos', id: UUID } },
-    });
+    expect(ultimaEscritura()).toMatchObject({ endpoint: 'actividad.create', input: { body: { descripcion: 'Revisar frenos', id: UUID } } });
   });
 
   it('completar una actividad manda el estado con el anterior como precondición', async () => {

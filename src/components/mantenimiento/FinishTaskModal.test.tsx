@@ -18,7 +18,9 @@ let branchesData = [
   { id: 'br-2', name: 'Faena', address: null, isActive: true },
 ];
 
-vi.mock('../../hooks/useBranches', () => ({ useBranches: () => ({ data: branchesData, isPending: false }) }));
+vi.mock('../../hooks/useBranches', () => ({
+  useBranches: () => ({ data: branchesData, isPending: false }),
+}));
 
 vi.mock('../../hooks/useInventory', () => ({
   useItems: () => ({
@@ -55,7 +57,14 @@ vi.mock('../../hooks/useInventory', () => ({
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
-        stocks: [{ branchId: 'br-2', quantity: 4, minimumQuantity: 0, branch: { id: 'br-2', name: 'Faena' } }],
+        stocks: [
+          {
+            branchId: 'br-2',
+            quantity: 4,
+            minimumQuantity: 0,
+            branch: { id: 'br-2', name: 'Faena' },
+          },
+        ],
       },
     ],
     isPending: false,
@@ -143,7 +152,9 @@ describe('FinishTaskModal', () => {
     submitForm();
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-    const { intervencion } = mutateMock.mock.calls[0][0] as { intervencion: { horometro?: number } };
+    const { intervencion } = mutateMock.mock.calls[0][0] as {
+      intervencion: { horometro?: number };
+    };
     expect(intervencion.horometro).toBeUndefined();
   });
 
@@ -172,7 +183,9 @@ describe('FinishTaskModal', () => {
     submitForm();
 
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-    const { intervencion } = mutateMock.mock.calls[0][0] as { intervencion: { branchId?: string } };
+    const { intervencion } = mutateMock.mock.calls[0][0] as {
+      intervencion: { branchId?: string };
+    };
     expect(intervencion.branchId).toBe('br-2');
   });
 
@@ -202,7 +215,9 @@ describe('FinishTaskModal', () => {
     fillDetalle();
     fireEvent.click(screen.getByRole('button', { name: /Agregar insumo/ }));
 
-    const buscador = await waitFor(() => screen.getByPlaceholderText('Busca por código o nombre…') as HTMLInputElement);
+    const buscador = await waitFor(
+      () => screen.getByPlaceholderText('Busca por código o nombre…') as HTMLInputElement,
+    );
     // Abrir la lista (patrón OperatorPicker.test) y recién ahí escribir.
     const trigger = screen.getAllByRole('button', { name: 'Abrir Insumo' })[0] as HTMLButtonElement;
     fireEvent.click(trigger);
@@ -218,7 +233,9 @@ describe('FinishTaskModal', () => {
     elegirComoQueda();
     submitForm();
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-    const { intervencion } = mutateMock.mock.calls[0][0] as { intervencion: { insumos?: { insumoId: string }[] } };
+    const { intervencion } = mutateMock.mock.calls[0][0] as {
+      intervencion: { insumos?: { insumoId: string }[] };
+    };
     expect(intervencion.insumos?.[0]?.insumoId).toBe('item-2');
   });
 
@@ -331,7 +348,10 @@ describe('FinishTaskModal', () => {
       submitForm();
 
       await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-      const call = mutateMock.mock.calls[0][0] as { lecturaMantencion?: number; intervencion: { horometro?: number } };
+      const call = mutateMock.mock.calls[0][0] as {
+        lecturaMantencion?: number;
+        intervencion: { horometro?: number };
+      };
       expect(call.lecturaMantencion).toBe(1248.5);
       expect(call.intervencion.horometro).toBe(1248.5);
     });
@@ -343,13 +363,19 @@ describe('FinishTaskModal', () => {
       expect((screen.getByLabelText(LECTURA_H) as HTMLInputElement).value).toBe('');
       submitForm();
 
-      await waitFor(() => expect(screen.getByText('Indica la lectura al momento de la mantención.')).toBeTruthy());
+      await waitFor(() =>
+        expect(screen.getByText('Indica la lectura al momento de la mantención.')).toBeTruthy(),
+      );
       expect(mutateMock).not.toHaveBeenCalled();
     });
 
     it('un liviano por km la pide en kilómetros', () => {
-      openModal(ORDEN, [{ ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 }]);
-      const campo = screen.getByLabelText(/Kilometraje al momento de la mantención \(km\)/) as HTMLInputElement;
+      openModal(ORDEN, [
+        { ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 },
+      ]);
+      const campo = screen.getByLabelText(
+        /Kilometraje al momento de la mantención \(km\)/,
+      ) as HTMLInputElement;
       expect(campo.value).toBe('84306');
     });
 

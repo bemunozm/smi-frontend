@@ -20,7 +20,10 @@ import { useQueuedCreate, useQueuedMutation, writeQueued } from './useQueuedMuta
 
 /** Lista de OT, opcionalmente filtrada por `estado` (mismo query param que el backend). */
 export function useOrdenes(estado?: EstadoOT) {
-  return useQuery({ queryKey: [...ORDENES_QUERY_KEY, estado ?? 'TODAS'], queryFn: () => OrdenesAPI.list(estado) });
+  return useQuery({
+    queryKey: [...ORDENES_QUERY_KEY, estado ?? 'TODAS'],
+    queryFn: () => OrdenesAPI.list(estado),
+  });
 }
 
 /**
@@ -87,7 +90,10 @@ export function useLogOperation() {
     mutationFn: async (input: CreateOrdenInput) => {
       const id = generateUuid();
       const created = await writeQueued('orden.create', { params: {}, body: { ...input, id } });
-      const started = await writeQueued('orden.update', { params: { id }, body: { estado: 'EN_PROCESO' } });
+      const started = await writeQueued('orden.update', {
+        params: { id },
+        body: { estado: 'EN_PROCESO' },
+      });
       return { created, started };
     },
     onSuccess: ({ created, started }, input) => {
@@ -95,7 +101,9 @@ export function useLogOperation() {
         avisarGuardadoEnCola();
         return;
       }
-      toast.success('Operación iniciada', { description: created.data?.titulo ?? input.titulo });
+      toast.success('Operación iniciada', {
+        description: created.data?.titulo ?? input.titulo,
+      });
     },
     onError: (error: unknown) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la operación.'));

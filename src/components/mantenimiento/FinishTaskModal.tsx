@@ -22,10 +22,19 @@ import {
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useFinishTask } from '../../hooks/useIntervenciones';
 import { TIPO_OT_LABELS } from '../../config/mantenimiento-colors';
-import { CreateIntervencionSchema, type CreateIntervencionInput, type OrdenTrabajo } from '../../types/mantenimiento';
+import {
+  CreateIntervencionSchema,
+  type CreateIntervencionInput,
+  type OrdenTrabajo,
+} from '../../types/mantenimiento';
 import type { EquipmentStatus } from '../../types/equipment';
 import { parseDecimal } from '../../lib/decimal';
-import { equipmentLabel, lecturaMantencion, leerLecturaMantencion, type EquipmentRef } from './workshop';
+import {
+  equipmentLabel,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 /** La intervención sin el horómetro (la clave fuera, no en `undefined`). */
@@ -170,8 +179,12 @@ export function FinishTaskModal({
           onSubmit={(e) => void handleSubmit(onSubmit)(e)}
         >
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-[#fafbfc] px-3.5 py-3">
-            <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>{TIPO_OT_LABELS[orden.tipo]}</Chip>
-            <span className="tabular text-xs text-muted-foreground">{equipmentLabel(orden.equipoId, equipment)}</span>
+            <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>
+              {TIPO_OT_LABELS[orden.tipo]}
+            </Chip>
+            <span className="tabular text-xs text-muted-foreground">
+              {equipmentLabel(orden.equipoId, equipment)}
+            </span>
             <strong className="min-w-0 flex-1 truncate text-sm">{orden.titulo}</strong>
             <ChipEstado color="#1a3a9c">En proceso</ChipEstado>
           </div>
@@ -220,7 +233,9 @@ export function FinishTaskModal({
             </div>
 
             {fields.length === 0 ? (
-              <p className="m-0 text-sm text-muted-foreground">Sin insumos registrados en esta operación.</p>
+              <p className="m-0 text-sm text-muted-foreground">
+                Sin insumos registrados en esta operación.
+              </p>
             ) : (
               <>
                 {faenaBranch ? (
@@ -232,8 +247,8 @@ export function FinishTaskModal({
                     className="rounded-2xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm text-[var(--danger-soft-foreground)]"
                     role="alert"
                   >
-                    No hay una bodega de faena activa en Inventario — no se puede descontar stock. Crea o reactiva la
-                    bodega "Faena" antes de cerrar con insumos.
+                    No hay una bodega de faena activa en Inventario — no se puede descontar stock.
+                    Crea o reactiva la bodega "Faena" antes de cerrar con insumos.
                   </div>
                 )}
 
@@ -265,7 +280,11 @@ export function FinishTaskModal({
                         <Campo error={errors.insumos?.[index]?.cantidad?.message} label="Cantidad">
                           <Input
                             entero
-                            value={field.value === undefined || Number.isNaN(field.value) ? '' : String(field.value)}
+                            value={
+                              field.value === undefined || Number.isNaN(field.value)
+                                ? ''
+                                : String(field.value)
+                            }
                             onBlur={field.onBlur}
                             onChange={(e) => {
                               const texto = e.target.value;
@@ -341,9 +360,9 @@ export function FinishTaskModal({
           <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
             <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Al guardar <strong>se descuenta el stock</strong> de la bodega elegida (movimientos trazables en
-              Inventario) y la operación pasa a <strong>Finalizado</strong>, en solo lectura. Si un insumo no alcanza,
-              no se guarda nada.
+              Al guardar <strong>se descuenta el stock</strong> de la bodega elegida (movimientos
+              trazables en Inventario) y la operación pasa a <strong>Finalizado</strong>, en solo
+              lectura. Si un insumo no alcanza, no se guarda nada.
             </span>
           </div>
 

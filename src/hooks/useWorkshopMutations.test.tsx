@@ -15,7 +15,9 @@ const { avisarMock } = vi.hoisted(() => ({ avisarMock: vi.fn() }));
 vi.mock('../offline/submit-write', async (importOriginal) =>
   (await import('../test/office-write')).conSubmitWriteFalso(await importOriginal()),
 );
-vi.mock('@heroui/react', () => ({ toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock('@heroui/react', () => ({
+  toast: { success: vi.fn(), danger: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
 vi.mock('../lib/outbox-feedback', () => ({ avisarGuardadoEnCola: avisarMock }));
 
 import { toast } from '@heroui/react';
@@ -85,7 +87,9 @@ describe('useFinishTask', () => {
       body: { estado: 'COMPLETADA' },
       dependsOn: ['op-intervencion'],
     });
-    expect(toast.success).toHaveBeenCalledWith('Operación finalizada', { description: ORDEN.titulo });
+    expect(toast.success).toHaveBeenCalledWith('Operación finalizada', {
+      description: ORDEN.titulo,
+    });
   });
 
   it('el estado declarado del equipo viaja en el MISMO PATCH del cierre (equipmentStatus)', async () => {
@@ -93,7 +97,11 @@ describe('useFinishTask', () => {
     submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
 
     const { result } = renderHook(() => useFinishTask(), { wrapper });
-    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, equipmentStatus: 'OUT_OF_SERVICE' });
+    result.current.mutate({
+      orden: ORDEN,
+      intervencion: INTERVENCION_INPUT,
+      equipmentStatus: 'OUT_OF_SERVICE',
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const [, second] = submitWriteMock.mock.calls;
@@ -202,6 +210,8 @@ describe('useLogOperation', () => {
     expect(first[1]).toEqual({ params: {}, body: { ...input, id: createdId } });
     expect(second[0]).toBe('orden.update');
     expect(second[1]).toEqual({ params: { id: createdId }, body: { estado: 'EN_PROCESO' } });
-    expect(toast.success).toHaveBeenCalledWith('Operación iniciada', { description: ORDEN.titulo });
+    expect(toast.success).toHaveBeenCalledWith('Operación iniciada', {
+      description: ORDEN.titulo,
+    });
   });
 });

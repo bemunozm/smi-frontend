@@ -14,17 +14,29 @@ export interface WorkshopBoard {
   finished: OrdenTrabajo[];
 }
 
-const PRIORITY_RANK: Record<PrioridadOT, number> = { CRITICA: 0, ALTA: 1, MEDIA: 2, BAJA: 3 };
+const PRIORITY_RANK: Record<PrioridadOT, number> = {
+  CRITICA: 0,
+  ALTA: 1,
+  MEDIA: 2,
+  BAJA: 3,
+};
 
 function byDateDesc(field: 'createdAt' | 'updatedAt') {
-  return (a: OrdenTrabajo, b: OrdenTrabajo) => new Date(b[field]).getTime() - new Date(a[field]).getTime();
+  return (a: OrdenTrabajo, b: OrdenTrabajo) =>
+    new Date(b[field]).getTime() - new Date(a[field]).getTime();
 }
 
 export function groupWorkshopBoard(ordenes: readonly OrdenTrabajo[]): WorkshopBoard {
   const backlog = ordenes
     .filter((o) => o.estado === 'PENDIENTE' || o.estado === 'ASIGNADA')
-    .sort((a, b) => PRIORITY_RANK[a.prioridad] - PRIORITY_RANK[b.prioridad] || byDateDesc('createdAt')(a, b));
-  const inProgress = ordenes.filter((o) => o.estado === 'EN_PROCESO').sort(byDateDesc('updatedAt'));
+    .sort(
+      (a, b) =>
+        PRIORITY_RANK[a.prioridad] - PRIORITY_RANK[b.prioridad] ||
+        byDateDesc('createdAt')(a, b),
+    );
+  const inProgress = ordenes
+    .filter((o) => o.estado === 'EN_PROCESO')
+    .sort(byDateDesc('updatedAt'));
   const finished = ordenes
     .filter((o) => o.estado === 'COMPLETADA' || o.estado === 'CANCELADA')
     .sort(byDateDesc('updatedAt'));
@@ -48,12 +60,17 @@ function isSameLocalDay(iso: string, reference: Date): boolean {
   );
 }
 
-export function buildWorkshopStats(ordenes: readonly OrdenTrabajo[], now: Date = new Date()): WorkshopStats {
+export function buildWorkshopStats(
+  ordenes: readonly OrdenTrabajo[],
+  now: Date = new Date(),
+): WorkshopStats {
   const board = groupWorkshopBoard(ordenes);
   return {
     backlog: board.backlog.length,
     inProgress: board.inProgress.length,
-    finishedToday: ordenes.filter((o) => o.estado === 'COMPLETADA' && isSameLocalDay(o.updatedAt, now)).length,
+    finishedToday: ordenes.filter(
+      (o) => o.estado === 'COMPLETADA' && isSameLocalDay(o.updatedAt, now),
+    ).length,
     total: ordenes.length,
   };
 }
@@ -102,18 +119,26 @@ export interface LecturaMantencion {
  * unidad la decide el equipo (liviano por km, pesado por horas); si la OT no
  * resuelve en Flota se asume horómetro, que es el caso de la pauta.
  */
-export function lecturaMantencion(equipoId: string, equipment: readonly EquipmentRef[] | undefined): LecturaMantencion {
+export function lecturaMantencion(
+  equipoId: string,
+  equipment: readonly EquipmentRef[] | undefined,
+): LecturaMantencion {
   const equipo = findEquipment(equipoId, equipment);
   const esKm = equipo?.controlUnit === 'KM';
   const actual = esKm ? equipo?.currentMileage : equipo?.currentHourmeter;
   return {
-    label: esKm ? 'Kilometraje al momento de la mantención (km)' : 'Horómetro al momento de la mantención (h)',
+    label: esKm
+      ? 'Kilometraje al momento de la mantención (km)'
+      : 'Horómetro al momento de la mantención (h)',
     unidad: esKm ? 'km' : 'h',
     inicial: formatDecimalInput(actual),
   };
 }
 
-/** Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es obligatoria); `null` si vale. */
+/**
+ * Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es
+ * obligatoria); `null` si vale.
+ */
 export function errorLecturaMantencion(valor: number | null | undefined): string | null {
   if (valor == null || Number.isNaN(valor)) return 'Indica la lectura al momento de la mantención.';
   if (valor < 0) return 'Escribe una lectura válida (0 o mayor).';
@@ -134,8 +159,13 @@ export function leerLecturaMantencion(texto: string): { valor: number } | { erro
  * "EX-014 · CAT 320". `equipoId` en la OT es texto libre (puede ser código
  * interno o id de Flota); sin match se muestra crudo, nunca rompe.
  */
-export function equipmentLabel(equipoId: string, equipment: readonly EquipmentRef[] | undefined): string {
-  const match = equipment?.find((eq) => eq.internalCode === equipoId || eq.id === equipoId);
+export function equipmentLabel(
+  equipoId: string,
+  equipment: readonly EquipmentRef[] | undefined,
+): string {
+  const match = equipment?.find(
+    (eq) => eq.internalCode === equipoId || eq.id === equipoId,
+  );
   return match ? `${match.internalCode} · ${match.brand} ${match.model}` : equipoId;
 }
 
@@ -154,5 +184,10 @@ export function formatDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? iso
-    : date.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    : date.toLocaleString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 }

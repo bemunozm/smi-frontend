@@ -25,22 +25,41 @@ export const ESTADO_OT = {
 export type EstadoOT = (typeof ESTADO_OT)[keyof typeof ESTADO_OT];
 export const ESTADOS_OT: readonly EstadoOT[] = Object.values(ESTADO_OT);
 
-export const TIPO_OT = { CORRECTIVA: 'CORRECTIVA', PREVENTIVA: 'PREVENTIVA' } as const;
+export const TIPO_OT = {
+  CORRECTIVA: 'CORRECTIVA',
+  PREVENTIVA: 'PREVENTIVA',
+} as const;
 export type TipoOT = (typeof TIPO_OT)[keyof typeof TIPO_OT];
 export const TIPOS_OT: readonly TipoOT[] = Object.values(TIPO_OT);
 
-export const ORIGEN_OT = { MANUAL: 'MANUAL', PREVENTIVO: 'PREVENTIVO', HALLAZGO: 'HALLAZGO' } as const;
+export const ORIGEN_OT = {
+  MANUAL: 'MANUAL',
+  PREVENTIVO: 'PREVENTIVO',
+  HALLAZGO: 'HALLAZGO',
+} as const;
 export type OrigenOT = (typeof ORIGEN_OT)[keyof typeof ORIGEN_OT];
 
-export const PRIORIDAD_OT = { BAJA: 'BAJA', MEDIA: 'MEDIA', ALTA: 'ALTA', CRITICA: 'CRITICA' } as const;
+export const PRIORIDAD_OT = {
+  BAJA: 'BAJA',
+  MEDIA: 'MEDIA',
+  ALTA: 'ALTA',
+  CRITICA: 'CRITICA',
+} as const;
 export type PrioridadOT = (typeof PRIORIDAD_OT)[keyof typeof PRIORIDAD_OT];
 export const PRIORIDADES_OT: readonly PrioridadOT[] = Object.values(PRIORIDAD_OT);
 
-export const ESTADO_ACTIVIDAD = { PENDIENTE: 'PENDIENTE', COMPLETADA: 'COMPLETADA' } as const;
+export const ESTADO_ACTIVIDAD = {
+  PENDIENTE: 'PENDIENTE',
+  COMPLETADA: 'COMPLETADA',
+} as const;
 export type EstadoActividad = (typeof ESTADO_ACTIVIDAD)[keyof typeof ESTADO_ACTIVIDAD];
 export const ESTADOS_ACTIVIDAD: readonly EstadoActividad[] = Object.values(ESTADO_ACTIVIDAD);
 
-export const ORIGEN_ACTIVIDAD = { HALLAZGO: 'HALLAZGO', EQUIPO: 'EQUIPO', MANUAL: 'MANUAL' } as const;
+export const ORIGEN_ACTIVIDAD = {
+  HALLAZGO: 'HALLAZGO',
+  EQUIPO: 'EQUIPO',
+  MANUAL: 'MANUAL',
+} as const;
 export type OrigenActividad = (typeof ORIGEN_ACTIVIDAD)[keyof typeof ORIGEN_ACTIVIDAD];
 export const ORIGENES_ACTIVIDAD: readonly OrigenActividad[] = Object.values(ORIGEN_ACTIVIDAD);
 
@@ -49,7 +68,10 @@ export const ORIGENES_ACTIVIDAD: readonly OrigenActividad[] = Object.values(ORIG
 // ---------------------------------------------------------------------------
 
 /** Persona asignada — subset de `User` que exponen los endpoints de Mantenimiento. */
-export const AsignadoSchema = z.object({ id: z.string(), nombre: z.string() });
+export const AsignadoSchema = z.object({
+  id: z.string(),
+  nombre: z.string(),
+});
 export type Asignado = z.infer<typeof AsignadoSchema>;
 
 // ---------------------------------------------------------------------------
@@ -94,9 +116,15 @@ export const OrdenTrabajoSchema = z.object({
 export type OrdenTrabajo = z.infer<typeof OrdenTrabajoSchema>;
 
 /** Envoltura `{ data, message }` — todas las respuestas del backend la usan. */
-export const OrdenTrabajoListResponseSchema = z.object({ data: z.array(OrdenTrabajoSchema), message: z.string() });
+export const OrdenTrabajoListResponseSchema = z.object({
+  data: z.array(OrdenTrabajoSchema),
+  message: z.string(),
+});
 
-export const OrdenTrabajoResponseSchema = z.object({ data: OrdenTrabajoSchema, message: z.string() });
+export const OrdenTrabajoResponseSchema = z.object({
+  data: OrdenTrabajoSchema,
+  message: z.string(),
+});
 
 /**
  * `POST /api/mantenimiento/ordenes` body (ADMIN/SUPERVISOR). `equipoId` y
@@ -186,7 +214,11 @@ export const ToggleTareaSchema = z.object({
  * la UI muestra la cantidad y marca el stock como "pendiente de Inventario",
  * nunca simula un stock antes/después.
  */
-export const InsumoUsadoSchema = z.object({ id: z.string(), insumoId: z.string(), cantidad: z.number() });
+export const InsumoUsadoSchema = z.object({
+  id: z.string(),
+  insumoId: z.string(),
+  cantidad: z.number(),
+});
 
 export const IntervencionSchema = z.object({
   id: z.string(),
@@ -206,7 +238,10 @@ export const IntervencionSchema = z.object({
 });
 export type Intervencion = z.infer<typeof IntervencionSchema>;
 
-export const IntervencionListResponseSchema = z.object({ data: z.array(IntervencionSchema), message: z.string() });
+export const IntervencionListResponseSchema = z.object({
+  data: z.array(IntervencionSchema),
+  message: z.string(),
+});
 
 /**
  * `POST /api/mantenimiento/ordenes/:id/intervenciones` body (MANTENEDOR).
@@ -233,7 +268,11 @@ export const CreateIntervencionSchema = z
   })
   .superRefine((values, ctx) => {
     if ((values.insumos?.length ?? 0) > 0 && !values.branchId) {
-      ctx.addIssue({ code: 'custom', path: ['branchId'], message: 'Elige la bodega de la que salen los insumos' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['branchId'],
+        message: 'Elige la bodega de la que salen los insumos',
+      });
     }
   });
 export type CreateIntervencionInput = z.infer<typeof CreateIntervencionSchema>;
@@ -290,7 +329,10 @@ export const UmbralSchema = z.object({
 });
 export type Umbral = z.infer<typeof UmbralSchema>;
 
-export const UmbralListResponseSchema = z.object({ data: z.array(UmbralSchema), message: z.string() });
+export const UmbralListResponseSchema = z.object({
+  data: z.array(UmbralSchema),
+  message: z.string(),
+});
 
 /** `POST /api/mantenimiento/umbrales` body (ADMIN). */
 export const CreateUmbralSchema = z.object({
@@ -319,7 +361,10 @@ export const ActividadSchema = z.object({
 });
 export type Actividad = z.infer<typeof ActividadSchema>;
 
-export const ActividadListResponseSchema = z.object({ data: z.array(ActividadSchema), message: z.string() });
+export const ActividadListResponseSchema = z.object({
+  data: z.array(ActividadSchema),
+  message: z.string(),
+});
 
 /**
  * `POST /api/mantenimiento/actividades` body (ADMIN/SUPERVISOR). `equipoId`/
@@ -337,7 +382,9 @@ export const CreateActividadSchema = z.object({
 export type CreateActividadInput = z.infer<typeof CreateActividadSchema>;
 
 /** `PATCH /api/mantenimiento/actividades/:id` body. */
-export const UpdateActividadSchema = z.object({ estado: z.enum(ESTADO_ACTIVIDAD) });
+export const UpdateActividadSchema = z.object({
+  estado: z.enum(ESTADO_ACTIVIDAD),
+});
 export type UpdateActividadInput = z.infer<typeof UpdateActividadSchema>;
 
 /** Los campos editables de una orden tal como los guarda el servidor: la forma de

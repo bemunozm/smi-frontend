@@ -19,7 +19,13 @@ import {
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useCompletarTarea } from '../../hooks/useOrdenes';
 import type { OrdenTrabajo, Tarea } from '../../types/mantenimiento';
-import { equipmentLabel, formatDate, lecturaMantencion, leerLecturaMantencion, type EquipmentRef } from './workshop';
+import {
+  equipmentLabel,
+  formatDate,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 const ESTADO_HEX: Record<string, string> = {
@@ -40,7 +46,10 @@ const ESTADO_LABEL: Record<string, string> = {
 
 /** «2 de 3 tareas» — el avance del checklist de la orden preventiva. */
 export function tareasHechas(orden: Pick<OrdenTrabajo, 'tareas'>): { hechas: number; total: number } {
-  return { hechas: orden.tareas.filter((t) => t.hecha).length, total: orden.tareas.length };
+  return {
+    hechas: orden.tareas.filter((t) => t.hecha).length,
+    total: orden.tareas.length,
+  };
 }
 
 /**
@@ -55,9 +64,16 @@ function TareaHecha({ tarea }: { tarea: Tarea }) {
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3">
       <div className="flex min-w-0 items-start gap-2">
         <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success-soft-foreground)]" />
-        <span className="text-sm font-semibold text-[var(--success-soft-foreground)]">{tarea.texto}</span>
+        <span className="text-sm font-semibold text-[var(--success-soft-foreground)]">
+          {tarea.texto}
+        </span>
       </div>
-      <Boton className="shrink-0" type="button" variante="contorno" onClick={() => setVerDetalle(true)}>
+      <Boton
+        className="shrink-0"
+        type="button"
+        variante="contorno"
+        onClick={() => setVerDetalle(true)}
+      >
         Ver detalle
       </Boton>
 
@@ -150,7 +166,9 @@ function TareaForm({
   const [lectura, setLectura] = useState(campoLectura.inicial);
   const lecturaLeida = leerLecturaMantencion(lectura);
 
-  const filasValidas = insumos.every((fila) => fila.insumoId !== '' && Number(fila.cantidad) > 0);
+  const filasValidas = insumos.every(
+    (fila) => fila.insumoId !== '' && Number(fila.cantidad) > 0,
+  );
   const lista =
     notas.trim().length > 0 &&
     foto.file != null &&
@@ -187,7 +205,9 @@ function TareaForm({
 
       {pideLectura ? (
         <Campo
-          error={lectura.trim() !== '' && 'error' in lecturaLeida ? lecturaLeida.error : undefined}
+          error={
+            lectura.trim() !== '' && 'error' in lecturaLeida ? lecturaLeida.error : undefined
+          }
           hint="Con esta tarea se completa la mantención: desde esta lectura se cuenta el próximo cambio."
           label={campoLectura.label}
           requerido
@@ -240,7 +260,11 @@ function TareaForm({
                 />
               </Campo>
               <Campo label="Cantidad">
-                <Input entero value={fila.cantidad} onChange={(e) => editarFila(index, { cantidad: e.target.value })} />
+                <Input
+                  entero
+                  value={fila.cantidad}
+                  onChange={(e) => editarFila(index, { cantidad: e.target.value })}
+                />
               </Campo>
               <Boton
                 aria-label="Quitar insumo"
@@ -255,8 +279,8 @@ function TareaForm({
           ))}
 
           <div className="rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
-            Al guardar la tarea, estos insumos se <strong>descuentan automáticamente</strong> del stock de Faena y
-            quedan como salida trazable ligada a la OT.
+            Al guardar la tarea, estos insumos se <strong>descuentan automáticamente</strong> del
+            stock de Faena y quedan como salida trazable ligada a la OT.
           </div>
         </>
       ) : null}
@@ -279,11 +303,16 @@ function TareaForm({
                 foto: foto.file,
                 ...(insumos.length > 0
                   ? {
-                      insumos: insumos.map((fila) => ({ insumoId: fila.insumoId, cantidad: Number(fila.cantidad) })),
+                      insumos: insumos.map((fila) => ({
+                        insumoId: fila.insumoId,
+                        cantidad: Number(fila.cantidad),
+                      })),
                       branchId: faenaBranch?.id,
                     }
                   : {}),
-                ...(pideLectura && 'valor' in lecturaLeida ? { lecturaMantencion: lecturaLeida.valor } : {}),
+                ...(pideLectura && 'valor' in lecturaLeida
+                  ? { lecturaMantencion: lecturaLeida.valor }
+                  : {}),
               },
               { onSuccess: onListo },
             )
@@ -328,12 +357,16 @@ export function PreventiveChecklistModal({
   const [tareaActiva, setTareaActiva] = useState<string | null>(null);
 
   const { hechas, total } = tareasHechas(orden);
-  const tareas = useMemo(() => [...orden.tareas].sort((a, b) => a.posicion - b.posicion), [orden.tareas]);
+  const tareas = useMemo(
+    () => [...orden.tareas].sort((a, b) => a.posicion - b.posicion),
+    [orden.tareas],
+  );
   // La lectura de la mantención se pide solo al completar la última tarea
   // pendiente de una OT de pauta: es la que pasa la orden a COMPLETADA.
   const pendientes = total - hechas;
   const pideLectura = orden.pautaCycle != null && pendientes === 1;
-  const hito = orden.pautaMilestone != null ? `Mantención de ${orden.pautaMilestone.toLocaleString('es-CL')}` : null;
+  const hito =
+    orden.pautaMilestone != null ? `Mantención de ${orden.pautaMilestone.toLocaleString('es-CL')}` : null;
 
   return (
     <>
@@ -358,7 +391,9 @@ export function PreventiveChecklistModal({
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="tabular text-[15.5px] font-bold">{equipmentLabel(orden.equipoId, equipment)}</span>
+            <span className="tabular text-[15.5px] font-bold">
+              {equipmentLabel(orden.equipoId, equipment)}
+            </span>
             <Chip tono="info">Preventiva</Chip>
             <ChipEstado color={ESTADO_HEX[orden.estado] ?? '#92590a'}>
               {ESTADO_LABEL[orden.estado] ?? orden.estado}
@@ -390,7 +425,11 @@ export function PreventiveChecklistModal({
                   {soloLectura ? (
                     <Chip tono="warning">Pendiente</Chip>
                   ) : (
-                    <Boton type="button" variante="contorno" onClick={() => setTareaActiva(tarea.id)}>
+                    <Boton
+                      type="button"
+                      variante="contorno"
+                      onClick={() => setTareaActiva(tarea.id)}
+                    >
                       Completar
                     </Boton>
                   )}
@@ -401,8 +440,8 @@ export function PreventiveChecklistModal({
 
           {!soloLectura && hechas < total ? (
             <div className="rounded-2xl bg-[var(--accent-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--accent-soft-foreground)]">
-              Cada tarea guardada queda también en el <strong>ciclo de mantenciones</strong> del equipo. Con la última,
-              la orden se finaliza sola.
+              Cada tarea guardada queda también en el <strong>ciclo de mantenciones</strong> del
+              equipo. Con la última, la orden se finaliza sola.
             </div>
           ) : null}
 
