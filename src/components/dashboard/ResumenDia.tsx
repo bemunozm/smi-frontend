@@ -141,9 +141,9 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
 
       <KpiTile
         bg={RESUMEN_CARD_BG.adBlue}
-        // Lo que se gestiona es cuánto AdBlue QUEDA: el saldo vivo del ítem,
-        // que las cargas declaradas van restando. Puede ser negativo (se cargó
-        // más de lo que figura en bodega) y se muestra tal cual, con su signo.
+        // Lo que se gestiona es cuánto AdBlue QUEDA: el saldo vivo del ítem en
+        // su unidad de Inventario, que las cargas declaradas van restando.
+        // Puede ser negativo (se cargó más de lo que figura en bodega).
         big={disponibleAdBlue ? disponibleAdBlue.valor : '—'}
         fecha={fecha}
         fechaLabel={pasado ? 'saldo actual' : undefined}
@@ -155,7 +155,7 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
       >
         {disponibleAdBlue ? (
           <>
-            {disponibleAdBlue.enUnidades ? <span>= {disponibleAdBlue.enUnidades}</span> : null}
+            {disponibleAdBlue.enLitros ? <span>= {disponibleAdBlue.enLitros}</span> : null}
             {disponibleAdBlue.negativo ? (
               <span>
                 <Chip color="danger" size="sm" variant="soft">

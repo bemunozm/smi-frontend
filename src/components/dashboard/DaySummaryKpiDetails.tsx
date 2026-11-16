@@ -438,8 +438,8 @@ function AdBlueDetail({ enabled, past }: { enabled: boolean; past: boolean }) {
               className={`font-mono text-2xl font-semibold ${disponible.negativo ? 'text-danger' : 'text-foreground'}`}
             >
               {`${disponible.valor} ${disponible.unidad}`}
-              {disponible.enUnidades ? (
-                <span className="ms-2 text-sm font-normal text-muted-foreground">= {disponible.enUnidades}</span>
+              {disponible.enLitros ? (
+                <span className="ms-2 text-sm font-normal text-muted-foreground">= {disponible.enLitros}</span>
               ) : null}
             </span>
             {disponible.negativo ? (
