@@ -25,10 +25,9 @@ const TONO_CLASE = {
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
 
-// Filas alternadas (gris marcado/blanco) con divisores verticales entre columnas y sin líneas horizontales. Las
-// celdas de HeroUI son transparentes, así que el hover se fuerza a un gris más oscuro que la franja.
-const CEBRA_FILA =
-  'even:bg-default/70 odd:bg-surface [&_td]:border-b-0! [&_td:not(:last-child)]:border-r [&_td:not(:last-child)]:border-r-foreground/20 hover:[&_td]:bg-border!';
+// Columnas alternadas (gris/blanco) sin líneas horizontales ni verticales. Las celdas de HeroUI son transparentes y
+// traen su propio fondo con más especificidad, por eso el gris va con `!` y solo si la fila no está en hover.
+const CEBRA_COLUMNAS = '[&_td]:border-b-0! [&:not(:hover)_td:nth-child(even)]:bg-default/70! hover:[&_td]:bg-border!';
 
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
@@ -268,7 +267,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   className="min-w-full"
                 >
                   {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="[&_th]:after:hidden [&_th]:border-b-2 [&_th]:border-border [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-r-foreground/20 [&_th]:bg-border!">
+                  <Table.Header className="[&_th]:after:hidden [&_th]:border-b-2 [&_th]:border-border [&_th]:bg-border!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
@@ -284,7 +283,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   <Table.Body>
                     {filas.map((fila) => (
                       <Table.Row
-                        className={`${CEBRA_FILA} ${atenuada(fila)}`}
+                        className={`${CEBRA_COLUMNAS} ${atenuada(fila)}`}
                         data-testid={`pizarra-fila-${fila.equipmentId}`}
                         id={fila.equipmentId}
                         key={fila.equipmentId}
