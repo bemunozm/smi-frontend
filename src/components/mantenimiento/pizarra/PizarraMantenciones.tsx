@@ -28,7 +28,7 @@ const SIN_LECTURA = 'Sin lectura';
 // Filas alternadas (gris marcado/blanco) con separador más fuerte; las celdas de HeroUI son transparentes, así que
 // el hover se fuerza a un gris más oscuro que la franja para que se lea sobre ambos tonos.
 const CEBRA_FILA =
-  'even:bg-default/60 odd:bg-surface [&_.table__cell]:border-border! [&_.table__cell]:hover:bg-default!';
+  'even:bg-default/70 odd:bg-surface [&_td]:border-border! hover:[&_td]:bg-border!';
 
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
@@ -268,7 +268,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   className="min-w-full"
                 >
                   {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="[&_.table__column]:border-b-2 [&_.table__column]:border-border [&_.table__column]:bg-default!">
+                  <Table.Header className="[&_th]:border-b-2 [&_th]:border-border [&_th]:bg-border!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
