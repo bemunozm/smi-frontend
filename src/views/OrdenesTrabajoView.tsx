@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Spinner } from '@heroui/react';
-import { ArrowRight, Clock, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Clock, History, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
-import { Boton, Chip, Segmentado, Tarjeta } from '../components/terreno/ui';
+import { Boton, Chip, Input, Segmentado, Tarjeta } from '../components/terreno/ui';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -23,10 +23,13 @@ import {
 import type { OrdenTrabajo } from '../types/mantenimiento';
 import type { HallazgoDeEquipo } from '../types/hallazgos';
 import {
+  FINISHED_RECENT_DAYS,
   buildWorkshopStats,
+  equipmentLabel,
   formatDate,
   findEquipment,
   groupWorkshopBoard,
+  splitFinished,
   toPrioridadOT,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
@@ -44,6 +47,7 @@ function BoardColumn({
   count,
   conCabecera = true,
   vacio,
+  pie,
   children,
 }: {
   title: string;
@@ -53,6 +57,8 @@ function BoardColumn({
   conCabecera?: boolean;
   /** Qué decir si la columna no tiene tarjetas. */
   vacio: string;
+  /** Debajo de las tarjetas, haya o no tarjetas (p. ej. «Ver historial»). */
+  pie?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -71,6 +77,7 @@ function BoardColumn({
         ) : (
           children
         )}
+        {pie}
       </div>
     </section>
   );
@@ -242,6 +249,123 @@ function FindingCard({
   );
 }
 
+type MarcaDe = ReturnType<typeof usePendingWrites>['marcaDe'];
+
+/** Tarjeta de una operación finalizada (o cancelada): en el tablero y en el historial. */
+function FinishedCard({
+  orden,
+  fleet,
+  marca,
+}: {
+  orden: OrdenTrabajo;
+  fleet: readonly EquipmentRef[] | undefined;
+  marca: ReturnType<MarcaDe>;
+}) {
+  return (
+    <BoardCard muted>
+      <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+      <div className="flex items-start gap-2">
+        <TituloOrden>{orden.titulo}</TituloOrden>
+        <MarcaPendiente marca={marca} />
+      </div>
+      <HallazgoAssoc orden={orden} />
+      <ChipsRow>
+        {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
+        <TipoChip tipo={orden.tipo} />
+      </ChipsRow>
+      <CardMeta>
+        {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
+        {orden.asignadoA?.nombre ?? 'Sin asignar'}
+      </CardMeta>
+      {esChecklistPauta(orden) ? (
+        <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
+      ) : (
+        <ViewOperationModal equipment={fleet} orden={orden} />
+      )}
+    </BoardCard>
+  );
+}
+
+/** Cuántas tarjetas del historial se dibujan de una vez. */
+const HISTORIAL_PAGINA = 30;
+
+/**
+ * Historial de finalizadas: las operaciones cerradas hace más de
+ * `FINISHED_RECENT_DAYS` días, que ya no ocupan la columna del tablero. Se
+ * despliega debajo del tablero (no en un pop-up: cada tarjeta abre su propio
+ * «Ver operación»), con búsqueda por equipo u operación y de a
+ * `HISTORIAL_PAGINA` tarjetas.
+ */
+function HistorialFinalizadas({
+  ordenes,
+  fleet,
+  marcaDe,
+  onCerrar,
+}: {
+  ordenes: readonly OrdenTrabajo[];
+  fleet: readonly EquipmentRef[] | undefined;
+  marcaDe: MarcaDe;
+  onCerrar: () => void;
+}) {
+  const [busqueda, setBusqueda] = useState('');
+  const [visibles, setVisibles] = useState(HISTORIAL_PAGINA);
+  const texto = busqueda.trim().toLowerCase();
+  const lista = texto
+    ? ordenes.filter(
+        (orden) =>
+          orden.titulo.toLowerCase().includes(texto) ||
+          equipmentLabel(orden.equipoId, fleet).toLowerCase().includes(texto),
+      )
+    : ordenes;
+
+  return (
+    <section
+      aria-label="Historial de finalizadas"
+      className="flex flex-col gap-3.5 rounded-3xl border border-border bg-card/60 p-4"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="m-0 text-[18px] font-bold tracking-[-0.01em] text-foreground">Historial de finalizadas</h3>
+          <p className="m-0 text-[14px] text-[var(--label-color)]">
+            Operaciones cerradas hace más de {FINISHED_RECENT_DAYS} días, de la más reciente a la más antigua.
+          </p>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+          <Input
+            aria-label="Buscar en el historial"
+            className="sm:w-72"
+            onChange={(event) => {
+              setBusqueda(event.target.value);
+              setVisibles(HISTORIAL_PAGINA);
+            }}
+            placeholder="Buscar por equipo u operación…"
+            value={busqueda}
+          />
+          <Boton onClick={onCerrar} variante="contorno">
+            Ocultar historial
+          </Boton>
+        </div>
+      </div>
+      {lista.length === 0 ? (
+        <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-[15px] text-[var(--label-color)]">
+          Ninguna operación del historial calza con la búsqueda.
+        </p>
+      ) : (
+        <div className="grid items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {lista.slice(0, visibles).map((orden) => (
+            <FinishedCard fleet={fleet} key={orden.id} marca={marcaDe('orden', orden.id)} orden={orden} />
+          ))}
+        </div>
+      )}
+      {lista.length > visibles ? (
+        <Boton ancho onClick={() => setVisibles((n) => n + HISTORIAL_PAGINA)} variante="contorno">
+          Mostrar más ({lista.length - visibles} restantes)
+        </Boton>
+      ) : null}
+    </section>
+  );
+}
+
 /**
  * Sub-vista "Órdenes" del taller (diseño Mantenedor Taller): los hallazgos
  * reportados llegan como OT PENDIENTE/ASIGNADA a la bandeja, "Iniciar
@@ -260,6 +384,15 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const board = useMemo(() => groupWorkshopBoard(ordenes ?? []), [ordenes]);
+  // La columna «Finalizadas» muestra solo la última semana; lo anterior va al
+  // historial, que se despliega aparte para no alargar el tablero sin fin.
+  const finalizadas = useMemo(() => splitFinished(board.finished), [board.finished]);
+  const [verHistorial, setVerHistorial] = useState(false);
+  const historialRef = useRef<HTMLDivElement>(null);
+  const abrirHistorial = () => {
+    setVerHistorial(true);
+    requestAnimationFrame(() => historialRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  };
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
   // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
   // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
@@ -292,7 +425,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const conteos = {
     ordenes: openFindings.length + board.backlog.length,
     proceso: board.inProgress.length,
-    finalizadas: board.finished.length,
+    finalizadas: finalizadas.recent.length,
   };
   const ver = (c: typeof columna) => tresColumnas || columna === c;
 
@@ -470,34 +603,38 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                 conCabecera={tresColumnas}
                 count={conteos.finalizadas}
                 title="Finalizadas"
-                vacio="Todavía no hay operaciones finalizadas."
+                vacio={`No hay operaciones finalizadas en los últimos ${FINISHED_RECENT_DAYS} días.`}
+                pie={
+                  finalizadas.history.length > 0 ? (
+                    <Boton ancho onClick={verHistorial ? () => setVerHistorial(false) : abrirHistorial} variante="contorno">
+                      <History aria-hidden className="h-4 w-4" />
+                      {verHistorial ? 'Ocultar historial' : `Ver historial (${finalizadas.history.length} anteriores)`}
+                    </Boton>
+                  ) : null
+                }
               >
-                {board.finished.map((orden) => (
-                  <BoardCard key={orden.id} muted>
-                    <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
-                    <div className="flex items-start gap-2">
-                      <TituloOrden>{orden.titulo}</TituloOrden>
-                      <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
-                    </div>
-                    <HallazgoAssoc orden={orden} />
-                    <ChipsRow>
-                      {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
-                      <TipoChip tipo={orden.tipo} />
-                    </ChipsRow>
-                    <CardMeta>
-                      {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
-                      {orden.asignadoA?.nombre ?? 'Sin asignar'}
-                    </CardMeta>
-                    {esChecklistPauta(orden) ? (
-                      <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
-                    ) : (
-                      <ViewOperationModal equipment={fleet} orden={orden} />
-                    )}
-                  </BoardCard>
+                {finalizadas.recent.map((orden) => (
+                  <FinishedCard
+                    fleet={fleet}
+                    key={orden.id}
+                    marca={pendientes.marcaDe('orden', orden.id)}
+                    orden={orden}
+                  />
                 ))}
               </BoardColumn>
             )}
           </div>
+
+          {verHistorial && finalizadas.history.length > 0 ? (
+            <div className="scroll-mt-4" ref={historialRef}>
+              <HistorialFinalizadas
+                fleet={fleet}
+                marcaDe={pendientes.marcaDe}
+                onCerrar={() => setVerHistorial(false)}
+                ordenes={finalizadas.history}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

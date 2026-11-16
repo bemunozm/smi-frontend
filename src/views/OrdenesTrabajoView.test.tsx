@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -221,8 +221,10 @@ vi.mock('../hooks/usePendingWrites', () => ({
 
 vi.mock('../components/sync/PendientesStrip', () => ({ PendientesStrip: () => null }));
 
+// Órdenes que un test agrega al tablero (se vacía en `afterEach`).
+let ordenesExtra: OrdenTrabajo[] = [];
 vi.mock('../hooks/useOrdenes', () => ({
-  useOrdenes: () => ({ data: ORDENES, isPending: false, isError: false, error: null }),
+  useOrdenes: () => ({ data: [...ORDENES, ...ordenesExtra], isPending: false, isError: false, error: null }),
   useCrearOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useActualizarOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useLogOperation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -263,7 +265,17 @@ vi.mock('../hooks/useMediaQuery', async (original) => ({
   useMediaQuery: () => escritorio,
 }));
 
+// Los fixtures son del 05/10/2026: el reloj se fija al día siguiente para que
+// sus finalizadas caigan dentro de la última semana (la columna del tablero).
+// Solo `Date`: los timers reales siguen andando para react-aria.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-06T12:00:00.000Z'));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
+  ordenesExtra = [];
   cleanup();
   escritorio = true;
   allowed = CAN_MANTENEDOR;
@@ -280,6 +292,44 @@ function renderView() {
 }
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
+
+  it('las finalizadas de hace más de 7 días van al historial, que se despliega aparte', () => {
+    ordenesExtra = [
+      orden({
+        id: 'ot-vieja',
+        equipoId: 'RE-003',
+        hallazgoId: null,
+        pautaMilestone: null,
+        pautaCycle: null,
+        titulo: 'Cambio de neumáticos traseros',
+        estado: 'COMPLETADA',
+        tipo: 'CORRECTIVA',
+        origen: 'MANUAL',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+      }),
+    ];
+    renderView();
+
+    const finished = screen.getByRole('region', { name: 'Finalizadas' });
+    expect(within(finished).getByText('Engrase general y cambio de pernos')).toBeTruthy();
+    expect(within(finished).queryByText('Cambio de neumáticos traseros')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Historial de finalizadas' })).toBeNull();
+
+    fireEvent.click(within(finished).getByRole('button', { name: /Ver historial \(1 anteriores\)/ }));
+    const historial = screen.getByRole('region', { name: 'Historial de finalizadas' });
+    expect(within(historial).getByText('Cambio de neumáticos traseros')).toBeTruthy();
+
+    fireEvent.change(within(historial).getByLabelText('Buscar en el historial'), { target: { value: 'pluma' } });
+    expect(within(historial).getByText('Ninguna operación del historial calza con la búsqueda.')).toBeTruthy();
+
+    fireEvent.click(within(historial).getByRole('button', { name: 'Ocultar historial' }));
+    expect(screen.queryByRole('region', { name: 'Historial de finalizadas' })).toBeNull();
+  });
+
+  it('sin finalizadas antiguas no ofrece historial', () => {
+    renderView();
+    expect(screen.queryByRole('button', { name: /Ver historial/ })).toBeNull();
+  });
   it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
     renderView();
     const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;
