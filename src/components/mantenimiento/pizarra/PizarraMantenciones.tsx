@@ -262,7 +262,8 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   aria-label={panel === 'livianos' ? 'Pizarra de equipos livianos' : 'Pizarra de equipos pesados'}
                   className="min-w-full"
                 >
-                  <Table.Header>
+                  {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
+                  <Table.Header className="border-b! border-border! [&_.table__column]:bg-default!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
@@ -278,7 +279,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   <Table.Body>
                     {filas.map((fila) => (
                       <Table.Row
-                        className={atenuada(fila)}
+                        className={`${CEBRA_FILA} ${atenuada(fila)}`}
                         data-testid={`pizarra-fila-${fila.equipmentId}`}
                         id={fila.equipmentId}
                         key={fila.equipmentId}
@@ -372,6 +373,10 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
     </div>
   );
 }
+
+// Filas alternadas (gris/blanco) con separador más marcado; las celdas son transparentes, así que el hover
+// de HeroUI se ve sobre ambos tonos.
+const CEBRA_FILA = 'even:bg-surface-secondary odd:bg-surface [&_.table__cell]:border-border!';
 
 function Dato({ titulo, children, className = '' }: { titulo: string; children: ReactNode; className?: string }) {
   return (
