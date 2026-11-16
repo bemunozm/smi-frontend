@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, within, fireEvent } from '@testing-library/react';
 
-const { resumenHook, navigateMock, vueltasHook, kardexHook } = vi.hoisted(() => ({
+const { resumenHook, navigateMock, vueltasHook, adblueHook } = vi.hoisted(() => ({
   resumenHook: vi.fn(),
   navigateMock: vi.fn(),
   vueltasHook: vi.fn(),
-  kardexHook: vi.fn(),
+  adblueHook: vi.fn(),
 }));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
@@ -13,9 +13,8 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('../../hooks/useDashboard', () => ({
   useDashboardResumenDia: (fecha?: string) => resumenHook(fecha),
   useDashboardVueltas: (rango: unknown, enabled?: boolean) => vueltasHook(rango, enabled),
+  useDashboardAdBlue: (enabled: boolean) => adblueHook(enabled),
 }));
-
-vi.mock('../../hooks/useInventory', () => ({ useKardex: (itemId: string | null) => kardexHook(itemId) }));
 
 import { toDateOnly } from '../../lib/turno';
 import { ResumenDia } from './ResumenDia';
@@ -109,12 +108,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/** Las consultas de los popups (vueltas, kardex) parten "cargando" salvo que el test diga otra cosa. */
+/** Las consultas de los popups (vueltas, AdBlue) parten "cargando" salvo que el test diga otra cosa. */
 const SIN_CARGA = { data: undefined, isPending: true, isError: false, error: null };
 
 beforeEach(() => {
   vueltasHook.mockReturnValue(SIN_CARGA);
-  kardexHook.mockReturnValue(SIN_CARGA);
+  adblueHook.mockReturnValue(SIN_CARGA);
 });
 
 describe('ResumenDia', () => {
@@ -613,114 +612,140 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios');
   });
 
-  it('AdBlue: kardex filtrado al día y «Ver todo» a Cargas de combustible', () => {
-    kardexHook.mockReturnValue({
-      data: {
-        movements: [
-          {
-            id: 'm1',
-            direction: 'IN',
-            reason: 'PURCHASE',
-            quantity: 20,
-            occurredAt: '2026-10-16T12:00:00.000Z',
-            equipment: null,
-          },
-          {
-            id: 'm2',
-            direction: 'OUT',
-            reason: 'ACTIVITY',
-            quantity: 5,
-            occurredAt: '2026-10-14T12:00:00.000Z',
-            equipment: { id: 'e-cg', internalCode: 'CG-002' },
-          },
-        ],
+  /** Historial de `GET /dashboard/adblue`: saldo negativo (bidones) y tres cargas. */
+  const HISTORIAL = {
+    saldo: { itemId: 'i1', nombre: 'AdBlue bidón 10 L', stock: -2, unidad: 'UNIT', stockLitros: -20 },
+    totalCargado: 25,
+    cargas: [
+      {
+        id: 'card_2',
+        equipmentId: 'e-sem4',
+        internalCode: 'SEM 04',
+        litros: 10,
+        fecha: '2026-11-16T10:00:00.000Z',
+        turno: 'NOCTURNO',
+        cargadoPor: 'Ana Soto',
+        origen: 'TARJETA' as const,
       },
-      isPending: false,
-      isError: false,
-      error: null,
+      {
+        id: 'card_1',
+        equipmentId: 'e-sem2',
+        internalCode: 'SEM 02',
+        litros: 10,
+        fecha: '2026-11-15T22:00:00.000Z',
+        turno: 'DIURNO',
+        cargadoPor: 'Juan Pérez',
+        origen: 'TARJETA' as const,
+      },
+      {
+        id: 'carga_1',
+        equipmentId: 'e-cm',
+        internalCode: 'CM-006',
+        litros: 5,
+        fecha: '2026-11-14T15:00:00.000Z',
+        turno: null,
+        cargadoPor: null,
+        origen: 'MANUAL' as const,
+      },
+    ],
+  };
+  const historial = (data: object) =>
+    adblueHook.mockReturnValue({ data, isPending: false, isError: false, error: null });
+
+  it('la tarjeta se llama «AdBlue disponible» y muestra el saldo en litros', () => {
+    mock({
+      ...BASE,
+      adBlue: { itemId: 'i1', nombre: 'AdBlue bidón 10 L', stock: 10, unidad: 'UNIT', stockLitros: 100 },
     });
-    mock({ ...BASE, adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER', stockLitros: null } });
     render(<ResumenDia />);
-    const dialog = abrir('Ver detalle de AdBlue');
-    expect(kardexHook).toHaveBeenLastCalledWith('i1');
-    expect(within(dialog).getByText('Saldo actual: 150,5 L')).toBeTruthy();
-    const mov = within(dialog).getByTestId('adblue-mov-m1');
-    expect(within(mov).getByText('Entrada')).toBeTruthy();
-    expect(within(mov).getByText('Compra / reposición')).toBeTruthy();
-    expect(within(mov).getByText('+20 L')).toBeTruthy();
-    // El movimiento de otro día no aparece.
-    expect(within(dialog).queryByTestId('adblue-mov-m2')).toBeNull();
+    const ad = within(screen.getByTestId('kpi-adblue'));
+    expect(ad.getByText('AdBlue disponible')).toBeTruthy();
+    expect(ad.getByText('100')).toBeTruthy();
+    expect(ad.getByText('L')).toBeTruthy();
+    expect(ad.getByText('= 10 u')).toBeTruthy();
+    expect(ad.queryByText('Saldo negativo')).toBeNull();
+  });
+
+  it('un saldo negativo se muestra en negativo, con su aviso', () => {
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
+    render(<ResumenDia />);
+    const ad = within(screen.getByTestId('kpi-adblue'));
+    expect(ad.getByText('−20')).toBeTruthy();
+    expect(ad.getByText('= −2 u')).toBeTruthy();
+    expect(ad.getByText('Saldo negativo')).toBeTruthy();
+  });
+
+  it('con adBlueDia la tarjeta suma lo cargado en el día como línea secundaria', () => {
+    mock({ ...BASE, adBlueDia: ADBLUE_DIA });
+    render(<ResumenDia />);
+    expect(within(screen.getByTestId('kpi-adblue')).getByText('Cargado el 16/10: 550 L')).toBeTruthy();
+  });
+
+  it('el popup lista TODAS las cargas con fecha, equipo, origen, quién cargó y −litros', () => {
+    historial(HISTORIAL);
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue disponible');
+    expect(adblueHook).toHaveBeenLastCalledWith(true);
+
+    const nocturna = within(within(dialog).getByTestId('adblue-carga-card_2'));
+    expect(nocturna.getByText('SEM 04')).toBeTruthy();
+    expect(nocturna.getByText('Cierre de tarjeta · Noche')).toBeTruthy();
+    expect(nocturna.getByText('Cargó: Ana Soto')).toBeTruthy();
+    expect(nocturna.getByText('−10 L')).toBeTruthy();
+    expect(nocturna.getByText(/\d{2}-\d{2}-\d{2}/)).toBeTruthy();
+
+    const manual = within(within(dialog).getByTestId('adblue-carga-carga_1'));
+    expect(manual.getByText('Carga manual')).toBeTruthy();
+    expect(manual.getByText('Cargó: —')).toBeTruthy();
+    expect(manual.getByText('−5 L')).toBeTruthy();
+
+    // La más reciente primero, en el orden del backend.
+    const ids = within(dialog)
+      .getAllByTestId(/^adblue-carga-/)
+      .map((el) => el.getAttribute('data-testid'));
+    expect(ids).toEqual(['adblue-carga-card_2', 'adblue-carga-card_1', 'adblue-carga-carga_1']);
+
+    expect(within(dialog).getByText('TOTAL CARGADO (3 cargas)')).toBeTruthy();
+    expect(within(dialog).getByText('−25 L')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
     expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
   });
 
-  it('sin ítem AdBlue (payload viejo, sin adBlueDia) la tarjeta no es un botón', () => {
+  it('el popup muestra el saldo disponible en negativo y pide recontar', () => {
+    historial(HISTORIAL);
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
+    render(<ResumenDia />);
+    const saldo = within(within(abrir('Ver detalle de AdBlue disponible')).getByTestId('adblue-saldo'));
+    expect(saldo.getByText(/−20 L/)).toBeTruthy();
+    expect(saldo.getByText('= −2 u')).toBeTruthy();
+    expect(saldo.getByText(/Saldo negativo: se cargó más AdBlue/)).toBeTruthy();
+  });
+
+  it('sin ítem en Inventario la tarjeta igual abre el popup con las cargas', () => {
+    historial({ ...HISTORIAL, saldo: null });
     mock(BASE);
     render(<ResumenDia />);
-    expect(screen.queryByRole('button', { name: 'Ver detalle de AdBlue' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Ver detalle de HM operacionales' })).toBeTruthy();
-  });
-
-  it('con adBlueDia la tarjeta muestra lo CARGADO en el día con desglose, y el saldo como línea secundaria', () => {
-    mock({ ...BASE, adBlueDia: ADBLUE_DIA });
-    render(<ResumenDia />);
-    const ad = within(screen.getByTestId('kpi-adblue'));
-    expect(ad.getByText('550')).toBeTruthy();
-    expect(ad.getByText(/30 Día \+ 20 Noche/)).toBeTruthy();
-    expect(ad.getByText('Saldo: sin ítem en Inventario')).toBeTruthy();
-    expect(ad.queryByText('Por verificar')).toBeNull();
-  });
-
-  it('con adBlueDia y el ítem en inventario, la línea secundaria es el saldo', () => {
-    mock({
-      ...BASE,
-      adBlueDia: ADBLUE_DIA,
-      adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER', stockLitros: null },
-    });
-    render(<ResumenDia />);
-    expect(within(screen.getByTestId('kpi-adblue')).getByText('Saldo: 150,5 L')).toBeTruthy();
-  });
-
-  it('el popup de AdBlue lista las cargas del día (tarjetas y manuales) con su total, aun sin ítem en inventario', () => {
-    mock({ ...BASE, adBlueDia: ADBLUE_DIA });
-    render(<ResumenDia />);
-    const dialog = abrir('Ver detalle de AdBlue cargado');
-    // Sin ítem no hay kardex que consultar.
-    expect(kardexHook).toHaveBeenLastCalledWith(null);
-    const manual = within(dialog).getByTestId('adblue-carga-AA-001-0');
-    expect(within(manual).getByText('500 L')).toBeTruthy();
-    expect(within(manual).getByText('Manual')).toBeTruthy();
-    expect(within(manual).getByText('Cargó: Admin SMI')).toBeTruthy();
-    const diurna = within(dialog).getByTestId('adblue-carga-CG-002-1');
-    expect(within(diurna).getByText('30 L')).toBeTruthy();
-    expect(within(diurna).getByText('Día')).toBeTruthy();
-    const nocturna = within(dialog).getByTestId('adblue-carga-EX-001-2');
-    expect(within(nocturna).getByText('Noche')).toBeTruthy();
-    expect(within(nocturna).getByText('Cargó: —')).toBeTruthy();
-    expect(within(dialog).getByText('550 L')).toBeTruthy();
+    const dialog = abrir('Ver detalle de AdBlue disponible');
     expect(within(dialog).getByText(/Sin ítem AdBlue en Inventario/)).toBeTruthy();
+    expect(within(dialog).getByTestId('adblue-carga-card_1')).toBeTruthy();
   });
 
-  it('popup de AdBlue sin cargas ese día lo dice', () => {
-    kardexHook.mockReturnValue({ data: { movements: [] }, isPending: false, isError: false, error: null });
-    mock({
-      ...BASE,
-      adBlueDia: { total: 0, dia: 0, noche: 0, cargas: [] },
-      adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' },
-    });
+  it('sin cargas registradas el popup lo dice', () => {
+    historial({ saldo: HISTORIAL.saldo, totalCargado: 0, cargas: [] });
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
     render(<ResumenDia />);
-    const dialog = abrir('Ver detalle de AdBlue cargado');
-    expect(within(dialog).getByText('Sin cargas de AdBlue este día.')).toBeTruthy();
-    expect(within(dialog).getByText('Saldo actual: 150,5 L')).toBeTruthy();
+    expect(
+      within(abrir('Ver detalle de AdBlue disponible')).getByText('Aún no hay cargas de AdBlue registradas.'),
+    ).toBeTruthy();
   });
 
-  it('en un día pasado el popup de AdBlue aclara que el saldo es el vivo', () => {
-    kardexHook.mockReturnValue({ data: { movements: [] }, isPending: false, isError: false, error: null });
-    mock({ ...BASE, adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' } });
+  it('en un día pasado el popup aclara que el saldo es el de hoy', () => {
+    historial(HISTORIAL);
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
     render(<ResumenDia />);
     fireEvent.click(screen.getByRole('button', { name: 'Día anterior' }));
-    const dialog = abrir('Ver detalle de AdBlue');
-    expect(within(dialog).getByText(/El saldo es el vivo de Inventario/)).toBeTruthy();
-    expect(within(dialog).getByText('Sin movimientos este día.')).toBeTruthy();
+    const dialog = abrir('Ver detalle de AdBlue disponible');
+    expect(within(dialog).getByText('Es el saldo de hoy, no el del día consultado.')).toBeTruthy();
   });
 });

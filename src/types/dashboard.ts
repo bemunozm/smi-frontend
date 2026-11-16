@@ -132,6 +132,17 @@ export interface RangoDashboard {
   hasta: string;
 }
 
+/** Saldo VIVO del ítem AdBlue de Inventario. Puede ser negativo: las cargas
+ * declaradas descuentan aunque la bodega no alcance (toca recontar). */
+const AdBlueSaldoSchema = z.object({
+  itemId: z.string(),
+  nombre: z.string(),
+  stock: z.number(),
+  unidad: z.string(),
+  /** El saldo en litros si el ítem se cuenta en bidones; ausente en respuestas viejas. */
+  stockLitros: z.number().nullish(),
+});
+
 /** ← `GET /api/dashboard/resumen-dia`: portada del admin ("resumen del día"). */
 const HmLitrosSchema = z.object({ hm: z.number(), litros: z.number() });
 export const ResumenDiaSchema = z.object({
@@ -152,16 +163,7 @@ export const ResumenDiaSchema = z.object({
     ),
   }),
   produccion: z.object({ internos: z.number(), minaCaleta: z.number(), mineras: z.number() }),
-  adBlue: z
-    .object({
-      itemId: z.string(),
-      nombre: z.string(),
-      stock: z.number(),
-      unidad: z.string(),
-      /** El saldo en litros si el ítem se cuenta en bidones; ausente en respuestas viejas. */
-      stockLitros: z.number().nullish(),
-    })
-    .nullable(),
+  adBlue: AdBlueSaldoSchema.nullable(),
   /** AdBlue CARGADO en el día (tarjetas con AdBlue al cierre + cargas manuales
    * del panel) con el detalle de cada carga (popup AdBlue). Independiente del
    * saldo de inventario (`adBlue`). Opcional: payloads cacheados (PWA)
@@ -228,3 +230,26 @@ export const ResumenDiaSchema = z.object({
     .optional(),
 });
 export type ResumenDia = z.infer<typeof ResumenDiaSchema>;
+
+/** ← `GET /api/dashboard/adblue`: tarjeta «AdBlue disponible» — saldo vivo +
+ * TODAS las cargas declaradas (tarjetas cerradas y cargas manuales), de la
+ * más reciente a la más antigua. */
+export const AdBlueHistorialSchema = z.object({
+  saldo: AdBlueSaldoSchema.nullable(),
+  totalCargado: z.number(),
+  cargas: z.array(
+    z.object({
+      id: z.string(),
+      equipmentId: z.string(),
+      internalCode: z.string(),
+      litros: z.number(),
+      /** ISO: salida de la tarjeta o fecha de la carga manual. */
+      fecha: z.string(),
+      /** DIURNO | NOCTURNO de la tarjeta; null en una carga manual. */
+      turno: z.string().nullable(),
+      cargadoPor: z.string().nullable(),
+      origen: z.enum(['TARJETA', 'MANUAL']),
+    }),
+  ),
+});
+export type AdBlueHistorial = z.infer<typeof AdBlueHistorialSchema>;
