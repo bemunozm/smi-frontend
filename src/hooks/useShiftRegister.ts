@@ -118,6 +118,8 @@ export interface UseShiftRegisterResult {
   finalInvalido: boolean;
   litrosError: string | null;
   litrosAviso: string | null;
+  /** Con litros escritos la foto del surtidor es obligatoria; sin ellos, no. */
+  fotoRequerida: boolean;
   adBlueCierre: ResultadoAdBlue;
   adBlueIncompletoCierre: boolean;
   isCerrando: boolean;

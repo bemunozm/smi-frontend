@@ -97,6 +97,15 @@ describe('foto o archivo que el servidor rechazaría: se rechaza AL GUARDAR, no 
     expect(await db.blobs.count()).toBe(0);
   });
 
+  it('un cierre sin combustible (corte de luz) se guarda sin foto: nada que subir antes del POST', async () => {
+    await enqueueCloseCard('u1', 'card-1', { ...CIERRE, fuelLiters: 0 }, null);
+
+    const op = await db.outbox.get('close-1');
+    expect(op).toMatchObject({ type: 'closeCard', status: 'pending' });
+    expect(op && 'photoId' in op ? op.photoId : undefined).toBeUndefined();
+    expect(await db.blobs.count()).toBe(0);
+  });
+
   it('una foto válida (PNG) pasa', async () => {
     await enqueueCreateHallazgo('u1', HALLAZGO_INPUT, archivo(1024, 'image/png'));
 

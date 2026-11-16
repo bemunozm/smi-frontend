@@ -271,6 +271,7 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     finalInvalido: false,
     litrosError: null,
     litrosAviso: null,
+    fotoRequerida: false,
     isCerrando: false,
     foto: {
       file: null,
@@ -475,14 +476,24 @@ describe('RegistroEquipoView', () => {
     expect(cerrarMock).toHaveBeenCalledTimes(1);
   });
 
-  /** La foto del totalizador es obligatoria — el botón queda deshabilitado
-   * hasta que exista, y la pantalla dice por qué. */
-  it('no deja cerrar una tarjeta sin la foto del surtidor', () => {
-    renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA });
+  /** Con litros cargados la foto del totalizador es obligatoria — el botón
+   * queda deshabilitado hasta que exista, y la pantalla dice por qué. */
+  it('con combustible cargado no deja cerrar sin la foto del surtidor', () => {
+    renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, fotoRequerida: true, finalNum: 12500 });
 
     const cerrar = screen.getByRole('button', { name: /Cerrar tarjeta/ });
     expect(cerrar.hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Falta la foto del surtidor para cerrar.')).toBeTruthy();
+    expect(screen.getByText('Con combustible cargado falta la foto del surtidor para cerrar.')).toBeTruthy();
+  });
+
+  /** Corte de luz: sin combustible se cierra sin foto (16/11/2026). */
+  it('sin combustible se cierra sin foto: los litros dicen (opcional)', () => {
+    renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, fotoRequerida: false, finalNum: 12500 });
+
+    expect(screen.getByText('Combustible cargado (opcional)')).toBeTruthy();
+    expect(screen.queryByText(/falta la foto del surtidor/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Cerrar tarjeta/ }));
+    expect(cerrarMock).toHaveBeenCalledTimes(1);
   });
 
   it('usa el campo de foto compartido de Flota, no uno propio', () => {
@@ -1001,7 +1012,7 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.getByText('Marta Díaz')).toBeTruthy();
       expect(screen.getByText(/mar 22\/09 08:15/)).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: /Cerrar con la carga/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Cerrar camioneta/ }));
       expect(setCerrandoId).toHaveBeenCalledWith('l-c1');
     });
 
@@ -1011,8 +1022,9 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.getByText('Cómo funcionan las camionetas')).toBeTruthy();
       expect(screen.getByText(/no abras otra ni la toques/)).toBeTruthy();
-      expect(screen.getByText(/Ciérrala solo cuando le eches combustible/)).toBeTruthy();
-      expect(screen.getByText(/Solo si le echaste combustible\. Si no, déjala abierta\./)).toBeTruthy();
+      expect(screen.getByText(/Ciérrala cuando le eches combustible/)).toBeTruthy();
+      expect(screen.getByText(/se cierra igual solo con el km/)).toBeTruthy();
+      expect(screen.getByText(/sin carga si hubo un corte de luz/)).toBeTruthy();
     });
 
     it('en Livianos no aparece el reporte de salida a la administración', () => {
@@ -1025,16 +1037,22 @@ describe('RegistroEquipoView', () => {
       expect(screen.queryByRole('button', { name: /Enviar reporte de salida/ })).toBeNull();
     });
 
-    it('el cierre de un liviano pide km final, sin AdBlue, y recuerda que es solo con la carga', () => {
-      renderView('desktop', { cerrandoId: 'l-c1', cerrando: LIVIANO_ABIERTO, finalNum: 45300, horasMaquina: 180 });
+    it('el cierre de un liviano pide km final, sin AdBlue, y explica que sin carga se cierra igual', () => {
+      renderView('desktop', {
+        cerrandoId: 'l-c1',
+        cerrando: LIVIANO_ABIERTO,
+        finalNum: 45300,
+        horasMaquina: 180,
+        fotoRequerida: true,
+      });
 
       expect(screen.getByText('Kilometraje final')).toBeTruthy();
       expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
       expect(screen.getByText('180 km')).toBeTruthy();
       expect(screen.queryByText(/AdBlue/)).toBeNull();
-      expect(screen.getByText(/Ciérrala solo si le echaste combustible/)).toBeTruthy();
+      expect(screen.getByText(/puedes cerrarla igual sin litros ni foto/)).toBeTruthy();
       expect(screen.queryByText(/reporte de salida del turno/)).toBeNull();
-      // La foto del surtidor sigue siendo obligatoria.
+      // Con litros escritos, la foto del surtidor sigue siendo obligatoria.
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
   });
