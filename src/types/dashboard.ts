@@ -240,6 +240,9 @@ export const AdBlueHistorialSchema = z.object({
   cargas: z.array(
     z.object({
       id: z.string(),
+      /** Carga de combustible a abrir en «Cargas de combustible»; null si la
+       * tarjeta cerró con AdBlue sin diésel. Ausente en un backend previo. */
+      cargaId: z.string().nullish(),
       equipmentId: z.string(),
       internalCode: z.string(),
       litros: z.number(),

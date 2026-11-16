@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertDialog,
   Button,
@@ -247,7 +248,22 @@ export function CargasCombustibleAdminView() {
   // `DateValue.toString()` es `YYYY-MM-DD`: comparable contra `diaLocal`.
   const desde = range?.start.toString() ?? '';
   const hasta = range?.end.toString() ?? '';
-  const [detalle, setDetalle] = useState<RegistroCombustible | null>(null);
+  const [detalleElegido, setDetalle] = useState<RegistroCombustible | null>(null);
+  // `?id=<carga>` abre esa carga directo (enlace desde el popup «AdBlue
+  // disponible» del dashboard). Se busca en TODAS las cargas, no en la lista
+  // filtrada: el enlace tiene que abrir aunque los filtros la escondan.
+  const [params, setParams] = useSearchParams();
+  const idEnlazado = params.get('id');
+  const detalleEnlazado = idEnlazado ? ((data ?? []).find((c) => c.id === idEnlazado) ?? null) : null;
+  const detalle = detalleElegido ?? detalleEnlazado;
+  const cerrarDetalle = () => {
+    setDetalle(null);
+    if (idEnlazado) {
+      const siguientes = new URLSearchParams(params);
+      siguientes.delete('id');
+      setParams(siguientes, { replace: true });
+    }
+  };
   const [editando, setEditando] = useState<RegistroCombustible | null>(null);
   const [eliminando, setEliminando] = useState<RegistroCombustible | null>(null);
   const [creando, setCreando] = useState(false);
@@ -578,12 +594,12 @@ export function CargasCombustibleAdminView() {
       <DetalleCargaModal
         carga={detalle}
         clase={detalle ? claseDe(detalle) : undefined}
-        onClose={() => setDetalle(null)}
+        onClose={cerrarDetalle}
         onEditar={
           puedeEditar && detalle
             ? () => {
                 setEditando(detalle);
-                setDetalle(null);
+                cerrarDetalle();
               }
             : undefined
         }
@@ -591,7 +607,7 @@ export function CargasCombustibleAdminView() {
           puedeEliminar && detalle
             ? () => {
                 setEliminando(detalle);
-                setDetalle(null);
+                cerrarDetalle();
               }
             : undefined
         }

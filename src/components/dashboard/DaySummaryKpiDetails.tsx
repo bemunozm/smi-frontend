@@ -105,7 +105,7 @@ export function DaySummaryKpiDetails({
         // «Solo con AdBlue»).
         verTodoTo="/cargas-combustible"
       >
-        <AdBlueDetail enabled={open === 'adblue'} past={past} />
+        <AdBlueDetail enabled={open === 'adblue'} onClose={onClose} past={past} />
       </KpiDetailModal>
     </>
   );
@@ -407,8 +407,9 @@ function origenAdBlue(c: { turno: string | null; origen: 'TARJETA' | 'MANUAL' })
  * se cargó más de lo que había en bodega) y TODAS las cargas declaradas, de
  * la más reciente a la más antigua, cada una restando su litros.
  */
-function AdBlueDetail({ enabled, past }: { enabled: boolean; past: boolean }) {
+function AdBlueDetail({ enabled, past, onClose }: { enabled: boolean; past: boolean; onClose: () => void }) {
   const { data, isPending, isError, error } = useDashboardAdBlue(enabled);
+  const navigate = useNavigate();
 
   if (isPending) {
     return (
@@ -466,17 +467,41 @@ function AdBlueDetail({ enabled, past }: { enabled: boolean; past: boolean }) {
         ) : (
           <>
             <div className="max-h-96 overflow-y-auto pe-1">
-              {data.cargas.map((c) => (
-                <div className={ROW_LISTA} data-testid={`adblue-carga-${c.id}`} key={`${c.origen}-${c.id}`}>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {FECHA_HORA.format(new Date(c.fecha))}
-                  </span>
-                  <span className="font-mono text-sm text-foreground">{c.internalCode}</span>
-                  <span className="text-xs text-muted-foreground">{origenAdBlue(c)}</span>
-                  <span className="text-xs text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
-                  <span className="ms-auto font-mono text-sm font-semibold text-danger">{conSigno(-c.litros)} L</span>
-                </div>
-              ))}
+              {data.cargas.map((c) => {
+                const contenido = (
+                  <>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {FECHA_HORA.format(new Date(c.fecha))}
+                    </span>
+                    <span className="font-mono text-sm text-foreground">{c.internalCode}</span>
+                    <span className="text-xs text-muted-foreground">{origenAdBlue(c)}</span>
+                    <span className="text-xs text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
+                    {c.cargaId ? null : <span className="text-xs text-muted-foreground">(sin carga de diésel)</span>}
+                    <span className="ms-auto font-mono text-sm font-semibold text-danger">{conSigno(-c.litros)} L</span>
+                  </>
+                );
+                // Con carga de diésel, la fila abre su detalle en Cargas de
+                // combustible (fecha, equipo, clase, litros y AdBlue).
+                return c.cargaId ? (
+                  <button
+                    aria-label={`Ver la carga de ${c.internalCode}`}
+                    className={`${ROW_LISTA} w-full cursor-pointer rounded-md text-start hover:bg-surface-secondary`}
+                    data-testid={`adblue-carga-${c.id}`}
+                    key={`${c.origen}-${c.id}`}
+                    onClick={() => {
+                      onClose();
+                      void navigate(`/cargas-combustible?id=${encodeURIComponent(c.cargaId as string)}`);
+                    }}
+                    type="button"
+                  >
+                    {contenido}
+                  </button>
+                ) : (
+                  <div className={ROW_LISTA} data-testid={`adblue-carga-${c.id}`} key={`${c.origen}-${c.id}`}>
+                    {contenido}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex items-center gap-2 border-t border-border pt-2.5">
               <span className="text-sm font-semibold text-foreground">

@@ -619,6 +619,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
     cargas: [
       {
         id: 'card_2',
+        cargaId: null,
         equipmentId: 'e-sem4',
         internalCode: 'SEM 04',
         litros: 10,
@@ -629,6 +630,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
       },
       {
         id: 'card_1',
+        cargaId: 'carga_tarjeta_1',
         equipmentId: 'e-sem2',
         internalCode: 'SEM 02',
         litros: 10,
@@ -639,6 +641,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
       },
       {
         id: 'carga_1',
+        cargaId: 'carga_1',
         equipmentId: 'e-cm',
         internalCode: 'CM-006',
         litros: 5,
@@ -730,6 +733,30 @@ describe('popups de detalle de las tarjetas KPI', () => {
     const dialog = abrir('Ver detalle de AdBlue disponible');
     expect(within(dialog).getByText(/Sin ítem AdBlue en Inventario/)).toBeTruthy();
     expect(within(dialog).getByTestId('adblue-carga-card_1')).toBeTruthy();
+  });
+
+  it('apretar una carga lleva a su detalle en Cargas de combustible y cierra el popup', () => {
+    historial(HISTORIAL);
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue disponible');
+
+    // Carga de tarjeta: abre la carga de diésel nacida de su cierre.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ver la carga de SEM 02' }));
+    expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible?id=carga_tarjeta_1');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('una tarjeta con AdBlue pero sin diésel no tiene carga que abrir: la fila no es botón', () => {
+    historial(HISTORIAL);
+    mock({ ...BASE, adBlue: HISTORIAL.saldo });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue disponible');
+
+    const fila = within(dialog).getByTestId('adblue-carga-card_2');
+    expect(fila.tagName).not.toBe('BUTTON');
+    expect(within(fila).getByText('(sin carga de diésel)')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Ver la carga de CM-006' })).toBeTruthy();
   });
 
   it('sin cargas registradas el popup lo dice', () => {
