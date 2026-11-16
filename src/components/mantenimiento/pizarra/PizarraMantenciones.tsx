@@ -268,7 +268,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   className="min-w-full"
                 >
                   {/* Cabecera más oscura que el cuerpo y con línea inferior marcada */}
-                  <Table.Header className="[&_th]:border-b-2 [&_th]:border-border [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-r-foreground/20 [&_th]:bg-border!">
+                  <Table.Header className="[&_th]:after:hidden [&_th]:border-b-2 [&_th]:border-border [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-r-foreground/20 [&_th]:bg-border!">
                     <Table.Column isRowHeader>Equipo</Table.Column>
                     <Table.Column>{textos.cambio}</Table.Column>
                     <Table.Column>Fecha último cambio</Table.Column>
