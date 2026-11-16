@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Chip, Spinner, Table, ToggleButton, ToggleButtonGroup } from '@heroui/react';
-import { ClipboardList, History } from 'lucide-react';
+import { CalendarDays, CircleAlert, ClipboardList, Clock, History, TriangleAlert } from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
 import { DESKTOP_QUERY, useMediaQuery } from '../../../hooks/useMediaQuery';
@@ -18,16 +18,32 @@ type Panel = 'pesados' | 'livianos';
 
 const TONO_CLASE = {
   atrasado: 'font-bold text-danger',
-  alerta: 'font-semibold text-danger',
+  alerta: 'font-semibold text-warning',
   normal: 'text-foreground',
 } as const;
 
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
 
-// Columnas alternadas (gris/blanco) sin líneas horizontales ni verticales. Las celdas de HeroUI son transparentes y
-// traen su propio fondo con más especificidad, por eso el gris va con `!` y solo si la fila no está en hover.
-const CEBRA_COLUMNAS = '[&_td]:border-b-0! [&:not(:hover)_td:nth-child(even)]:bg-default/70! hover:[&_td]:bg-border!';
+// Columnas alternadas (gris desde la primera) por índice lógico de columna, no por `nth-child`: la celda con colSpan
+// de «Registrar mantención anterior» correría los colores. Las celdas de HeroUI traen fondo propio con más
+// especificidad, por eso el gris va con `!` y solo si la fila no está en hover; el hover verde (tinte del token
+// success) va sobre todas las celdas de la fila y le gana al gris.
+const CEBRA_COLUMNAS = '[&_td]:border-b-0! [&:not(:hover)_td[data-gris]]:bg-default/70! hover:[&_td]:bg-success/15!';
+
+/** Columnas pares (0, 2, 4…) en gris; la celda con colSpan 2 toma el color de su primera columna. */
+const fondoColumna = (indice: number) => (indice % 2 === 0 ? { 'data-gris': '' } : {});
+
+/** Ícono chico, atenuado y decorativo antes del valor (reloj para horas/km, calendario para fechas). */
+function ConIcono({ icono, children }: { icono: 'reloj' | 'fecha'; children: ReactNode }) {
+  const Icono = icono === 'reloj' ? Clock : CalendarDays;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icono aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      {children}
+    </span>
+  );
+}
 
 function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
@@ -35,6 +51,9 @@ function Pendientes({ fila }: { fila: MaintenanceBoardRow }) {
   if (texto == null) return <span className="text-muted-foreground">{SIN_LECTURA}</span>;
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
+      {/* Atrasado: triángulo rojo; alerta (dentro del aviso): círculo de exclamación ámbar; normal: sin ícono. */}
+      {tono(fila) === 'atrasado' ? <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0 text-danger" /> : null}
+      {tono(fila) === 'alerta' ? <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning" /> : null}
       <span className={`tabular-nums ${TONO_CLASE[tono(fila)]}`}>{texto}</span>
       {/* Sin último cambio el número sale de los hitos absolutos: se avisa
           para que nadie lo tome por exacto. */}
@@ -225,10 +244,14 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   {/* Lo que se mira en la pizarra: dónde está, cuándo toca y cuánto falta. */}
                   <dl className="m-0 grid grid-cols-3 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
                     <Dato titulo={textos.actual}>
-                      <span className="font-semibold tabular-nums">{actual(fila)}</span>
+                      <ConIcono icono="reloj">
+                        <span className="font-semibold tabular-nums">{actual(fila)}</span>
+                      </ConIcono>
                     </Dato>
                     <Dato titulo="Próximo cambio">
-                      <span className="font-semibold tabular-nums">{lectura(fila.dueAt, fila.unit) ?? '—'}</span>
+                      <ConIcono icono="reloj">
+                        <span className="font-semibold tabular-nums">{lectura(fila.dueAt, fila.unit) ?? '—'}</span>
+                      </ConIcono>
                     </Dato>
                     <Dato titulo={textos.pendientes}>
                       <Pendientes fila={fila} />
@@ -237,16 +260,22 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                   {fila.source !== 'SIN_PAUTA' ? (
                     <dl className="m-0 grid grid-cols-2 gap-2 text-sm">
                       <Dato titulo={textos.cambio}>
-                        <span className="tabular-nums">{lectura(fila.interval, fila.unit) ?? '—'}</span>
+                        <ConIcono icono="reloj">
+                          <span className="tabular-nums">{lectura(fila.interval, fila.unit) ?? '—'}</span>
+                        </ConIcono>
                       </Dato>
                       <Dato titulo="Fecha estimada">
-                        <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                        <ConIcono icono="fecha">
+                          <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                        </ConIcono>
                       </Dato>
                       <Dato className="col-span-2" titulo="Último cambio">
                         {fila.lastChange ? (
-                          <span className="tabular-nums">
-                            {fechaCorta(fila.lastChange.doneAt)} · {lectura(fila.lastChange.counterAt, fila.unit)}
-                          </span>
+                          <ConIcono icono="fecha">
+                            <span className="tabular-nums">
+                              {fechaCorta(fila.lastChange.doneAt)} · {lectura(fila.lastChange.counterAt, fila.unit)}
+                            </span>
+                          </ConIcono>
                         ) : (
                           botonAnterior(fila)
                         )}
@@ -288,25 +317,29 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                         id={fila.equipmentId}
                         key={fila.equipmentId}
                       >
-                        <Table.Cell className="text-sm">
+                        <Table.Cell className="text-sm" {...fondoColumna(0)}>
                           <Equipo fila={fila} />
                         </Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums">
-                          {fila.source === 'SIN_PAUTA' ? sinPauta(fila) : (lectura(fila.interval, fila.unit) ?? '—')}
+                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(1)}>
+                          {fila.source === 'SIN_PAUTA' ? (
+                            sinPauta(fila)
+                          ) : (
+                            <ConIcono icono="reloj">{lectura(fila.interval, fila.unit) ?? '—'}</ConIcono>
+                          )}
                         </Table.Cell>
                         {fila.lastChange ? (
                           <>
-                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums">
-                              {fechaCorta(fila.lastChange.doneAt)}
+                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(2)}>
+                              <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
                             </Table.Cell>
-                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums">
-                              {lectura(fila.lastChange.counterAt, fila.unit)}
+                            <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(3)}>
+                              <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
                             </Table.Cell>
                           </>
                         ) : (
                           // Sin último cambio las dos columnas se juntan en el botón
                           // para cargarlo: es lo que falta para contar desde ahí.
-                          <Table.Cell className="text-sm" colSpan={2}>
+                          <Table.Cell className="text-sm" colSpan={2} {...fondoColumna(2)}>
                             {fila.source === 'SIN_PAUTA' ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
@@ -314,17 +347,23 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                             )}
                           </Table.Cell>
                         )}
-                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums">
-                          {lectura(fila.dueAt, fila.unit) ?? '—'}
+                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(4)}>
+                          <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
                         </Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums">{actual(fila)}</Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">
+                        <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(5)}>
+                          <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                        </Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap" {...fondoColumna(6)}>
                           <Pendientes fila={fila} />
                         </Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">
-                          <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                        <Table.Cell className="text-sm whitespace-nowrap" {...fondoColumna(7)}>
+                          <ConIcono icono="fecha">
+                            <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                          </ConIcono>
                         </Table.Cell>
-                        <Table.Cell className="text-right">{botonVer(fila)}</Table.Cell>
+                        <Table.Cell className="text-right" {...fondoColumna(8)}>
+                          {botonVer(fila)}
+                        </Table.Cell>
                       </Table.Row>
                     ))}
                   </Table.Body>

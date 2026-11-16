@@ -334,4 +334,45 @@ describe('PizarraMantenciones', () => {
     renderPizarra();
     expect(screen.getByText('Falló la pizarra')).toBeTruthy();
   });
+
+  it('horas pendientes: atrasado en rojo con triángulo, alerta en ámbar con exclamación y normal sin ícono', () => {
+    boardHook.mockReturnValue({
+      data: [
+        filaPizarra({ equipmentId: 'a1', internalCode: 'ATR', remaining: -5 }),
+        filaPizarra({ equipmentId: 'a2', internalCode: 'ALE', remaining: 40, alertBefore: 50 }),
+        filaPizarra({ equipmentId: 'a3', internalCode: 'NOR', remaining: 300, alertBefore: 50 }),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    renderPizarra();
+
+    const atrasado = screen.getByTestId('pizarra-fila-a1');
+    expect(within(atrasado).getByText('+5 h atrasado').className).toContain('text-danger');
+    expect(atrasado.querySelector('svg.text-danger')).toBeTruthy();
+    const alerta = screen.getByTestId('pizarra-fila-a2');
+    expect(within(alerta).getByText('40 h').className).toContain('text-warning');
+    expect(alerta.querySelector('svg.text-warning')).toBeTruthy();
+    expect(alerta.querySelector('svg.text-danger')).toBeNull();
+    const normal = screen.getByTestId('pizarra-fila-a3');
+    expect(normal.querySelector('svg.text-danger, svg.text-warning')).toBeNull();
+  });
+
+  it('la tabla pinta de gris las columnas por índice lógico aunque haya celda con colSpan, y lleva íconos', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    // p1 tiene último cambio (9 celdas); p2 no (8 celdas, una con colSpan 2): ambas con el mismo gris de partida.
+    const conCambio = screen.getByTestId('pizarra-fila-p1').querySelectorAll('td');
+    expect([...conCambio].map((td) => td.hasAttribute('data-gris'))).toEqual([
+      true, false, true, false, true, false, true, false, true,
+    ]);
+    const sinCambio = screen.getByTestId('pizarra-fila-p2').querySelectorAll('td');
+    expect([...sinCambio].map((td) => td.hasAttribute('data-gris'))).toEqual([
+      true, false, true, true, false, true, false, true,
+    ]);
+    // Íconos decorativos junto a los valores.
+    expect(screen.getByTestId('pizarra-fila-p1').querySelectorAll('svg[aria-hidden="true"]').length).toBeGreaterThan(5);
+  });
 });
