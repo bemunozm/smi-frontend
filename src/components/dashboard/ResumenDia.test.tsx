@@ -655,14 +655,15 @@ describe('popups de detalle de las tarjetas KPI', () => {
   it('la tarjeta se llama «AdBlue disponible» y muestra el saldo en litros', () => {
     mock({
       ...BASE,
-      adBlue: { itemId: 'i1', nombre: 'AdBlue bidón 10 L', stock: 10, unidad: 'UNIT', stockLitros: 100 },
+      adBlue: { itemId: 'i1', nombre: 'AdBlue bidón 10 L', stock: 79.6, unidad: 'UNIT', stockLitros: 796 },
     });
     render(<ResumenDia />);
     const ad = within(screen.getByTestId('kpi-adblue'));
     expect(ad.getByText('AdBlue disponible')).toBeTruthy();
-    expect(ad.getByText('100')).toBeTruthy();
-    expect(ad.getByText('L')).toBeTruthy();
-    expect(ad.getByText('= 10 u')).toBeTruthy();
+    // El número principal es el de Inventario (bidones, con su decimal); los litros, aparte.
+    expect(ad.getByText('79,6')).toBeTruthy();
+    expect(ad.getByText('u')).toBeTruthy();
+    expect(ad.getByText('= 796 L')).toBeTruthy();
     expect(ad.queryByText('Saldo negativo')).toBeNull();
   });
 
@@ -670,8 +671,8 @@ describe('popups de detalle de las tarjetas KPI', () => {
     mock({ ...BASE, adBlue: HISTORIAL.saldo });
     render(<ResumenDia />);
     const ad = within(screen.getByTestId('kpi-adblue'));
-    expect(ad.getByText('−20')).toBeTruthy();
-    expect(ad.getByText('= −2 u')).toBeTruthy();
+    expect(ad.getByText('−2')).toBeTruthy();
+    expect(ad.getByText('= −20 L')).toBeTruthy();
     expect(ad.getByText('Saldo negativo')).toBeTruthy();
   });
 
@@ -717,8 +718,8 @@ describe('popups de detalle de las tarjetas KPI', () => {
     mock({ ...BASE, adBlue: HISTORIAL.saldo });
     render(<ResumenDia />);
     const saldo = within(within(abrir('Ver detalle de AdBlue disponible')).getByTestId('adblue-saldo'));
-    expect(saldo.getByText(/−20 L/)).toBeTruthy();
-    expect(saldo.getByText('= −2 u')).toBeTruthy();
+    expect(saldo.getByText(/−2 u/)).toBeTruthy();
+    expect(saldo.getByText('= −20 L')).toBeTruthy();
     expect(saldo.getByText(/Saldo negativo: se cargó más AdBlue/)).toBeTruthy();
   });
 

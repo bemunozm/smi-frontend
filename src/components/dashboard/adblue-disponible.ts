@@ -8,30 +8,26 @@ export function conSigno(n: number): string {
 }
 
 export interface AdBlueDisponible {
-  /** El saldo listo para mostrar, con su signo: «−20». */
+  /** El saldo listo para mostrar, con su signo: «79,6» o «−2». */
   valor: string;
   unidad: string;
-  /** El mismo saldo en la unidad del ítem cuando se cuenta en bidones: «−2 u». */
-  enUnidades: string | null;
+  /** El mismo saldo en litros cuando el ítem se cuenta en bidones: «796 L». */
+  enLitros: string | null;
   negativo: boolean;
 }
 
 /**
- * Saldo disponible de AdBlue en LITROS cuando se puede (las cargas se
- * declaran en litros): un ítem en bidones usa `stockLitros`, uno contado en
- * litros su propio `stock`. Sin conversión posible, queda en la unidad del
- * ítem. Puede ser negativo: las cargas descuentan aunque la bodega no alcance.
+ * Saldo disponible de AdBlue en la MISMA unidad con que lo lleva Inventario
+ * (bidones: «79,6 u»), para que el número de la tarjeta sea el que el
+ * administrador ve en la ficha del ítem. Si el ítem se cuenta en bidones,
+ * los litros van aparte («= 796 L»). Puede ser negativo: las cargas
+ * descuentan aunque la bodega no alcance.
  */
 export function adBlueDisponible(saldo: NonNullable<ResumenDia['adBlue']>): AdBlueDisponible {
-  const simbolo = UNIT_SYMBOLS[saldo.unidad as UnitOfMeasure] ?? saldo.unidad;
-  const litros = saldo.stockLitros ?? (saldo.unidad === 'LITER' ? saldo.stock : null);
-  if (litros != null) {
-    return {
-      valor: conSigno(litros),
-      unidad: 'L',
-      enUnidades: saldo.stockLitros != null ? `${conSigno(saldo.stock)} ${simbolo}` : null,
-      negativo: litros < 0,
-    };
-  }
-  return { valor: conSigno(saldo.stock), unidad: simbolo, enUnidades: null, negativo: saldo.stock < 0 };
+  return {
+    valor: conSigno(saldo.stock),
+    unidad: UNIT_SYMBOLS[saldo.unidad as UnitOfMeasure] ?? saldo.unidad,
+    enLitros: saldo.stockLitros != null ? `${conSigno(saldo.stockLitros)} L` : null,
+    negativo: saldo.stock < 0,
+  };
 }
