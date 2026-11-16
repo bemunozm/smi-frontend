@@ -170,7 +170,7 @@ export function ReportesView() {
 
           {!isPending && !isError && reportes.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
-              Todavía no hay reportes de salida: aparecen acá cuando un supervisor toca «Enviar reporte de salida»
+              Todavía no hay reportes de salida: aparecen acá cuando un supervisor toca «Enviar reporte de salida a terreno»
               en Terreno.
             </p>
           ) : null}
