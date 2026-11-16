@@ -53,12 +53,56 @@ const BASE = {
   ],
   lecturas: [
     { id: 'c1', equipmentId: 'e-cg', internalCode: 'CG-002', turno: 'DIURNO', inicial: 100, final: 106, avance: 6 },
-    { id: 'c2', equipmentId: 'e-cg', internalCode: 'CG-002', turno: 'NOCTURNO', inicial: 106, final: null, avance: null },
+    {
+      id: 'c2',
+      equipmentId: 'e-cg',
+      internalCode: 'CG-002',
+      turno: 'NOCTURNO',
+      inicial: 106,
+      final: null,
+      avance: null,
+    },
   ],
 };
 
 const mock = (data: object) =>
   resumenHook.mockReturnValue({ data, isPending: false, isError: false, error: null, refetch: vi.fn() });
+
+/** AdBlue cargado en el día: dos tarjetas (día/noche) + una carga manual. */
+const ADBLUE_DIA = {
+  total: 550,
+  dia: 30,
+  noche: 20,
+  cargas: [
+    {
+      equipmentId: 'e-aa',
+      internalCode: 'AA-001',
+      litros: 500,
+      turno: null,
+      hora: '2026-10-16T15:00:00.000Z',
+      cargadoPor: 'Admin SMI',
+      origen: 'MANUAL' as const,
+    },
+    {
+      equipmentId: 'e-cg',
+      internalCode: 'CG-002',
+      litros: 30,
+      turno: 'DIURNO',
+      hora: '2026-10-16T18:00:00.000Z',
+      cargadoPor: 'Juan Pérez',
+      origen: 'TARJETA' as const,
+    },
+    {
+      equipmentId: 'e-ex',
+      internalCode: 'EX-001',
+      litros: 20,
+      turno: 'NOCTURNO',
+      hora: '2026-10-16T23:30:00.000Z',
+      cargadoPor: null,
+      origen: 'TARJETA' as const,
+    },
+  ],
+};
 
 afterEach(() => {
   cleanup();
@@ -241,12 +285,48 @@ describe('ResumenDia', () => {
 });
 
 const FLOTA_HOY = [
-  { equipmentId: 'e1', internalCode: 'CG-002', estado: 'EN_USO', status: 'OPERATIONAL', operador: 'Hoy Op', turno: 'DIURNO', supervisor: 'Sup', unidadControl: 'HOURS', contadorActual: 10, nivelCombustible: 50 },
-  { equipmentId: 'e2', internalCode: 'EX-001', estado: 'INOPERATIVO', status: 'IN_WORKSHOP', unidadControl: 'KM', contadorActual: 5, nivelCombustible: null },
+  {
+    equipmentId: 'e1',
+    internalCode: 'CG-002',
+    estado: 'EN_USO',
+    status: 'OPERATIONAL',
+    operador: 'Hoy Op',
+    turno: 'DIURNO',
+    supervisor: 'Sup',
+    unidadControl: 'HOURS',
+    contadorActual: 10,
+    nivelCombustible: 50,
+  },
+  {
+    equipmentId: 'e2',
+    internalCode: 'EX-001',
+    estado: 'INOPERATIVO',
+    status: 'IN_WORKSHOP',
+    unidadControl: 'KM',
+    contadorActual: 5,
+    nivelCombustible: null,
+  },
 ];
 const FLOTA_PASADA = [
-  { equipmentId: 'e1', internalCode: 'CG-002', estado: 'OPERO', operador: 'Ayer Op', turno: 'NOCTURNO', supervisor: 'Sup', unidadControl: 'HOURS', contadorActual: 10, nivelCombustible: 20 },
-  { equipmentId: 'e2', internalCode: 'EX-001', estado: 'SIN_ACTIVIDAD', unidadControl: 'KM', contadorActual: 5, nivelCombustible: null },
+  {
+    equipmentId: 'e1',
+    internalCode: 'CG-002',
+    estado: 'OPERO',
+    operador: 'Ayer Op',
+    turno: 'NOCTURNO',
+    supervisor: 'Sup',
+    unidadControl: 'HOURS',
+    contadorActual: 10,
+    nivelCombustible: 20,
+  },
+  {
+    equipmentId: 'e2',
+    internalCode: 'EX-001',
+    estado: 'SIN_ACTIVIDAD',
+    unidadControl: 'KM',
+    contadorActual: 5,
+    nivelCombustible: null,
+  },
 ];
 
 describe('ResumenDia: una sección, una tarjeta', () => {
@@ -475,7 +555,9 @@ describe('popups de detalle de las tarjetas KPI', () => {
     render(<ResumenDia />);
     const dialog = abrir('Ver detalle de Diésel');
     fireEvent.click(within(dialog).getByTestId('diesel-det-EX-001'));
-    expect(within(within(dialog).getByTestId('diesel-exp-EX-001')).getByText('Detalle no disponible en este payload.')).toBeTruthy();
+    expect(
+      within(within(dialog).getByTestId('diesel-exp-EX-001')).getByText('Detalle no disponible en este payload.'),
+    ).toBeTruthy();
   });
 
   it('Reports: lista el día completo (la card corta en 3) y «Ver todo» va a Report', () => {
@@ -531,7 +613,7 @@ describe('popups de detalle de las tarjetas KPI', () => {
     expect(navigateMock).toHaveBeenCalledWith('/reportes-diarios');
   });
 
-  it('AdBlue: kardex filtrado al día y «Ver todo» a la ficha del ítem', () => {
+  it('AdBlue: kardex filtrado al día y «Ver todo» a Cargas de combustible', () => {
     kardexHook.mockReturnValue({
       data: {
         movements: [
@@ -569,14 +651,67 @@ describe('popups de detalle de las tarjetas KPI', () => {
     // El movimiento de otro día no aparece.
     expect(within(dialog).queryByTestId('adblue-mov-m2')).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ver todo →' }));
-    expect(navigateMock).toHaveBeenCalledWith('/inventario/i1');
+    expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
   });
 
-  it('sin ítem AdBlue la tarjeta no es un botón', () => {
+  it('sin ítem AdBlue (payload viejo, sin adBlueDia) la tarjeta no es un botón', () => {
     mock(BASE);
     render(<ResumenDia />);
     expect(screen.queryByRole('button', { name: 'Ver detalle de AdBlue' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Ver detalle de HM operacionales' })).toBeTruthy();
+  });
+
+  it('con adBlueDia la tarjeta muestra lo CARGADO en el día con desglose, y el saldo como línea secundaria', () => {
+    mock({ ...BASE, adBlueDia: ADBLUE_DIA });
+    render(<ResumenDia />);
+    const ad = within(screen.getByTestId('kpi-adblue'));
+    expect(ad.getByText('550')).toBeTruthy();
+    expect(ad.getByText(/30 Día \+ 20 Noche/)).toBeTruthy();
+    expect(ad.getByText('Saldo: sin ítem en Inventario')).toBeTruthy();
+    expect(ad.queryByText('Por verificar')).toBeNull();
+  });
+
+  it('con adBlueDia y el ítem en inventario, la línea secundaria es el saldo', () => {
+    mock({
+      ...BASE,
+      adBlueDia: ADBLUE_DIA,
+      adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER', stockLitros: null },
+    });
+    render(<ResumenDia />);
+    expect(within(screen.getByTestId('kpi-adblue')).getByText('Saldo: 150,5 L')).toBeTruthy();
+  });
+
+  it('el popup de AdBlue lista las cargas del día (tarjetas y manuales) con su total, aun sin ítem en inventario', () => {
+    mock({ ...BASE, adBlueDia: ADBLUE_DIA });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue cargado');
+    // Sin ítem no hay kardex que consultar.
+    expect(kardexHook).toHaveBeenLastCalledWith(null);
+    const manual = within(dialog).getByTestId('adblue-carga-AA-001-0');
+    expect(within(manual).getByText('500 L')).toBeTruthy();
+    expect(within(manual).getByText('Manual')).toBeTruthy();
+    expect(within(manual).getByText('Cargó: Admin SMI')).toBeTruthy();
+    const diurna = within(dialog).getByTestId('adblue-carga-CG-002-1');
+    expect(within(diurna).getByText('30 L')).toBeTruthy();
+    expect(within(diurna).getByText('Día')).toBeTruthy();
+    const nocturna = within(dialog).getByTestId('adblue-carga-EX-001-2');
+    expect(within(nocturna).getByText('Noche')).toBeTruthy();
+    expect(within(nocturna).getByText('Cargó: —')).toBeTruthy();
+    expect(within(dialog).getByText('550 L')).toBeTruthy();
+    expect(within(dialog).getByText(/Sin ítem AdBlue en Inventario/)).toBeTruthy();
+  });
+
+  it('popup de AdBlue sin cargas ese día lo dice', () => {
+    kardexHook.mockReturnValue({ data: { movements: [] }, isPending: false, isError: false, error: null });
+    mock({
+      ...BASE,
+      adBlueDia: { total: 0, dia: 0, noche: 0, cargas: [] },
+      adBlue: { itemId: 'i1', nombre: 'AdBlue 20L', stock: 150.5, unidad: 'LITER' },
+    });
+    render(<ResumenDia />);
+    const dialog = abrir('Ver detalle de AdBlue cargado');
+    expect(within(dialog).getByText('Sin cargas de AdBlue este día.')).toBeTruthy();
+    expect(within(dialog).getByText('Saldo actual: 150,5 L')).toBeTruthy();
   });
 
   it('en un día pasado el popup de AdBlue aclara que el saldo es el vivo', () => {

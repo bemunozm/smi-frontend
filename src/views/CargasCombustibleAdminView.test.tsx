@@ -72,7 +72,8 @@ const carga = (over: Partial<RegistroCombustible> & Pick<RegistroCombustible, 'i
 });
 
 const LISTA: RegistroCombustible[] = [
-  carga({ id: 'c1' }),
+  // Con AdBlue del cierre de su tarjeta (resuelto por el backend).
+  carga({ id: 'c1', adBlueLitros: 30 }),
   // Camioneta a las 23:30 LOCAL del 05-11: el filtro por día tiene que verla
   // en SU día. Su equipo no está en el catálogo (clase desde el backend).
   carga({
@@ -106,6 +107,7 @@ const LISTA: RegistroCombustible[] = [
     registroHorometroId: null,
     realizadoPor: 'Admin SMI',
     origen: 'MANUAL',
+    adBlueLitros: 500,
   }),
 ];
 
@@ -237,6 +239,36 @@ describe('CargasCombustibleAdminView', () => {
     expect(within(vieja).getAllByText('—').length).toBeGreaterThan(0);
   });
 
+  it('muestra el AdBlue de cada carga y suma su total en un chip aparte', () => {
+    render(<CargasCombustibleAdminView />);
+    const conAdBlue = screen.getByTestId('carga-fila-c1');
+    expect(within(conAdBlue).getByText('AdBlue')).toBeTruthy();
+    expect(within(conAdBlue).getByText('30 L')).toBeTruthy();
+    // Sin AdBlue, la card móvil no muestra la sección.
+    expect(within(screen.getByTestId('carga-fila-c2')).queryByText('AdBlue')).toBeNull();
+    expect(screen.getByTestId('total-adblue').textContent).toBe('530 L AdBlue');
+  });
+
+  it('filtro «Solo con AdBlue»: quedan las cargas que además cargaron AdBlue y los totales lo siguen', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(filtros().getByRole('button', { name: /AdBlue/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Solo con AdBlue' }));
+    expect(screen.getAllByTestId(/carga-fila-/).map((f) => f.getAttribute('data-testid'))).toEqual([
+      'carga-fila-c1',
+      'carga-fila-c3',
+    ]);
+    expect(screen.getByTestId('total-filtrado').textContent).toBe('200 L en 2 cargas');
+    expect(screen.getByTestId('total-adblue').textContent).toBe('530 L AdBlue');
+  });
+
+  it('el detalle muestra el AdBlue de la carga; «—» si no trajo', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-c1'));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('AdBlue')).toBeTruthy();
+    expect(within(dialog).getByText('30 L')).toBeTruthy();
+  });
+
   it('una foto legacy (/uploads/...) se sirve vía assetUrl, nunca con la ruta cruda', () => {
     listHook.mockReturnValue(ok([carga({ id: 'c9', fotoUrl: '/uploads/carga-vieja.jpg' })]));
     render(<CargasCombustibleAdminView />);
@@ -341,6 +373,44 @@ describe('alta manual («Nueva carga»)', () => {
           tipo: 'PETROLEO',
           fecha: new Date('2026-11-04T10:30').toISOString(),
           lectura: 45600,
+        },
+        foto: null,
+      },
+      expect.anything(),
+    );
+  });
+
+  it('con el switch de AdBlue encendido exige los litros y los manda junto con la carga', async () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva carga' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Equipo/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /EX-001/ }));
+    fireEvent.change(within(dialog).getByLabelText('Horómetro al cargar (h)'), { target: { value: '1600' } });
+    fireEvent.change(within(dialog).getByLabelText('Litros'), { target: { value: '120' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha de carga'), { target: { value: '2026-11-04T10:30' } });
+
+    const guardar = within(dialog).getByRole('button', { name: 'Registrar carga' });
+    expect(guardar.hasAttribute('disabled')).toBe(false);
+
+    // AdBlue marcado sin litros bloquea el guardado…
+    fireEvent.click(within(dialog).getByRole('switch', { name: /Se cargó AdBlue/ }));
+    expect(guardar.hasAttribute('disabled')).toBe(true);
+    // …y con los litros, viajan junto con la carga.
+    fireEvent.change(within(dialog).getByLabelText('AdBlue cargado (L)'), { target: { value: '500' } });
+    expect(guardar.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(guardar);
+    await waitFor(() => expect(crearMock).toHaveBeenCalledTimes(1));
+    expect(crearMock).toHaveBeenCalledWith(
+      {
+        values: {
+          equipoId: 'e1',
+          litros: 120,
+          tipo: 'PETROLEO',
+          fecha: new Date('2026-11-04T10:30').toISOString(),
+          lectura: 1600,
+          adBlueLitros: 500,
         },
         foto: null,
       },
@@ -456,6 +526,40 @@ describe('edición de una carga (solo ADMIN)', () => {
     const [vars] = editarMock.mock.calls[0]!;
     expect(vars.carga.id).toBe('m1');
     expect(vars.cambios).toMatchObject({ litros: 100.4, lectura: 1200 });
+  });
+
+  it('en una carga MANUAL el AdBlue se agrega con el switch y viaja en los cambios', async () => {
+    const manual = carga({ id: 'm1', registroHorometroId: null, origen: 'MANUAL', lectura: 1000 });
+    listHook.mockReturnValue(ok([manual]));
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-m1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar carga' }));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('switch', { name: /Se cargó AdBlue/ }));
+    fireEvent.change(within(dialog).getByLabelText('AdBlue cargado (L)'), { target: { value: '25' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(editarMock).toHaveBeenCalledTimes(1));
+    expect(editarMock.mock.calls[0]![0].cambios).toEqual({ adBlueLitros: 25 });
+  });
+
+  it('apagar el switch de AdBlue en una carga MANUAL lo quita (viaja null)', async () => {
+    const manual = carga({ id: 'm2', registroHorometroId: null, origen: 'MANUAL', lectura: 1000, adBlueLitros: 25 });
+    listHook.mockReturnValue(ok([manual]));
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByTestId('carga-fila-m2'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar carga' }));
+
+    const dialog = screen.getByRole('dialog');
+    // Parte encendido con sus litros cargados.
+    const litrosAdBlue = within(dialog).getByLabelText('AdBlue cargado (L)') as HTMLInputElement;
+    expect(litrosAdBlue.value).toBe('25');
+    fireEvent.click(within(dialog).getByRole('switch', { name: /Se cargó AdBlue/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(editarMock).toHaveBeenCalledTimes(1));
+    expect(editarMock.mock.calls[0]![0].cambios).toEqual({ adBlueLitros: null });
   });
 
   it('una carga de TARJETA solo permite corregir los litros, con la nota de la tarjeta', async () => {

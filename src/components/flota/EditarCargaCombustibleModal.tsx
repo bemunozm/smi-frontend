@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
+import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, Switch, TextField } from '@heroui/react';
 
 import { DecimalField } from '../DecimalField';
+import { adBlueIncompleto, validarAdBlue } from '../../lib/adblue';
 import { revisarLitros } from '../../lib/litros';
 import { useEditarCargaCombustible } from '../../hooks/useCombustible';
 import type { UpdateCombustibleBody } from '../../api/CombustibleAPI';
@@ -28,6 +29,10 @@ const EdicionSchema = z.object({
   lectura: z.number().positive('Ingresá la lectura del contador'),
   tipo: z.enum(['PETROLEO', 'BENCINA']),
   fecha: z.string().min(1, 'Requerido'),
+  // AdBlue de la carga manual: la regla la aplica `validarAdBlue` (compartida
+  // con el cierre de tarjeta); apagar el switch lo QUITA al guardar.
+  adBlue: z.boolean(),
+  adBlueLitros: z.number(),
 });
 type EdicionValues = z.infer<typeof EdicionSchema>;
 
@@ -47,6 +52,8 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
     control,
     handleSubmit,
     watch,
+    setValue,
+    getFieldState,
     formState: { errors },
   } = useForm<EdicionValues>({
     resolver: zodResolver(EdicionSchema),
@@ -55,6 +62,8 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
       lectura: carga.lectura ?? 0,
       tipo: carga.tipo === 'BENCINA' ? 'BENCINA' : 'PETROLEO',
       fecha: toDateTimeLocal(new Date(carga.fecha)),
+      adBlue: carga.adBlueLitros != null,
+      adBlueLitros: carga.adBlueLitros ?? 0,
     },
   });
 
@@ -62,13 +71,18 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
   const lectura = watch('lectura');
   const fechaIso = fechaRegistroIso(watch('fecha'));
   const revisionLitros = revisarLitros(watch('litros'), { liviano: esLiviano });
+  const adBlue = watch('adBlue');
+  const adBlueLitrosCampo = watch('adBlueLitros');
+  const adBlueLitros = Number.isFinite(adBlueLitrosCampo) && adBlueLitrosCampo > 0 ? adBlueLitrosCampo : null;
+  const resultadoAdBlue = validarAdBlue(adBlue, adBlueLitros, getFieldState('adBlueLitros').isDirty);
   const puedeGuardar =
     revisionLitros.error == null &&
     !editar.isPending &&
     Number.isFinite(litros) &&
     litros > 0 &&
     litros <= LITROS_MAX &&
-    (esDeTarjeta || (fechaIso !== null && Number.isFinite(lectura) && lectura > 0));
+    (esDeTarjeta ||
+      (fechaIso !== null && Number.isFinite(lectura) && lectura > 0 && !adBlueIncompleto(adBlue, adBlueLitros)));
 
   const onSubmit = (values: EdicionValues) => {
     let cambios: UpdateCombustibleBody;
@@ -82,11 +96,14 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
     } else {
       const iso = fechaRegistroIso(values.fecha);
       if (!iso) return;
+      // Switch apagado = quitar el AdBlue (viaja null, distinto de omitirlo).
+      const adBlueNuevo = values.adBlue && values.adBlueLitros > 0 ? values.adBlueLitros : null;
       cambios = {
         ...(values.litros !== carga.litros ? { litros: values.litros } : {}),
         ...(values.tipo !== carga.tipo ? { tipo: values.tipo } : {}),
         ...(iso !== new Date(carga.fecha).toISOString() ? { fecha: iso } : {}),
         ...(values.lectura !== (carga.lectura ?? 0) ? { lectura: values.lectura } : {}),
+        ...(adBlueNuevo !== (carga.adBlueLitros ?? null) ? { adBlueLitros: adBlueNuevo } : {}),
       };
       if (Object.keys(cambios).length === 0) {
         onClose();
@@ -214,6 +231,51 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
                       </TextField>
                     )}
                   />
+
+                  <Controller
+                    control={control}
+                    name="adBlue"
+                    render={({ field }) => (
+                      <Switch
+                        isSelected={field.value}
+                        onChange={(on) => {
+                          field.onChange(on);
+                          if (!on) setValue('adBlueLitros', 0, { shouldValidate: false });
+                        }}
+                      >
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                          <span className="flex flex-col">
+                            <span className="text-sm font-medium text-foreground">Se cargó AdBlue también</span>
+                            <span className="text-xs text-muted-foreground">
+                              Apagarlo quita el AdBlue de esta carga al guardar.
+                            </span>
+                          </span>
+                        </Switch.Content>
+                      </Switch>
+                    )}
+                  />
+
+                  {adBlue ? (
+                    <Controller
+                      control={control}
+                      name="adBlueLitros"
+                      render={({ field }) => (
+                        <DecimalField
+                          errorMessage={resultadoAdBlue.error ?? undefined}
+                          isInvalid={resultadoAdBlue.error != null}
+                          label="AdBlue cargado (L)"
+                          litros
+                          warning={resultadoAdBlue.aviso ?? undefined}
+                          onBlur={field.onBlur}
+                          onChange={field.onChange}
+                          value={field.value}
+                        />
+                      )}
+                    />
+                  ) : null}
                 </>
               )}
             </form>

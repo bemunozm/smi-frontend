@@ -34,12 +34,7 @@ export interface RegistroCombustible {
   /** `type`/`equipmentClass`/`controlUnit` los agrega el backend para la
    * vista admin de cargas; opcionales para tolerar respuestas del backend
    * anterior. */
-  equipo?: {
-    internalCode: string;
-    type?: string;
-    equipmentClass?: 'LIGHT' | 'HEAVY';
-    controlUnit?: 'KM' | 'HOURS';
-  };
+  equipo?: { internalCode: string; type?: string; equipmentClass?: 'LIGHT' | 'HEAVY'; controlUnit?: 'KM' | 'HOURS' };
   /** Lectura del contador del equipo AL CARGAR (horómetro en pesados, km en
    * livianos): la propia de la carga manual, o el valorFinal de la tarjeta
    * que la originó — resuelta por el backend. Null en filas viejas. */
@@ -49,4 +44,8 @@ export interface RegistroCombustible {
   realizadoPor?: string | null;
   /** TARJETA = nació del cierre de una tarjeta de turno; MANUAL = alta directa. */
   origen?: 'TARJETA' | 'MANUAL';
+  /** AdBlue cargado junto con la carga (L), resuelto por el backend: el propio
+   * del alta manual, o el declarado al cierre de la tarjeta vinculada. Null =
+   * sin AdBlue; ausente en respuestas del backend anterior. */
+  adBlueLitros?: number | null;
 }

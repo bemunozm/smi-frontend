@@ -60,6 +60,12 @@ function lecturaTexto(carga: RegistroCombustible, clase: EquipmentClass | undefi
   return carga.lectura != null ? `${NUM_CL_1.format(carga.lectura)} ${unidadLectura(carga, clase)}` : '—';
 }
 
+/** AdBlue cargado junto con la carga (propio o el del cierre de la tarjeta
+ * vinculada, resuelto por el backend); '—' sin AdBlue o con backend anterior. */
+function adBlueTexto(carga: RegistroCombustible): string {
+  return carga.adBlueLitros != null ? `${NUM_CL_1.format(carga.adBlueLitros)} L` : '—';
+}
+
 function formatFecha(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
@@ -139,6 +145,7 @@ function DetalleCargaModal({
                   <Dato label="Clase" value={clase ? equipmentClassLabel(clase) : '—'} />
                   <Dato label="Litros" value={`${NUM_CL_1.format(carga.litros)} L`} />
                   <Dato label="Combustible" value={tipoDe(carga)} />
+                  <Dato label="AdBlue" value={adBlueTexto(carga)} />
                   <Dato label={`${nombreLectura(carga, clase)} al cargar`} value={lecturaTexto(carga, clase)} />
                   <Dato label="Realizó" value={carga.realizadoPor ?? '—'} />
                   <Dato label="Origen" value={origenDe(carga)} />
@@ -212,6 +219,8 @@ function SelectFiltro({
 }
 
 const TODOS = 'TODOS';
+/** Valor del filtro de AdBlue: solo cargas que además trajeron AdBlue. */
+const CON_ADBLUE = 'CON_ADBLUE';
 
 /** `DateValue.toString()` es `YYYY-MM-DD` → `dd/mm/aaaa` para el botón. */
 const fmtDiaRango = (dia: DateValue) => dia.toString().split('-').reverse().join('/');
@@ -229,6 +238,7 @@ export function CargasCombustibleAdminView() {
   const [equipoFiltro, setEquipoFiltro] = useState(TODOS);
   const [claseFiltro, setClaseFiltro] = useState(TODOS);
   const [supervisorFiltro, setSupervisorFiltro] = useState(TODOS);
+  const [adBlueFiltro, setAdBlueFiltro] = useState(TODOS);
   // Período en UN calendario de rango: el rango es una decisión («esta
   // semana»), no dos campos sueltos. Se abre desde un botón, sin segmentos
   // dd/mm/aaaa a la vista (pedido del administrador).
@@ -286,16 +296,18 @@ export function CargasCombustibleAdminView() {
         if (equipoFiltro !== TODOS && c.equipoId !== equipoFiltro) return false;
         if (claseFiltro !== TODOS && claseDe(c) !== claseFiltro) return false;
         if (supervisorFiltro !== TODOS && c.realizadoPor !== supervisorFiltro) return false;
+        if (adBlueFiltro === CON_ADBLUE && !(c.adBlueLitros != null && c.adBlueLitros > 0)) return false;
         const dia = diaLocal(c.fecha);
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
         return true;
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `claseDe` deriva de `clasePorEquipo`
-    [cargas, equipoFiltro, claseFiltro, supervisorFiltro, desde, hasta, clasePorEquipo],
+    [cargas, equipoFiltro, claseFiltro, supervisorFiltro, adBlueFiltro, desde, hasta, clasePorEquipo],
   );
 
   const totalLitros = lista.reduce((acc, c) => acc + c.litros, 0);
+  const totalAdBlue = lista.reduce((acc, c) => acc + (c.adBlueLitros ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -316,6 +328,11 @@ export function CargasCombustibleAdminView() {
           <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
             {NUM_CL_1.format(totalLitros)} L en {NUM_CL.format(lista.length)} {lista.length === 1 ? 'carga' : 'cargas'}
           </Chip>
+          {totalAdBlue > 0 ? (
+            <Chip color="default" data-testid="total-adblue" size="md" variant="soft">
+              {NUM_CL_1.format(totalAdBlue)} L AdBlue
+            </Chip>
+          ) : null}
           {puedeCrear ? <Button onPress={() => setCreando(true)}>Nueva carga</Button> : null}
         </div>
       </div>
@@ -329,7 +346,7 @@ export function CargasCombustibleAdminView() {
                 De la más reciente a la más antigua. El total de arriba sigue al filtro.
               </Card.Description>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="filtros-cargas">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="filtros-cargas">
               <SelectFiltro
                 label="Equipo"
                 onChange={setEquipoFiltro}
@@ -353,6 +370,15 @@ export function CargasCombustibleAdminView() {
                   ...supervisores.map((nombre) => ({ value: nombre, label: nombre })),
                 ]}
                 value={supervisorFiltro}
+              />
+              <SelectFiltro
+                label="AdBlue"
+                onChange={setAdBlueFiltro}
+                opciones={[
+                  { value: TODOS, label: 'Todas las cargas' },
+                  { value: CON_ADBLUE, label: 'Solo con AdBlue' },
+                ]}
+                value={adBlueFiltro}
               />
               <div className="flex h-full flex-col gap-1">
                 <DialogTrigger isOpen={periodoAbierto} onOpenChange={setPeriodoAbierto}>
@@ -450,6 +476,14 @@ export function CargasCombustibleAdminView() {
                           </dt>
                           <dd className="m-0 text-foreground">{tipoDe(c)}</dd>
                         </div>
+                        {c.adBlueLitros != null ? (
+                          <div className="flex flex-col">
+                            <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                              AdBlue
+                            </dt>
+                            <dd className="m-0 text-foreground">{adBlueTexto(c)}</dd>
+                          </div>
+                        ) : null}
                         <div className="flex flex-col">
                           <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                             Clase
@@ -495,6 +529,7 @@ export function CargasCombustibleAdminView() {
                     <Table.Column>Realizó</Table.Column>
                     <Table.Column className="w-full">Origen</Table.Column>
                     <Table.Column>Foto</Table.Column>
+                    <Table.Column className="text-right">AdBlue</Table.Column>
                     <Table.Column className="text-right">Litros</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -523,6 +558,9 @@ export function CargasCombustibleAdminView() {
                           <Table.Cell className="text-sm whitespace-nowrap">{c.realizadoPor ?? '—'}</Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{origenDe(c)}</Table.Cell>
                           <Table.Cell className="text-sm whitespace-nowrap">{c.fotoUrl ? 'Sí' : '—'}</Table.Cell>
+                          <Table.Cell className="text-right font-mono text-sm whitespace-nowrap">
+                            {adBlueTexto(c)}
+                          </Table.Cell>
                           <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
                             {NUM_CL_1.format(c.litros)} L
                           </Table.Cell>

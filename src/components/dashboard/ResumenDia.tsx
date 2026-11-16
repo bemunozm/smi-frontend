@@ -71,7 +71,7 @@ function KpiTile({
 }
 
 function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }) {
-  const { fecha, hm, diesel, reports, produccion, adBlue } = data;
+  const { fecha, hm, diesel, reports, produccion, adBlue, adBlueDia } = data;
   const [detalle, setDetalle] = useState<DaySummaryKpi | null>(null);
   const vueltasTotal = produccion.internos + produccion.minaCaleta + produccion.mineras;
   const extra = reports.porEquipo.length - MAX_REPORTS_EQUIPOS;
@@ -141,15 +141,31 @@ function TarjetasKpi({ data, pasado }: { data: ResumenDiaData; pasado: boolean }
 
       <KpiTile
         bg={RESUMEN_CARD_BG.adBlue}
-        big={adBlue ? NUM_CL_1.format(adBlue.stock) : '—'}
+        // Lo que CAMBIA con la operación es lo cargado en el día; el saldo de
+        // inventario queda como línea secundaria (y en el popup). Un payload
+        // cacheado sin `adBlueDia` cae a la tarjeta de saldo anterior.
+        big={adBlueDia ? NUM_CL_1.format(adBlueDia.total) : adBlue ? NUM_CL_1.format(adBlue.stock) : '—'}
         fecha={fecha}
-        fechaLabel={pasado ? 'saldo actual' : undefined}
-        label="AdBlue"
-        onOpen={adBlue ? () => setDetalle('adblue') : undefined}
+        fechaLabel={adBlueDia ? undefined : pasado ? 'saldo actual' : undefined}
+        label={adBlueDia ? 'AdBlue cargado' : 'AdBlue'}
+        onOpen={adBlueDia || adBlue ? () => setDetalle('adblue') : undefined}
         testId="kpi-adblue"
-        unit={adBlue ? unidadAdBlue : undefined}
+        unit={adBlueDia ? 'L' : adBlue ? unidadAdBlue : undefined}
       >
-        {adBlue ? (
+        {adBlueDia ? (
+          <>
+            <span>
+              {NUM_CL_1.format(adBlueDia.dia)} Día + {NUM_CL_1.format(adBlueDia.noche)} Noche
+            </span>
+            <span>
+              {adBlue
+                ? `Saldo: ${NUM_CL_1.format(adBlue.stock)} ${unidadAdBlue}${
+                    adBlue.stockLitros != null ? ` = ${NUM_CL_1.format(adBlue.stockLitros)} L` : ''
+                  }`
+                : 'Saldo: sin ítem en Inventario'}
+            </span>
+          </>
+        ) : adBlue ? (
           <>
             <span>{adBlue.nombre}</span>
             {adBlue.stockLitros != null ? <span>= {NUM_CL_1.format(adBlue.stockLitros)} L</span> : null}
