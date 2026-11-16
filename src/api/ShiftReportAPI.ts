@@ -4,6 +4,7 @@ import { axiosInstance } from '../lib/axios';
 import { env } from '../config/env';
 import { toDomainError } from '../lib/api-error';
 import {
+  DeleteShiftReportResponseSchema,
   ShiftCardListResponseSchema,
   ShiftReportListResponseSchema,
   ShiftReportWrapperSchema,
@@ -58,6 +59,18 @@ async function cards(id: string): Promise<ShiftCardResponse[]> {
   }
 }
 
+/** Borra un reporte de salida (`DELETE /api/shift-reports/:id`, solo ADMIN):
+ * para envíos duplicados. Las tarjetas del turno no se tocan; el borrado queda
+ * en el Registro de actividad. */
+async function remove(id: string): Promise<void> {
+  try {
+    const response = await axiosInstance.delete(`/api/shift-reports/${encodeURIComponent(id)}`);
+    DeleteShiftReportResponseSchema.parse(response.data);
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo eliminar el reporte.');
+  }
+}
+
 /**
  * URL de descarga (`GET /api/shift-reports/:id/file`, 302 a una URL
  * firmada) — un `<a target="_blank">` directo, no un `fetch` desde acá: el
@@ -72,5 +85,6 @@ export const ShiftReportAPI = {
   sendExitReport,
   list,
   cards,
+  remove,
   fileUrl,
 };
