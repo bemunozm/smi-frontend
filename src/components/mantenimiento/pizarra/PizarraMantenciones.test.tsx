@@ -156,10 +156,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPizarra(entrada = '/mantenciones', onVerRegistro = vi.fn()) {
+function renderPizarra(entrada = '/mantenciones', onVerRegistro = vi.fn(), onVerTablero = vi.fn()) {
   return render(
     <MemoryRouter initialEntries={[entrada]}>
-      <PizarraMantenciones onVerRegistro={onVerRegistro} />
+      <PizarraMantenciones onVerRegistro={onVerRegistro} onVerTablero={onVerTablero} />
     </MemoryRouter>,
   );
 }
@@ -370,6 +370,19 @@ describe('PizarraMantenciones', () => {
     renderPizarra('/mantenciones', onVerRegistro);
     fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
     expect(onVerRegistro).toHaveBeenCalled();
+  });
+
+  it('el ADMIN tiene «Vista tablero mantenedor», que avisa a la vista; la SECRETARIA no lo ve', () => {
+    const onVerTablero = vi.fn();
+    renderPizarra('/mantenciones', vi.fn(), onVerTablero);
+    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero mantenedor' }));
+    expect(onVerTablero).toHaveBeenCalled();
+    cleanup();
+
+    rol.value = 'SECRETARIA';
+    renderPizarra();
+    expect(screen.queryByRole('button', { name: 'Vista tablero mantenedor' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ver registro de mantención' })).toBeTruthy();
   });
 
   it('muestra el error de la pizarra', () => {

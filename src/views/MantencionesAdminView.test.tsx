@@ -47,13 +47,18 @@ vi.mock('./OrdenesTrabajoView', () => ({
 }));
 
 // La pizarra tiene sus propios tests (`PizarraMantenciones.test.tsx`); acá
-// solo importa que sea la vista por defecto y que su botón lleve al registro.
+// solo importa que sea la vista por defecto y que sus botones lleven al registro y al tablero.
 vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
-  PizarraMantenciones: ({ onVerRegistro }: { onVerRegistro: () => void }) => (
+  PizarraMantenciones: ({ onVerRegistro, onVerTablero }: { onVerRegistro: () => void; onVerTablero?: () => void }) => (
     <div data-testid="pizarra">
       <button onClick={onVerRegistro} type="button">
         Ver registro de mantención
       </button>
+      {onVerTablero ? (
+        <button onClick={onVerTablero} type="button">
+          Vista tablero mantenedor
+        </button>
+      ) : null}
     </div>
   ),
 }));
@@ -358,6 +363,29 @@ describe('MantencionesAdminView', () => {
     expect(screen.getByText('Registro')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'atras' }));
     expect(screen.queryByText('Registro')).toBeNull();
+  });
+
+  it('desde la pizarra, «Vista tablero mantenedor» abre el tablero y «atrás» vuelve a la pizarra', () => {
+    render(
+      <MemoryRouter initialEntries={['/mantenciones']}>
+        <MantencionesAdminView />
+        <Atras />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero mantenedor' }));
+    expect(screen.queryByTestId('pizarra')).toBeNull();
+    expect(screen.getByTestId('tablero-taller')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'atras' }));
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByTestId('tablero-taller')).toBeNull();
+  });
+
+  it('a la SECRETARIA la pizarra no le ofrece el atajo al tablero', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Vista tablero mantenedor' })).toBeNull();
   });
 
   it('?vista=tablero abre directo en el tablero (la vista queda en la URL)', () => {

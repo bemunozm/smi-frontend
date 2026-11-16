@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Chip, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
-import { CalendarDays, CircleAlert, ClipboardList, Clock, History, TriangleAlert } from 'lucide-react';
+import { CalendarDays, CircleAlert, ClipboardList, Clock, History, SquareKanban, TriangleAlert } from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
 import { DESKTOP_QUERY, useMediaQuery } from '../../../hooks/useMediaQuery';
@@ -186,13 +186,21 @@ function Equipo({ fila, sinEstado = false }: { fila: MaintenanceBoardRow; sinEst
  * La pizarra de mantenciones: la versión en el sistema de la pizarra blanca de
  * faena (horas cambio, último cambio, próximo cambio, horómetro actual y horas
  * pendientes en rojo). Es la vista principal de Mantenciones del admin; el
- * registro de órdenes queda detrás de «Ver registro de mantención».
+ * registro de órdenes queda detrás de «Ver registro de mantención» y, para el
+ * ADMIN, el tablero del mantenedor detrás de «Vista tablero mantenedor».
  *
  * Todos los números vienen del backend (`/maintenance-plans/board`), que usa
  * la misma regla que dispara las órdenes preventivas: la pizarra no puede
  * mostrar un próximo cambio distinto al del aviso.
  */
-export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => void }) {
+export function PizarraMantenciones({
+  onVerRegistro,
+  onVerTablero,
+}: {
+  onVerRegistro: () => void;
+  /** Lleva al tablero del mantenedor (`?vista=tablero`); sin él no hay atajo. */
+  onVerTablero?: () => void;
+}) {
   const { data, isPending, isError, error } = useMaintenanceBoard();
   const { data: pronosticos } = useMaintenanceForecastByEquipment();
   const [params, setParams] = useSearchParams();
@@ -274,10 +282,20 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
           <ToggleButton id="pesados">Equipos pesados</ToggleButton>
           <ToggleButton id="livianos">Equipos livianos</ToggleButton>
         </ToggleButtonGroup>
-        <Button onPress={onVerRegistro} size="sm" variant="secondary">
-          <History className="size-4" />
-          Ver registro de mantención
-        </Button>
+        {/* Los dos accesos juntos y con su propio wrap: en el teléfono bajan en bloque bajo el selector de panel. */}
+        <div className="flex flex-wrap gap-2">
+          <Button onPress={onVerRegistro} size="sm" variant="secondary">
+            <History className="size-4" />
+            Ver registro de mantención
+          </Button>
+          {/* El tablero es del ADMIN, igual que el botón de vista del registro: la SECRETARIA no lo ve. */}
+          {esAdmin && onVerTablero ? (
+            <Button onPress={onVerTablero} size="sm" variant="secondary">
+              <SquareKanban className="size-4" />
+              Vista tablero mantenedor
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Card>

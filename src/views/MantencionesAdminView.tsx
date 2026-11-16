@@ -469,7 +469,8 @@ const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 te
  * Mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA). Por defecto,
  * la pizarra de mantenciones (`PizarraMantenciones`): el estado de cada equipo
  * como la pizarra blanca de faena. «Ver registro de mantención» lleva al
- * registro (`?vista=registro`) y «Volver a la pizarra» lo deshace.
+ * registro (`?vista=registro`) y «Volver a la pizarra» lo deshace. El ADMIN
+ * tiene además «Vista tablero mantenedor», que va directo al tablero.
  *
  * El registro muestra por defecto las órdenes de trabajo COMPLETADAS del
  * taller —preventivas o correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
@@ -600,7 +601,12 @@ export function MantencionesAdminView() {
       </div>
 
       {vistaPizarra ? (
-        <PizarraMantenciones onVerRegistro={() => setFiltro('vista', 'registro', '')} />
+        <PizarraMantenciones
+          onVerRegistro={() => setFiltro('vista', 'registro', '')}
+          // Directo al tablero desde la pizarra (solo ADMIN); `vista` agrega entrada al historial, así que «atrás»
+          // vuelve a la pizarra.
+          onVerTablero={esAdmin ? () => setFiltro('vista', 'tablero', '') : undefined}
+        />
       ) : vistaTablero ? (
         <OrdenesTrabajoView contexto="panel" />
       ) : (
