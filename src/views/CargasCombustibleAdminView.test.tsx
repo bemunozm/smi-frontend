@@ -21,6 +21,10 @@ const { listHook, crearMock, editarMock, eliminarMock } = vi.hoisted(() => ({
 }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' | 'MANTENEDOR' } }));
 
+// `?id=` abre una carga directo (enlace desde el popup AdBlue del dashboard).
+const { url, setParamsMock } = vi.hoisted(() => ({ url: { search: '' }, setParamsMock: vi.fn() }));
+vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(url.search), setParamsMock] }));
+
 vi.mock('../hooks/useCombustible', () => ({
   useCombustibleList: () => listHook(),
   useCrearCargaCombustible: () => ({ mutate: crearMock, isPending: false }),
@@ -119,6 +123,7 @@ const filtros = () => within(screen.getByTestId('filtros-cargas'));
 
 beforeEach(() => {
   rol.value = 'ADMIN';
+  url.search = '';
   listHook.mockReturnValue(ok(LISTA));
 });
 
@@ -259,6 +264,28 @@ describe('CargasCombustibleAdminView', () => {
     ]);
     expect(screen.getByTestId('total-filtrado').textContent).toBe('200 L en 2 cargas');
     expect(screen.getByTestId('total-adblue').textContent).toBe('530 L AdBlue');
+  });
+
+  it('con ?id= abre el detalle de esa carga directo, aunque los filtros la escondan', () => {
+    url.search = '?id=c3';
+    render(<CargasCombustibleAdminView />);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Carga de combustible · EX-001')).toBeTruthy();
+    expect(within(dialog).getByText('80 L')).toBeTruthy();
+    expect(within(dialog).getByText('500 L')).toBeTruthy();
+  });
+
+  it('cerrar el detalle abierto por enlace quita el ?id= de la URL', () => {
+    url.search = '?id=c3&otro=1';
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /cerrar|close/i }));
+    expect(setParamsMock).toHaveBeenCalledWith(new URLSearchParams('otro=1'), { replace: true });
+  });
+
+  it('un ?id= que no corresponde a ninguna carga no abre nada', () => {
+    url.search = '?id=no-existe';
+    render(<CargasCombustibleAdminView />);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('el detalle muestra el AdBlue de la carga; «—» si no trajo', () => {
