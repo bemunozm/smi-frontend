@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import {
   Button,
-  Chip,
   Input,
   Label,
   Modal,
   Spinner,
   TextField,
 } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 import { Info } from 'lucide-react';
 
 import {

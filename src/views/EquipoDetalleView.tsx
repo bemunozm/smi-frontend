@@ -695,7 +695,7 @@ function TurnoEnCursoBanner({ equipo }: { equipo: EquipmentDetail }) {
           <span>Desde {fmtFechaHora(openShift.fecha)}</span>
           {equipo.equipmentClass === 'LIGHT' ? (
             <span className="basis-full text-xs">
-              Se cierra al cargar combustible: el supervisor desde Registro de equipo o el mantenedor desde «Mi
+              Se cierra al cargar combustible (o sin carga, indicando el motivo): el supervisor desde Registro de equipo o el mantenedor desde «Mi
               camioneta».
             </span>
           ) : null}

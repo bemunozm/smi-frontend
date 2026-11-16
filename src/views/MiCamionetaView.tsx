@@ -283,6 +283,16 @@ export function MiCamionetaView({
             onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
           />
         </Campo>
+        {cierre.motivoRequerido && (
+          <Campo label="Motivo sin carga de combustible" requerido hint="Por ejemplo: corte de luz, surtidor sin combustible o no le tocaba cargar.">
+            <Textarea
+              rows={2}
+              placeholder="¿Por qué no se cargó combustible?"
+              value={cierre.cierre.motivoSinCarga}
+              onChange={(e) => cierre.setCierre((c) => ({ ...c, motivoSinCarga: e.target.value }))}
+            />
+          </Campo>
+        )}
         <Campo label="Observaciones">
           <Textarea
             rows={2}
@@ -296,6 +306,7 @@ export function MiCamionetaView({
           onClick={() => void cierre.cerrar()}
           disabled={
             (cierre.fotoRequerida && !cierre.foto.file) ||
+            cierre.faltaMotivo ||
             cierre.foto.isReadingPhoto ||
             cierre.isCerrando ||
             cierre.finalNum == null ||
@@ -310,6 +321,11 @@ export function MiCamionetaView({
             Con combustible cargado falta la foto del surtidor para cerrar.
           </p>
         )}
+        {cierre.faltaMotivo && (
+          <p className="m-0 text-center text-[12.5px] text-[var(--label-color)]">
+            Sin combustible cargado, escribe el motivo para cerrar.
+          </p>
+        )}
       </Form>
     </Card>
   );
@@ -318,7 +334,7 @@ export function MiCamionetaView({
     <Card>
       <CardHead
         titulo="Usar una camioneta"
-        bajada="Anota el kilometraje al tomarla. Queda abierta hasta que cargues combustible."
+        bajada="Anota el kilometraje al tomarla. Se cierra al cargar combustible o, si no se pudo cargar, indicando el motivo."
       />
       {proyeccion.disponiblesLivianos.length === 0 ? (
         <Hint>No hay camionetas libres: todas tienen una tarjeta abierta.</Hint>

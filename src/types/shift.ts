@@ -65,6 +65,9 @@ export const ShiftCardResponseSchema = z.object({
    * abierta (o en datos legacy sin foto). */
   pumpPhotoUrl: z.string().nullable(),
   observaciones: z.string().nullable(),
+  /** Por qué se cerró sin combustible (corte de luz…). `nullish`: respuestas
+   * guardadas por el Service Worker antes de que existiera el campo. */
+  noFuelReason: z.string().nullish(),
   belowPreviousReading: z.boolean(),
   fecha: z.string(),
   fechaSalida: z.string().nullable(),
@@ -198,6 +201,9 @@ export interface CloseShiftCardInput {
   /** Litros de AdBlue (> 0 y ≤ 1000) — obligatorios cuando `adBlue` es `true`. */
   adBlueLiters?: number;
   observaciones?: string;
+  /** Por qué no se cargó combustible — se exige en el form cuando
+   * `fuelLiters` es 0 (16/11/2026). */
+  noFuelReason?: string;
   /** Hora del DISPOSITIVO al cerrar la tarjeta. */
   capturedAt: string;
   /** Hora del DISPOSITIVO al tomar la foto, si difiere de `capturedAt`. */

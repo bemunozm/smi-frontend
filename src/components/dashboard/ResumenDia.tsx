@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Chip, Spinner, Table } from '@heroui/react';
+import { Card, Spinner, Table } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { RESUMEN_CARD_BG } from '../../config/dashboard-colors';
 import { useDashboardResumenDia } from '../../hooks/useDashboard';

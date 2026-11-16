@@ -50,6 +50,8 @@ export interface TarjetaTurno {
    * se registró, no el del turno. */
   cerradaIso?: string;
   observaciones?: string;
+  /** Por qué se cerró sin carga de combustible (corte de luz…). */
+  motivoSinCarga?: string;
   /** URL firmada de la foto del surtidor (`ShiftCardResponse.pumpPhotoUrl`)
    * — nunca la key cruda: la firma al leer la hace el backend. */
   pumpPhotoUrl?: string;
@@ -191,6 +193,7 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
       : undefined,
     cerradaIso: card.closedAt ?? undefined,
     observaciones: card.observaciones ?? undefined,
+    motivoSinCarga: card.noFuelReason ?? undefined,
     pumpPhotoUrl: card.pumpPhotoUrl ?? undefined,
     // "arrastrada": sigue abierta y no pertenece al turno que corre ahora.
     arrastrada: !liviano && grupo === 'anterior' && estado === 'curso',

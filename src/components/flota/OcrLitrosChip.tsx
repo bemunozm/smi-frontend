@@ -1,4 +1,4 @@
-import { Chip } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { fmtLitros } from '../../lib/format';
 import type { SugerenciaOcr } from '../../lib/usePhotoCaptureFlow';

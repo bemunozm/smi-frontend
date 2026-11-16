@@ -259,7 +259,7 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     cerrandoId: null,
     setCerrandoId,
     cerrando: null,
-    cierre: { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' },
+    cierre: { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '', motivoSinCarga: '' },
     adBlueCierre: { litros: null, error: null, aviso: null },
     adBlueIncompletoCierre: false,
     edicion: EDICION_INACTIVA,
@@ -272,6 +272,8 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     litrosError: null,
     litrosAviso: null,
     fotoRequerida: false,
+    motivoRequerido: false,
+    faltaMotivo: false,
     isCerrando: false,
     foto: {
       file: null,
@@ -494,6 +496,20 @@ describe('RegistroEquipoView', () => {
     expect(screen.queryByText(/falta la foto del surtidor/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Cerrar tarjeta/ }));
     expect(cerrarMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin combustible pide el motivo y no deja cerrar sin él', () => {
+    renderView('desktop', {
+      cerrandoId: 'c1',
+      cerrando: TARJETA_ABIERTA,
+      finalNum: 12500,
+      motivoRequerido: true,
+      faltaMotivo: true,
+    });
+
+    expect(screen.getByText('Motivo sin carga de combustible')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Sin combustible cargado, escribe el motivo para cerrar.')).toBeTruthy();
   });
 
   it('usa el campo de foto compartido de Flota, no uno propio', () => {
@@ -876,7 +892,7 @@ describe('RegistroEquipoView', () => {
       renderView('desktop', {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
-        cierre: { final: '', litros: '', adBlue: true, adBlueLitros: '', observaciones: '' },
+        cierre: { final: '', litros: '', adBlue: true, adBlueLitros: '', observaciones: '', motivoSinCarga: '' },
       });
       expect(screen.getByLabelText(/AdBlue cargado/)).toBeTruthy();
     });
@@ -895,7 +911,7 @@ describe('RegistroEquipoView', () => {
       renderView('desktop', {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
-        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '' },
+        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '45', observaciones: '', motivoSinCarga: '' },
         adBlueCierre: {
           litros: 45,
           error: null,
@@ -912,7 +928,7 @@ describe('RegistroEquipoView', () => {
     });
 
     it('con AdBlue marcado explica el estanque de 30 L; el aviso de exceso reemplaza esa nota', () => {
-      const conAdBlue = { final: '', litros: '', adBlue: true, adBlueLitros: '12', observaciones: '' };
+      const conAdBlue = { final: '', litros: '', adBlue: true, adBlueLitros: '12', observaciones: '', motivoSinCarga: '' };
       const { unmount } = renderView('desktop', { cerrandoId: 'c1', cerrando: TARJETA_ABIERTA, cierre: conAdBlue });
       expect(
         screen.getByText('Los cargadores SEM 3, 4, 5 y 6 tienen estanque de 30 L y gastan cerca de 1 L por hora.'),
@@ -936,7 +952,7 @@ describe('RegistroEquipoView', () => {
       renderView('desktop', {
         cerrandoId: 'c1',
         cerrando: TARJETA_ABIERTA,
-        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '', observaciones: '' },
+        cierre: { final: '12500', litros: '10', adBlue: true, adBlueLitros: '', observaciones: '', motivoSinCarga: '' },
         adBlueCierre: { litros: null, error: 'Indica cuántos litros de AdBlue se cargaron.', aviso: null },
         adBlueIncompletoCierre: true,
         finalNum: 12500,
@@ -1022,8 +1038,8 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.getByText('Cómo funcionan las camionetas')).toBeTruthy();
       expect(screen.getByText(/no abras otra ni la toques/)).toBeTruthy();
-      expect(screen.getByText(/Ciérrala cuando le eches combustible/)).toBeTruthy();
-      expect(screen.getByText(/se cierra igual solo con el km/)).toBeTruthy();
+      expect(screen.getByText(/Ciérrala al cargar combustible/)).toBeTruthy();
+      expect(screen.getByText(/basta el km y el motivo/)).toBeTruthy();
       expect(screen.getByText(/sin carga si hubo un corte de luz/)).toBeTruthy();
     });
 
@@ -1050,7 +1066,7 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
       expect(screen.getByText('180 km')).toBeTruthy();
       expect(screen.queryByText(/AdBlue/)).toBeNull();
-      expect(screen.getByText(/puedes cerrarla igual sin litros ni foto/)).toBeTruthy();
+      expect(screen.getByText(/ciérrala solo con el km e indica el motivo/)).toBeTruthy();
       expect(screen.queryByText(/reporte de salida del turno/)).toBeNull();
       // Con litros escritos, la foto del surtidor sigue siendo obligatoria.
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);

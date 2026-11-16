@@ -17,13 +17,15 @@ export interface CierreState {
   adBlue: boolean;
   adBlueLitros: string;
   observaciones: string;
+  /** Por qué no se cargó combustible: obligatorio sin litros (16/11/2026). */
+  motivoSinCarga: string;
 }
 
 // Topes y mensajes de litros: viven en `lib/litros.ts` (los comparten el cierre,
 // el turno pasado y las cargas del panel). Se re-exportan por compatibilidad.
 export { LITROS_FUERA_DE_RANGO, LITROS_MAX } from '../lib/litros';
 
-const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '' };
+const DEFAULT_CIERRE: CierreState = { final: '', litros: '', adBlue: false, adBlueLitros: '', observaciones: '', motivoSinCarga: '' };
 
 export interface UseCierreFormParams {
   tarjetas: TarjetaTurno[];
@@ -50,6 +52,11 @@ export interface UseCierreFormResult {
   /** `true` si se escribieron litros: entonces la foto del surtidor es
    * obligatoria. Sin combustible se cierra sin foto. */
   fotoRequerida: boolean;
+  /** `true` si no se escribieron litros: entonces hay que justificar por qué
+   * (corte de luz, surtidor sin combustible…). */
+  motivoRequerido: boolean;
+  /** Sin litros y sin motivo escrito: no se puede cerrar. */
+  faltaMotivo: boolean;
   /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
   adBlueCierre: ResultadoAdBlue;
   /** `true` si se marcó AdBlue y los litros todavía no sirven. */
@@ -92,6 +99,9 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   // El combustible es opcional (corte de luz, 16/11/2026): la foto del
   // surtidor solo se exige cuando se escriben litros.
   const fotoRequerida = (validacionLitros.valor ?? 0) > 0;
+  // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026).
+  const motivoRequerido = !fotoRequerida;
+  const faltaMotivo = motivoRequerido && cierre.motivoSinCarga.trim() === '';
 
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
@@ -115,6 +125,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
       litrosError ||
       adBlueIncompletoCierre ||
       (fotoRequerida && !foto.file) ||
+      faltaMotivo ||
       isCerrando
     )
       return;
@@ -132,6 +143,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
           adBlue: cierre.adBlue,
           ...(cierre.adBlue ? { adBlueLiters: adBlueCierre.litros ?? undefined } : {}),
           observaciones: cierre.observaciones.trim() || undefined,
+          ...(motivoRequerido ? { noFuelReason: cierre.motivoSinCarga.trim() } : {}),
           capturedAt: new Date().toISOString(),
           photoCapturedAt: foto.captureDate ? foto.captureDate.toISOString() : undefined,
           // El turno de quien cierra: un liviano entra en el reporte de ESE turno.
@@ -149,5 +161,5 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, fotoRequerida, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, fotoRequerida, motivoRequerido, faltaMotivo, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

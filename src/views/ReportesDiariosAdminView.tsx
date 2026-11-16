@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertDialog, Button, Card, Chip, Modal, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Modal, Spinner, Table } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 
 import { usePermissions } from '../hooks/usePermissions';
 import { usePastShiftSummary } from '../hooks/usePastShiftSummary';

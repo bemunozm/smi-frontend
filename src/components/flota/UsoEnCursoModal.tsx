@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Button, Chip, Modal, Spinner } from '@heroui/react';
+import { Button, Modal, Spinner } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { useCombustibleList } from '../../hooks/useCombustible';
 import { useCurrentUser } from '../../hooks/useCurrentUser';

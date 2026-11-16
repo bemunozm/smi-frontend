@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AlertDialog, Button, Card, Chip, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Spinner, Table } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { Download, Eye, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
@@ -170,7 +171,7 @@ export function ReportesView() {
 
           {!isPending && !isError && reportes.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
-              Todavía no hay reportes de salida: aparecen acá cuando un supervisor toca «Enviar reporte de salida»
+              Todavía no hay reportes de salida: aparecen acá cuando un supervisor toca «Enviar reporte de salida a terreno»
               en Terreno.
             </p>
           ) : null}

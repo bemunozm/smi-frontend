@@ -43,6 +43,37 @@ export function groupWorkshopBoard(ordenes: readonly OrdenTrabajo[]): WorkshopBo
   return { backlog, inProgress, finished };
 }
 
+/** Preventiva de pauta (nace del ciclo de mantenciones, con su checklist de
+ * tareas): se registra y se consulta con el checklist, no con la bitácora. */
+export function esChecklistPauta(orden: OrdenTrabajo): boolean {
+  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
+}
+
+/** Días que una operación finalizada se queda en la columna «Finalizadas»
+ * del tablero; las más antiguas pasan al historial. */
+export const FINISHED_RECENT_DAYS = 7;
+
+/**
+ * Separa las finalizadas (ya ordenadas por `groupWorkshopBoard`) en las de los
+ * últimos `FINISHED_RECENT_DAYS` días —las que se ven en el tablero— y el
+ * historial. Se mide por `updatedAt`, la misma fecha que la tarjeta muestra
+ * como «Finalizada». Una fecha ilegible cae en recientes: mejor verla de más
+ * que esconderla.
+ */
+export function splitFinished(
+  finished: readonly OrdenTrabajo[],
+  now: Date = new Date(),
+): { recent: OrdenTrabajo[]; history: OrdenTrabajo[] } {
+  const limite = now.getTime() - FINISHED_RECENT_DAYS * 24 * 60 * 60 * 1000;
+  const recent: OrdenTrabajo[] = [];
+  const history: OrdenTrabajo[] = [];
+  for (const orden of finished) {
+    const fecha = new Date(orden.updatedAt).getTime();
+    (Number.isNaN(fecha) || fecha >= limite ? recent : history).push(orden);
+  }
+  return { recent, history };
+}
+
 export interface WorkshopStats {
   backlog: number;
   inProgress: number;

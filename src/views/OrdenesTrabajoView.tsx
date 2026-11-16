@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@heroui/react';
-import { ArrowRight, Clock, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Clock, History, TriangleAlert } from 'lucide-react';
 
 // El taller se dibuja con el kit de Terreno: mismos chips/tarjetas/cifras
 // táctiles que usa la tablet en terreno (y sin el bug de slots de HeroUI).
@@ -23,10 +24,13 @@ import {
 import type { OrdenTrabajo } from '../types/mantenimiento';
 import type { HallazgoDeEquipo } from '../types/hallazgos';
 import {
+  FINISHED_RECENT_DAYS,
   buildWorkshopStats,
+  esChecklistPauta,
   formatDate,
   findEquipment,
   groupWorkshopBoard,
+  splitFinished,
   toPrioridadOT,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
@@ -126,15 +130,6 @@ function TituloOrden({ children }: { children: React.ReactNode }) {
 /** Tipo de operación con el chip del kit: preventiva azul, correctiva neutra. */
 function TipoChip({ tipo }: { tipo: OrdenTrabajo['tipo'] }) {
   return tipo === 'PREVENTIVA' ? <PreventiveChip /> : <Chip tono="neutral">Correctiva</Chip>;
-}
-
-/**
- * Orden preventiva nacida de la pauta por horómetro/km: su tarjeta es un
- * CHECKLIST (las operaciones del hito como tareas), no el flujo iniciar →
- * finalizar de las correctivas.
- */
-function esChecklistPauta(orden: OrdenTrabajo): boolean {
-  return orden.origen === 'PREVENTIVO' && orden.tareas.length > 0;
 }
 
 /**
@@ -242,6 +237,41 @@ function FindingCard({
   );
 }
 
+/** Tarjeta de una operación finalizada (o cancelada) en el tablero. */
+function FinishedCard({
+  orden,
+  fleet,
+  marca,
+}: {
+  orden: OrdenTrabajo;
+  fleet: readonly EquipmentRef[] | undefined;
+  marca: ReturnType<ReturnType<typeof usePendingWrites>['marcaDe']>;
+}) {
+  return (
+    <BoardCard muted>
+      <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+      <div className="flex items-start gap-2">
+        <TituloOrden>{orden.titulo}</TituloOrden>
+        <MarcaPendiente marca={marca} />
+      </div>
+      <HallazgoAssoc orden={orden} />
+      <ChipsRow>
+        {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
+        <TipoChip tipo={orden.tipo} />
+      </ChipsRow>
+      <CardMeta>
+        {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
+        {orden.asignadoA?.nombre ?? 'Sin asignar'}
+      </CardMeta>
+      {esChecklistPauta(orden) ? (
+        <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
+      ) : (
+        <ViewOperationModal equipment={fleet} orden={orden} />
+      )}
+    </BoardCard>
+  );
+}
+
 /**
  * Sub-vista "Órdenes" del taller (diseño Mantenedor Taller): los hallazgos
  * reportados llegan como OT PENDIENTE/ASIGNADA a la bandeja, "Iniciar
@@ -260,6 +290,12 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const pendientes = usePendingWrites(RECURSOS_DE_ORDENES);
 
   const board = useMemo(() => groupWorkshopBoard(ordenes ?? []), [ordenes]);
+  // La columna «Finalizadas» muestra solo la última semana; el historial
+  // completo es otra pantalla, en tabla (`/mantenimiento/ordenes/historial`).
+  // Solo en el taller: en el panel, la «Vista registro» de Mantenciones ya es
+  // ese historial (con más filtros) y un segundo botón llevaría al mismo lugar.
+  const finalizadas = useMemo(() => splitFinished(board.finished), [board.finished]);
+  const navigate = useNavigate();
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
   // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
   // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
@@ -292,7 +328,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const conteos = {
     ordenes: openFindings.length + board.backlog.length,
     proceso: board.inProgress.length,
-    finalizadas: board.finished.length,
+    finalizadas: finalizadas.recent.length,
   };
   const ver = (c: typeof columna) => tresColumnas || columna === c;
 
@@ -311,7 +347,15 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
         ) : (
           <span aria-hidden className="grow" />
         )}
-        {canCreate ? <CreateOperationModal /> : null}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {contexto === 'taller' && board.finished.length > 0 ? (
+            <Boton onClick={() => void navigate('/mantenimiento/ordenes/historial')} variante="contorno">
+              <History aria-hidden className="h-4 w-4" />
+              Historial
+            </Boton>
+          ) : null}
+          {canCreate ? <CreateOperationModal /> : null}
+        </div>
       </div>
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
@@ -470,30 +514,15 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                 conCabecera={tresColumnas}
                 count={conteos.finalizadas}
                 title="Finalizadas"
-                vacio="Todavía no hay operaciones finalizadas."
+                vacio={`No hay operaciones finalizadas en los últimos ${FINISHED_RECENT_DAYS} días.`}
               >
-                {board.finished.map((orden) => (
-                  <BoardCard key={orden.id} muted>
-                    <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
-                    <div className="flex items-start gap-2">
-                      <TituloOrden>{orden.titulo}</TituloOrden>
-                      <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
-                    </div>
-                    <HallazgoAssoc orden={orden} />
-                    <ChipsRow>
-                      {orden.estado === 'CANCELADA' ? <Chip tono="danger">Cancelada</Chip> : null}
-                      <TipoChip tipo={orden.tipo} />
-                    </ChipsRow>
-                    <CardMeta>
-                      {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
-                      {orden.asignadoA?.nombre ?? 'Sin asignar'}
-                    </CardMeta>
-                    {esChecklistPauta(orden) ? (
-                      <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
-                    ) : (
-                      <ViewOperationModal equipment={fleet} orden={orden} />
-                    )}
-                  </BoardCard>
+                {finalizadas.recent.map((orden) => (
+                  <FinishedCard
+                    fleet={fleet}
+                    key={orden.id}
+                    marca={pendientes.marcaDe('orden', orden.id)}
+                    orden={orden}
+                  />
                 ))}
               </BoardColumn>
             )}

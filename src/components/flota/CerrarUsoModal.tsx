@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
-import { Button, Chip, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+import { Button, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { DecimalField } from '../DecimalField';
 import { useUpdateEquipmentStatus } from '../../hooks/useEquipment';

@@ -120,6 +120,9 @@ export interface UseShiftRegisterResult {
   litrosAviso: string | null;
   /** Con litros escritos la foto del surtidor es obligatoria; sin ellos, no. */
   fotoRequerida: boolean;
+  /** Sin litros hay que justificar por qué no se cargó combustible. */
+  motivoRequerido: boolean;
+  faltaMotivo: boolean;
   adBlueCierre: ResultadoAdBlue;
   adBlueIncompletoCierre: boolean;
   isCerrando: boolean;

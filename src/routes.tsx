@@ -21,6 +21,7 @@ import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { PrevencionLayout } from './layout/PrevencionLayout';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
+import { HistorialOperacionesView } from './views/HistorialOperacionesView';
 import { MiCamionetaView } from './views/MiCamionetaView';
 import { WorkshopStockView } from './views/WorkshopStockView';
 import { NotificacionesView } from './views/NotificacionesView';
@@ -196,6 +197,9 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/mantenimiento', element: <Navigate replace to="/mantenimiento/ordenes" /> },
                   { path: '/mantenimiento/ordenes', element: <OrdenesTrabajoView /> },
+                  // Todas las finalizadas en tabla (el tablero solo muestra la
+                  // última semana); bajo /ordenes para que la pestaña siga activa.
+                  { path: '/mantenimiento/ordenes/historial', element: <HistorialOperacionesView /> },
                   { path: '/mantenimiento/checklist', element: <ChecklistDiarioView /> },
                   // La camioneta con que el mantenedor se mueve en faena (km y carga de combustible).
                   { path: '/mantenimiento/camioneta', element: <MiCamionetaView /> },

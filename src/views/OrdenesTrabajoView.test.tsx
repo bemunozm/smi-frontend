@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
 
@@ -221,8 +221,10 @@ vi.mock('../hooks/usePendingWrites', () => ({
 
 vi.mock('../components/sync/PendientesStrip', () => ({ PendientesStrip: () => null }));
 
+// Órdenes que un test agrega al tablero (se vacía en `afterEach`).
+let ordenesExtra: OrdenTrabajo[] = [];
 vi.mock('../hooks/useOrdenes', () => ({
-  useOrdenes: () => ({ data: ORDENES, isPending: false, isError: false, error: null }),
+  useOrdenes: () => ({ data: [...ORDENES, ...ordenesExtra], isPending: false, isError: false, error: null }),
   useCrearOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useActualizarOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useLogOperation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -263,7 +265,17 @@ vi.mock('../hooks/useMediaQuery', async (original) => ({
   useMediaQuery: () => escritorio,
 }));
 
+// Los fixtures son del 05/10/2026: el reloj se fija al día siguiente para que
+// sus finalizadas caigan dentro de la última semana (la columna del tablero).
+// Solo `Date`: los timers reales siguen andando para react-aria.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-06T12:00:00.000Z'));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
+  ordenesExtra = [];
   cleanup();
   escritorio = true;
   allowed = CAN_MANTENEDOR;
@@ -280,6 +292,48 @@ function renderView() {
 }
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
+
+  it('las finalizadas de hace más de 7 días salen de la columna; «Historial» lleva a la tabla completa', () => {
+    ordenesExtra = [
+      orden({
+        id: 'ot-vieja',
+        equipoId: 'RE-003',
+        hallazgoId: null,
+        pautaMilestone: null,
+        pautaCycle: null,
+        titulo: 'Cambio de neumáticos traseros',
+        estado: 'COMPLETADA',
+        tipo: 'CORRECTIVA',
+        origen: 'MANUAL',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+      }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/mantenimiento/ordenes']}>
+        <Routes>
+          <Route element={<OrdenesTrabajoView />} path="/mantenimiento/ordenes" />
+          <Route element={<p>Pantalla de historial</p>} path="/mantenimiento/ordenes/historial" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const finished = screen.getByRole('region', { name: 'Finalizadas' });
+    expect(within(finished).getByText('Engrase general y cambio de pernos')).toBeTruthy();
+    expect(within(finished).queryByText('Cambio de neumáticos traseros')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }));
+    expect(screen.getByText('Pantalla de historial')).toBeTruthy();
+  });
+
+  it('en el panel del administrador no hay «Historial»: la «Vista registro» ya es ese historial', () => {
+    render(
+      <MemoryRouter>
+        <OrdenesTrabajoView contexto="panel" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('region', { name: 'Finalizadas' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Historial' })).toBeNull();
+  });
   it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
     renderView();
     const board = screen.getByRole('region', { name: 'Órdenes' }).parentElement;

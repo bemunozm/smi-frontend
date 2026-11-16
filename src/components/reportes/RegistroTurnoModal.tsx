@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Button, Chip, Modal, Spinner } from '@heroui/react';
+import { Button, Modal, Spinner } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 import { ArrowLeft, Download, Pencil, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../../api/ShiftReportAPI';
@@ -68,6 +69,11 @@ function FilaTarjeta({ tarjeta, onEditar }: { tarjeta: TarjetaTurno; onEditar?: 
           }
         />
       </dl>
+      {tarjeta.motivoSinCarga ? (
+        <p className="m-0 text-sm text-foreground">
+          <span className="font-semibold">Sin carga de combustible:</span> {tarjeta.motivoSinCarga}
+        </p>
+      ) : null}
       {tarjeta.observaciones ? <p className="m-0 text-sm text-foreground">{tarjeta.observaciones}</p> : null}
       {tarjeta.pumpPhotoUrl ? (
         <a
