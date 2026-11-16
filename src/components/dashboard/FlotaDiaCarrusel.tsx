@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Card, Chip } from '@heroui/react';
+import { Card } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { estadoFlotaChipColor, estadoFlotaLabel, type EstadoHoy } from '../../config/dashboard-colors';
 import { FichaEquipoModal } from './FichaEquipoModal';

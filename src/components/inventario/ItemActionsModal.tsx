@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button,
-  Chip,
   Input,
   Label,
   ListBox,
@@ -11,6 +10,7 @@ import {
   Spinner,
   TextField,
 } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 import {
   ArrowLeft,
   ArrowLeftRight,

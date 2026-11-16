@@ -1,8 +1,31 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": [
+    "react",
+    "typescript",
+    "oxc"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@heroui/react",
+            "importNames": [
+              "Chip"
+            ],
+            "message": "Usa el Chip de components/ui/Chip: el de HeroUI 3.2.3 mezcla colores entre chips (estado compartido de tailwind-variants)."
+          }
+        ]
+      }
+    ]
   }
 }

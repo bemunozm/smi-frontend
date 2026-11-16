@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Chip } from '@heroui/react';
+import { Chip } from '../ui/Chip';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useMarkRead } from '../../hooks/useNotificaciones';

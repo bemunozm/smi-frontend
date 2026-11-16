@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Card, Chip, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Button, Card, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 
 import { EventoTimelineItem } from '../components/ficha/EventoTimelineItem';
 import { isOneOf } from '../config/ficha-colors';

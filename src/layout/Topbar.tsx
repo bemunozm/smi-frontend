@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, Button, Chip, Dropdown, Label } from '@heroui/react';
+import { Avatar, Button, Dropdown, Label } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import type { Key } from '@heroui/react';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';

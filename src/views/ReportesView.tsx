@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AlertDialog, Button, Card, Chip, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Spinner, Table } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 import { Download, Eye, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';

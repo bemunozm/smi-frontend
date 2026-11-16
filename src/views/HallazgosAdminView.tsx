@@ -4,7 +4,6 @@ import {
   AlertDialog,
   Button,
   Card,
-  Chip,
   Input,
   Label,
   ListBox,
@@ -15,6 +14,7 @@ import {
   TextArea,
   TextField,
 } from '@heroui/react';
+import { Chip } from '../components/ui/Chip';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
