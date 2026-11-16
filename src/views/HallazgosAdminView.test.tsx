@@ -94,6 +94,14 @@ describe('HallazgosAdminView', () => {
     expect(screen.getByTestId('total-CERRADO').textContent).toBe('1 cerrado');
   });
 
+  it('por defecto muestra solo abiertos y en proceso; «Cerrado» muestra los cerrados', () => {
+    renderView();
+    expect((screen.getByLabelText(/estado/i) as HTMLSelectElement).value).toBe('PENDIENTES');
+    expect(screen.getByTestId('hallazgo-fila-h1')).toBeTruthy();
+    expect(screen.getByTestId('hallazgo-fila-h2')).toBeTruthy();
+    expect(screen.queryByTestId('hallazgo-fila-h3')).toBeNull();
+  });
+
   it('filtra por estado y por texto (descripción o equipo)', () => {
     renderView();
     fireEvent.change(screen.getByLabelText(/estado/i), { target: { value: 'CERRADO' } });
@@ -205,6 +213,8 @@ describe('HallazgosAdminView', () => {
 
   it('el detalle sin nombre de quien registró dice «Sin registro», y sin foto lo dice', () => {
     renderView();
+    // h3 está cerrado: por defecto el listado solo muestra abiertos y en proceso.
+    fireEvent.change(screen.getByLabelText(/estado/i), { target: { value: 'CERRADO' } });
     fireEvent.click(screen.getByTestId('hallazgo-fila-h3'));
 
     const dialog = screen.getByRole('dialog');

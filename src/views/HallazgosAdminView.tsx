@@ -40,6 +40,11 @@ import type { Criticidad, HallazgoEstado } from '../types/dashboard';
 
 const ESTADOS = ['ABIERTO', 'EN_PROCESO', 'CERRADO'] as const;
 
+/** Filtro por defecto del listado: lo que sigue pendiente (abiertos y en
+ * proceso). Los cerrados se ven eligiendo «Cerrado» (o «Todos»). */
+const PENDIENTES = 'PENDIENTES';
+const ESTADOS_PENDIENTES: readonly string[] = ['ABIERTO', 'EN_PROCESO'];
+
 const PRIORIDAD_LABEL: Record<string, string> = {
   BAJA: 'Baja',
   MEDIA: 'Media',
@@ -540,7 +545,7 @@ export function HallazgosAdminView() {
   const puedeEliminar = canDeleteHallazgo(usePermissions().role);
   const [params, setParams] = useSearchParams();
   const [busqueda, setBusqueda] = useState('');
-  const [estadoFiltro, setEstadoFiltro] = useState('TODOS');
+  const [estadoFiltro, setEstadoFiltro] = useState(PENDIENTES);
   const [editando, setEditando] = useState<Hallazgo | null>(null);
   const [eliminando, setEliminando] = useState<Hallazgo | null>(null);
   const [creando, setCreando] = useState(false);
@@ -548,7 +553,9 @@ export function HallazgosAdminView() {
   const lista = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     return (hallazgos ?? []).filter((h) => {
-      if (estadoFiltro !== 'TODOS' && h.estado !== estadoFiltro) return false;
+      if (estadoFiltro === PENDIENTES) {
+        if (!ESTADOS_PENDIENTES.includes(h.estado)) return false;
+      } else if (estadoFiltro !== 'TODOS' && h.estado !== estadoFiltro) return false;
       if (!texto) return true;
       return (
         h.descripcion.toLowerCase().includes(texto) ||
@@ -618,12 +625,13 @@ export function HallazgosAdminView() {
                   onChange={(event) => setEstadoFiltro(event.target.value)}
                   value={estadoFiltro}
                 >
-                  <option value="TODOS">Todos</option>
+                  <option value={PENDIENTES}>Abiertos y en proceso</option>
                   {ESTADOS.map((estado) => (
                     <option key={estado} value={estado}>
                       {hallazgoEstadoLabel(estado)}
                     </option>
                   ))}
+                  <option value="TODOS">Todos</option>
                 </select>
               </label>
             </div>
