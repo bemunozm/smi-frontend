@@ -33,6 +33,10 @@ export const NOTIF_TIPOS = {
   /** A un liviano le falta poco para la mantención de cada 10.000 km (Módulo 4)
    * — `data: { equipmentId, ordenId }`. */
   LIGHT_SERVICE_DUE: 'light-service.due',
+  /** Un equipo con pauta entró al margen de aviso y se creó su orden
+   * preventiva en el tablero del taller (al mantenedor y al administrador) —
+   * `data: { equipmentId, ordenId }`. */
+  PREVENTIVE_SERVICE_DUE: 'preventive-service.due',
   /** Terminó el turno del supervisor con pesados abiertos (solo a él) —
    * `data: { shiftId, shiftDate, shiftType }`. */
   SHIFT_OPEN_CARDS: 'shift.open-cards',
