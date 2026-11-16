@@ -92,16 +92,22 @@ export function DaySummaryKpiDetails({
       >
         <ProductionDetail data={data} enabled={open === 'production'} />
       </KpiDetailModal>
-      {data.adBlue ? (
-        <KpiDetailModal
-          isOpen={open === 'adblue'}
-          onOpenChange={cerrar}
-          title="AdBlue"
-          verTodoTo={`/inventario/${data.adBlue.itemId}`}
-        >
-          <AdBlueDetail adBlue={data.adBlue} enabled={open === 'adblue'} fecha={data.fecha} past={past} />
-        </KpiDetailModal>
-      ) : null}
+      <KpiDetailModal
+        isOpen={open === 'adblue'}
+        onOpenChange={cerrar}
+        title={`AdBlue – ${dia}`}
+        // Las cargas de AdBlue viven en Cargas de combustible (con su filtro
+        // «Solo con AdBlue»); el saldo/kardex del ítem sigue adentro del popup.
+        verTodoTo="/cargas-combustible"
+      >
+        <AdBlueDetail
+          adBlue={data.adBlue}
+          adBlueDia={data.adBlueDia}
+          enabled={open === 'adblue'}
+          fecha={data.fecha}
+          past={past}
+        />
+      </KpiDetailModal>
     </>
   );
 }
@@ -384,64 +390,110 @@ function ProductionDetail({ data, enabled }: { data: ResumenDia; enabled: boolea
   );
 }
 
-/** Saldo del ítem AdBlue + su kardex del día consultado. */
+/** Turno de la carga de AdBlue, legible: tarjeta → Día/Noche; manual → Manual. */
+function turnoAdBlue(c: { turno: string | null; origen: 'TARJETA' | 'MANUAL' }): string {
+  if (c.turno === 'NOCTURNO') return 'Noche';
+  if (c.turno === 'DIURNO') return 'Día';
+  return c.origen === 'MANUAL' ? 'Manual' : '—';
+}
+
+/** Cargas de AdBlue del día + (si el ítem existe) saldo y kardex del ítem. */
 function AdBlueDetail({
   adBlue,
+  adBlueDia,
   fecha,
   enabled,
   past,
 }: {
-  adBlue: NonNullable<ResumenDia['adBlue']>;
+  adBlue: ResumenDia['adBlue'];
+  adBlueDia: ResumenDia['adBlueDia'];
   fecha: string;
   enabled: boolean;
   past: boolean;
 }) {
-  const { data, isPending, isError, error } = useKardex(enabled ? adBlue.itemId : null);
-  const unidad = UNIT_SYMBOLS[adBlue.unidad as UnitOfMeasure] ?? adBlue.unidad;
+  // El kardex solo con el popup abierto Y con ítem en el catálogo.
+  const { data, isPending, isError, error } = useKardex(enabled && adBlue ? adBlue.itemId : null);
+  const unidad = adBlue ? (UNIT_SYMBOLS[adBlue.unidad as UnitOfMeasure] ?? adBlue.unidad) : '';
   const delDia = (data?.movements ?? []).filter((m) => toDateOnly(new Date(m.occurredAt)) === fecha);
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col">
+        <h4 className="mb-1.5 text-sm font-semibold text-foreground">Cargas del {formatDia(fecha)}</h4>
+        {!adBlueDia ? (
+          <p className="text-sm text-muted-foreground">Detalle no disponible en este payload.</p>
+        ) : adBlueDia.cargas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin cargas de AdBlue este día.</p>
+        ) : (
+          <>
+            {adBlueDia.cargas.map((c, i) => (
+              <div className={ROW_LISTA} data-testid={`adblue-carga-${c.internalCode}-${i}`} key={`${c.hora}-${i}`}>
+                <span className="font-mono text-xs text-muted-foreground">{HORA.format(new Date(c.hora))}</span>
+                <span className="font-mono text-sm text-foreground">{c.internalCode}</span>
+                <span className="text-xs text-muted-foreground">{turnoAdBlue(c)}</span>
+                <span className="text-xs text-muted-foreground">Cargó: {c.cargadoPor ?? '—'}</span>
+                <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                  {NUM_CL_1.format(c.litros)} L
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 border-t border-border pt-2.5">
+              <span className="text-sm font-semibold text-foreground">TOTAL</span>
+              <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                {NUM_CL_1.format(adBlueDia.total)} L
+              </span>
+            </div>
+          </>
+        )}
+      </div>
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{adBlue.nombre}</span>
-        <span className="font-mono text-sm text-foreground">
-          {`Saldo actual: ${NUM_CL_1.format(adBlue.stock)} ${unidad}`}
-          {adBlue.stockLitros != null ? ` = ${NUM_CL_1.format(adBlue.stockLitros)} L` : ''}
-        </span>
-        {past ? (
+        <span className="text-sm font-medium text-foreground">{adBlue ? adBlue.nombre : 'Saldo en Inventario'}</span>
+        {adBlue ? (
+          <span className="font-mono text-sm text-foreground">
+            {`Saldo actual: ${NUM_CL_1.format(adBlue.stock)} ${unidad}`}
+            {adBlue.stockLitros != null ? ` = ${NUM_CL_1.format(adBlue.stockLitros)} L` : ''}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Sin ítem AdBlue en Inventario: crea el ítem para llevar también el saldo disponible.
+          </span>
+        )}
+        {adBlue && past ? (
           <span className="text-xs text-muted-foreground">
             El saldo es el vivo de Inventario; los movimientos listados sí son los del día consultado.
           </span>
         ) : null}
       </div>
-      <div className="flex flex-col">
-        <h4 className="mb-1.5 text-sm font-semibold text-foreground">Movimientos del {formatDia(fecha)}</h4>
-        {isPending ? (
-          <div className="flex justify-center py-4">
-            <Spinner color="accent" size="sm" />
-          </div>
-        ) : null}
-        {isError ? (
-          <p className="text-sm text-danger-soft-foreground" role="alert">
-            {error instanceof Error ? error.message : 'No se pudo cargar el kardex del ítem.'}
-          </p>
-        ) : null}
-        {!isPending && !isError && delDia.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin movimientos este día.</p>
-        ) : null}
-        {delDia.map((m) => (
-          <div className={ROW_LISTA} data-testid={`adblue-mov-${m.id}`} key={m.id}>
-            <span className="font-mono text-xs text-muted-foreground">{HORA.format(new Date(m.occurredAt))}</span>
-            <MovementKindChip kind={movementKind(m)} />
-            <span className="text-xs text-muted-foreground">{MOVEMENT_REASON_LABELS[m.reason]}</span>
-            {m.equipment ? (
-              <span className="font-mono text-xs text-muted-foreground">{m.equipment.internalCode}</span>
-            ) : null}
-            <span className="ms-auto font-mono text-sm font-semibold text-foreground">
-              {`${m.direction === 'IN' ? '+' : '−'}${NUM_CL_1.format(m.quantity)} ${unidad}`}
-            </span>
-          </div>
-        ))}
-      </div>
+      {adBlue ? (
+        <div className="flex flex-col">
+          <h4 className="mb-1.5 text-sm font-semibold text-foreground">Movimientos del {formatDia(fecha)}</h4>
+          {isPending ? (
+            <div className="flex justify-center py-4">
+              <Spinner color="accent" size="sm" />
+            </div>
+          ) : null}
+          {isError ? (
+            <p className="text-sm text-danger-soft-foreground" role="alert">
+              {error instanceof Error ? error.message : 'No se pudo cargar el kardex del ítem.'}
+            </p>
+          ) : null}
+          {!isPending && !isError && delDia.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin movimientos este día.</p>
+          ) : null}
+          {delDia.map((m) => (
+            <div className={ROW_LISTA} data-testid={`adblue-mov-${m.id}`} key={m.id}>
+              <span className="font-mono text-xs text-muted-foreground">{HORA.format(new Date(m.occurredAt))}</span>
+              <MovementKindChip kind={movementKind(m)} />
+              <span className="text-xs text-muted-foreground">{MOVEMENT_REASON_LABELS[m.reason]}</span>
+              {m.equipment ? (
+                <span className="font-mono text-xs text-muted-foreground">{m.equipment.internalCode}</span>
+              ) : null}
+              <span className="ms-auto font-mono text-sm font-semibold text-foreground">
+                {`${m.direction === 'IN' ? '+' : '−'}${NUM_CL_1.format(m.quantity)} ${unidad}`}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

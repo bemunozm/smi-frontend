@@ -21,6 +21,8 @@ export interface CreateCombustibleBody {
   lectura?: number;
   /** Key `tmp/<userId>/<uuid>.<ext>` de la foto ya subida (`uploadFile`). */
   fotoKey?: string;
+  /** AdBlue cargado junto con la carga (L), si se cargó (tope 1.000 L). */
+  adBlueLitros?: number;
 }
 
 /** POST directo (online) — el alta del panel admin. El alta de Terreno va por
@@ -36,6 +38,8 @@ export interface UpdateCombustibleBody {
   /** ISO datetime. */
   fecha?: string;
   lectura?: number;
+  /** AdBlue de la carga (L): corrige el valor, o `null` lo QUITA. */
+  adBlueLitros?: number | null;
 }
 
 /** Corrección de una carga MANUAL desde el panel (solo ADMIN). Una carga

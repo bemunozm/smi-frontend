@@ -51,7 +51,6 @@ export const HallazgoResumenSchema = z.object({
 });
 export type HallazgoResumen = z.infer<typeof HallazgoResumenSchema>;
 
-
 // ---------------------------------------------------------------------------
 // Contrato real del dashboard administrador (endpoints de smi-backend).
 // Los campos replican exactamente la respuesta de cada endpoint.
@@ -79,11 +78,7 @@ export const FlotaDiaSchema = EstadoEquipoHoySchema.extend({
 export type FlotaDia = z.infer<typeof FlotaDiaSchema>;
 
 export const ResumenHoySchema = z.object({
-  totales: z.object({
-    enUso: z.number().int(),
-    disponibles: z.number().int(),
-    inoperativos: z.number().int(),
-  }),
+  totales: z.object({ enUso: z.number().int(), disponibles: z.number().int(), inoperativos: z.number().int() }),
   equipos: z.array(EstadoEquipoHoySchema),
 });
 export type ResumenHoy = z.infer<typeof ResumenHoySchema>;
@@ -94,17 +89,12 @@ export const MetricasEquipoSchema = z.object({
   horas: z.number(),
   litros: z.number(),
   rendimiento: z.number().nullable(),
-  serieDiaria: z.array(
-    z.object({ fecha: z.string(), horas: z.number(), opero: z.boolean() }),
-  ),
+  serieDiaria: z.array(z.object({ fecha: z.string(), horas: z.number(), opero: z.boolean() })),
 });
 export type MetricasEquipo = z.infer<typeof MetricasEquipoSchema>;
 
 export const SupervisoresSchema = z.object({
-  porTurno: z.record(
-    z.enum(['DIURNO', 'NOCTURNO']),
-    z.object({ horas: z.number(), equipos: z.number() }),
-  ),
+  porTurno: z.record(z.enum(['DIURNO', 'NOCTURNO']), z.object({ horas: z.number(), equipos: z.number() })),
   porSupervisor: z.array(
     z.object({
       supervisorId: z.string(),
@@ -120,12 +110,7 @@ export type Supervisores = z.infer<typeof SupervisoresSchema>;
 export const MantenedoresSchema = z.object({
   total: z.object({ horas: z.number(), trabajos: z.number() }),
   porEquipo: z.array(
-    z.object({
-      equipmentId: z.string(),
-      internalCode: z.string(),
-      horas: z.number(),
-      trabajos: z.number(),
-    }),
+    z.object({ equipmentId: z.string(), internalCode: z.string(), horas: z.number(), trabajos: z.number() }),
   ),
 });
 export type Mantenedores = z.infer<typeof MantenedoresSchema>;
@@ -154,12 +139,7 @@ export const ResumenDiaSchema = z.object({
   /** Opcional: payloads cacheados (PWA) previos al campo. */
   flota: z.array(FlotaDiaSchema).optional(),
   hm: z.object({ total: z.number(), dia: z.number(), noche: z.number() }),
-  diesel: z.object({
-    total: z.number(),
-    dia: z.number(),
-    noche: z.number(),
-    porHm: z.number().nullable(),
-  }),
+  diesel: z.object({ total: z.number(), dia: z.number(), noche: z.number(), porHm: z.number().nullable() }),
   reports: z.object({
     totalHoras: z.number(),
     porEquipo: z.array(
@@ -182,6 +162,29 @@ export const ResumenDiaSchema = z.object({
       stockLitros: z.number().nullish(),
     })
     .nullable(),
+  /** AdBlue CARGADO en el día (tarjetas con AdBlue al cierre + cargas manuales
+   * del panel) con el detalle de cada carga (popup AdBlue). Independiente del
+   * saldo de inventario (`adBlue`). Opcional: payloads cacheados (PWA)
+   * previos al campo. */
+  adBlueDia: z
+    .object({
+      total: z.number(),
+      dia: z.number(),
+      noche: z.number(),
+      cargas: z.array(
+        z.object({
+          equipmentId: z.string(),
+          internalCode: z.string(),
+          litros: z.number(),
+          /** DIURNO | NOCTURNO de la tarjeta; null en una carga manual. */
+          turno: z.string().nullable(),
+          hora: z.string(),
+          cargadoPor: z.string().nullable(),
+          origen: z.enum(['TARJETA', 'MANUAL']),
+        }),
+      ),
+    })
+    .optional(),
   operacionPorEquipo: z.array(
     z.object({
       equipmentId: z.string().optional(), // ausente en payloads cacheados por la PWA: fila no navegable
