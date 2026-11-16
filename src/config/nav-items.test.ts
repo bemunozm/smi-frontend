@@ -18,7 +18,7 @@ describe('NAV_ITEMS', () => {
     const labelsDe = (seccion: string) =>
       NAV_ITEMS.filter((item) => item.seccion === seccion).map((item) => item.label);
 
-    expect(labelsDe('Administración')).toEqual(['Dashboard', 'Equipos', 'Inventario', 'Mi camioneta']);
+    expect(labelsDe('Administración')).toEqual(['Dashboard', 'Equipos', 'Inventario', 'Mi camioneta', 'Empresas externas']);
     expect(labelsDe('Reportes')).toEqual([
       'Informe diario equipos',
       'Informe de producción diaria',

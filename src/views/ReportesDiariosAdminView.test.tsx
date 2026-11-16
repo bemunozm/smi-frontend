@@ -106,6 +106,20 @@ describe('ReportesDiariosAdminView', () => {
     expect(fila.getByText('Turno sin novedades')).toBeTruthy();
   });
 
+  it('desglosa las vueltas por sección en la misma tabla, sin abrir el reporte', () => {
+    render(<ReportesDiariosAdminView />);
+    expect(screen.getByRole('columnheader', { name: 'Internos' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Mina Caleta' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Mineras' })).toBeTruthy();
+
+    const internos = within(screen.getByTestId('reporte-r1-INTERNOS'));
+    expect(internos.getByText('30')).toBeTruthy();
+    expect(internos.getByText('3 × 10')).toBeTruthy();
+    expect(within(screen.getByTestId('reporte-r1-MINA_CALETA')).getByText('2 × 5')).toBeTruthy();
+    // Sin vueltas en la sección: guion.
+    expect(screen.getByTestId('reporte-r1-MINERAS').textContent).toBe('—');
+  });
+
   it('filtra por supervisor y por día', () => {
     render(<ReportesDiariosAdminView />);
 

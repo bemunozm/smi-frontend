@@ -11,7 +11,7 @@ import { ROLES } from '../types/roles';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL } from '../lib/dashboard-format';
 import { fromDateOnly } from '../lib/turno';
-import { SECCION_LABEL, TRASPASO_LABEL } from '../types/reporte-diario';
+import { SECCIONES, SECCION_LABEL, TRASPASO_LABEL } from '../types/reporte-diario';
 import type { ReporteDiario } from '../types/reporte-diario';
 
 const TURNO_LABEL: Record<string, string> = { DIURNO: 'Diurno', NOCTURNO: 'Nocturno' };
@@ -31,6 +31,30 @@ function formatFechaReporte(reporte: ReporteDiario): string {
 /** Vueltas totales del reporte: Σ camiones × vueltas por camión de cada sección. */
 function vueltasTotales(reporte: ReporteDiario): number {
   return reporte.produccion.reduce((acc, p) => acc + p.camiones * p.vueltasPorCamion, 0);
+}
+
+/** Encabezado corto de cada sección en la tabla (el largo vive en `SECCION_LABEL`). */
+const SECCION_COLUMNA: Record<(typeof SECCIONES)[number], string> = {
+  INTERNOS: 'Internos',
+  MINA_CALETA: 'Mina Caleta',
+  MINERAS: 'Mineras',
+};
+
+/** Celda de una sección: las vueltas y, abajo, camiones × vueltas por camión.
+ * Pedido del cliente (16/11/2026): ver el desglose sin abrir el reporte. */
+function CeldaSeccion({ reporte, seccion }: { reporte: ReporteDiario; seccion: (typeof SECCIONES)[number] }) {
+  const p = reporte.produccion.find((x) => x.seccion === seccion);
+  if (!p || p.camiones * p.vueltasPorCamion === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="flex flex-col items-end leading-tight">
+      <span className="font-mono text-sm font-semibold text-foreground">
+        {NUM_CL.format(p.camiones * p.vueltasPorCamion)}
+      </span>
+      <span className="font-mono text-[11.5px] text-muted-foreground">
+        {NUM_CL.format(p.camiones)} × {NUM_CL.format(p.vueltasPorCamion)}
+      </span>
+    </span>
+  );
 }
 
 function Dato({ label, value }: { label: string; value: string }) {
@@ -397,7 +421,14 @@ export function ReportesDiariosAdminView() {
                     <Table.Column isRowHeader>Fecha</Table.Column>
                     <Table.Column>Turno</Table.Column>
                     <Table.Column>Supervisor</Table.Column>
-                    <Table.Column className="text-right">Vueltas</Table.Column>
+                    {SECCIONES.map((seccion) => (
+                      <Table.Column className="text-right" key={seccion}>
+                        <span title={`${SECCION_LABEL[seccion]}: vueltas (camiones × vueltas por camión)`}>
+                          {SECCION_COLUMNA[seccion]}
+                        </span>
+                      </Table.Column>
+                    ))}
+                    <Table.Column className="text-right">Total vueltas</Table.Column>
                     <Table.Column className="w-full">Observaciones</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -415,6 +446,15 @@ export function ReportesDiariosAdminView() {
                           {TURNO_LABEL[r.turno] ?? r.turno}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{r.supervisorNombre}</Table.Cell>
+                        {SECCIONES.map((seccion) => (
+                          <Table.Cell
+                            className="text-right whitespace-nowrap"
+                            data-testid={`reporte-${r.id}-${seccion}`}
+                            key={seccion}
+                          >
+                            <CeldaSeccion reporte={r} seccion={seccion} />
+                          </Table.Cell>
+                        ))}
                         <Table.Cell className="text-right font-mono text-sm font-semibold whitespace-nowrap">
                           {NUM_CL.format(vueltasTotales(r))}
                         </Table.Cell>
