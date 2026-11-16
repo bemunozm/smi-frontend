@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
 
@@ -123,6 +123,16 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+/** El «atrás» del navegador (MemoryRouter no usa `window.history`). */
+function Atras() {
+  const navigate = useNavigate();
+  return (
+    <button onClick={() => navigate(-1)} type="button">
+      atras
+    </button>
+  );
+}
 
 /** El registro quedó detrás de `?vista=registro`: la pizarra es la vista por defecto. */
 const REGISTRO = '/mantenciones?vista=registro';
@@ -294,6 +304,19 @@ describe('MantencionesAdminView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Vista registro' }));
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
     expect(screen.getByText('Registro')).toBeTruthy();
+  });
+
+  it('cambiar de vista agrega una entrada al historial: «atrás» vuelve a la pizarra', () => {
+    render(
+      <MemoryRouter initialEntries={['/mantenciones']}>
+        <MantencionesAdminView />
+        <Atras />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    expect(screen.getByText('Registro')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'atras' }));
+    expect(screen.queryByText('Registro')).toBeNull();
   });
 
   it('?vista=tablero abre directo en el tablero (la vista queda en la URL)', () => {

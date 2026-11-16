@@ -492,7 +492,10 @@ export function MantencionesAdminView() {
     const siguientes = new URLSearchParams(params);
     if (valor === vacio) siguientes.delete(clave);
     else siguientes.set(clave, valor);
-    setParams(siguientes, { replace: true });
+    // Cambiar de vista (pizarra ↔ registro ↔ tablero) agrega una entrada al
+    // historial para que «atrás» del navegador/Android vuelva a la pizarra;
+    // los filtros, en cambio, reemplazan para no llenar el historial.
+    setParams(siguientes, { replace: clave !== 'vista' });
   };
 
   const lista = useMemo(

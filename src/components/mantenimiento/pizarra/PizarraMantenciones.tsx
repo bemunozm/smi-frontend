@@ -238,17 +238,15 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                       <Dato titulo="Fecha estimada">
                         <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
                       </Dato>
-                      <div className="col-span-2">
-                        <Dato titulo="Último cambio">
-                          {fila.lastChange ? (
-                            <span className="tabular-nums">
-                              {fechaCorta(fila.lastChange.doneAt)} · {lectura(fila.lastChange.counterAt, fila.unit)}
-                            </span>
-                          ) : (
-                            botonAnterior(fila)
-                          )}
-                        </Dato>
-                      </div>
+                      <Dato className="col-span-2" titulo="Último cambio">
+                        {fila.lastChange ? (
+                          <span className="tabular-nums">
+                            {fechaCorta(fila.lastChange.doneAt)} · {lectura(fila.lastChange.counterAt, fila.unit)}
+                          </span>
+                        ) : (
+                          botonAnterior(fila)
+                        )}
+                      </Dato>
                     </dl>
                   ) : null}
                   {botonVer(fila, 'w-full')}
@@ -342,9 +340,17 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
             controlUnit: anterior.unit === 'km' ? 'KM' : 'HOURS',
           }}
           isOpen
+          // La pizarra siempre pide la lectura; con pauta, además, qué hito fue
+          // (de ahí cuenta el próximo cambio). Un liviano no tiene hitos.
+          lecturaObligatoria
           onOpenChange={(open) => {
             if (!open) setAnterior(null);
           }}
+          pauta={
+            anterior.source === 'PAUTA'
+              ? { milestones: anterior.milestones, initialMilestone: anterior.initialMilestone }
+              : undefined
+          }
         />
       ) : null}
 
@@ -367,9 +373,9 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
   );
 }
 
-function Dato({ titulo, children }: { titulo: string; children: ReactNode }) {
+function Dato({ titulo, children, className = '' }: { titulo: string; children: ReactNode; className?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div className={`flex min-w-0 flex-col gap-0.5 ${className}`}>
       <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{titulo}</dt>
       <dd className="m-0 break-words">{children}</dd>
     </div>

@@ -22,11 +22,13 @@ const kindLabel = (kind: string) => planItemKindLabel[kind as PlanItemKind] ?? k
  */
 export function MantencionARealizarModal({ fila, onClose }: { fila: MaintenanceBoardRow | null; onClose: () => void }) {
   const liviano = fila?.source === 'LIVIANO';
+  // Sin próximo hito (pauta sin hitos o sin lectura) no hay número que mostrar:
+  // «Mantención de 0 h» sería falso.
   const titulo = !fila
     ? ''
-    : liviano
+    : liviano || fila.nextMilestone == null
       ? `Mantención a realizar · ${fila.internalCode}`
-      : `Mantención de ${fmtNum(fila.nextMilestone ?? 0)} ${fila.unit} · ${fila.internalCode}`;
+      : `Mantención de ${fmtNum(fila.nextMilestone)} ${fila.unit} · ${fila.internalCode}`;
   const toca = fila ? lectura(fila.dueAt, fila.unit) : null;
 
   return (

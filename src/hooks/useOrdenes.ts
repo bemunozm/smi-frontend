@@ -4,7 +4,7 @@ import { toast } from '@heroui/react';
 import { OrdenesAPI } from '../api/MantenimientoAPI';
 import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
-import { EQUIPMENT_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
+import { EQUIPMENT_KEY, MAINTENANCE_PLANS_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
 import { buildQueuedEdit } from '../lib/queued-edit';
 import { generateUuid } from '../lib/uuid';
 import { ordenEntity } from '../offline/db';
@@ -20,10 +20,7 @@ import { useQueuedCreate, useQueuedMutation, writeQueued } from './useQueuedMuta
 
 /** Lista de OT, opcionalmente filtrada por `estado` (mismo query param que el backend). */
 export function useOrdenes(estado?: EstadoOT) {
-  return useQuery({
-    queryKey: [...ORDENES_QUERY_KEY, estado ?? 'TODAS'],
-    queryFn: () => OrdenesAPI.list(estado),
-  });
+  return useQuery({ queryKey: [...ORDENES_QUERY_KEY, estado ?? 'TODAS'], queryFn: () => OrdenesAPI.list(estado) });
 }
 
 /**
@@ -48,7 +45,7 @@ export function useCrearOrden() {
  * (solo ADMIN). Mutación directa, sin cola offline: es carga de datos desde
  * el escritorio del administrador, no un flujo de terreno. Invalida `ordenes`
  * (el registro «Mantenciones» la lista) y `equipment` (la ficha muestra
- * `ultimaMantencion`).
+ * `ultimaMantencion`) y `maintenance-plans` (pizarra y pronóstico).
  */
 export function useRegistrarMantencionHistorica() {
   const queryClient = useQueryClient();
@@ -58,6 +55,9 @@ export function useRegistrarMantencionHistorica() {
       toast.success('Mantención anterior registrada', { description: orden.titulo });
       void queryClient.invalidateQueries({ queryKey: ORDENES_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
+      // La pizarra y el pronóstico cuelgan de la raíz de las pautas: el
+      // «último cambio» que se acaba de cargar cambia su próximo cambio.
+      void queryClient.invalidateQueries({ queryKey: MAINTENANCE_PLANS_KEY });
     },
     onError: (error: unknown) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la mantención anterior.'));
@@ -87,10 +87,7 @@ export function useLogOperation() {
     mutationFn: async (input: CreateOrdenInput) => {
       const id = generateUuid();
       const created = await writeQueued('orden.create', { params: {}, body: { ...input, id } });
-      const started = await writeQueued('orden.update', {
-        params: { id },
-        body: { estado: 'EN_PROCESO' },
-      });
+      const started = await writeQueued('orden.update', { params: { id }, body: { estado: 'EN_PROCESO' } });
       return { created, started };
     },
     onSuccess: ({ created, started }, input) => {
@@ -98,9 +95,7 @@ export function useLogOperation() {
         avisarGuardadoEnCola();
         return;
       }
-      toast.success('Operación iniciada', {
-        description: created.data?.titulo ?? input.titulo,
-      });
+      toast.success('Operación iniciada', { description: created.data?.titulo ?? input.titulo });
     },
     onError: (error: unknown) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la operación.'));
@@ -170,11 +165,7 @@ export function useCompletarTarea() {
     endpoint: 'orden.toggleTarea',
     build: ({ ordenId, tareaId, notas, foto, insumos, branchId }) => ({
       params: { ordenId, tareaId },
-      body: {
-        hecha: true,
-        notas,
-        ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}),
-      },
+      body: { hecha: true, notas, ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}) },
       ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
     }),
     onSent: () => {

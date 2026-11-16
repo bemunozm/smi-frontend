@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input, Label, ListBox, Modal, Select, Spinner, TextArea, TextField } from '@heroui/react';
 
 import { useRegistrarMantencionHistorica } from '../../hooks/useOrdenes';
+import { fmtNum } from '../../lib/format';
 import type { ControlUnit } from '../../types/equipment';
 import type { TipoOT } from '../../types/mantenimiento';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
@@ -30,10 +31,17 @@ export function MantencionAnteriorModal({
   equipo,
   isOpen,
   onOpenChange,
+  pauta,
+  lecturaObligatoria = false,
 }: {
   equipo: { id: string; internalCode: string; controlUnit: ControlUnit };
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
+  /** Desde la pizarra: los hitos de la pauta del equipo. Con ella se elige
+   * qué mantención fue (de ahí cuenta el próximo cambio) y la lectura es obligatoria. */
+  pauta?: { milestones: number[]; initialMilestone: number | null };
+  /** La pizarra siempre pide la lectura: sin ella no hay desde dónde contar. */
+  lecturaObligatoria?: boolean;
 }) {
   const registrar = useRegistrarMantencionHistorica();
   const [fecha, setFecha] = useState('');
@@ -42,6 +50,7 @@ export function MantencionAnteriorModal({
   const [realizadaPor, setRealizadaPor] = useState('');
   const [lectura, setLectura] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [hito, setHito] = useState<number | null>(null);
 
   // La unidad de la lectura la decide el equipo: un liviano se controla por
   // kilómetros, un pesado por horas de motor.
@@ -49,14 +58,27 @@ export function MantencionAnteriorModal({
   const lecturaLabel = esKm ? 'Kilometraje en la mantención (km)' : 'Horómetro en la mantención (h)';
   // Coma o punto decimal, como los demás campos numéricos de texto del admin.
   const lecturaNumero = lectura.trim() === '' ? undefined : Number(lectura.replace(',', '.'));
-  const lecturaValida = lecturaNumero === undefined || (Number.isFinite(lecturaNumero) && lecturaNumero >= 0);
+  const lecturaRequerida = lecturaObligatoria || pauta != null;
+  const lecturaValida =
+    lecturaNumero === undefined ? !lecturaRequerida : Number.isFinite(lecturaNumero) && lecturaNumero >= 0;
+  const unidad = esKm ? 'km' : 'h';
+  // Servicio inicial (si la pauta lo tiene) y cada hito, en la unidad del equipo.
+  const opcionesHito = [
+    ...(pauta?.initialMilestone != null
+      ? [{ valor: pauta.initialMilestone, label: `Servicio inicial ${fmtNum(pauta.initialMilestone)} h` }]
+      : []),
+    ...(pauta?.milestones ?? []).map((n) => ({ valor: n, label: `${fmtNum(n)} ${unidad}` })),
+  ];
+  // El título se rellena solo si quedó vacío; si ya escribieron uno, se respeta.
+  const tituloEfectivo = titulo.trim() || (hito != null ? `Mantención ${fmtNum(hito)} ${unidad}` : '');
 
   const hoy = hoyLocal();
   const puedeGuardar =
     !registrar.isPending &&
     /^\d{4}-\d{2}-\d{2}$/.test(fecha) &&
     fecha <= hoy &&
-    titulo.trim().length > 0 &&
+    tituloEfectivo.length > 0 &&
+    (pauta == null || hito != null) &&
     lecturaValida;
 
   const cerrar = () => {
@@ -70,10 +92,11 @@ export function MantencionAnteriorModal({
         equipoId: equipo.id,
         fecha,
         tipo,
-        titulo: titulo.trim(),
+        titulo: tituloEfectivo,
         ...(realizadaPor.trim() ? { realizadaPor: realizadaPor.trim() } : {}),
         ...(lecturaNumero !== undefined ? { lectura: lecturaNumero } : {}),
         ...(observaciones.trim() ? { observaciones: observaciones.trim() } : {}),
+        ...(pauta && hito != null ? { milestone: hito } : {}),
       },
       {
         onSuccess: () => {
@@ -83,6 +106,7 @@ export function MantencionAnteriorModal({
           setRealizadaPor('');
           setLectura('');
           setObservaciones('');
+          setHito(null);
           onOpenChange(false);
         },
       },
@@ -137,9 +161,44 @@ export function MantencionAnteriorModal({
                 </Select>
               </div>
 
+              {pauta ? (
+                <Select
+                  data-testid="select-mantencion"
+                  fullWidth
+                  isRequired
+                  onChange={(value) => value != null && setHito(Number(value))}
+                  placeholder="Elegí la mantención"
+                  value={hito != null ? String(hito) : null}
+                >
+                  <Label>Qué mantención fue</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      {opcionesHito.map((opcion) => (
+                        <ListBox.Item id={String(opcion.valor)} key={opcion.valor} textValue={opcion.label}>
+                          {opcion.label}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              ) : null}
+
               <TextField fullWidth name="titulo" onChange={setTitulo} value={titulo}>
-                <Label>Qué mantención fue</Label>
-                <Input placeholder="Cambio de aceite y filtros, mantención 10.000 km…" />
+                <Label>{pauta ? 'Título (opcional)' : 'Qué mantención fue'}</Label>
+                <Input
+                  placeholder={
+                    pauta
+                      ? hito != null
+                        ? `Mantención ${fmtNum(hito)} ${unidad}`
+                        : 'Se completa con la mantención elegida'
+                      : 'Cambio de aceite y filtros, mantención 10.000 km…'
+                  }
+                />
               </TextField>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

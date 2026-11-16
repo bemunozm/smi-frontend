@@ -33,8 +33,26 @@ vi.mock('../../../hooks/usePermissions', async () => {
 // Los dos modales existentes tienen sus propios tests: acá importa que se
 // abran y con qué equipo.
 vi.mock('../MantencionAnteriorModal', () => ({
-  MantencionAnteriorModal: ({ equipo, isOpen }: { equipo: { id: string; controlUnit: string }; isOpen: boolean }) =>
-    isOpen ? <div data-control-unit={equipo.controlUnit} data-equipo={equipo.id} data-testid="modal-anterior" /> : null,
+  MantencionAnteriorModal: ({
+    equipo,
+    isOpen,
+    pauta,
+    lecturaObligatoria,
+  }: {
+    equipo: { id: string; controlUnit: string };
+    isOpen: boolean;
+    pauta?: unknown;
+    lecturaObligatoria?: boolean;
+  }) =>
+    isOpen ? (
+      <div
+        data-control-unit={equipo.controlUnit}
+        data-equipo={equipo.id}
+        data-lectura-obligatoria={String(lecturaObligatoria)}
+        data-pauta={JSON.stringify(pauta ?? null)}
+        data-testid="modal-anterior"
+      />
+    ) : null,
 }));
 vi.mock('../PautaMantencionModal', () => ({
   PautaMantencionModal: ({ equipo, isOpen }: { equipo: { id: string }; isOpen: boolean }) =>
@@ -211,6 +229,35 @@ describe('PizarraMantenciones', () => {
     const modal = screen.getByTestId('modal-anterior');
     expect(modal.getAttribute('data-equipo')).toBe('p2');
     expect(modal.getAttribute('data-control-unit')).toBe('HOURS');
+    // Con pauta: los hitos de la fila; la lectura es siempre obligatoria desde la pizarra.
+    expect(JSON.parse(modal.getAttribute('data-pauta') ?? 'null')).toEqual({
+      milestones: [250, 500, 750, 1000],
+      initialMilestone: null,
+    });
+    expect(modal.getAttribute('data-lectura-obligatoria')).toBe('true');
+  });
+
+  it('un liviano abre «Registrar mantención anterior» sin pauta pero con lectura obligatoria', () => {
+    renderPizarra();
+    fireEvent.click(screen.getByRole('radio', { name: 'Equipos livianos' }));
+    fireEvent.click(
+      within(screen.getByTestId('pizarra-fila-l1')).getByRole('button', { name: 'Registrar mantención anterior' }),
+    );
+    const modal = screen.getByTestId('modal-anterior');
+    expect(modal.getAttribute('data-pauta')).toBe('null');
+    expect(modal.getAttribute('data-lectura-obligatoria')).toBe('true');
+  });
+
+  it('sin próximo hito el título no dice «0 h»', () => {
+    boardHook.mockReturnValue({
+      data: [filaPizarra({ equipmentId: 'x1', internalCode: 'SEM 09', nextMilestone: null, dueAt: null })],
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    renderPizarra();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver mantención a realizar' }));
+    expect(within(screen.getByRole('dialog')).getByText('Mantención a realizar · SEM 09')).toBeTruthy();
   });
 
   it('la SECRETARIA no ve «Registrar mantención anterior» ni «Asignar pauta»', () => {
