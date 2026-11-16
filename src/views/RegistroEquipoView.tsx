@@ -479,7 +479,7 @@ export function RegistroEquipoView() {
             className="min-h-[60px] !rounded-[18px] !text-[17px] shadow-[0_0_0_4px_rgba(29,78,216,.35)]"
             onClick={() => setVerReporte(true)}
           >
-            Enviar reporte de salida <ArrowRight className="h-[19px] w-[19px]" />
+            Enviar reporte de salida a terreno <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
           <p className="m-0 text-[12.5px] text-white/85">
             Aviso en el sistema y correo con el PDF a la administración.
