@@ -35,7 +35,7 @@ const CEBRA_COLUMNAS =
 /** Columnas pares (0, 2, 4…) en gris. */
 const fondoColumna = (indice: number) => (indice % 2 === 0 ? { 'data-gris': '' } : {});
 
-// Cabecera tipo tabla de precios: cada columna es un bloque propio (color del degradado azul → turquesa → verde,
+// Cabecera tipo tabla de precios: cada columna es un bloque propio (degradado de azul oscuro a azul claro,
 // texto blanco en negrita, esquinas de arriba redondeadas y relieve). El borde blanco a los lados hace de separación
 // entre bloques; `z-1` deja la sombra por encima de la primera fila del cuerpo. El `::after` es la rayita separadora
 // de HeroUI, que acá sobra.
@@ -381,9 +381,7 @@ export function PizarraMantenciones({ onVerRegistro }: { onVerRegistro: () => vo
                     <Table.Column className={cabecera(5)}>{textos.actual}</Table.Column>
                     <Table.Column className={cabecera(6)}>{textos.pendientes}</Table.Column>
                     <Table.Column className={cabecera(7)}>Fecha estimada de mantención</Table.Column>
-                    <Table.Column className={cabecera(8)}>
-                      <span className="sr-only">Acciones</span>
-                    </Table.Column>
+                    <Table.Column className={cabecera(8)}>Detalle de mantención</Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {filas.map((fila) => (

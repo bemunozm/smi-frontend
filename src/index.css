@@ -137,23 +137,23 @@
   --terreno-offline: #e0a11a;
 
   /* --- Pizarra de mantenciones -----------------------------------------
-     Cabecera tipo tabla de precios: cada columna es un bloque de color que
-     avanza de azul a turquesa y a verde. Se definen los tres colores base y
-     los nueve pasos se mezclan acá (oklab) para que el componente solo nombre
-     `bg-pizarra-N`. Los tres base son lo bastante oscuros para texto blanco
-     en negrita (≥ 4,5:1 en todos los pasos). */
-  --pizarra-azul: #1e40af;
-  --pizarra-turquesa: #0f766e;
-  --pizarra-verde: #15803d;
-  --pizarra-col-1: var(--pizarra-azul);
-  --pizarra-col-2: color-mix(in oklab, var(--pizarra-azul) 75%, var(--pizarra-turquesa));
-  --pizarra-col-3: color-mix(in oklab, var(--pizarra-azul) 50%, var(--pizarra-turquesa));
-  --pizarra-col-4: color-mix(in oklab, var(--pizarra-azul) 25%, var(--pizarra-turquesa));
-  --pizarra-col-5: var(--pizarra-turquesa);
-  --pizarra-col-6: color-mix(in oklab, var(--pizarra-turquesa) 75%, var(--pizarra-verde));
-  --pizarra-col-7: color-mix(in oklab, var(--pizarra-turquesa) 50%, var(--pizarra-verde));
-  --pizarra-col-8: color-mix(in oklab, var(--pizarra-turquesa) 25%, var(--pizarra-verde));
-  --pizarra-col-9: var(--pizarra-verde);
+     Cabecera tipo tabla de precios: cada columna es un bloque de color, todo
+     azul, que va del azul oscuro (primera columna) a uno más claro (última).
+     Se definen los dos extremos y los nueve pasos se mezclan acá (oklab) para
+     que el componente solo nombre `bg-pizarra-N`. El claro no pasa de #2563eb
+     para que el texto blanco en negrita siga legible: blanco sobre el oscuro
+     ≈ 10,4:1 y sobre el claro ≈ 5,2:1 (≥ 4,5:1 en todos los pasos). */
+  --pizarra-azul-oscuro: #1e3a8a;
+  --pizarra-azul-claro: #2563eb;
+  --pizarra-col-1: var(--pizarra-azul-oscuro);
+  --pizarra-col-2: color-mix(in oklab, var(--pizarra-azul-oscuro) 87.5%, var(--pizarra-azul-claro));
+  --pizarra-col-3: color-mix(in oklab, var(--pizarra-azul-oscuro) 75%, var(--pizarra-azul-claro));
+  --pizarra-col-4: color-mix(in oklab, var(--pizarra-azul-oscuro) 62.5%, var(--pizarra-azul-claro));
+  --pizarra-col-5: color-mix(in oklab, var(--pizarra-azul-oscuro) 50%, var(--pizarra-azul-claro));
+  --pizarra-col-6: color-mix(in oklab, var(--pizarra-azul-oscuro) 37.5%, var(--pizarra-azul-claro));
+  --pizarra-col-7: color-mix(in oklab, var(--pizarra-azul-oscuro) 25%, var(--pizarra-azul-claro));
+  --pizarra-col-8: color-mix(in oklab, var(--pizarra-azul-oscuro) 12.5%, var(--pizarra-azul-claro));
+  --pizarra-col-9: var(--pizarra-azul-claro);
   /* Relieve del bloque de cabecera: brillo arriba, borde oscuro abajo y una
      sombra corta que lo despega del cuerpo. */
   --pizarra-relieve-cabecera:

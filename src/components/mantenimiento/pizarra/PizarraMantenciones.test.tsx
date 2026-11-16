@@ -225,6 +225,7 @@ describe('PizarraMantenciones', () => {
 
     expect(screen.getByRole('columnheader', { name: 'Km actual' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Km pendientes' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Detalle de mantención' })).toBeTruthy();
     expect(screen.queryByText('SEM 02')).toBeNull();
     expect(screen.getByText('CAM 07')).toBeTruthy();
   });
@@ -243,6 +244,7 @@ describe('PizarraMantenciones', () => {
       'Horómetro actual',
       'Horas pendientes',
       'Fecha estimada de mantención',
+      'Detalle de mantención',
     ]) {
       expect(within(principal).getByRole('columnheader', { name: nombre })).toBeTruthy();
     }
@@ -452,7 +454,7 @@ describe('PizarraMantenciones', () => {
     expect(screen.getByTestId('pizarra-fila-p1').querySelectorAll('svg[aria-hidden="true"]').length).toBeGreaterThan(5);
   });
 
-  it('la cabecera es un bloque de color por columna, del azul al verde', () => {
+  it('la cabecera es un bloque de color por columna, del azul oscuro al azul claro', () => {
     escritorio.value = true;
     renderPizarra();
 
