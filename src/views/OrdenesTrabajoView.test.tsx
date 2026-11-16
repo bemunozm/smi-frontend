@@ -315,7 +315,9 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(within(finished).queryByText('Cambio de neumáticos traseros')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Historial de finalizadas' })).toBeNull();
 
-    fireEvent.click(within(finished).getByRole('button', { name: /Ver historial \(1 anteriores\)/ }));
+    // El botón vive arriba, junto a «Crear orden», no al pie de la columna.
+    expect(within(finished).queryByRole('button', { name: /Historial/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Historial (1)' }));
     const historial = screen.getByRole('region', { name: 'Historial de finalizadas' });
     expect(within(historial).getByText('Cambio de neumáticos traseros')).toBeTruthy();
 
@@ -328,7 +330,7 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
 
   it('sin finalizadas antiguas no ofrece historial', () => {
     renderView();
-    expect(screen.queryByRole('button', { name: /Ver historial/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Historial/ })).toBeNull();
   });
   it('en escritorio las TRES columnas están a la vista, con el resumen arriba', () => {
     renderView();

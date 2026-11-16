@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Spinner } from '@heroui/react';
 import { ArrowRight, Clock, History, TriangleAlert } from 'lucide-react';
 
@@ -47,7 +47,6 @@ function BoardColumn({
   count,
   conCabecera = true,
   vacio,
-  pie,
   children,
 }: {
   title: string;
@@ -57,8 +56,6 @@ function BoardColumn({
   conCabecera?: boolean;
   /** Qué decir si la columna no tiene tarjetas. */
   vacio: string;
-  /** Debajo de las tarjetas, haya o no tarjetas (p. ej. «Ver historial»). */
-  pie?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -77,7 +74,6 @@ function BoardColumn({
         ) : (
           children
         )}
-        {pie}
       </div>
     </section>
   );
@@ -291,10 +287,10 @@ const HISTORIAL_PAGINA = 30;
 
 /**
  * Historial de finalizadas: las operaciones cerradas hace más de
- * `FINISHED_RECENT_DAYS` días, que ya no ocupan la columna del tablero. Se
- * despliega debajo del tablero (no en un pop-up: cada tarjeta abre su propio
- * «Ver operación»), con búsqueda por equipo u operación y de a
- * `HISTORIAL_PAGINA` tarjetas.
+ * `FINISHED_RECENT_DAYS` días, que ya no ocupan la columna del tablero. El
+ * botón «Historial» de arriba (junto a «Crear orden») lo despliega encima del
+ * tablero (no en un pop-up: cada tarjeta abre su propio «Ver operación»), con
+ * búsqueda por equipo u operación y de a `HISTORIAL_PAGINA` tarjetas.
  */
 function HistorialFinalizadas({
   ordenes,
@@ -388,11 +384,6 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   // historial, que se despliega aparte para no alargar el tablero sin fin.
   const finalizadas = useMemo(() => splitFinished(board.finished), [board.finished]);
   const [verHistorial, setVerHistorial] = useState(false);
-  const historialRef = useRef<HTMLDivElement>(null);
-  const abrirHistorial = () => {
-    setVerHistorial(true);
-    requestAnimationFrame(() => historialRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
-  };
   const stats = useMemo(() => buildWorkshopStats(ordenes ?? []), [ordenes]);
   // Los hallazgos ABIERTOS del supervisor esperan acá; al iniciar la operación
   // pasan a EN_PROCESO (lo hace el backend en la misma transacción) y su lugar
@@ -444,7 +435,15 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
         ) : (
           <span aria-hidden className="grow" />
         )}
-        {canCreate ? <CreateOperationModal /> : null}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {finalizadas.history.length > 0 ? (
+            <Boton aria-expanded={verHistorial} onClick={() => setVerHistorial((v) => !v)} variante="contorno">
+              <History aria-hidden className="h-4 w-4" />
+              {verHistorial ? 'Ocultar historial' : `Historial (${finalizadas.history.length})`}
+            </Boton>
+          ) : null}
+          {canCreate ? <CreateOperationModal /> : null}
+        </div>
       </div>
 
       <PendientesStrip recursos={RECURSOS_DE_ORDENES} />
@@ -497,6 +496,14 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
         // Tablet es el dispositivo principal del taller: las TRES columnas se
         // quedan en pantalla desde md (834px de una tablet vertical incluida).
         <div className="flex flex-col gap-3.5">
+          {verHistorial && finalizadas.history.length > 0 ? (
+            <HistorialFinalizadas
+              fleet={fleet}
+              marcaDe={pendientes.marcaDe}
+              onCerrar={() => setVerHistorial(false)}
+              ordenes={finalizadas.history}
+            />
+          ) : null}
           {!tresColumnas && (
             <Segmentado
               etiqueta="Columna del tablero"
@@ -604,14 +611,6 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                 count={conteos.finalizadas}
                 title="Finalizadas"
                 vacio={`No hay operaciones finalizadas en los últimos ${FINISHED_RECENT_DAYS} días.`}
-                pie={
-                  finalizadas.history.length > 0 ? (
-                    <Boton ancho onClick={verHistorial ? () => setVerHistorial(false) : abrirHistorial} variante="contorno">
-                      <History aria-hidden className="h-4 w-4" />
-                      {verHistorial ? 'Ocultar historial' : `Ver historial (${finalizadas.history.length} anteriores)`}
-                    </Boton>
-                  ) : null
-                }
               >
                 {finalizadas.recent.map((orden) => (
                   <FinishedCard
@@ -624,17 +623,6 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
               </BoardColumn>
             )}
           </div>
-
-          {verHistorial && finalizadas.history.length > 0 ? (
-            <div className="scroll-mt-4" ref={historialRef}>
-              <HistorialFinalizadas
-                fleet={fleet}
-                marcaDe={pendientes.marcaDe}
-                onCerrar={() => setVerHistorial(false)}
-                ordenes={finalizadas.history}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>
