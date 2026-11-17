@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { Button, Calendar } from '@heroui/react';
+import { parseDate } from '@internationalized/date';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
 
 import { toDateOnly } from '../../lib/turno';
+
+/** `YYYY-MM-DD` → el día del calendario; `null` si está vacío o no es una fecha. */
+function aDia(fecha: string): DateValue | null {
+  try {
+    return /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? parseDate(fecha) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** `YYYY-MM-DD` → `dd/mm/aaaa` para el botón. */
 const fmtDia = (fecha: string) => fecha.split('-').reverse().join('/');
@@ -14,11 +24,9 @@ const fmtDia = (fecha: string) => fecha.split('-').reverse().join('/');
  * (mismo patrón que «Filtrar por fecha» de Cargas), nunca el `<input type="date">`
  * nativo. Los días futuros quedan apagados.
  *
- * Trabaja con `YYYY-MM-DD` (lo que espera el backend), no con el `DateValue` de
- * react-aria: armar uno desde un texto pide `@internationalized/date`, que no es
- * dependencia directa del proyecto. Por eso una fecha que llega precargada se ve
- * en el botón pero no queda marcada en el calendario (que abre en el mes de hoy)
- * hasta que se elige un día.
+ * Trabaja con `YYYY-MM-DD` (lo que espera el backend); la conversión al
+ * `DateValue` de react-aria queda acá adentro. Así una fecha precargada (al
+ * editar) abre el calendario en su mes y queda marcada.
  */
 export function FechaPasadaPicker({
   label,
@@ -31,9 +39,7 @@ export function FechaPasadaPicker({
   onChange: (fecha: string) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
-  // El último día elegido en el calendario: se marca mientras siga siendo el valor.
-  const [elegido, setElegido] = useState<DateValue | null>(null);
-  const marcado = elegido != null && elegido.toString() === value ? elegido : null;
+  const dia = aDia(value);
   // Hoy en el reloj del dispositivo (`YYYY-MM-DD`): una mantención ya hecha no puede ser futura (el backend también
   // lo exige).
   const hoy = toDateOnly(new Date());
@@ -55,12 +61,11 @@ export function FechaPasadaPicker({
               // Los días futuros quedan apagados: no se pueden elegir.
               isDateUnavailable={(dia) => dia.toString() > hoy}
               onChange={(dia) => {
-                setElegido(dia);
                 onChange(dia.toString());
                 // Elegido el día, el popover se cierra solo: queda a la vista en el botón.
                 setAbierto(false);
               }}
-              value={marcado}
+              value={dia}
             >
               <Calendar.Header>
                 <Calendar.NavButton slot="previous" />

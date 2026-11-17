@@ -63,6 +63,17 @@ describe('EditarUltimoCambioModal', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it('el calendario abre en el mes de la fecha precargada y la deja marcada', async () => {
+    const fila = filaPizarra({ lastChange: { milestone: 250, counterAt: 2250, doneAt: '2026-09-03T12:00:00.000Z' } });
+    render(<EditarUltimoCambioModal fila={fila} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /03\/09\/2026/ }));
+    const dia = await screen.findByRole('button', { name: /September 3, 2026/ });
+    expect(dia.closest('[role="gridcell"]')?.getAttribute('aria-selected')).toBe('true');
+    // Septiembre, no el mes de hoy (octubre en el reloj del test).
+    expect(screen.queryByRole('button', { name: /October 20, 2026/ })).toBeNull();
+  });
+
   it('los días futuros no se pueden elegir', async () => {
     render(<EditarUltimoCambioModal fila={filaPizarra()} onClose={() => {}} />);
 
