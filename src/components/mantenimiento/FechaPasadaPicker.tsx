@@ -6,14 +6,19 @@ import { CalendarDays } from 'lucide-react';
 
 import { toDateOnly } from '../../lib/turno';
 
-/** `toString()` de un día es `YYYY-MM-DD` → `dd/mm/aaaa` para el botón. */
-const fmtDia = (dia: DateValue) => dia.toString().split('-').reverse().join('/');
+/** `YYYY-MM-DD` → `dd/mm/aaaa` para el botón. */
+const fmtDia = (fecha: string) => fecha.split('-').reverse().join('/');
 
 /**
  * Fecha de una mantención ya hecha: botón + calendario de HeroUI en un popover
  * (mismo patrón que «Filtrar por fecha» de Cargas), nunca el `<input type="date">`
- * nativo. Los días futuros quedan apagados. El `toString()` del día es el
- * `YYYY-MM-DD` que espera el backend.
+ * nativo. Los días futuros quedan apagados.
+ *
+ * Trabaja con `YYYY-MM-DD` (lo que espera el backend), no con el `DateValue` de
+ * react-aria: armar uno desde un texto pide `@internationalized/date`, que no es
+ * dependencia directa del proyecto. Por eso una fecha que llega precargada se ve
+ * en el botón pero no queda marcada en el calendario (que abre en el mes de hoy)
+ * hasta que se elige un día.
  */
 export function FechaPasadaPicker({
   label,
@@ -21,10 +26,14 @@ export function FechaPasadaPicker({
   onChange,
 }: {
   label: string;
-  value: DateValue | null;
-  onChange: (dia: DateValue) => void;
+  /** `YYYY-MM-DD`, o `''` sin fecha. */
+  value: string;
+  onChange: (fecha: string) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
+  // El último día elegido en el calendario: se marca mientras siga siendo el valor.
+  const [elegido, setElegido] = useState<DateValue | null>(null);
+  const marcado = elegido != null && elegido.toString() === value ? elegido : null;
   // Hoy en el reloj del dispositivo (`YYYY-MM-DD`): una mantención ya hecha no puede ser futura (el backend también
   // lo exige).
   const hoy = toDateOnly(new Date());
@@ -46,11 +55,12 @@ export function FechaPasadaPicker({
               // Los días futuros quedan apagados: no se pueden elegir.
               isDateUnavailable={(dia) => dia.toString() > hoy}
               onChange={(dia) => {
-                onChange(dia);
+                setElegido(dia);
+                onChange(dia.toString());
                 // Elegido el día, el popover se cierra solo: queda a la vista en el botón.
                 setAbierto(false);
               }}
-              value={value}
+              value={marcado}
             >
               <Calendar.Header>
                 <Calendar.NavButton slot="previous" />

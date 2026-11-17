@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Button, Input, Label, ListBox, Modal, Select, Spinner, TextArea, TextField } from '@heroui/react';
-import type { DateValue } from 'react-aria-components/Calendar';
 
 import { useRegistrarMantencionHistorica } from '../../hooks/useOrdenes';
 import { fmtNum } from '../../lib/format';
@@ -39,10 +38,9 @@ export function MantencionAnteriorModal({
   lecturaObligatoria?: boolean;
 }) {
   const registrar = useRegistrarMantencionHistorica();
-  // El día elegido en el calendario; su `toString()` es el `YYYY-MM-DD` que
-  // espera el backend (y se compara directo contra `hoy`).
-  const [dia, setDia] = useState<DateValue | null>(null);
-  const fecha = dia?.toString() ?? '';
+  // El día elegido en el calendario, en el `YYYY-MM-DD` que espera el backend
+  // (y se compara directo contra `hoy`).
+  const [fecha, setFecha] = useState('');
   const [tipo, setTipo] = useState<TipoOT>('PREVENTIVA');
   const [titulo, setTitulo] = useState('');
   const [realizadaPor, setRealizadaPor] = useState('');
@@ -98,7 +96,7 @@ export function MantencionAnteriorModal({
       },
       {
         onSuccess: () => {
-          setDia(null);
+          setFecha('');
           setTipo('PREVENTIVA');
           setTitulo('');
           setRealizadaPor('');
@@ -135,7 +133,7 @@ export function MantencionAnteriorModal({
               </p>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FechaPasadaPicker label="Fecha de la mantención" onChange={setDia} value={dia} />
+                <FechaPasadaPicker label="Fecha de la mantención" onChange={setFecha} value={fecha} />
 
                 <Select fullWidth value={tipo} onChange={(value) => value && setTipo(value as TipoOT)}>
                   <Label>Tipo</Label>

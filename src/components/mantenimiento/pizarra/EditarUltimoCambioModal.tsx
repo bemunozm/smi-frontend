@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { Button, Modal, Spinner } from '@heroui/react';
-import { parseDate } from '@internationalized/date';
-import type { DateValue } from 'react-aria-components/Calendar';
 
 import { useCorregirUltimoCambio } from '../../../hooks/useMaintenancePlans';
 import { fmtNum } from '../../../lib/format';
@@ -15,10 +13,9 @@ import { FechaPasadaPicker } from '../FechaPasadaPicker';
 const LECTURA_MAXIMA = 1_000_000;
 
 /** `2026-10-01T12:00:00.000Z` → el día en la hora local, como lo muestra la pizarra (`fechaCorta`). */
-function diaLocal(iso: string): DateValue | null {
+function diaLocal(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return parseDate(toDateOnly(d));
+  return Number.isNaN(d.getTime()) ? '' : toDateOnly(d);
 }
 
 /** Qué hito fue el último cambio: «Mantención de 250 h» o, en un liviano, «Servicio de 10.000 km». */
@@ -38,12 +35,11 @@ function textoHito(fila: MaintenanceBoardRow, hito: number): string {
 export function EditarUltimoCambioModal({ fila, onClose }: { fila: MaintenanceBoardRow; onClose: () => void }) {
   const corregir = useCorregirUltimoCambio();
   const ultimo = fila.lastChange;
-  const [dia, setDia] = useState<DateValue | null>(() => (ultimo ? diaLocal(ultimo.doneAt) : null));
+  const fechaOriginal = ultimo ? diaLocal(ultimo.doneAt) : '';
+  const [fecha, setFecha] = useState(fechaOriginal);
   const [lectura, setLectura] = useState<number>(ultimo?.counterAt ?? Number.NaN);
 
   const esKm = fila.unit === 'km';
-  const fecha = dia?.toString() ?? '';
-  const fechaOriginal = ultimo ? (diaLocal(ultimo.doneAt)?.toString() ?? '') : '';
   const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= toDateOnly(new Date());
   const lecturaValida = Number.isFinite(lectura) && lectura >= 0 && lectura <= LECTURA_MAXIMA;
   const cambio = fecha !== fechaOriginal || lectura !== ultimo?.counterAt;
@@ -91,7 +87,7 @@ export function EditarUltimoCambioModal({ fila, onClose }: { fila: MaintenanceBo
               </p>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FechaPasadaPicker label="Fecha del último cambio" onChange={setDia} value={dia} />
+                <FechaPasadaPicker label="Fecha del último cambio" onChange={setFecha} value={fecha} />
                 <DecimalField
                   decimales={1}
                   isInvalid={!Number.isNaN(lectura) && !lecturaValida}
