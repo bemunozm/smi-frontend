@@ -7,7 +7,7 @@ import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import { RegistroTurnoModal } from '../components/reportes/RegistroTurnoModal';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
-import { useDeleteShiftReport, useShiftReports } from '../hooks/useShiftReports';
+import { useAbrirPdfReporte, useDeleteShiftReport, useShiftReports } from '../hooks/useShiftReports';
 import { turnoLabel } from '../config/flota-colors';
 import { canDeleteShiftReport } from '../lib/permissions';
 import { fromDateOnly } from '../lib/turno';
@@ -130,6 +130,7 @@ export function ReportesView() {
   const [eliminando, setEliminando] = useState<ShiftReportListItem | null>(null);
   const puedeEliminar = canDeleteShiftReport(usePermissions().role);
   const eliminar = useDeleteShiftReport();
+  const abrirPdf = useAbrirPdfReporte();
 
   return (
     <div className="flex flex-col gap-6">
@@ -222,6 +223,10 @@ export function ReportesView() {
                           <a
                             className="inline-flex items-center gap-1.5 text-sm font-medium text-(--accent) hover:underline"
                             href={ShiftReportAPI.fileUrl(reporte.id)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              abrirPdf(reporte.id);
+                            }}
                             rel="noreferrer"
                             target="_blank"
                           >

@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { toDomainError } from '../lib/api-error';
 import {
   DeleteShiftReportResponseSchema,
+  ShiftReportFileUrlResponseSchema,
   ShiftCardListResponseSchema,
   ShiftReportListResponseSchema,
   ShiftReportWrapperSchema,
@@ -81,10 +82,26 @@ function fileUrl(id: string): string {
   return `${env.apiUrl}/api/shift-reports/${id}/file`;
 }
 
+/**
+ * URL firmada del PDF en JSON (`GET /api/shift-reports/:id/file-url`). Se pide
+ * ANTES de abrir la pestaña: si el reporte ya no existe (se borró por
+ * duplicado) el 404 se muestra como aviso en la app, no como la página cruda
+ * `{"data":null,"message":"Reporte no encontrado"}`.
+ */
+async function signedFileUrl(id: string): Promise<string> {
+  try {
+    const res = await axiosInstance.get(`/api/shift-reports/${encodeURIComponent(id)}/file-url`);
+    return ShiftReportFileUrlResponseSchema.parse(res.data).data.url;
+  } catch (error) {
+    throw toDomainError(error, 'No se pudo abrir el PDF del reporte.');
+  }
+}
+
 export const ShiftReportAPI = {
   sendExitReport,
   list,
   cards,
   remove,
   fileUrl,
+  signedFileUrl,
 };

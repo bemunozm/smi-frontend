@@ -163,6 +163,9 @@ export interface UseShiftRegisterResult {
   /** URL de descarga del PDF de un reporte — la vista no importa
    * `ShiftReportAPI` directo (CLAUDE.md: "SOLO UI, consume los hooks"). */
   reporteUrl: (id: string) => string;
+  /** Abre el PDF de un reporte en otra pestaña; si ya no existe (se borró por
+   * duplicado) avisa en la app en vez del 404 crudo (`useAbrirPdfReporte`). */
+  abrirPdfReporte: (id: string) => void;
 }
 
 export function useShiftRegister(): UseShiftRegisterResult {

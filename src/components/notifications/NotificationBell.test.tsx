@@ -43,6 +43,7 @@ let notificacionesResult: { data: Notificacion[]; isPending: boolean; isError: b
 };
 let unreadCountResult: { data: number } = { data: 1 };
 
+vi.mock('../../hooks/useShiftReports', () => ({ useAbrirPdfReporte: () => vi.fn() }));
 vi.mock('../../hooks/useNotificaciones', () => ({
   useNotificaciones: () => notificacionesResult,
   useUnreadCount: () => unreadCountResult,

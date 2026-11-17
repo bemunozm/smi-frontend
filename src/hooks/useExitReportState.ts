@@ -3,6 +3,7 @@ import { toast } from '@heroui/react';
 
 import { esActual, type EstadoReporte, type TarjetaTurno } from './shift-register-helpers';
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
+import { useAbrirPdfReporte } from './useShiftReports';
 import type { OutboxLastError, SendExitReportOp, OutboxOp } from '../offline/db';
 import { enqueueExitReport } from '../offline/outbox';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
@@ -44,6 +45,9 @@ export interface UseExitReportStateResult {
   /** URL de descarga del PDF de un reporte — la vista no importa
    * `ShiftReportAPI` directo (CLAUDE.md: "SOLO UI, consume los hooks"). */
   reporteUrl: (id: string) => string;
+  /** Abre el PDF de un reporte en otra pestaña; si ya no existe (se borró por
+   * duplicado) avisa en la app en vez del 404 crudo (`useAbrirPdfReporte`). */
+  abrirPdfReporte: (id: string) => void;
 }
 
 /**
@@ -57,6 +61,7 @@ export function useExitReportState({
   enCurso,
   userId,
 }: UseExitReportStateParams): UseExitReportStateResult {
+  const abrirPdfReporte = useAbrirPdfReporte();
   const opsReporte = useMemo(() => ops.filter((op): op is SendExitReportOp => op.type === 'sendExitReport'), [ops]);
 
   const shiftActualServidor = useMemo(
@@ -140,5 +145,6 @@ export function useExitReportState({
     enviarReporte,
     isEnviandoReporte,
     reporteUrl: ShiftReportAPI.fileUrl,
+    abrirPdfReporte,
   };
 }

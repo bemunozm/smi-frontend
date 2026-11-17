@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('../../hooks/useNotificaciones', () => ({ useMarkRead: () => ({ mutate: vi.fn() }) }));
+const abrirPdfMock = vi.hoisted(() => vi.fn());
+vi.mock('../../hooks/useShiftReports', () => ({ useAbrirPdfReporte: () => abrirPdfMock }));
 
 // El destino de varios avisos depende del rol (el admin va a SUS vistas de
 // gestión; terreno/taller a la ficha del equipo) — se controla desde acá.
@@ -34,6 +36,30 @@ function editada(data: Notificacion['data']): Notificacion {
     createdAt: '2026-10-05T10:00:00.000Z',
   };
 }
+
+describe('NotificationItem — reporte de salida', () => {
+  it('al tocarla abre el PDF por `useAbrirPdfReporte` (avisa si el reporte se borró), sin navegar', () => {
+    render(
+      <NotificationItem
+        notificacion={{
+          id: 'n9',
+          userId: 'u1',
+          tipo: 'shift.exit-report',
+          titulo: 'Reporte de salida',
+          cuerpo: 'Turno DIURNO',
+          data: { reportId: 'r7', shiftId: 's1' },
+          leida: false,
+          createdAt: '2026-11-16T10:00:00.000Z',
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(abrirPdfMock).toHaveBeenCalledWith('r7');
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('NotificationItem — registro corregido', () => {
   it('lleva etiqueta propia, no la genérica', () => {

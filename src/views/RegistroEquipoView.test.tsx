@@ -26,6 +26,7 @@ const setDetalleCerrada = vi.fn();
 const abrirEdicionMock = vi.fn();
 const enviarReporteMock = vi.fn();
 const elegirTurnoPasadoMock = vi.fn();
+const abrirPdfMock = vi.fn();
 const reporteUrlMock = vi.fn((id: string) => `/api/shift-reports/${id}/file`);
 
 // Resumen del turno pasado elegido (`usePastShiftSummary`) — cada test lo
@@ -299,6 +300,7 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     enviarReporte: enviarReporteMock,
     isEnviandoReporte: false,
     reporteUrl: reporteUrlMock,
+    abrirPdfReporte: abrirPdfMock,
     ...overrides,
   };
 }

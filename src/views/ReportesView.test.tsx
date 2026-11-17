@@ -13,7 +13,9 @@ const { reportesHook, eliminarMutate, permisos, escritorio } = vi.hoisted(() => 
 vi.mock('../hooks/useShiftReports', () => ({
   useShiftReports: () => reportesHook(),
   useDeleteShiftReport: () => ({ mutate: eliminarMutate, isPending: false }),
+  useAbrirPdfReporte: () => abrirPdfMock,
 }));
+const abrirPdfMock = vi.hoisted(() => vi.fn());
 vi.mock('../hooks/usePermissions', () => ({ usePermissions: () => ({ role: permisos.role, can: () => true }) }));
 vi.mock('../hooks/useMediaQuery', () => ({ DESKTOP_QUERY: 'desktop', useMediaQuery: () => escritorio.value }));
 // El modal tiene su propio test (`RegistroTurnoModal.test.tsx`): acá solo importa qué reporte abre
@@ -87,6 +89,14 @@ describe('ReportesView', () => {
     const enlace = within(screen.getByTestId('reporte-fila-r2')).getByRole('link', { name: /Descargar PDF/ });
     expect(enlace.getAttribute('href')).toContain('/api/shift-reports/r2/file');
     expect(enlace.getAttribute('target')).toBe('_blank');
+  });
+
+  it('tocar «Descargar PDF» lo abre por la app (si el reporte se borró, avisa en vez del 404 crudo)', () => {
+    render(<ReportesView />);
+
+    fireEvent.click(within(screen.getByTestId('reporte-fila-r2')).getByRole('link', { name: /Descargar PDF/ }));
+
+    expect(abrirPdfMock).toHaveBeenCalledWith('r2');
   });
 
   it('«Ver registro» abre las tarjetas del turno de esa fila', () => {
