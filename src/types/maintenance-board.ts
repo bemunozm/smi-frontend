@@ -40,6 +40,19 @@ export const MaintenanceBoardRowSchema = z.object({
 });
 export type MaintenanceBoardRow = z.infer<typeof MaintenanceBoardRowSchema>;
 
+/**
+ * Corregir el último cambio de un equipo desde la pizarra
+ * (`PATCH /api/maintenance-plans/:equipmentId/last-change`, solo ADMIN): se
+ * mandan la fecha y la lectura juntas. Responde la fila de la pizarra ya
+ * recalculada.
+ */
+export interface CorregirUltimoCambioInput {
+  /** `YYYY-MM-DD`; no puede ser futura ni anterior al cambio previo. */
+  doneAt: string;
+  /** Lectura del cambio: entre la del cambio previo y la actual del equipo. */
+  counterAt: number;
+}
+
 export const MaintenanceBoardListResponseSchema = z.object({
   data: z.array(MaintenanceBoardRowSchema),
   message: z.string(),

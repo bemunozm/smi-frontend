@@ -1,7 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
-import { CalendarDays, CircleAlert, ClipboardList, Clock, History, SquareKanban, TriangleAlert } from 'lucide-react';
+import {
+  CalendarDays,
+  CircleAlert,
+  ClipboardList,
+  Clock,
+  History,
+  Pencil,
+  SquareKanban,
+  TriangleAlert,
+} from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
 import { DESKTOP_QUERY, useMediaQuery } from '../../../hooks/useMediaQuery';
@@ -12,6 +21,7 @@ import type { MaintenanceForecastRow } from '../../../types/maintenance-forecast
 import { MantencionAnteriorModal } from '../MantencionAnteriorModal';
 import { PautaMantencionModal } from '../PautaMantencionModal';
 import { Chip } from '../../ui/Chip';
+import { EditarUltimoCambioModal } from './EditarUltimoCambioModal';
 import { MantencionARealizarModal } from './MantencionARealizarModal';
 import { etiquetas, fechaCorta, lectura, separarSinPauta, textoPendientes, tono } from './pizarra';
 
@@ -251,12 +261,15 @@ export function PizarraMantenciones({
   // ficha y en Equipos): la SECRETARIA ve la pizarra sin esos botones.
   const esAdmin = role === 'ADMIN';
   const puedeEditarPauta = can('maintenancePlan.save');
+  // Corregir el último cambio (fecha y lectura) es solo del ADMIN.
+  const puedeCorregirCambio = can('maintenancePlan.lastChange');
 
   const panel: Panel = params.get('panel') === 'livianos' ? 'livianos' : 'pesados';
   const textos = etiquetas(panel);
   const [verItems, setVerItems] = useState<MaintenanceBoardRow | null>(null);
   const [anterior, setAnterior] = useState<MaintenanceBoardRow | null>(null);
   const [pauta, setPauta] = useState<MaintenanceBoardRow | null>(null);
+  const [editar, setEditar] = useState<MaintenanceBoardRow | null>(null);
 
   // Los sin pauta van a su propia sección debajo: no tienen números que comparar con el resto.
   const { conPauta: filas, sinPauta: filasSinPauta } = useMemo(
@@ -288,6 +301,22 @@ export function PizarraMantenciones({
     ) : (
       <span className="text-muted-foreground">—</span>
     );
+
+  // Con último cambio, un lápiz chico al lado del valor lo corrige. El de la fecha y el de la lectura abren el mismo
+  // modal, que guarda las dos juntas. Es un botón normal (enfocable): es una acción real, no ruido de tabulación.
+  const botonEditar = (fila: MaintenanceBoardRow, etiqueta: string): ReactNode =>
+    puedeCorregirCambio ? (
+      <Button
+        isIconOnly
+        aria-label={etiqueta}
+        className="size-7 min-w-7 text-muted-foreground"
+        onPress={() => setEditar(fila)}
+        size="sm"
+        variant="ghost"
+      >
+        <Pencil aria-hidden="true" className="size-3.5" />
+      </Button>
+    ) : null;
 
   // «Asignar pauta» es solo para pesados: los livianos tienen su servicio fijo de 10.000 km.
   const botonAsignarPauta = (fila: MaintenanceBoardRow, className?: string): ReactNode =>
@@ -404,6 +433,8 @@ export function PizarraMantenciones({
                           <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
                           <span aria-hidden="true">·</span>
                           <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                          {/* Un solo lápiz en la tarjeta: abre el modal que corrige fecha y lectura juntas. */}
+                          {botonEditar(fila, 'Editar último cambio')}
                         </span>
                       ) : esAdmin ? (
                         <span className="flex flex-wrap gap-2">
@@ -460,18 +491,24 @@ export function PizarraMantenciones({
                         {/* Sin último cambio, cada columna lleva su botón (es lo que falta para contar desde ahí). */}
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(2)}>
                           {fila.lastChange ? (
-                            <ValorConTooltip fila={fila} titulo="Fecha último cambio">
-                              <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
-                            </ValorConTooltip>
+                            <span className="inline-flex items-center gap-1">
+                              <ValorConTooltip fila={fila} titulo="Fecha último cambio">
+                                <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
+                              </ValorConTooltip>
+                              {botonEditar(fila, 'Editar fecha del último cambio')}
+                            </span>
                           ) : (
                             botonRegistrar(fila, 'fecha')
                           )}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(3)}>
                           {fila.lastChange ? (
-                            <ValorConTooltip fila={fila} titulo={textos.ultimo}>
-                              <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
-                            </ValorConTooltip>
+                            <span className="inline-flex items-center gap-1">
+                              <ValorConTooltip fila={fila} titulo={textos.ultimo}>
+                                <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                              </ValorConTooltip>
+                              {botonEditar(fila, textos.editarUltimo)}
+                            </span>
                           ) : (
                             botonRegistrar(fila, 'lectura')
                           )}
@@ -617,6 +654,8 @@ export function PizarraMantenciones({
           }
         />
       ) : null}
+
+      {editar ? <EditarUltimoCambioModal fila={editar} onClose={() => setEditar(null)} /> : null}
 
       {pauta ? (
         <PautaMantencionModal

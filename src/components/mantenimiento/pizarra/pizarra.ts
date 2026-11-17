@@ -92,6 +92,7 @@ export function etiquetas(panel: 'pesados' | 'livianos') {
         proximo: 'Km próximo cambio',
         actual: 'Km actual',
         pendientes: 'Km pendientes',
+        editarUltimo: 'Editar km del último cambio',
       }
     : {
         cambio: 'Horas cambio',
@@ -99,5 +100,6 @@ export function etiquetas(panel: 'pesados' | 'livianos') {
         proximo: 'Horómetro próximo cambio',
         actual: 'Horómetro actual',
         pendientes: 'Horas pendientes',
+        editarUltimo: 'Editar horómetro del último cambio',
       };
 }

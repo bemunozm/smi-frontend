@@ -54,6 +54,11 @@ vi.mock('../MantencionAnteriorModal', () => ({
       />
     ) : null,
 }));
+vi.mock('./EditarUltimoCambioModal', () => ({
+  EditarUltimoCambioModal: ({ fila }: { fila: { equipmentId: string } }) => (
+    <div data-equipo={fila.equipmentId} data-testid="modal-editar-cambio" />
+  ),
+}));
 vi.mock('../PautaMantencionModal', () => ({
   PautaMantencionModal: ({ equipo, isOpen }: { equipo: { id: string }; isOpen: boolean }) =>
     isOpen ? <div data-equipo={equipo.id} data-testid="modal-pauta" /> : null,
@@ -373,6 +378,86 @@ describe('PizarraMantenciones', () => {
     const celdas = screen.getByTestId('pizarra-fila-p2').querySelectorAll('td');
     expect(celdas[2]?.textContent).toBe('—');
     expect(celdas[3]?.textContent).toBe('—');
+  });
+
+  it('con último cambio, el ADMIN ve un lápiz en la fecha y otro en el horómetro; abren el mismo modal', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const celdas = screen.getByTestId('pizarra-fila-p1').querySelectorAll('td');
+    const lapizFecha = within(celdas[2] as HTMLElement).getByRole('button', {
+      name: 'Editar fecha del último cambio',
+    });
+    const lapizLectura = within(celdas[3] as HTMLElement).getByRole('button', {
+      name: 'Editar horómetro del último cambio',
+    });
+    // Son acciones reales: enfocables con teclado.
+    expect(lapizFecha.getAttribute('tabindex')).not.toBe('-1');
+    expect(lapizLectura.getAttribute('tabindex')).not.toBe('-1');
+
+    fireEvent.click(lapizLectura);
+    expect(screen.getByTestId('modal-editar-cambio').getAttribute('data-equipo')).toBe('p1');
+    cleanup();
+
+    escritorio.value = true;
+    renderPizarra();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar fecha del último cambio' }));
+    expect(screen.getByTestId('modal-editar-cambio').getAttribute('data-equipo')).toBe('p1');
+  });
+
+  it('sin último cambio no hay lápiz: la fila sigue con «Registrar fecha/horómetro»', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const fila = screen.getByTestId('pizarra-fila-p2');
+    expect(within(fila).queryByRole('button', { name: /^Editar/ })).toBeNull();
+    expect(within(fila).getByRole('button', { name: 'Registrar fecha' })).toBeTruthy();
+    expect(within(fila).getByRole('button', { name: 'Registrar horómetro' })).toBeTruthy();
+  });
+
+  it('en livianos el lápiz de la lectura dice km', () => {
+    escritorio.value = true;
+    boardHook.mockReturnValue({
+      data: [
+        filaPizarra({
+          equipmentId: 'l2',
+          internalCode: 'CAM 08',
+          equipmentClass: 'LIGHT',
+          unit: 'km',
+          source: 'LIVIANO',
+          lastChange: { milestone: 10000, counterAt: 80000, doneAt: '2026-09-01T12:00:00.000Z' },
+        }),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    renderPizarra('/mantenciones?panel=livianos');
+    expect(screen.getByRole('button', { name: 'Editar km del último cambio' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Editar fecha del último cambio' })).toBeTruthy();
+  });
+
+  it('en el teléfono la tarjeta trae un solo lápiz junto a «Último cambio»', () => {
+    renderPizarra();
+
+    const tarjeta = screen.getByTestId('pizarra-fila-p1');
+    const lapices = within(tarjeta).getAllByRole('button', { name: /^Editar/ });
+    expect(lapices.map((b) => b.getAttribute('aria-label'))).toEqual(['Editar último cambio']);
+    fireEvent.click(lapices[0] as HTMLElement);
+    expect(screen.getByTestId('modal-editar-cambio').getAttribute('data-equipo')).toBe('p1');
+    expect(within(screen.getByTestId('pizarra-fila-p2')).queryByRole('button', { name: /^Editar/ })).toBeNull();
+  });
+
+  it('la SECRETARIA no ve los lápices de editar el último cambio', () => {
+    rol.value = 'SECRETARIA';
+    escritorio.value = true;
+    renderPizarra();
+    expect(screen.queryAllByRole('button', { name: /^Editar/ })).toEqual([]);
+    cleanup();
+
+    escritorio.value = false;
+    renderPizarra();
+    expect(screen.queryAllByRole('button', { name: /^Editar/ })).toEqual([]);
   });
 
   it('un pesado sin pauta ofrece «Asignar pauta» al ADMIN', () => {

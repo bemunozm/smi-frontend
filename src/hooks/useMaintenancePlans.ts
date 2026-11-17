@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MaintenanceForecastAPI } from '../api/MaintenanceForecastAPI';
 import { MaintenancePlanAPI } from '../api/MaintenancePlanAPI';
 import { MAINTENANCE_PLANS_KEY } from '../lib/query-keys';
+import type { CorregirUltimoCambioInput } from '../types/maintenance-board';
 import type { SaveMaintenancePlanInput, SetMaintenanceRecordInput } from '../types/maintenance-plan';
 import { useQueuedMutation } from './useQueuedMutation';
 
@@ -69,6 +70,28 @@ export function useSaveMaintenancePlan() {
       toast.success('Pauta guardada', { description: internalCode });
     },
     errorFallback: 'No se pudo guardar la pauta de mantención.',
+  });
+}
+
+export interface CorregirUltimoCambioVars extends CorregirUltimoCambioInput {
+  equipmentId: string;
+  internalCode: string;
+}
+
+/**
+ * Corrige la fecha y la lectura del último cambio desde la pizarra (solo
+ * ADMIN). Va por la cola de escrituras como la pauta; el replay refresca la
+ * raíz de las pautas (pizarra y pronóstico). Los 400 del backend (fecha futura,
+ * lectura fuera de rango…) llegan tal cual en el toast de error.
+ */
+export function useCorregirUltimoCambio() {
+  return useQueuedMutation<'maintenancePlan.lastChange', CorregirUltimoCambioVars>({
+    endpoint: 'maintenancePlan.lastChange',
+    build: ({ equipmentId, doneAt, counterAt }) => ({ params: { equipmentId }, body: { doneAt, counterAt } }),
+    onSent: (_data, { internalCode }) => {
+      toast.success('Último cambio corregido', { description: internalCode });
+    },
+    errorFallback: 'No se pudo corregir el último cambio.',
   });
 }
 
