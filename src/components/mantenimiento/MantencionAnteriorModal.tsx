@@ -8,11 +8,7 @@ import type { ControlUnit } from '../../types/equipment';
 import type { TipoOT } from '../../types/mantenimiento';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
 import { FechaPasadaPicker } from './FechaPasadaPicker';
-
-const TIPO_OPTIONS = [
-  { value: 'PREVENTIVA', label: 'Preventiva' },
-  { value: 'CORRECTIVA', label: 'Correctiva' },
-] as const;
+import { opcionesHito as armarOpcionesHito, TIPO_OPTIONS } from './opciones-mantencion';
 
 /**
  * «Registrar mantención anterior» de la ficha del equipo (solo ADMIN): la
@@ -59,12 +55,7 @@ export function MantencionAnteriorModal({
     lecturaNumero === undefined ? !lecturaRequerida : Number.isFinite(lecturaNumero) && lecturaNumero >= 0;
   const unidad = esKm ? 'km' : 'h';
   // Servicio inicial (si la pauta lo tiene) y cada hito, en la unidad del equipo.
-  const opcionesHito = [
-    ...(pauta?.initialMilestone != null
-      ? [{ valor: pauta.initialMilestone, label: `Servicio inicial ${fmtNum(pauta.initialMilestone)} ${unidad}` }]
-      : []),
-    ...(pauta?.milestones ?? []).map((n) => ({ valor: n, label: `${fmtNum(n)} ${unidad}` })),
-  ];
+  const opcionesHito = armarOpcionesHito(pauta, unidad);
   // El título se rellena solo si quedó vacío; si ya escribieron uno, se respeta.
   const tituloEfectivo = titulo.trim() || (hito != null ? `Mantención ${fmtNum(hito)} ${unidad}` : '');
 

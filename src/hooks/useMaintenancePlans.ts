@@ -79,15 +79,27 @@ export interface CorregirUltimoCambioVars extends CorregirUltimoCambioInput {
 }
 
 /**
- * Corrige la fecha y la lectura del último cambio desde la pizarra (solo
- * ADMIN). Va por la cola de escrituras como la pauta; el replay refresca la
+ * Corrige el último cambio desde la pizarra (solo ADMIN): fecha, lectura,
+ * hito y los datos de su orden. Va por la cola de escrituras como la pauta; el replay refresca la
  * raíz de las pautas (pizarra y pronóstico). Los 400 del backend (fecha futura,
  * lectura fuera de rango…) llegan tal cual en el toast de error.
  */
 export function useCorregirUltimoCambio() {
   return useQueuedMutation<'maintenancePlan.lastChange', CorregirUltimoCambioVars>({
     endpoint: 'maintenancePlan.lastChange',
-    build: ({ equipmentId, doneAt, counterAt }) => ({ params: { equipmentId }, body: { doneAt, counterAt } }),
+    build: ({ equipmentId, doneAt, counterAt, milestone, tipo, titulo, realizadaPor, observaciones }) => ({
+      params: { equipmentId },
+      // Solo los campos que mandó el formulario: los ausentes no se tocan.
+      body: {
+        doneAt,
+        counterAt,
+        ...(milestone !== undefined ? { milestone } : {}),
+        ...(tipo !== undefined ? { tipo } : {}),
+        ...(titulo !== undefined ? { titulo } : {}),
+        ...(realizadaPor !== undefined ? { realizadaPor } : {}),
+        ...(observaciones !== undefined ? { observaciones } : {}),
+      },
+    }),
     onSent: (_data, { internalCode }) => {
       toast.success('Último cambio corregido', { description: internalCode });
     },

@@ -40,6 +40,32 @@ describe('useCorregirUltimoCambio', () => {
     expect(toast.success).toHaveBeenCalledWith('Último cambio corregido', { description: 'SEM 02' });
   });
 
+  it('manda también el hito y los datos de la orden cuando vienen', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado(null));
+    const { result } = renderHook(() => useCorregirUltimoCambio(), { wrapper });
+
+    result.current.mutate({
+      ...VARS,
+      milestone: 500,
+      tipo: 'CORRECTIVA',
+      titulo: 'Mantención 500 h',
+      realizadaPor: '',
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(ultimaEscritura().input).toEqual({
+      params: { equipmentId: 'eq_1' },
+      body: {
+        doneAt: '2026-10-02',
+        counterAt: 2260.5,
+        milestone: 500,
+        tipo: 'CORRECTIVA',
+        titulo: 'Mantención 500 h',
+        realizadaPor: '',
+      },
+    });
+  });
+
   it('el 400 del backend llega tal cual en el toast de error', async () => {
     submitWriteMock.mockRejectedValueOnce(
       new DomainError('La lectura no puede ser mayor que el horómetro actual del equipo.', { status: 400 }),

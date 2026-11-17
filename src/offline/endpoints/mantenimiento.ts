@@ -101,7 +101,7 @@ export interface MantenimientoEndpointMap {
     body: SaveMaintenancePlanInput;
     result: MaintenancePlanView;
   };
-  /** Corregir la fecha y la lectura del último cambio desde la pizarra (`PATCH`,
+  /** Corregir el último cambio desde la pizarra (`PATCH`,
    * last-write-wins). Responde la fila de la pizarra recalculada. */
   'maintenancePlan.lastChange': {
     params: { equipmentId: string };

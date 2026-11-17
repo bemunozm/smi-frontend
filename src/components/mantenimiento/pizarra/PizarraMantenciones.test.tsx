@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 import type { MaintenanceForecastRow } from '../../../types/maintenance-forecast';
-import { filaPizarra } from './fixtures';
+import { filaPizarra, ultimoCambio } from './fixtures';
 
 const { boardHook, forecastHook, escritorio, rol } = vi.hoisted(() => ({
   boardHook: vi.fn(),
@@ -425,7 +425,7 @@ describe('PizarraMantenciones', () => {
           equipmentClass: 'LIGHT',
           unit: 'km',
           source: 'LIVIANO',
-          lastChange: { milestone: 10000, counterAt: 80000, doneAt: '2026-09-01T12:00:00.000Z' },
+          lastChange: ultimoCambio({ milestone: 10000, counterAt: 80000, doneAt: '2026-09-01T12:00:00.000Z' }),
         }),
       ],
       isPending: false,
