@@ -118,7 +118,10 @@ function ValorConTooltip({
 }) {
   return (
     <Tooltip delay={300}>
-      <Tooltip.Trigger className="inline-flex">{children}</Tooltip.Trigger>
+      {/* Solo hover: sin tabulación ni rol de botón, para no sumar paradas de teclado ni anuncios por fila. */}
+      <Tooltip.Trigger className="inline-flex" role="presentation" tabIndex={-1}>
+        {children}
+      </Tooltip.Trigger>
       <Tooltip.Content>{`${titulo} · ${fila.internalCode}`}</Tooltip.Content>
     </Tooltip>
   );
@@ -545,7 +548,9 @@ export function PizarraMantenciones({
                               <Equipo fila={fila} sinEstado />
                             </Table.Cell>
                             <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(1)}>
-                              <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                              <ValorConTooltip fila={fila} titulo={textos.actual}>
+                                <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                              </ValorConTooltip>
                             </Table.Cell>
                             <Table.Cell className="text-sm" {...fondoColumna(2)}>
                               {fila.status === 'OUT_OF_SERVICE' ? (

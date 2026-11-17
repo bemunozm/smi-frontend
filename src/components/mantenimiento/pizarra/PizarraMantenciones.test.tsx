@@ -129,6 +129,13 @@ const FILAS: MaintenanceBoardRow[] = [
   }),
 ];
 
+/** Pasa el mouse por un elemento; el tooltip por hover solo abre si la última interacción fue con puntero. */
+function pasarMouse(elemento: HTMLElement) {
+  fireEvent.pointerDown(document.body, { pointerType: 'mouse' });
+  fireEvent.pointerOver(elemento, { pointerType: 'mouse' });
+  fireEvent.pointerMove(elemento, { pointerType: 'mouse' });
+}
+
 const pronostico = (over: Partial<MaintenanceForecastRow>): MaintenanceForecastRow => ({
   equipmentId: 'p1',
   unit: 'h',
@@ -275,13 +282,44 @@ describe('PizarraMantenciones', () => {
       [4, 'Horómetro actual'],
       [5, 'Horómetro próximo cambio'],
     ] as const) {
-      const disparador = (celdas[indice] as HTMLElement).querySelector('.tooltip__trigger') as HTMLElement;
-      // El tooltip por hover solo abre si la última interacción fue con puntero.
-      fireEvent.pointerDown(document.body, { pointerType: 'mouse' });
-      fireEvent.pointerOver(disparador, { pointerType: 'mouse' });
-      fireEvent.pointerMove(disparador, { pointerType: 'mouse' });
+      pasarMouse((celdas[indice] as HTMLElement).firstElementChild as HTMLElement);
       expect(await screen.findByText(`${titulo} · SEM 02`)).toBeTruthy();
     }
+  });
+
+  it('el tooltip de columna es solo hover: el valor no es tabulable ni se anuncia como botón', () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const fila = screen.getByTestId('pizarra-fila-p1');
+    const celdas = fila.querySelectorAll('td');
+    for (const indice of [1, 4, 5, 6]) {
+      const valor = (celdas[indice] as HTMLElement).querySelector('[tabindex]') as HTMLElement;
+      expect(valor.getAttribute('tabindex')).toBe('-1');
+      expect(valor.getAttribute('role')).not.toBe('button');
+    }
+    // Los únicos botones de la fila son los de acción; la burbuja de estado (si la hay) sigue enfocable.
+    expect(within(fila).queryAllByRole('button').every((b) => b.getAttribute('tabindex') !== '-1')).toBe(true);
+  });
+
+  it('en livianos el tooltip usa las etiquetas en km, y en horas pendientes va sobre el número', async () => {
+    escritorio.value = true;
+    renderPizarra('/mantenciones?panel=livianos');
+
+    const celdas = screen.getByTestId('pizarra-fila-l1').querySelectorAll('td');
+    pasarMouse((celdas[4] as HTMLElement).firstElementChild as HTMLElement);
+    expect(await screen.findByText('Km actual · CAM 07')).toBeTruthy();
+    pasarMouse(within(celdas[6] as HTMLElement).getByText('5.694 km'));
+    expect(await screen.findByText('Km pendientes · CAM 07')).toBeTruthy();
+  });
+
+  it('en la tabla de sin pauta la lectura actual también lleva el tooltip', async () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const celdas = screen.getByTestId('pizarra-sin-pauta-p3').querySelectorAll('td');
+    pasarMouse((celdas[1] as HTMLElement).firstElementChild as HTMLElement);
+    expect(await screen.findByText('Horómetro actual · SANY 01')).toBeTruthy();
   });
 
   it('sin último cambio, el ADMIN ve «Registrar fecha» y lo abre con el equipo', () => {
