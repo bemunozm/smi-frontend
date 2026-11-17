@@ -166,9 +166,9 @@ function ChipInoperativo() {
 }
 
 /**
- * Código y qué equipo es; los fuera de servicio lo dicen además de verse
- * atenuados (salvo `sinEstado`: la tabla de sin pauta lo muestra en su propia
- * columna).
+ * Código y qué equipo es; los fuera de servicio llevan además el chip
+ * «Inoperativo» (salvo con `sinEstado`: la tabla de sin pauta lo muestra en su
+ * propia columna).
  */
 function Equipo({ fila, sinEstado = false }: { fila: MaintenanceBoardRow; sinEstado?: boolean }) {
   const detalle = [fila.type, [fila.brand, fila.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
@@ -326,7 +326,7 @@ export function PizarraMantenciones({
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {filas.map((fila) => (
                 <li
-                  className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4`}
+                  className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
                   data-testid={`pizarra-fila-${fila.equipmentId}`}
                   key={fila.equipmentId}
                 >
@@ -518,7 +518,7 @@ export function PizarraMantenciones({
                 <ul className="m-0 flex list-none flex-col gap-3 p-0">
                   {filasSinPauta.map((fila) => (
                     <li
-                      className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4`}
+                      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
                       data-testid={`pizarra-sin-pauta-${fila.equipmentId}`}
                       key={fila.equipmentId}
                     >
