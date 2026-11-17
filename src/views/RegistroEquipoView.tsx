@@ -161,6 +161,7 @@ export function RegistroEquipoView() {
     enviarReporte,
     isEnviandoReporte,
     reporteUrl,
+    abrirPdfReporte,
     elegirTurnoPasado,
     esDiaPasado,
   } = useShiftRegister();
@@ -1538,7 +1539,8 @@ export function RegistroEquipoView() {
                 rel="noopener"
                 aria-disabled={!enLinea}
                 onClick={(e) => {
-                  if (!enLinea) e.preventDefault();
+                  e.preventDefault();
+                  if (enLinea) abrirPdfReporte(reporteUltimo.id);
                 }}
                 className={`inline-flex min-h-[52px] w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl px-5 text-[15.5px] font-semibold ${
                   enLinea

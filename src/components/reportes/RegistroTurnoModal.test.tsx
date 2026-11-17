@@ -9,7 +9,10 @@ const { cardsHook, rol } = vi.hoisted(() => ({
   rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' },
 }));
 
-vi.mock('../../hooks/useShiftReports', () => ({ useShiftReportCards: () => cardsHook() }));
+vi.mock('../../hooks/useShiftReports', () => ({
+  useShiftReportCards: () => cardsHook(),
+  useAbrirPdfReporte: () => vi.fn(),
+}));
 vi.mock('../../hooks/useShiftCards', () => ({ useCambiosTarjeta: () => ({ data: [], isLoading: false }) }));
 vi.mock('../../hooks/useCurrentUser', () => ({ useCurrentUser: () => ({ user: { id: 'admin_1' } }) }));
 vi.mock('../../offline/useOutboxOps', () => ({ useOutboxOps: () => [] }));

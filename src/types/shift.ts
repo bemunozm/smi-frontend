@@ -296,4 +296,10 @@ export const ShiftReportListResponseSchema = z.object({
 });
 
 /** `DELETE /api/shift-reports/:id` (solo ADMIN). */
+/** `GET /api/shift-reports/:id/file-url`: la URL firmada del PDF. */
+export const ShiftReportFileUrlResponseSchema = z.object({
+  data: z.object({ url: z.string() }),
+  message: z.string(),
+});
+
 export const DeleteShiftReportResponseSchema = z.object({ data: z.null(), message: z.string() });

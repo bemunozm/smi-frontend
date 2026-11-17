@@ -52,6 +52,7 @@ let notificacionesResult: {
   error: Error | null;
 } = { data: NOTIFICACIONES, isPending: false, isError: false, error: null };
 
+vi.mock('../hooks/useShiftReports', () => ({ useAbrirPdfReporte: () => vi.fn() }));
 vi.mock('../hooks/useNotificaciones', () => ({
   useNotificaciones: () => notificacionesResult,
   useMarkRead: () => ({ mutate: markReadMock, isPending: false }),

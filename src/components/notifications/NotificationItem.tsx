@@ -3,8 +3,8 @@ import { Chip } from '../ui/Chip';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useMarkRead } from '../../hooks/useNotificaciones';
+import { useAbrirPdfReporte } from '../../hooks/useShiftReports';
 import { notificacionTipoConfig } from '../../config/notificacion-colors';
-import { ShiftReportAPI } from '../../api/ShiftReportAPI';
 import { relativeTime } from '../../lib/relative-time';
 import { NOTIF_TIPOS, type Notificacion } from '../../types/notificacion';
 import { rutaDeChecklist } from './checklist-route';
@@ -40,6 +40,7 @@ export interface NotificationItemProps {
  */
 export function NotificationItem({ notificacion, onAfterClick }: NotificationItemProps) {
   const markRead = useMarkRead();
+  const abrirPdf = useAbrirPdfReporte();
   const navigate = useNavigate();
   const { role } = useCurrentUser();
   const { label, color } = notificacionTipoConfig(notificacion.tipo);
@@ -47,14 +48,14 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
   const handleClick = (): void => {
     markRead.mutate(notificacion.id);
 
-    // `shift.exit-report`: no tiene
-    // una pantalla propia — abre directo el PDF (302 a la URL firmada, ver
-    // `api/ShiftReportAPI.ts#fileUrl`), no una navegación interna con
+    // `shift.exit-report`: no tiene una pantalla propia — abre el PDF en otra
+    // pestaña (`useAbrirPdfReporte`: si el reporte se borró, avisa en la app en
+    // vez del 404 crudo), no una navegación interna con
     // `navigate()`. Se resuelve ANTES que `equipoIdFrom` porque
     // `data.equipoId` no aplica a este tipo.
     const reportId = notificacion.tipo === NOTIF_TIPOS.SHIFT_EXIT_REPORT ? reportIdFrom(notificacion.data) : null;
     if (reportId) {
-      window.open(ShiftReportAPI.fileUrl(reportId), '_blank', 'noopener');
+      abrirPdf(reportId);
       onAfterClick?.();
       return;
     }

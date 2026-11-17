@@ -12,7 +12,7 @@ import { useEditarTarjeta } from '../../hooks/useEditarTarjeta';
 import { useEquipment } from '../../hooks/useEquipment';
 import { useOperators } from '../../hooks/useOperators';
 import { usePermissions } from '../../hooks/usePermissions';
-import { useShiftReportCards } from '../../hooks/useShiftReports';
+import { useAbrirPdfReporte, useShiftReportCards } from '../../hooks/useShiftReports';
 import { mapCardToTarjeta, type TarjetaTurno } from '../../hooks/shift-register-helpers';
 import { NUM_CL_1 } from '../../lib/dashboard-format';
 import { contextoTurno, fromDateOnly } from '../../lib/turno';
@@ -107,6 +107,7 @@ export function RegistroTurnoModal({
   onEliminar?: (() => void) | undefined;
 }) {
   const { data: cards, isPending, isError, error } = useShiftReportCards(reporte?.id ?? null);
+  const abrirPdf = useAbrirPdfReporte();
   const { user } = useCurrentUser();
   const ops = useOutboxOps(user?.id);
   const puedeEditar = usePermissions().can('shiftCard.edit');
@@ -203,6 +204,10 @@ export function RegistroTurnoModal({
               <a
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-(--accent) hover:underline"
                 href={ShiftReportAPI.fileUrl(reporte.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  abrirPdf(reporte.id);
+                }}
                 rel="noreferrer"
                 target="_blank"
               >
