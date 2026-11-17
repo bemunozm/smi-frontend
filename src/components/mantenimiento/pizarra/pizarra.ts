@@ -4,12 +4,11 @@ import type { MaintenanceBoardRow } from '../../../types/maintenance-board';
 export type Tono = 'atrasado' | 'alerta' | 'normal';
 
 /**
- * Grupo de orden de una fila: lo que se puede atender arriba, lo que no tiene
- * números al medio y los equipos fuera de servicio al final (atenuados, no
- * ocultos: siguen siendo parte de la flota).
+ * Grupo de orden de una fila: lo que se puede atender arriba y lo que no tiene
+ * números abajo. Los equipos fuera de servicio no tienen grupo propio: se
+ * ordenan por urgencia como los demás (siguen disponibles para mantención).
  */
 function grupo(fila: MaintenanceBoardRow): number {
-  if (fila.status === 'OUT_OF_SERVICE') return 3;
   if (fila.source === 'SIN_PAUTA') return 2;
   if (fila.remaining == null) return 1; // con pauta pero sin lectura
   return 0;

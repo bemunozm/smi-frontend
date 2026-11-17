@@ -268,7 +268,6 @@ export function PizarraMantenciones({
   );
 
   const actual = (fila: MaintenanceBoardRow) => lectura(fila.counter, fila.unit) ?? SIN_LECTURA;
-  const atenuada = (fila: MaintenanceBoardRow) => (fila.status === 'OUT_OF_SERVICE' ? 'opacity-60' : '');
 
   return (
     <div className="flex flex-col gap-4">
@@ -327,7 +326,7 @@ export function PizarraMantenciones({
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {filas.map((fila) => (
                 <li
-                  className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 ${atenuada(fila)}`}
+                  className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4`}
                   data-testid={`pizarra-fila-${fila.equipmentId}`}
                   key={fila.equipmentId}
                 >
@@ -405,7 +404,7 @@ export function PizarraMantenciones({
                   <Table.Body>
                     {filas.map((fila) => (
                       <Table.Row
-                        className={`${CEBRA_COLUMNAS} ${atenuada(fila)}`}
+                        className={CEBRA_COLUMNAS}
                         data-testid={`pizarra-fila-${fila.equipmentId}`}
                         id={fila.equipmentId}
                         key={fila.equipmentId}
@@ -488,7 +487,7 @@ export function PizarraMantenciones({
                       <Table.Body>
                         {filasSinPauta.map((fila) => (
                           <Table.Row
-                            className={`${CEBRA_COLUMNAS} ${atenuada(fila)}`}
+                            className={CEBRA_COLUMNAS}
                             data-testid={`pizarra-sin-pauta-${fila.equipmentId}`}
                             id={fila.equipmentId}
                             key={fila.equipmentId}
@@ -519,7 +518,7 @@ export function PizarraMantenciones({
                 <ul className="m-0 flex list-none flex-col gap-3 p-0">
                   {filasSinPauta.map((fila) => (
                     <li
-                      className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 ${atenuada(fila)}`}
+                      className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4`}
                       data-testid={`pizarra-sin-pauta-${fila.equipmentId}`}
                       key={fila.equipmentId}
                     >

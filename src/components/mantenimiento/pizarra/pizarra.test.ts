@@ -23,14 +23,14 @@ describe('ordenarFilas', () => {
     expect(codigos(ordenarFilas(filas))).toEqual(['ANC', 'EST']);
   });
 
-  it('sin pauta al final y los fuera de servicio después de todo, aunque estén atrasados', () => {
+  it('sin pauta al final y los fuera de servicio se ordenan por urgencia como cualquier otro', () => {
     const filas = [
       filaPizarra({ internalCode: 'FUERA', status: 'OUT_OF_SERVICE', remaining: -500 }),
       filaPizarra({ internalCode: 'SIN', source: 'SIN_PAUTA', remaining: null, dueAt: null, interval: null }),
       filaPizarra({ internalCode: 'OK', remaining: 300 }),
       filaPizarra({ internalCode: 'SINLECT', counter: null, remaining: null }),
     ];
-    expect(codigos(ordenarFilas(filas))).toEqual(['OK', 'SINLECT', 'SIN', 'FUERA']);
+    expect(codigos(ordenarFilas(filas))).toEqual(['FUERA', 'OK', 'SINLECT', 'SIN']);
   });
 
   it('no muta el arreglo que recibe', () => {
