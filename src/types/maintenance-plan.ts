@@ -32,7 +32,7 @@ export type PlanItem = z.infer<typeof PlanItemSchema>;
 export const NextMaintenanceSchema = z.object({
   milestone: z.number(),
   firstTimeOnly: z.boolean(),
-  /** Cuánto falta, en horas o km. 0 = toca ahora. */
+  /** Cuánto falta, en horas o km. 0 = toca ahora; negativo = atrasada (contada desde el último cambio). */
   remaining: z.number(),
   dueAt: z.number(),
   items: z.array(PlanItemSchema),

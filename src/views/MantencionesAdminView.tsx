@@ -14,9 +14,13 @@ import {
   Input,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
-import { SquareKanban, Table2 } from 'lucide-react';
+import { ArrowLeft, SquareKanban, Table2 } from 'lucide-react';
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
+
+import { PizarraMantenciones } from '../components/mantenimiento/pizarra/PizarraMantenciones';
+import { errorLecturaMantencion, lecturaMantencion, type EquipmentRef } from '../components/mantenimiento/workshop';
+import { DecimalField } from '../components/DecimalField';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -26,6 +30,7 @@ import { useItems } from '../hooks/useInventory';
 import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL_1 } from '../lib/dashboard-format';
+import { parseDecimal } from '../lib/decimal';
 import { ESTADO_OT_LABELS, PRIORIDAD_OT_OPTIONS, estadoOTChipColor } from '../config/mantenimiento-colors';
 import type { EquipmentStatus } from '../types/equipment';
 import type { OrdenTrabajo, PrioridadOT, Tarea } from '../types/mantenimiento';
@@ -279,18 +284,39 @@ function DetalleMantencionModal({
  * administrador: a veces el mantenedor se olvida). Registra «qué se hizo» como
  * intervención SIN insumos —el stock lo descuenta el taller— y pasa la orden a
  * COMPLETADA con el estado en que queda el equipo, obligatorio igual que en
- * «Finalizar tarea» (`useFinishTask`, por la cola).
+ * «Finalizar tarea» (`useFinishTask`, por la cola). Si es PREVENTIVA pide
+ * además la lectura al momento de la mantención (prellenada con la actual del
+ * equipo): desde ahí el backend cuenta el próximo cambio.
  */
-function FinalizarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onClose: () => void }) {
+function FinalizarMantencionModal({
+  orden,
+  equipos,
+  onClose,
+}: {
+  orden: OrdenTrabajo;
+  equipos: readonly EquipmentRef[] | undefined;
+  onClose: () => void;
+}) {
   const finalizar = useFinishTask();
   const [detalle, setDetalle] = useState('');
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
-  const valido = detalle.trim().length >= 3 && equipoFinal !== '';
+  const esPreventiva = orden.tipo === 'PREVENTIVA';
+  const campoLectura = lecturaMantencion(orden.equipoId, equipos);
+  // `NaN` = vacía (la lectura actual del equipo no se conoce): hay que escribirla.
+  const [lectura, setLectura] = useState(() => parseDecimal(campoLectura.inicial) ?? Number.NaN);
+  const [lecturaTocada, setLecturaTocada] = useState(false);
+  const errorLectura = esPreventiva ? errorLecturaMantencion(lectura) : null;
+  const valido = detalle.trim().length >= 3 && equipoFinal !== '' && errorLectura == null;
 
   const guardar = () => {
     if (!valido || !equipoFinal) return;
     finalizar.mutate(
-      { orden, intervencion: { tipo: orden.tipo, detalle: detalle.trim() }, equipmentStatus: equipoFinal },
+      {
+        orden,
+        intervencion: { tipo: orden.tipo, detalle: detalle.trim() },
+        equipmentStatus: equipoFinal,
+        ...(esPreventiva ? { lecturaMantencion: lectura } : {}),
+      },
       { onSuccess: onClose },
     );
   };
@@ -318,6 +344,23 @@ function FinalizarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onC
                 <Label>Qué se hizo</Label>
                 <TextArea placeholder="Lo que el taller realizó…" rows={3} />
               </TextField>
+              {esPreventiva ? (
+                <div className="flex flex-col gap-1">
+                  <DecimalField
+                    errorMessage={lecturaTocada ? errorLectura : null}
+                    isInvalid={lecturaTocada && errorLectura != null}
+                    label={campoLectura.label}
+                    onChange={(valor) => {
+                      setLectura(valor);
+                      setLecturaTocada(true);
+                    }}
+                    value={lectura}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Desde esta lectura se cuenta la próxima mantención.
+                  </p>
+                </div>
+              ) : null}
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-foreground">Cómo queda el equipo</span>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Cómo queda el equipo">
@@ -423,9 +466,14 @@ function EditarMantencionModal({ orden, onClose }: { orden: OrdenTrabajo; onClos
 const SELECT_FILTRO = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 
 /**
- * Registro de mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA):
- * por defecto las órdenes de trabajo COMPLETADAS del taller —preventivas o
- * correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
+ * Mantenciones del panel (`/mantenciones`, ADMIN y SECRETARIA). Por defecto,
+ * la pizarra de mantenciones (`PizarraMantenciones`): el estado de cada equipo
+ * como la pizarra blanca de faena. «Ver registro de mantención» lleva al
+ * registro (`?vista=registro`) y «Volver a la pizarra» lo deshace. El ADMIN
+ * tiene además «Vista tablero mantenedor», que va directo al tablero.
+ *
+ * El registro muestra por defecto las órdenes de trabajo COMPLETADAS del
+ * taller —preventivas o correctivas—, con filtros por fecha, mantenedor y tipo, y el detalle en
  * popup (tareas, intervenciones, insumos). «Sin terminar» muestra las que el
  * taller dejó abiertas, para cerrarlas si el mantenedor se olvidó
  * (`FinalizarMantencionModal`). Es también el destino del aviso «Orden de
@@ -452,6 +500,9 @@ export function MantencionesAdminView() {
   // URL compartida le cambian la pantalla.
   const esAdmin = role === 'ADMIN';
   const vistaTablero = esAdmin && params.get('vista') === 'tablero';
+  // Sin `vista` manda la pizarra. Cualquier `vista` (también un `?vista=tablero`
+  // compartido a la SECRETARIA) lleva al registro, como antes de la pizarra.
+  const vistaPizarra = !params.get('vista');
 
   // `equipoId` de la OT es soft-ref: puede traer el id del equipo o su código.
   const codigoDe = (equipoRef: string) =>
@@ -483,7 +534,10 @@ export function MantencionesAdminView() {
     const siguientes = new URLSearchParams(params);
     if (valor === vacio) siguientes.delete(clave);
     else siguientes.set(clave, valor);
-    setParams(siguientes, { replace: true });
+    // Cambiar de vista (pizarra ↔ registro ↔ tablero) agrega una entrada al
+    // historial para que «atrás» del navegador/Android vuelva a la pizarra;
+    // los filtros, en cambio, reemplazan para no llenar el historial.
+    setParams(siguientes, { replace: clave !== 'vista' });
   };
 
   const lista = useMemo(
@@ -511,29 +565,49 @@ export function MantencionesAdminView() {
           </span>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">Mantenciones</h1>
           <p className="text-sm text-muted-foreground">
-            {vistaTablero
-              ? 'El tablero del taller tal como lo ve el mantenedor: órdenes esperando, en proceso y finalizadas. Desde acá también puedes crear una.'
-              : estadoFiltro === 'completadas'
-                ? 'Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.'
-                : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
+            {vistaPizarra
+              ? 'La pizarra de mantenciones: cuándo fue el último cambio de cada equipo, cuándo toca el próximo y cuánto le falta. Lo atrasado y lo que está por vencer, en rojo.'
+              : vistaTablero
+                ? 'El tablero del taller tal como lo ve el mantenedor: órdenes esperando, en proceso y finalizadas. Desde acá también puedes crear una.'
+                : estadoFiltro === 'completadas'
+                  ? 'Todas las mantenciones realizadas por el taller. Abre una para ver qué se hizo, quién y con qué insumos.'
+                  : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {esAdmin ? (
-            <Button onPress={() => setFiltro('vista', vistaTablero ? '' : 'tablero', '')} size="sm" variant="secondary">
-              {vistaTablero ? <Table2 className="size-4" /> : <SquareKanban className="size-4" />}
-              {vistaTablero ? 'Vista registro' : 'Vista tablero'}
+        {vistaPizarra ? null : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onPress={() => setFiltro('vista', '', '')} size="sm" variant="tertiary">
+              <ArrowLeft className="size-4" />
+              Volver a la pizarra
             </Button>
-          ) : null}
-          {!vistaTablero ? (
-            <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-              {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
-            </Chip>
-          ) : null}
-        </div>
+            {esAdmin ? (
+              // Sin `vista` se vuelve a la pizarra: del tablero se regresa al registro.
+              <Button
+                onPress={() => setFiltro('vista', vistaTablero ? 'registro' : 'tablero', '')}
+                size="sm"
+                variant="secondary"
+              >
+                {vistaTablero ? <Table2 className="size-4" /> : <SquareKanban className="size-4" />}
+                {vistaTablero ? 'Vista registro' : 'Vista tablero'}
+              </Button>
+            ) : null}
+            {!vistaTablero ? (
+              <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
+                {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
+              </Chip>
+            ) : null}
+          </div>
+        )}
       </div>
 
-      {vistaTablero ? (
+      {vistaPizarra ? (
+        <PizarraMantenciones
+          onVerRegistro={() => setFiltro('vista', 'registro', '')}
+          // Directo al tablero desde la pizarra (solo ADMIN); `vista` agrega entrada al historial, así que «atrás»
+          // vuelve a la pizarra.
+          onVerTablero={esAdmin ? () => setFiltro('vista', 'tablero', '') : undefined}
+        />
+      ) : vistaTablero ? (
         <OrdenesTrabajoView contexto="panel" />
       ) : (
         <Card>
@@ -763,7 +837,9 @@ export function MantencionesAdminView() {
       />
 
       {editando ? <EditarMantencionModal orden={editando} onClose={() => setEditando(null)} /> : null}
-      {finalizando ? <FinalizarMantencionModal orden={finalizando} onClose={() => setFinalizando(null)} /> : null}
+      {finalizando ? (
+        <FinalizarMantencionModal equipos={equipos} orden={finalizando} onClose={() => setFinalizando(null)} />
+      ) : null}
     </div>
   );
 }

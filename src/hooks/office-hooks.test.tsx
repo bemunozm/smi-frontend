@@ -704,6 +704,30 @@ describe('Mantenimiento', () => {
     });
   });
 
+  it('completar la ÚLTIMA tarea de una pauta lleva la lectura de la mantención en el mismo PATCH', async () => {
+    submitWriteMock.mockResolvedValueOnce(encolado());
+
+    await correr(useCompletarTarea, {
+      ordenId: 'ot_1',
+      tareaId: 'ta_2',
+      notas: 'Filtro nuevo',
+      foto: null,
+      lecturaMantencion: 1250.5,
+    });
+
+    const { input } = ultimaEscritura();
+    expect(input).toMatchObject({ body: { hecha: true, notas: 'Filtro nuevo', lecturaMantencion: 1250.5 } });
+  });
+
+  it('sin lectura, el PATCH de la tarea no la inventa', async () => {
+    submitWriteMock.mockResolvedValueOnce(encolado());
+
+    await correr(useCompletarTarea, { ordenId: 'ot_1', tareaId: 'ta_1', notas: 'Aceite', foto: null });
+
+    const { input } = ultimaEscritura();
+    expect(input.body).not.toHaveProperty('lecturaMantencion');
+  });
+
   it('una intervención va a la orden y lleva el id del cliente', async () => {
     submitWriteMock.mockResolvedValueOnce(enviado(null));
 

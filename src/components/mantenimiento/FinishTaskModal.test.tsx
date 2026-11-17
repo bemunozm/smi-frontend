@@ -72,6 +72,7 @@ vi.mock('../../hooks/useInventory', () => ({
 }));
 
 import { FinishTaskModal } from './FinishTaskModal';
+import type { EquipmentRef } from './workshop';
 
 const ORDEN: OrdenTrabajo = {
   id: 'ot-1',
@@ -103,18 +104,25 @@ afterEach(() => {
 // El equipo de la OT apunta a una bodega FANTASMA (inactiva o borrada): el
 // default debe caer a la primera bodega activa, nunca quedar en un id que el
 // Select no puede mostrar.
-const EQUIPMENT = [
+const EQUIPMENT: EquipmentRef[] = [
   {
     id: 'eq-9',
     internalCode: 'CM-007',
     brand: 'Volvo',
     model: 'FMX',
     homeBranchId: 'br-fantasma',
+    controlUnit: 'HOURS',
+    currentHourmeter: 1250,
+    currentMileage: null,
   },
 ];
 
-function openModal() {
-  render(<FinishTaskModal equipment={EQUIPMENT} orden={ORDEN} />);
+const LECTURA_H = /Horómetro al momento de la mantención \(h\)/;
+
+const CORRECTIVA: OrdenTrabajo = { ...ORDEN, tipo: 'CORRECTIVA' };
+
+function openModal(orden: OrdenTrabajo = ORDEN, equipment: EquipmentRef[] = EQUIPMENT) {
+  render(<FinishTaskModal equipment={equipment} orden={orden} />);
   fireEvent.click(screen.getByRole('button', { name: /Finalizar tarea/ }));
 }
 
@@ -137,7 +145,8 @@ function elegirComoQueda(opcion: 'Operativo' | 'Inoperativo' = 'Operativo') {
 
 describe('FinishTaskModal', () => {
   it('un horómetro no tocado NO se envía (no inventa una lectura 0 del medidor)', async () => {
-    openModal();
+    // Correctiva: ahí el horómetro de cierre es opcional y parte vacío.
+    openModal(CORRECTIVA);
     fillDetalle();
     elegirComoQueda();
     submitForm();
@@ -311,6 +320,8 @@ describe('FinishTaskModal', () => {
     render(<FinishTaskModal equipment={[]} orden={ORDEN} />);
     fireEvent.click(screen.getByRole('button', { name: /Finalizar tarea/ }));
     fillDetalle();
+    // Sin la unidad en Flota no hay lectura que prellenar: se escribe a mano.
+    fireEvent.change(screen.getByLabelText(LECTURA_H), { target: { value: '1300' } });
 
     expect(screen.getByText('¿Cómo queda el equipo?')).toBeTruthy();
     elegirComoQueda('Inoperativo');
@@ -319,5 +330,82 @@ describe('FinishTaskModal', () => {
     await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
     const call = mutateMock.mock.calls[0][0] as { equipmentStatus?: string };
     expect(call.equipmentStatus).toBe('OUT_OF_SERVICE');
+  });
+
+  describe('lectura de la mantención (OT preventiva)', () => {
+    it('reemplaza al horómetro de cierre: UN solo campo, prellenado con el horómetro actual', () => {
+      openModal();
+      expect(screen.queryByText('Horómetro de cierre')).toBeNull();
+      const campo = screen.getByLabelText(LECTURA_H) as HTMLInputElement;
+      expect(campo.value).toBe('1250');
+    });
+
+    it('acepta coma decimal y viaja como lecturaMantencion (y como horómetro de la intervención)', async () => {
+      openModal();
+      fillDetalle();
+      fireEvent.change(screen.getByLabelText(LECTURA_H), { target: { value: '1248,5' } });
+      elegirComoQueda();
+      submitForm();
+
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      const call = mutateMock.mock.calls[0][0] as {
+        lecturaMantencion?: number;
+        intervencion: { horometro?: number };
+      };
+      expect(call.lecturaMantencion).toBe(1248.5);
+      expect(call.intervencion.horometro).toBe(1248.5);
+    });
+
+    it('es obligatoria: vacía muestra el error y no cierra', async () => {
+      openModal(ORDEN, [{ ...EQUIPMENT[0]!, currentHourmeter: null }]);
+      fillDetalle();
+      elegirComoQueda();
+      expect((screen.getByLabelText(LECTURA_H) as HTMLInputElement).value).toBe('');
+      submitForm();
+
+      await waitFor(() =>
+        expect(screen.getByText('Indica la lectura al momento de la mantención.')).toBeTruthy(),
+      );
+      expect(mutateMock).not.toHaveBeenCalled();
+    });
+
+    it('un liviano por km la pide en kilómetros', () => {
+      openModal(ORDEN, [
+        { ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 },
+      ]);
+      const campo = screen.getByLabelText(
+        /Kilometraje al momento de la mantención \(km\)/,
+      ) as HTMLInputElement;
+      expect(campo.value).toBe('84306');
+    });
+
+    it('en km la lectura viaja solo como lecturaMantencion: NO como horómetro de la intervención', async () => {
+      openModal(ORDEN, [
+        { ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 84306 },
+      ]);
+      fillDetalle();
+      elegirComoQueda();
+      submitForm();
+
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      const call = mutateMock.mock.calls[0][0] as {
+        lecturaMantencion?: number;
+        intervencion: object;
+      };
+      expect(call.lecturaMantencion).toBe(84306);
+      expect(call.intervencion).not.toHaveProperty('horometro');
+    });
+
+    it('una correctiva no la pide ni la envía', async () => {
+      openModal(CORRECTIVA);
+      expect(screen.queryByLabelText(LECTURA_H)).toBeNull();
+      expect(screen.getByText('Horómetro de cierre')).toBeTruthy();
+      fillDetalle();
+      elegirComoQueda();
+      submitForm();
+
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      expect(mutateMock.mock.calls[0][0]).not.toHaveProperty('lecturaMantencion');
+    });
   });
 });

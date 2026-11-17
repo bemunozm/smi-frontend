@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
 
@@ -32,8 +32,8 @@ vi.mock('../hooks/usePermissions', async () => {
 vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({
     data: [
-      { id: 'e1', internalCode: 'SEM 02' },
-      { id: 'e2', internalCode: 'WA470' },
+      { id: 'e1', internalCode: 'SEM 02', controlUnit: 'HOURS', currentHourmeter: 512, currentMileage: null },
+      { id: 'e2', internalCode: 'WA470', controlUnit: 'HOURS', currentHourmeter: null, currentMileage: null },
     ],
   }),
 }));
@@ -43,6 +43,23 @@ vi.mock('../hooks/useInventory', () => ({ useItems: () => ({ data: [{ id: 'item_
 vi.mock('./OrdenesTrabajoView', () => ({
   OrdenesTrabajoView: ({ contexto }: { contexto?: string }) => (
     <div data-contexto={contexto} data-testid="tablero-taller" />
+  ),
+}));
+
+// La pizarra tiene sus propios tests (`PizarraMantenciones.test.tsx`); acá
+// solo importa que sea la vista por defecto y que sus botones lleven al registro y al tablero.
+vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
+  PizarraMantenciones: ({ onVerRegistro, onVerTablero }: { onVerRegistro: () => void; onVerTablero?: () => void }) => (
+    <div data-testid="pizarra">
+      <button onClick={onVerRegistro} type="button">
+        Ver registro de mantención
+      </button>
+      {onVerTablero ? (
+        <button onClick={onVerTablero} type="button">
+          Vista tablero mantenedor
+        </button>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -112,7 +129,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderView(entrada = '/mantenciones') {
+/** El «atrás» del navegador (MemoryRouter no usa `window.history`). */
+function Atras() {
+  const navigate = useNavigate();
+  return (
+    <button onClick={() => navigate(-1)} type="button">
+      atras
+    </button>
+  );
+}
+
+/** El registro quedó detrás de `?vista=registro`: la pizarra es la vista por defecto. */
+const REGISTRO = '/mantenciones?vista=registro';
+
+function renderView(entrada = REGISTRO) {
   return render(
     <MemoryRouter initialEntries={[entrada]}>
       <MantencionesAdminView />
@@ -121,6 +151,29 @@ function renderView(entrada = '/mantenciones') {
 }
 
 describe('MantencionesAdminView', () => {
+  it('por defecto muestra la pizarra, y «Ver registro de mantención» lleva al registro y vuelve', () => {
+    renderView('/mantenciones');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByText('Registro')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    expect(screen.queryByTestId('pizarra')).toBeNull();
+    expect(screen.getByText('Registro')).toBeTruthy();
+    expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a la pizarra' }));
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByText('Registro')).toBeNull();
+  });
+
+  it('el detalle de una mantención (?id=, destino de la notificación) abre también sobre la pizarra', () => {
+    renderView('/mantenciones?id=ot2');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('Reparación de frenos')).toBeTruthy();
+  });
+
   it('lista SOLO las órdenes completadas, con equipo, tipo y quién la hizo', () => {
     renderView();
 
@@ -187,14 +240,14 @@ describe('MantencionesAdminView', () => {
   });
 
   it('abre el detalle directo con ?id= (el destino de la notificación de mantención)', () => {
-    renderView('/mantenciones?id=ot2');
+    renderView(`${REGISTRO}&id=ot2`);
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Reparación de frenos')).toBeTruthy();
   });
 
   it('«Sin terminar» lista las órdenes que el taller dejó abiertas', () => {
-    renderView('/mantenciones?estado=sin-terminar');
+    renderView(`${REGISTRO}&estado=sin-terminar`);
     const filas = screen.getAllByTestId(/mantencion-fila-/);
     expect(filas.map((f) => f.getAttribute('data-testid'))).toEqual(['mantencion-fila-ot3']);
     expect(within(filas[0]).getByText('En proceso')).toBeTruthy();
@@ -202,7 +255,7 @@ describe('MantencionesAdminView', () => {
 
   it('SECRETARIA cierra una orden sin terminar: qué se hizo y cómo queda el equipo, sin insumos', () => {
     rol.value = 'SECRETARIA';
-    renderView('/mantenciones?estado=sin-terminar&id=ot3');
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot3`);
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
 
     const dialog = screen.getByRole('dialog');
@@ -218,14 +271,55 @@ describe('MantencionesAdminView', () => {
         orden: expect.objectContaining({ id: 'ot3' }),
         intervencion: { tipo: 'PREVENTIVA', detalle: 'Cambio de filtros' },
         equipmentStatus: 'OUT_OF_SERVICE',
+        // Preventiva: la lectura de la mantención, prellenada con el horómetro actual.
+        lecturaMantencion: 512,
       },
       expect.anything(),
     );
   });
 
+  it('finalizar una PREVENTIVA exige la lectura de la mantención (acepta coma decimal)', () => {
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot3`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    const lectura = within(dialog).getByLabelText('Horómetro al momento de la mantención (h)') as HTMLInputElement;
+    expect(lectura.value).toBe('512');
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de filtros' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+
+    fireEvent.change(lectura, { target: { value: '' } });
+    const finalizar = within(dialog).getByRole('button', { name: 'Finalizar mantención' });
+    expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(true);
+
+    fireEvent.change(lectura, { target: { value: '510,5' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+    expect(finalizarMock).toHaveBeenCalledWith(
+      expect.objectContaining({ lecturaMantencion: 510.5, equipmentStatus: 'OPERATIONAL' }),
+      expect.anything(),
+    );
+  });
+
+  it('finalizar una CORRECTIVA no pide ni envía la lectura de la mantención', () => {
+    ordenesHook.mockReturnValue(
+      ok([orden({ id: 'ot5', equipoId: 'e2', titulo: 'Frenos', tipo: 'CORRECTIVA', estado: 'EN_PROCESO' })]),
+    );
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot5`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText(/al momento de la mantención/)).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Pastillas nuevas' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+
+    expect(finalizarMock).toHaveBeenCalledTimes(1);
+    expect(finalizarMock.mock.calls[0]![0]).not.toHaveProperty('lecturaMantencion');
+  });
+
   it('una orden completada se edita (título, prioridad) pero no se vuelve a finalizar', () => {
     rol.value = 'SECRETARIA';
-    renderView('/mantenciones?id=ot1');
+    renderView(`${REGISTRO}&id=ot1`);
     const detalle = screen.getByRole('dialog');
     expect(within(detalle).queryByRole('button', { name: 'Marcar como finalizada' })).toBeNull();
     fireEvent.click(within(detalle).getByRole('button', { name: 'Editar' }));
@@ -256,6 +350,42 @@ describe('MantencionesAdminView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Vista registro' }));
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
     expect(screen.getByText('Registro')).toBeTruthy();
+  });
+
+  it('cambiar de vista agrega una entrada al historial: «atrás» vuelve a la pizarra', () => {
+    render(
+      <MemoryRouter initialEntries={['/mantenciones']}>
+        <MantencionesAdminView />
+        <Atras />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    expect(screen.getByText('Registro')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'atras' }));
+    expect(screen.queryByText('Registro')).toBeNull();
+  });
+
+  it('desde la pizarra, «Vista tablero mantenedor» abre el tablero y «atrás» vuelve a la pizarra', () => {
+    render(
+      <MemoryRouter initialEntries={['/mantenciones']}>
+        <MantencionesAdminView />
+        <Atras />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero mantenedor' }));
+    expect(screen.queryByTestId('pizarra')).toBeNull();
+    expect(screen.getByTestId('tablero-taller')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'atras' }));
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByTestId('tablero-taller')).toBeNull();
+  });
+
+  it('a la SECRETARIA la pizarra no le ofrece el atajo al tablero', () => {
+    rol.value = 'SECRETARIA';
+    renderView('/mantenciones');
+
+    expect(screen.getByTestId('pizarra')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Vista tablero mantenedor' })).toBeNull();
   });
 
   it('?vista=tablero abre directo en el tablero (la vista queda en la URL)', () => {

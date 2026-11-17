@@ -16,6 +16,7 @@ import {
   leerNumero,
   problemaDe,
   quitarHito,
+  textoFaltante,
   type FilaBorrador,
   type PautaBorrador,
 } from '../../lib/maintenance-plan';
@@ -395,9 +396,8 @@ function ResumenProxima({ vista }: { vista: MaintenancePlanView }) {
           <span>
             {next.firstTimeOnly ? 'Servicio inicial de ' : ''}
             {fmtContador(next.milestone, unit)} ·{' '}
-            <span className={next.remaining === 0 ? 'text-danger' : ''}>
-              {next.remaining === 0 ? 'toca ahora' : `faltan ${fmtContador(next.remaining, unit)}`}
-            </span>
+            {/* Contada desde el último cambio real puede estar pasada: «+38 h atrasado». */}
+            <span className={next.remaining <= 0 ? 'text-danger' : ''}>{textoFaltante(next.remaining, unit)}</span>
             <span className="block text-xs font-normal text-muted-foreground">
               {next.items.length} {next.items.length === 1 ? 'operación' : 'operaciones'}
             </span>

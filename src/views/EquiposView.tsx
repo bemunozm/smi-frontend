@@ -53,7 +53,7 @@ import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { usePermissions } from '../hooks/usePermissions';
 import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
-import { fmtContador } from '../lib/maintenance-plan';
+import { fmtContador, textoFaltante } from '../lib/maintenance-plan';
 import type { MaintenanceStatusRow } from '../types/maintenance-plan';
 import { ROLES } from '../types/roles';
 import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
@@ -520,21 +520,21 @@ const AVISO_PROXIMA: Record<'h' | 'km', number> = { h: 25, km: 500 };
 
 /**
  * «Próx. mant. 250 h · faltan 150 h» bajo el contador del equipo. Se pone en
- * advertencia cuando falta poco y en peligro cuando ya toca.
+ * advertencia cuando falta poco y en peligro cuando ya toca o se pasó (contada
+ * desde el último cambio real, lo que falta puede quedar negativo).
  */
 function ProximaMantencion({ fila }: { fila: MaintenanceStatusRow | undefined }) {
   const next = fila?.status.next;
   if (!fila || !next) return null;
   const tono =
-    next.remaining === 0
+    next.remaining <= 0
       ? 'text-danger'
       : next.remaining <= (fila.alertBefore ?? AVISO_PROXIMA[fila.unit])
         ? 'text-warning'
         : 'text-muted-foreground';
   return (
     <span className={`block text-xs tabular-nums ${tono}`}>
-      Próx. mant. {fmtContador(next.milestone, fila.unit)} ·{' '}
-      {next.remaining === 0 ? 'toca ahora' : `faltan ${fmtContador(next.remaining, fila.unit)}`}
+      Próx. mant. {fmtContador(next.milestone, fila.unit)} · {textoFaltante(next.remaining, fila.unit)}
     </span>
   );
 }

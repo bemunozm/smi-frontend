@@ -166,8 +166,14 @@ export const CreateMantencionHistoricaSchema = z.object({
    * horómetro si es pesado (la unidad la decide el backend por `controlUnit`). */
   lectura: z.number().nonnegative().optional(),
   observaciones: z.string().optional(),
+  /** Hito de la pauta que se hizo (la pizarra cuenta el próximo cambio desde
+   * ahí). Con pauta el backend exige además `lectura` y que el hito exista. */
+  milestone: z.number().int().min(1).optional(),
 });
 export type CreateMantencionHistoricaInput = z.infer<typeof CreateMantencionHistoricaSchema>;
+
+/** Mismo rango que valida el backend (0 a 1.000.000). */
+const LecturaMantencionSchema = z.number().min(0).max(1_000_000);
 
 /** `PATCH /api/mantenimiento/ordenes/:id` body — parcial. Un campo omitido es
  * "sin cambio"; `asignadoAId: null` desasigna la orden (el DTO del backend acepta
@@ -181,6 +187,10 @@ export const UpdateOrdenSchema = z.object({
    * actualiza en Flota en la misma transacción. Solo junto a `estado:
    * COMPLETADA` — fuera de ese cruce responde 400. */
   equipmentStatus: z.enum(EQUIPMENT_STATUS).optional(),
+  /** Lectura (h o km) al momento de la mantención de una OT PREVENTIVA: el
+   * backend cuenta el próximo cambio desde ahí. Igual que `equipmentStatus`,
+   * solo junto a `estado: COMPLETADA`. */
+  lecturaMantencion: LecturaMantencionSchema.optional(),
 });
 export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 
@@ -190,6 +200,8 @@ export type UpdateOrdenInput = z.infer<typeof UpdateOrdenSchema>;
 export const ToggleTareaSchema = z.object({
   hecha: z.boolean(),
   notas: z.string().optional(),
+  /** Con la última tarea de una OT de pauta (la que la completa). */
+  lecturaMantencion: LecturaMantencionSchema.optional(),
 });
 
 // ---------------------------------------------------------------------------

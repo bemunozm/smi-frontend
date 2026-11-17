@@ -58,10 +58,11 @@ import {
 export interface MantenimientoEndpointMap {
   'orden.create': { params: NoParams; body: WithId<CreateOrdenInput>; result: OrdenTrabajo };
   /** `equipmentStatus` (solo junto a `estado: COMPLETADA`): cómo queda la
-   * unidad al cerrar — el backend la actualiza en Flota en la misma transacción. */
+   * unidad al cerrar — el backend la actualiza en Flota en la misma transacción.
+   * `lecturaMantencion` (idem): la lectura de la mantención de una OT preventiva. */
   'orden.update': {
     params: { id: string };
-    body: Partial<OrdenFields> & { equipmentStatus?: EquipmentStatus };
+    body: Partial<OrdenFields> & { equipmentStatus?: EquipmentStatus; lecturaMantencion?: number };
     result: OrdenTrabajo;
   };
   /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición).
@@ -76,6 +77,8 @@ export interface MantenimientoEndpointMap {
       /** Insumos usados en ESTA tarea — el backend los descuenta del stock. */
       insumos?: { insumoId: string; cantidad: number }[];
       branchId?: string;
+      /** Solo con la última tarea de una OT de pauta: la lectura de la mantención. */
+      lecturaMantencion?: number;
     };
     result: Tarea;
   };
@@ -150,7 +153,9 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     parse: parseWith(OrdenTrabajoSchema),
     // 'hallazgos': completar cierra el hallazgo ligado; cancelar lo reabre.
     // 'equipment': el cierre puede dejar la unidad Operativa/Inoperativa.
-    invalidate: ['ordenes', 'hallazgos', 'equipment'],
+    // 'maintenancePlans': cerrar una preventiva escribe el último cambio real
+    // (el ancla) — la pizarra, la próxima mantención y el pronóstico cambian.
+    invalidate: ['ordenes', 'hallazgos', 'equipment', 'maintenancePlans'],
     label: (params) => etiqueta('Edición de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,

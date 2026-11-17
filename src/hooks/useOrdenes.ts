@@ -4,7 +4,7 @@ import { toast } from '@heroui/react';
 import { OrdenesAPI } from '../api/MantenimientoAPI';
 import { mensajeErrorFormulario } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
-import { EQUIPMENT_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
+import { EQUIPMENT_KEY, MAINTENANCE_PLANS_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
 import { buildQueuedEdit } from '../lib/queued-edit';
 import { generateUuid } from '../lib/uuid';
 import { ordenEntity } from '../offline/db';
@@ -48,7 +48,7 @@ export function useCrearOrden() {
  * (solo ADMIN). Mutación directa, sin cola offline: es carga de datos desde
  * el escritorio del administrador, no un flujo de terreno. Invalida `ordenes`
  * (el registro «Mantenciones» la lista) y `equipment` (la ficha muestra
- * `ultimaMantencion`).
+ * `ultimaMantencion`) y `maintenance-plans` (pizarra y pronóstico).
  */
 export function useRegistrarMantencionHistorica() {
   const queryClient = useQueryClient();
@@ -58,6 +58,9 @@ export function useRegistrarMantencionHistorica() {
       toast.success('Mantención anterior registrada', { description: orden.titulo });
       void queryClient.invalidateQueries({ queryKey: ORDENES_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
+      // La pizarra y el pronóstico cuelgan de la raíz de las pautas: el
+      // «último cambio» que se acaba de cargar cambia su próximo cambio.
+      void queryClient.invalidateQueries({ queryKey: MAINTENANCE_PLANS_KEY });
     },
     onError: (error: unknown) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo registrar la mantención anterior.'));
@@ -152,7 +155,9 @@ export function useToggleTarea() {
  * Completar una tarea del checklist preventivo: marca + qué se hizo + foto de
  * respaldo (la cola la sube y la inyecta como `fotoKey`). El backend escribe
  * el registro del ciclo y mueve la orden solo (primera tarea → EN_PROCESO,
- * todas → COMPLETADA) — acá no se toca el estado.
+ * todas → COMPLETADA) — acá no se toca el estado. Con la ÚLTIMA tarea de una
+ * OT de pauta viaja `lecturaMantencion`: la lectura con la que el backend
+ * cuenta el próximo cambio (solo la aplica al cruzar a COMPLETADA).
  */
 export function useCompletarTarea() {
   return useQueuedMutation<
@@ -165,15 +170,17 @@ export function useCompletarTarea() {
       /** Insumos usados en la tarea — salen SIEMPRE de la bodega de faena. */
       insumos?: { insumoId: string; cantidad: number }[];
       branchId?: string;
+      lecturaMantencion?: number;
     }
   >({
     endpoint: 'orden.toggleTarea',
-    build: ({ ordenId, tareaId, notas, foto, insumos, branchId }) => ({
+    build: ({ ordenId, tareaId, notas, foto, insumos, branchId, lecturaMantencion }) => ({
       params: { ordenId, tareaId },
       body: {
         hecha: true,
         notas,
         ...(insumos && insumos.length > 0 ? { insumos, branchId } : {}),
+        ...(lecturaMantencion != null ? { lecturaMantencion } : {}),
       },
       ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
     }),

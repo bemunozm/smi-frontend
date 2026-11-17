@@ -28,14 +28,32 @@ import {
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
 import type { EquipmentStatus } from '../../types/equipment';
-import { equipmentLabel, type EquipmentRef } from './workshop';
+import { parseDecimal } from '../../lib/decimal';
+import {
+  equipmentLabel,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from './workshop';
 import { useInsumosFaena } from './insumos-faena';
+
+/** La intervención sin el horómetro (la clave fuera, no en `undefined`). */
+function sinHorometro(values: CreateIntervencionInput): CreateIntervencionInput {
+  const copia = { ...values };
+  delete copia.horometro;
+  return copia;
+}
 
 /**
  * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
  * insumos (SelectorBuscable con grupos y stock en Faena) + horómetro.
  * Registra la intervención y pasa la OT a COMPLETADA (`useFinishTask`, por la
  * cola). La bodega es SIEMPRE la de faena — no hay opción de cambiarla.
+ *
+ * En una OT PREVENTIVA el horómetro de cierre pasa a ser la lectura al momento
+ * de la mantención: obligatoria, prellenada con la lectura actual del equipo,
+ * y viaja también como `lecturaMantencion` (desde ahí el backend cuenta el
+ * próximo cambio). Un solo campo — dos pedirían el mismo número dos veces.
  */
 export function FinishTaskModal({
   orden,
@@ -57,6 +75,11 @@ export function FinishTaskModal({
   // cargado y la declaración no puede desaparecer en silencio.
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
   const [errorEquipoFinal, setErrorEquipoFinal] = useState<string | null>(null);
+  const esPreventiva = orden.tipo === 'PREVENTIVA';
+  const campoLectura = lecturaMantencion(orden.equipoId, equipment);
+  // El texto tal cual se escribe: guardar solo el número perdía la coma a
+  // mitad de escribir un decimal («1250,» se volvía «1250»).
+  const [horometroTexto, setHorometroTexto] = useState('');
 
   const {
     control,
@@ -64,6 +87,7 @@ export function FinishTaskModal({
     reset,
     getValues,
     setValue,
+    setError,
     formState: { errors },
   } = useForm<CreateIntervencionInput>({
     resolver: zodResolver(CreateIntervencionSchema),
@@ -89,21 +113,44 @@ export function FinishTaskModal({
 
   const cerrar = () => setAbierto(false);
 
-  const onSubmit = (values: CreateIntervencionInput): void => {
-    if (!equipoFinal) {
-      setErrorEquipoFinal('Indica cómo queda el equipo.');
-      return;
+  const abrir = () => {
+    // Preventiva: se parte de la lectura actual del equipo (si se conoce),
+    // sin pisar lo que ya se haya escrito antes de cancelar.
+    if (esPreventiva && horometroTexto === '' && campoLectura.inicial !== '') {
+      setHorometroTexto(campoLectura.inicial);
+      setValue('horometro', parseDecimal(campoLectura.inicial) ?? undefined);
     }
+    setAbierto(true);
+  };
+
+  const onSubmit = (values: CreateIntervencionInput): void => {
+    let lectura: number | undefined;
+    let errorLectura: string | null = null;
+    if (esPreventiva) {
+      const leida = leerLecturaMantencion(horometroTexto);
+      if ('error' in leida) errorLectura = leida.error;
+      else lectura = leida.valor;
+    } else if (horometroTexto.trim() !== '' && parseDecimal(horometroTexto) == null) {
+      errorLectura = 'Escribe una lectura válida (0 o mayor).';
+    }
+    if (errorLectura) setError('horometro', { message: errorLectura });
+    if (!equipoFinal) setErrorEquipoFinal('Indica cómo queda el equipo.');
+    if (errorLectura || !equipoFinal) return;
     finishTask.mutate(
       {
         orden,
-        intervencion: values,
+        // En km la lectura NO va como horómetro de la intervención (columna en
+        // horas): solo viaja como `lecturaMantencion`.
+        intervencion:
+          esPreventiva && campoLectura.unidad === 'km' ? sinHorometro(values) : values,
         foto: foto.file,
         equipmentStatus: equipoFinal,
+        ...(lectura != null ? { lecturaMantencion: lectura } : {}),
       },
       {
         onSuccess: () => {
           reset();
+          setHorometroTexto('');
           foto.handleClearPhoto();
           setEquipoFinal('');
           setErrorEquipoFinal(null);
@@ -115,7 +162,7 @@ export function FinishTaskModal({
 
   return (
     <>
-      <Boton ancho variante="acento" onClick={() => setAbierto(true)}>
+      <Boton ancho variante="acento" onClick={abrir}>
         <Check className="h-5 w-5" />
         Finalizar tarea
       </Boton>
@@ -267,21 +314,24 @@ export function FinishTaskModal({
               render={({ field }) => (
                 <Campo
                   error={errors.horometro?.message}
-                  hint="Opcional — la lectura del medidor al cerrar."
-                  label="Horómetro de cierre"
-                  unidad="h"
+                  hint={
+                    esPreventiva
+                      ? 'Desde esta lectura se cuenta la próxima mantención.'
+                      : 'Opcional — la lectura del medidor al cerrar.'
+                  }
+                  label={esPreventiva ? campoLectura.label : 'Horómetro de cierre'}
+                  requerido={esPreventiva}
+                  unidad={esPreventiva ? campoLectura.unidad : 'h'}
                 >
                   <Input
                     numerico
-                    value={
-                      field.value === undefined || Number.isNaN(field.value)
-                        ? ''
-                        : String(field.value)
-                    }
+                    value={horometroTexto}
                     onBlur={field.onBlur}
                     onChange={(e) => {
-                      const texto = e.target.value.replace(',', '.');
-                      field.onChange(texto === '' ? undefined : Number(texto));
+                      const texto = e.target.value;
+                      setHorometroTexto(texto);
+                      // Coma o punto decimal; lo ilegible se rechaza al guardar.
+                      field.onChange(parseDecimal(texto) ?? undefined);
                     }}
                   />
                 </Campo>

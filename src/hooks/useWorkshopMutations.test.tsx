@@ -113,6 +113,28 @@ describe('useFinishTask', () => {
     });
   });
 
+  it('la lectura de la mantención viaja en el PATCH a COMPLETADA (no en la intervención)', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }, 'op-intervencion'));
+    submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }, 'op-patch'));
+
+    const { result } = renderHook(() => useFinishTask(), { wrapper });
+    result.current.mutate({
+      orden: ORDEN,
+      intervencion: INTERVENCION_INPUT,
+      equipmentStatus: 'OPERATIONAL',
+      lecturaMantencion: 1000,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [first, second] = submitWriteMock.mock.calls;
+    expect(first[1].body).not.toHaveProperty('lecturaMantencion');
+    expect(second[1]).toEqual({
+      params: { id: 'ot-1' },
+      body: { estado: 'COMPLETADA', equipmentStatus: 'OPERATIONAL', lecturaMantencion: 1000 },
+      dependsOn: ['op-intervencion'],
+    });
+  });
+
   it('la foto del cierre viaja como archivo del write de la intervención (el replay inyecta fotoKey)', async () => {
     submitWriteMock.mockResolvedValueOnce(enviado({ id: 'int-1' }));
     submitWriteMock.mockResolvedValueOnce(enviado({ ...ORDEN, estado: 'COMPLETADA' }));

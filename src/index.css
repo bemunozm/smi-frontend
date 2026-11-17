@@ -81,6 +81,11 @@
   --warning-soft: #fdebc8;
   --warning-soft-hover: #fbdfa6;
   --warning-soft-foreground: #92590a;
+  /* Amarillo real para el ícono de «cerca de la mantención»: --warning se lee café. */
+  --alert-yellow: #ca8a04;
+  /* Fondo amarillo de verdad para la burbuja de «Próxima mantención» de la pizarra: --warning-soft se lee crema.
+     El ícono va encima en --warning-soft-foreground (≈ 4,5:1), porque es la única señal del estado. */
+  --alert-yellow-soft: #fde68a;
 
   --danger: #b01818;
   --danger-foreground: #ffffff;
@@ -130,6 +135,33 @@
   --terreno-shell: #f5f4f1;
   --terreno-online: #38d17a;
   --terreno-offline: #e0a11a;
+
+  /* --- Pizarra de mantenciones -----------------------------------------
+     Cabecera tipo tabla de precios: cada columna es un bloque de color, todo
+     azul, que va del azul oscuro (primera columna) a uno más claro (última).
+     Se definen los dos extremos y los nueve pasos se mezclan acá (oklab) para
+     que el componente solo nombre `bg-pizarra-N`. El claro no pasa de #2563eb
+     para que el texto blanco en negrita siga legible: blanco sobre el oscuro
+     ≈ 10,4:1 y sobre el claro ≈ 5,2:1 (≥ 4,5:1 en todos los pasos). */
+  --pizarra-azul-oscuro: #1e3a8a;
+  --pizarra-azul-claro: #2563eb;
+  --pizarra-col-1: var(--pizarra-azul-oscuro);
+  --pizarra-col-2: color-mix(in oklab, var(--pizarra-azul-oscuro) 87.5%, var(--pizarra-azul-claro));
+  --pizarra-col-3: color-mix(in oklab, var(--pizarra-azul-oscuro) 75%, var(--pizarra-azul-claro));
+  --pizarra-col-4: color-mix(in oklab, var(--pizarra-azul-oscuro) 62.5%, var(--pizarra-azul-claro));
+  --pizarra-col-5: color-mix(in oklab, var(--pizarra-azul-oscuro) 50%, var(--pizarra-azul-claro));
+  --pizarra-col-6: color-mix(in oklab, var(--pizarra-azul-oscuro) 37.5%, var(--pizarra-azul-claro));
+  --pizarra-col-7: color-mix(in oklab, var(--pizarra-azul-oscuro) 25%, var(--pizarra-azul-claro));
+  --pizarra-col-8: color-mix(in oklab, var(--pizarra-azul-oscuro) 12.5%, var(--pizarra-azul-claro));
+  --pizarra-col-9: var(--pizarra-azul-claro);
+  /* Relieve del bloque de cabecera: brillo arriba, borde oscuro abajo y una
+     sombra corta que lo despega del cuerpo. */
+  --pizarra-relieve-cabecera:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -2px 0 rgba(0, 0, 0, 0.16), 0 2px 4px rgba(20, 23, 28, 0.22);
+  /* Relieve de las celdas del cuerpo: luz arriba y sombra fina abajo/derecha,
+     para que cada celda se lea separada sin rayar la tabla. */
+  --pizarra-relieve-celda:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(20, 23, 28, 0.08), inset -1px 0 0 rgba(20, 23, 28, 0.06);
 }
 
 /* ==========================================================================
@@ -419,6 +451,19 @@
   --color-accent: var(--accent-soft);
   --color-accent-foreground: var(--accent-soft-foreground);
   --color-border: var(--border);
+  --color-alert-yellow: var(--alert-yellow);
+  --color-alert-yellow-soft: var(--alert-yellow-soft);
+  --color-pizarra-1: var(--pizarra-col-1);
+  --color-pizarra-2: var(--pizarra-col-2);
+  --color-pizarra-3: var(--pizarra-col-3);
+  --color-pizarra-4: var(--pizarra-col-4);
+  --color-pizarra-5: var(--pizarra-col-5);
+  --color-pizarra-6: var(--pizarra-col-6);
+  --color-pizarra-7: var(--pizarra-col-7);
+  --color-pizarra-8: var(--pizarra-col-8);
+  --color-pizarra-9: var(--pizarra-col-9);
+  --shadow-pizarra-cabecera: var(--pizarra-relieve-cabecera);
+  --shadow-pizarra-celda: var(--pizarra-relieve-celda);
   --color-destructive: var(--danger);
   --color-destructive-foreground: var(--danger-foreground);
 }

@@ -1,3 +1,5 @@
+import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
+import type { ControlUnit } from '../../types/equipment';
 import { PRIORIDAD_OT, type OrdenTrabajo, type PrioridadOT } from '../../types/mantenimiento';
 
 /**
@@ -115,6 +117,11 @@ export interface EquipmentRef {
   model: string;
   /** Bodega base de la unidad — el default de la bodega al descontar insumos. */
   homeBranchId?: string | null;
+  /** Unidad y lecturas actuales: prellenan la lectura de la mantención al
+   * cerrar una OT preventiva. Opcionales: hay listas que no las traen. */
+  controlUnit?: ControlUnit;
+  currentHourmeter?: number | null;
+  currentMileage?: number | null;
 }
 
 /** La unidad de Flota detrás del `equipoId` libre de una OT, si se resuelve. */
@@ -123,6 +130,60 @@ export function findEquipment(
   equipment: readonly EquipmentRef[] | undefined,
 ): EquipmentRef | undefined {
   return equipment?.find((eq) => eq.internalCode === equipoId || eq.id === equipoId);
+}
+
+/** Tope de la lectura de la mantención — el mismo que valida el backend. */
+const LECTURA_MAXIMA = 1_000_000;
+
+export interface LecturaMantencion {
+  /** «Horómetro al momento de la mantención (h)» o su versión en km. */
+  label: string;
+  unidad: 'h' | 'km';
+  /** La lectura actual del equipo como texto del campo (coma decimal, sin
+   * miles); `''` si no se conoce — el campo queda vacío y hay que escribirla. */
+  inicial: string;
+}
+
+/**
+ * Lo que necesita el campo «lectura al momento de la mantención» al cerrar una
+ * OT preventiva: el backend la usa para contar el próximo cambio desde ahí. La
+ * unidad la decide el equipo (liviano por km, pesado por horas); si la OT no
+ * resuelve en Flota se asume horómetro, que es el caso de la pauta.
+ */
+export function lecturaMantencion(
+  equipoId: string,
+  equipment: readonly EquipmentRef[] | undefined,
+): LecturaMantencion {
+  const equipo = findEquipment(equipoId, equipment);
+  const esKm = equipo?.controlUnit === 'KM';
+  const actual = esKm ? equipo?.currentMileage : equipo?.currentHourmeter;
+  return {
+    label: esKm
+      ? 'Kilometraje al momento de la mantención (km)'
+      : 'Horómetro al momento de la mantención (h)',
+    unidad: esKm ? 'km' : 'h',
+    inicial: formatDecimalInput(actual),
+  };
+}
+
+/**
+ * Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es
+ * obligatoria); `null` si vale.
+ */
+export function errorLecturaMantencion(valor: number | null | undefined): string | null {
+  if (valor == null || Number.isNaN(valor)) return 'Indica la lectura al momento de la mantención.';
+  if (valor < 0) return 'Escribe una lectura válida (0 o mayor).';
+  if (valor > LECTURA_MAXIMA) return 'La lectura no puede superar 1.000.000.';
+  return null;
+}
+
+/** El texto del campo como número, o el motivo por el que no vale (es obligatorio). */
+export function leerLecturaMantencion(texto: string): { valor: number } | { error: string } {
+  if (texto.trim() === '') return { error: 'Indica la lectura al momento de la mantención.' };
+  const valor = parseDecimal(texto);
+  if (valor == null) return { error: 'Escribe una lectura válida (0 o mayor).' };
+  const error = errorLecturaMantencion(valor);
+  return error ? { error } : { valor };
 }
 
 /**

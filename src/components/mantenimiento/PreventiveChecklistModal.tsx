@@ -19,7 +19,13 @@ import {
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useCompletarTarea } from '../../hooks/useOrdenes';
 import type { OrdenTrabajo, Tarea } from '../../types/mantenimiento';
-import { equipmentLabel, formatDate, type EquipmentRef } from './workshop';
+import {
+  equipmentLabel,
+  formatDate,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 const ESTADO_HEX: Record<string, string> = {
@@ -133,14 +139,22 @@ interface FilaInsumo {
  * ESTA tarea, que el backend descuenta del stock de Faena al guardar. Vive
  * como componente propio para que el flujo de foto nazca y muera con la
  * tarea que se está completando.
+ *
+ * `pideLectura`: es la última tarea pendiente de una OT de pauta, la que la
+ * completa. Ahí se pide la lectura al momento de la mantención (prellenada
+ * con la actual del equipo): el backend cuenta el próximo cambio desde ella.
  */
 function TareaForm({
   orden,
   tarea,
+  equipment,
+  pideLectura,
   onListo,
 }: {
   orden: OrdenTrabajo;
   tarea: Tarea;
+  equipment: readonly EquipmentRef[] | undefined;
+  pideLectura: boolean;
   onListo: () => void;
 }) {
   const completar = useCompletarTarea();
@@ -148,6 +162,9 @@ function TareaForm({
   const [notas, setNotas] = useState('');
   const [insumos, setInsumos] = useState<FilaInsumo[]>([]);
   const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
+  const campoLectura = lecturaMantencion(orden.equipoId, equipment);
+  const [lectura, setLectura] = useState(campoLectura.inicial);
+  const lecturaLeida = leerLecturaMantencion(lectura);
 
   const filasValidas = insumos.every(
     (fila) => fila.insumoId !== '' && Number(fila.cantidad) > 0,
@@ -156,7 +173,8 @@ function TareaForm({
     notas.trim().length > 0 &&
     foto.file != null &&
     filasValidas &&
-    (insumos.length === 0 || faenaBranch != null);
+    (insumos.length === 0 || faenaBranch != null) &&
+    (!pideLectura || 'valor' in lecturaLeida);
 
   const editarFila = (index: number, cambio: Partial<FilaInsumo>): void => {
     setInsumos((filas) => filas.map((fila, i) => (i === index ? { ...fila, ...cambio } : fila)));
@@ -184,6 +202,20 @@ function TareaForm({
         onClear={foto.handleClearPhoto}
         onSelect={(file) => void foto.handleSelectPhoto(file)}
       />
+
+      {pideLectura ? (
+        <Campo
+          error={
+            lectura.trim() !== '' && 'error' in lecturaLeida ? lecturaLeida.error : undefined
+          }
+          hint="Con esta tarea se completa la mantención: desde esta lectura se cuenta el próximo cambio."
+          label={campoLectura.label}
+          requerido
+          unidad={campoLectura.unidad}
+        >
+          <Input numerico value={lectura} onChange={(e) => setLectura(e.target.value)} />
+        </Campo>
+      ) : null}
 
       <div className="flex items-center justify-between gap-3">
         <Label>¿Qué se utilizó? (opcional)</Label>
@@ -278,6 +310,9 @@ function TareaForm({
                       branchId: faenaBranch?.id,
                     }
                   : {}),
+                ...(pideLectura && 'valor' in lecturaLeida
+                  ? { lecturaMantencion: lecturaLeida.valor }
+                  : {}),
               },
               { onSuccess: onListo },
             )
@@ -326,6 +361,10 @@ export function PreventiveChecklistModal({
     () => [...orden.tareas].sort((a, b) => a.posicion - b.posicion),
     [orden.tareas],
   );
+  // La lectura de la mantención se pide solo al completar la última tarea
+  // pendiente de una OT de pauta: es la que pasa la orden a COMPLETADA.
+  const pendientes = total - hechas;
+  const pideLectura = orden.pautaCycle != null && pendientes === 1;
   const hito =
     orden.pautaMilestone != null ? `Mantención de ${orden.pautaMilestone.toLocaleString('es-CL')}` : null;
 
@@ -370,8 +409,10 @@ export function PreventiveChecklistModal({
                 <TareaHecha key={tarea.id} tarea={tarea} />
               ) : tareaActiva === tarea.id && !soloLectura ? (
                 <TareaForm
+                  equipment={equipment}
                   key={tarea.id}
                   orden={orden}
+                  pideLectura={pideLectura}
                   tarea={tarea}
                   onListo={() => setTareaActiva(null)}
                 />
