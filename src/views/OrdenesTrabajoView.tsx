@@ -14,6 +14,10 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { useEquipment } from '../hooks/useEquipment';
 import { useHallazgosList } from '../hooks/useHallazgos';
+import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../hooks/useMaintenancePlans';
+import { canDeleteOrden } from '../lib/permissions';
+import { ROLES } from '../types/roles';
+import type { MaintenanceBoardRow } from '../types/maintenance-board';
 import { RECURSOS_DE_ORDENES } from '../lib/pending-resources';
 import {
   ORIGEN_OT_LABELS,
@@ -30,6 +34,7 @@ import {
   formatDate,
   findEquipment,
   groupWorkshopBoard,
+  responsableDe,
   splitFinished,
   toPrioridadOT,
   type EquipmentRef,
@@ -40,6 +45,9 @@ import { StartOperationModal } from '../components/mantenimiento/StartOperationM
 import { FinishTaskModal } from '../components/mantenimiento/FinishTaskModal';
 import { PreventiveChecklistModal, tareasHechas } from '../components/mantenimiento/PreventiveChecklistModal';
 import { ViewOperationModal } from '../components/mantenimiento/ViewOperationModal';
+import { EliminarOperacionModal } from '../components/mantenimiento/EliminarOperacionModal';
+import { EditarOperacionModal } from '../components/mantenimiento/EditarOperacionModal';
+import { ResumenPreventiva } from '../components/mantenimiento/ResumenPreventiva';
 
 /** Columna del tablero: chip de cabecera + conteo + tarjetas. */
 function BoardColumn({
@@ -166,9 +174,18 @@ function TareasChip({ orden }: { orden: OrdenTrabajo }) {
 /** Titular de la tarjeta (boceto del taller): el EQUIPO primero y notorio —
  * código tabular en negrita + nombre de Flota en gris, como el Selector de
  * Terreno. */
-function EquipoHead({ equipoId, fleet }: { equipoId: string; fleet: readonly EquipmentRef[] | undefined }) {
+function EquipoHead({
+  equipoId,
+  fleet,
+  accion,
+}: {
+  equipoId: string;
+  fleet: readonly EquipmentRef[] | undefined;
+  /** Acción chica arriba a la derecha de la tarjeta (el ícono de eliminar). */
+  accion?: React.ReactNode;
+}) {
   const eq = findEquipment(equipoId, fleet);
-  return (
+  const cabecera = (
     <span className="min-w-0 leading-snug">
       <span className="tabular text-[18px] font-bold text-foreground">{eq?.internalCode ?? equipoId}</span>
       {eq ? (
@@ -178,6 +195,13 @@ function EquipoHead({ equipoId, fleet }: { equipoId: string; fleet: readonly Equ
         </span>
       ) : null}
     </span>
+  );
+  if (!accion) return cabecera;
+  return (
+    <div className="flex items-start justify-between gap-2">
+      {cabecera}
+      {accion}
+    </div>
   );
 }
 
@@ -261,7 +285,7 @@ function FinishedCard({
       </ChipsRow>
       <CardMeta>
         {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'} {formatDate(orden.updatedAt)} ·{' '}
-        {orden.asignadoA?.nombre ?? 'Sin asignar'}
+        {responsableDe(orden) ?? 'Sin asignar'}
       </CardMeta>
       {esChecklistPauta(orden) ? (
         <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />
@@ -283,7 +307,32 @@ function FinishedCard({
  * todo lo demás —crear, resumen, columnas y acciones— queda idéntico al taller.
  */
 export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller' | 'panel' } = {}) {
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
+  // La pizarra y el pronóstico (horómetro actual, pendientes y fecha
+  // estimada de cada preventiva) son de ADMIN, MANTENEDOR y SUPERVISOR.
+  const vePizarra = role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR;
+  const { data: pizarra } = useMaintenanceBoard(vePizarra);
+  const { data: pronosticos } = useMaintenanceForecastByEquipment(vePizarra);
+  const puedeEliminar = canDeleteOrden(role);
+  /** La fila de la pizarra del equipo de la orden (`equipoId` puede ser el id o el código). */
+  const filaDe = (orden: OrdenTrabajo): MaintenanceBoardRow | undefined =>
+    pizarra?.find((f) => f.equipmentId === orden.equipoId || f.internalCode === orden.equipoId);
+  const resumenDe = (orden: OrdenTrabajo) => {
+    if (orden.tipo !== 'PREVENTIVA') return null;
+    const fila = filaDe(orden);
+    return fila ? (
+      <ResumenPreventiva fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+    ) : null;
+  };
+  /** Editar y eliminar (íconos arriba a la derecha): ADMIN y MANTENEDOR, y no
+   * mientras la orden tenga una escritura sin sincronizar. */
+  const eliminarDe = (orden: OrdenTrabajo) =>
+    puedeEliminar && !pendientes.marcaDe('orden', orden.id) ? (
+      <span className="flex shrink-0 gap-1.5">
+        <EditarOperacionModal orden={orden} />
+        <EliminarOperacionModal fila={filaDe(orden)} orden={orden} />
+      </span>
+    ) : null;
   const { data: ordenes, isPending, isError, error } = useOrdenes();
   const { data: hallazgos, isPending: findingsPending, isError: findingsError } = useHallazgosList();
   const { data: equipment } = useEquipment();
@@ -434,7 +483,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                 ))}
                 {board.backlog.map((orden) => (
                   <BoardCard key={orden.id}>
-                    <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                    <EquipoHead accion={eliminarDe(orden)} equipoId={orden.equipoId} fleet={fleet} />
                     <div className="flex items-start gap-2">
                       <TituloOrden>{orden.titulo}</TituloOrden>
                       <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
@@ -453,6 +502,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                     <CardMeta>
                       {orden.origenDetalle ?? ORIGEN_OT_LABELS[orden.origen]} — {formatDate(orden.createdAt)}
                     </CardMeta>
+                    {resumenDe(orden)}
                     {esChecklistPauta(orden) ? (
                       canStart ? (
                         <IniciarMantencion orden={orden} />
@@ -475,7 +525,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
               >
                 {board.inProgress.map((orden) => (
                   <BoardCard key={orden.id}>
-                    <EquipoHead equipoId={orden.equipoId} fleet={fleet} />
+                    <EquipoHead accion={eliminarDe(orden)} equipoId={orden.equipoId} fleet={fleet} />
                     <div className="flex items-start gap-2">
                       <TituloOrden>{orden.titulo}</TituloOrden>
                       <MarcaPendiente marca={pendientes.marcaDe('orden', orden.id)} />
@@ -486,8 +536,9 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
                       {esChecklistPauta(orden) ? <TareasChip orden={orden} /> : null}
                     </ChipsRow>
                     <CardMeta>
-                      Iniciada {formatDate(orden.updatedAt)} · {orden.asignadoA?.nombre ?? 'Sin asignar'}
+                      Iniciada {formatDate(orden.updatedAt)} · {responsableDe(orden) ?? 'Sin asignar'}
                     </CardMeta>
+                    {resumenDe(orden)}
                     {/* Con una escritura de esta OT aún sin sincronizar, el botón
                     se retira: un segundo "Guardar y finalizar" generaría OTRA
                     intervención con OTRO id — y ahora eso descuenta stock real

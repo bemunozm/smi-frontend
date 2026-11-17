@@ -222,3 +222,32 @@ export function formatDate(iso: string): string {
         minute: '2-digit',
       });
 }
+
+/**
+ * Quién se hace cargo de la orden en el tablero: el asignado o, en las que
+ * nadie tomó (las preventivas que se abren solas), quien marcó la última
+ * tarea. Desde el 17/11/2026 el backend asigna a quien la mueve o la trabaja;
+ * esto cubre las órdenes de antes. `null` = de verdad nadie la tomó.
+ */
+export function responsableDe(orden: Pick<OrdenTrabajo, 'asignadoA' | 'tareas'>): string | null {
+  if (orden.asignadoA?.nombre) return orden.asignadoA.nombre;
+  const ultima = orden.tareas
+    .filter((t) => t.hechaPorNombre)
+    .sort((a, b) => (b.hechaAt ?? '').localeCompare(a.hechaAt ?? ''))[0];
+  return ultima?.hechaPorNombre ?? null;
+}
+
+/**
+ * Si al eliminar la orden se puede registrar «ya se hizo» (espejo de
+ * `OrdenesService.remove` en el backend): una preventiva de la pauta (con el
+ * hito guardado, o una anterior que solo lo tiene en «Pauta: 250 h · ciclo 2»)
+ * o el servicio de un liviano («Livianos: mantención de 20.000 km»). Son las
+ * que el sistema crea solo y volvería a crear si se borran sin registrar.
+ */
+export function registrableComoHecha(
+  orden: Pick<OrdenTrabajo, 'pautaCycle' | 'origenDetalle' | 'tipo'>,
+): boolean {
+  if (orden.pautaCycle != null) return true;
+  const detalle = orden.origenDetalle ?? '';
+  return /^Pauta: [\d.]+ (?:h|km) · ciclo \d+/.test(detalle) || (orden.tipo === 'PREVENTIVA' && detalle.startsWith('Livianos: '));
+}

@@ -2,15 +2,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { OrdenesAPI } from '../api/MantenimientoAPI';
-import { mensajeErrorFormulario } from '../lib/error-messages';
+import { mensajeErrorFormulario, mensajeErrorOperacion } from '../lib/error-messages';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
-import { EQUIPMENT_KEY, MAINTENANCE_PLANS_KEY, ORDENES_KEY as ORDENES_QUERY_KEY } from '../lib/query-keys';
+import {
+  EQUIPMENT_KEY,
+  HALLAZGOS_KEY,
+  MAINTENANCE_PLANS_KEY,
+  ORDENES_KEY as ORDENES_QUERY_KEY,
+} from '../lib/query-keys';
 import { buildQueuedEdit } from '../lib/queued-edit';
 import { generateUuid } from '../lib/uuid';
 import { ordenEntity } from '../offline/db';
 import type {
   CreateMantencionHistoricaInput,
   CreateOrdenInput,
+  EliminarOrdenOpciones,
   EstadoOT,
   OrdenFields,
   OrdenTrabajo,
@@ -188,5 +194,31 @@ export function useCompletarTarea() {
       toast.success('Tarea de mantención registrada');
     },
     errorFallback: 'No se pudo registrar la tarea de mantención.',
+  });
+}
+
+/**
+ * Eliminar una operación pendiente o en proceso (pedido del cliente,
+ * 17/11/2026). Va directo al servidor, no por la cola: borrar sin señal y
+ * descubrir después que no se pudo confundiría más de lo que ayuda. Refresca
+ * el tablero, la pizarra (una preventiva «ya hecha» mueve el último cambio) y
+ * los hallazgos (uno ligado vuelve a la bandeja).
+ */
+export function useEliminarOrden() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, opciones }: { id: string; titulo: string; opciones?: EliminarOrdenOpciones }) =>
+      OrdenesAPI.remove(id, opciones),
+    onSuccess: (resultado, { titulo }) => {
+      toast.success(resultado.registradaComoHecha ? 'Mantención registrada como hecha' : 'Operación eliminada', {
+        description: titulo,
+      });
+      void queryClient.invalidateQueries({ queryKey: ORDENES_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: MAINTENANCE_PLANS_KEY });
+      void queryClient.invalidateQueries({ queryKey: HALLAZGOS_KEY });
+    },
+    onError: (error: unknown) => {
+      toast.danger(mensajeErrorOperacion(error, 'No se pudo eliminar la operación.'));
+    },
   });
 }

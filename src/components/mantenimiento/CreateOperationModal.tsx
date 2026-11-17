@@ -29,7 +29,7 @@ import {
   type LogOperationFormValues,
   type OrdenTrabajo,
 } from '../../types/mantenimiento';
-import { formatDate } from './workshop';
+import { formatDate, responsableDe } from './workshop';
 import {
   guardarPrimeroClase,
   leerPrimeroClase,
@@ -112,7 +112,7 @@ function OperationTimelineItem({ orden }: { orden: OrdenTrabajo }) {
         </span>
       ) : null}
       <span className="text-xs text-muted-foreground">
-        Por: {orden.asignadoA?.nombre ?? 'Sin asignar'}
+        Por: {responsableDe(orden) ?? 'Sin asignar'}
       </span>
     </div>
   );

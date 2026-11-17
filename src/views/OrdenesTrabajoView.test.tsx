@@ -199,9 +199,10 @@ const CAN_ADMIN = new Set(['orden.create', 'orden.update', 'orden.toggleTarea', 
 const CAN_SOLO_LECTOR = new Set(['orden.update']);
 let allowed: ReadonlySet<string> = CAN_MANTENEDOR;
 
+const rolRef = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('../hooks/usePermissions', () => ({
   usePermissions: () => ({
-    role: null,
+    role: rolRef.value,
     can: (action: string) => allowed.has(action),
     canAny: (actions: readonly string[]) => actions.some((action) => allowed.has(action)),
     canCloseShiftCardFromFleet: false,
@@ -226,11 +227,65 @@ let ordenesExtra: OrdenTrabajo[] = [];
 vi.mock('../hooks/useOrdenes', () => ({
   useOrdenes: () => ({ data: [...ORDENES, ...ordenesExtra], isPending: false, isError: false, error: null }),
   useCrearOrden: () => ({ mutate: vi.fn(), isPending: false }),
-  useActualizarOrden: () => ({ mutate: vi.fn(), isPending: false }),
   useLogOperation: () => ({ mutate: vi.fn(), isPending: false }),
   useToggleTarea: () => ({ mutate: vi.fn(), isPending: false }),
   useCompletarTarea: () => ({ mutate: vi.fn(), isPending: false }),
   useOrden: () => ({ data: undefined }),
+  useEliminarOrden: () => ({ mutate: eliminarMock, isPending: false }),
+  useActualizarOrden: () => ({ mutate: actualizarMock, isPending: false }),
+}));
+const actualizarMock = vi.hoisted(() => vi.fn());
+vi.mock('../hooks/useUsers', () => ({
+  useUsers: () => ({ data: [{ id: 'u-ped', name: 'Pedro Soto' }] }),
+}));
+const eliminarMock = vi.hoisted(() => vi.fn());
+
+// La pizarra (horómetro actual, pendientes) y el pronóstico (fecha estimada)
+// de las preventivas: RE-003 está a 49,3 h de su mantención.
+const FILA_RE003 = {
+  equipmentId: 'eq-3',
+  internalCode: 'RE-003',
+  type: 'Retro',
+  brand: 'CAT',
+  model: '416',
+  equipmentClass: 'HEAVY' as const,
+  unit: 'h' as const,
+  status: 'OPERATIONAL' as const,
+  counter: 2700.7,
+  source: 'PAUTA' as const,
+  milestones: [250, 500],
+  initialMilestone: null,
+  lastChange: null,
+  interval: 250,
+  nextMilestone: 500,
+  dueAt: 2750,
+  remaining: 49.3,
+  alertBefore: 50,
+  estimated: true,
+  items: [],
+};
+vi.mock('../hooks/useMaintenancePlans', () => ({
+  useMaintenanceBoard: () => ({ data: [FILA_RE003] }),
+  useMaintenanceForecastByEquipment: () => ({
+    data: new Map([
+      [
+        'eq-3',
+        {
+          equipmentId: 'eq-3',
+          unit: 'h',
+          source: 'PAUTA',
+          nextAt: 2750,
+          remaining: 49.3,
+          status: 'ESTIMADA',
+          dailyUsage: 10,
+          basedOnDays: 14,
+          estimatedDate: '2026-11-18',
+          weekStart: '2026-11-16',
+          suggestedDate: null,
+        },
+      ],
+    ]),
+  }),
 }));
 
 vi.mock('../hooks/useEquipment', () => ({ useEquipment: () => ({ data: EQUIPMENT, isPending: false }) }));
@@ -276,6 +331,9 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   ordenesExtra = [];
+  rolRef.value = null;
+  eliminarMock.mockReset();
+  actualizarMock.mockReset();
   cleanup();
   escritorio = true;
   allowed = CAN_MANTENEDOR;
@@ -512,5 +570,99 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     renderView();
 
     expect(screen.queryByRole('button', { name: /Finalizar tarea/ })).toBeNull();
+  });
+
+  describe('pedidos del 17/11', () => {
+    it('la preventiva en proceso muestra horómetro actual, horas pendientes y fecha estimada', () => {
+      renderView();
+      // Solo RE-003 tiene fila en la pizarra: un solo resumen.
+      const resumen = screen.getByTestId('resumen-preventiva');
+      expect(within(resumen).getByText('Horómetro actual')).toBeTruthy();
+      expect(within(resumen).getByText('2.700,7 h')).toBeTruthy();
+      expect(within(resumen).getByText('49,3 h')).toBeTruthy();
+      expect(within(resumen).getByText('mié 18-11')).toBeTruthy();
+    });
+
+    it('sin asignado, la tarjeta dice quién hizo la última tarea en vez de «Sin asignar»', () => {
+      ordenesExtra = [
+        {
+          ...ORDENES.find((o) => o.id === 'ot-pauta-2')!,
+          id: 'ot-sin-asignar',
+          titulo: 'Preventiva sin asignar',
+          asignadoA: null,
+          tareas: [
+            {
+              id: 'tz-1',
+              texto: 'Cambio de aceite',
+              hecha: true,
+              posicion: 0,
+              notas: null,
+              fotoUrl: null,
+              hechaPorNombre: 'Pedro Soto',
+              hechaAt: '2026-10-05T10:00:00.000Z',
+            },
+          ],
+        },
+      ];
+      renderView();
+      expect(screen.getByText(/Pedro Soto/)).toBeTruthy();
+    });
+
+    it('el mantenedor puede eliminar; una preventiva «ya hecha» se registra al eliminarla', () => {
+      rolRef.value = 'MANTENEDOR';
+      renderView();
+      expect(screen.getAllByRole('button', { name: 'Eliminar' }).length).toBeGreaterThan(0);
+      // La tarjeta de la preventiva de la pauta (ot-pauta): desde su título,
+      // el primer ancestro que tiene un ícono «Eliminar» es la tarjeta.
+      let tarjeta: HTMLElement | null = screen.getByText('Mantención preventiva 250 h · EX-014');
+      while (tarjeta && !within(tarjeta).queryByRole('button', { name: 'Eliminar' })) tarjeta = tarjeta.parentElement;
+      expect(tarjeta).toBeTruthy();
+      fireEvent.click(within(tarjeta!).getByRole('button', { name: 'Eliminar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Ya se hizo: registrar y eliminar' }));
+      expect(eliminarMock).toHaveBeenCalledWith(
+        expect.objectContaining({ opciones: { yaHecha: true } }),
+        expect.anything(),
+      );
+    });
+
+    it('el diálogo de eliminar muestra los datos de la mantención y dice que si ya se hizo se puede eliminar', () => {
+      rolRef.value = 'MANTENEDOR';
+      renderView();
+      let tarjeta: HTMLElement | null = screen.getByText('Mantención preventiva 500 h · RE-003');
+      while (tarjeta && !within(tarjeta).queryByRole('button', { name: 'Eliminar' })) tarjeta = tarjeta.parentElement;
+      fireEvent.click(within(tarjeta!).getByRole('button', { name: 'Eliminar' }));
+
+      const datos = screen.getByTestId('eliminar-datos');
+      expect(within(datos).getByText('500 h · ciclo 1')).toBeTruthy();
+      expect(within(datos).getByText('2.700,7 h')).toBeTruthy();
+      expect(within(datos).getByText('49,3 h')).toBeTruthy();
+      expect(screen.getByText('Si esta mantención ya se hizo, puedes eliminarla.')).toBeTruthy();
+    });
+
+    it('«Editar» cambia título, prioridad y responsable de una operación', () => {
+      rolRef.value = 'ADMIN';
+      renderView();
+      let tarjeta: HTMLElement | null = screen.getByText('Mantención preventiva 500 h · RE-003');
+      while (tarjeta && !within(tarjeta).queryByRole('button', { name: 'Editar' })) tarjeta = tarjeta.parentElement;
+      fireEvent.click(within(tarjeta!).getByRole('button', { name: 'Editar' }));
+
+      fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Mantención 500 h (corregida)' } });
+      fireEvent.click(screen.getByRole('button', { name: /Alta/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+      expect(actualizarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({ titulo: 'Mantención 500 h (corregida)', prioridad: 'ALTA' }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('sin el rol (supervisor, secretaria) no hay «Eliminar»', () => {
+      rolRef.value = 'SUPERVISOR';
+      renderView();
+      expect(screen.queryByRole('button', { name: 'Eliminar' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
+    });
   });
 });

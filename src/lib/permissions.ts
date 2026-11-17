@@ -142,6 +142,12 @@ export function canDeleteShiftReport(role: Role | null | undefined): boolean {
   return role === ADMIN;
 }
 
+/** Eliminar una operación del taller pendiente o en proceso:
+ * `DELETE /api/mantenimiento/ordenes/:id` es ADMIN y MANTENEDOR (17/11/2026). */
+export function canDeleteOrden(role: Role | null | undefined): boolean {
+  return role === ADMIN || role === MANTENEDOR;
+}
+
 /**
  * Pantallas que SECRETARIA puede abrir — espejo de sus `allowedRoles` en
  * `routes.tsx`. Lo usan los atajos del dashboard («Ver todo», la ficha de un

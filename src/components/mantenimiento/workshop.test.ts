@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { OrdenTrabajo } from '../../types/mantenimiento';
 import {
+  registrableComoHecha,
+  responsableDe,
   buildWorkshopStats,
   equipmentLabel,
   formatDate,
@@ -141,5 +143,34 @@ describe('formatDate', () => {
     // lo que importa es que aparezcan día, mes y hora, no el string exacto.
     expect(formatted).toMatch(/0?5[-/]10/);
     expect(formatted).toContain('11:05');
+  });
+});
+
+describe('registrableComoHecha (eliminar: «ya se hizo»)', () => {
+  it('pauta con hito, pauta antigua solo con el texto y servicio de liviano', () => {
+    expect(registrableComoHecha({ pautaCycle: 1, origenDetalle: null, tipo: 'PREVENTIVA' })).toBe(true);
+    expect(registrableComoHecha({ pautaCycle: null, origenDetalle: 'Pauta: 1.250 h · ciclo 2', tipo: 'PREVENTIVA' })).toBe(true);
+    expect(
+      registrableComoHecha({ pautaCycle: null, origenDetalle: 'Livianos: mantención de 20.000 km', tipo: 'PREVENTIVA' }),
+    ).toBe(true);
+  });
+
+  it('una correctiva o una preventiva manual no', () => {
+    expect(registrableComoHecha({ pautaCycle: null, origenDetalle: 'P. Soto', tipo: 'CORRECTIVA' })).toBe(false);
+    expect(registrableComoHecha({ pautaCycle: null, origenDetalle: null, tipo: 'PREVENTIVA' })).toBe(false);
+  });
+});
+
+describe('responsableDe', () => {
+  const tarea = (hechaPorNombre: string | null, hechaAt: string | null) => ({
+    id: 't', texto: '', hecha: !!hechaPorNombre, posicion: 0, notas: null, fotoUrl: null, hechaPorNombre, hechaAt,
+  });
+
+  it('el asignado manda; sin asignado, quien hizo la última tarea; si no, null', () => {
+    expect(responsableDe({ asignadoA: { id: 'u1', nombre: 'Ana' }, tareas: [tarea('Pedro', '2026-11-01')] })).toBe('Ana');
+    expect(
+      responsableDe({ asignadoA: null, tareas: [tarea('Pedro', '2026-11-01'), tarea('Luis', '2026-11-05')] }),
+    ).toBe('Luis');
+    expect(responsableDe({ asignadoA: null, tareas: [tarea(null, null)] })).toBeNull();
   });
 });

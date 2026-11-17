@@ -46,8 +46,8 @@ export function useMaintenanceForecastByEquipment(enabled = true) {
  * La pizarra de mantenciones. Cuelga de la raíz de las pautas: guardar una
  * pauta o marcar un hito (que invalidan esa raíz) la refresca sola.
  */
-export function useMaintenanceBoard() {
-  return useQuery({ queryKey: [...MAINTENANCE_PLANS_KEY, 'board'], queryFn: MaintenancePlanAPI.board });
+export function useMaintenanceBoard(enabled = true) {
+  return useQuery({ queryKey: [...MAINTENANCE_PLANS_KEY, 'board'], queryFn: MaintenancePlanAPI.board, enabled });
 }
 
 export interface SaveMaintenancePlanVars {
