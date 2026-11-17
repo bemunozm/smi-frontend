@@ -24,6 +24,11 @@ import {
   type SaveMaintenancePlanInput,
   type SetMaintenanceRecordInput,
 } from '../../types/maintenance-plan';
+import {
+  MaintenanceBoardRowSchema,
+  type CorregirUltimoCambioInput,
+  type MaintenanceBoardRow,
+} from '../../types/maintenance-board';
 import { LightConfigViewSchema, type LightConfig, type LightConfigView } from '../../types/vencimientos';
 import type { EquipmentStatus } from '../../types/equipment';
 import {
@@ -95,6 +100,13 @@ export interface MantenimientoEndpointMap {
     params: { equipmentId: string };
     body: SaveMaintenancePlanInput;
     result: MaintenancePlanView;
+  };
+  /** Corregir el último cambio desde la pizarra (`PATCH`,
+   * last-write-wins). Responde la fila de la pizarra recalculada. */
+  'maintenancePlan.lastChange': {
+    params: { equipmentId: string };
+    body: CorregirUltimoCambioInput;
+    result: MaintenanceBoardRow;
   };
   /** Marcar o desmarcar una operación hecha en el ciclo (`PUT`, idempotente). */
   'maintenanceRecord.set': {
@@ -237,6 +249,19 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     parse: parseWith(MaintenancePlanViewSchema),
     invalidate: ['maintenancePlans'],
     label: (params) => etiqueta('Pauta de mantención', cachedName('equipment', params.equipmentId)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(equipmentEntity, params.equipmentId),
+  },
+  'maintenancePlan.lastChange': {
+    method: 'PATCH',
+    path: (params) => `/api/maintenance-plans/${param(params, 'equipmentId')}/last-change`,
+    failMessage: 'No se pudo corregir el último cambio.',
+    parse: parseWith(MaintenanceBoardRowSchema),
+    // El último cambio es el ancla: la pizarra, la próxima mantención y el
+    // pronóstico cuelgan de la raíz de las pautas.
+    invalidate: ['maintenancePlans'],
+    label: (params) => etiqueta('Último cambio corregido', cachedName('equipment', params.equipmentId)),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(equipmentEntity, params.equipmentId),

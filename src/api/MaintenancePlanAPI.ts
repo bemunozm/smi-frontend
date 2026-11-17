@@ -12,7 +12,8 @@ import { MaintenanceBoardListResponseSchema, type MaintenanceBoardRow } from '..
 
 /**
  * Lecturas de las pautas de mantención. La escritura (guardar la pauta) va por
- * la cola de escrituras: `maintenancePlan.save` en `offline/endpoints/`.
+ * la cola de escrituras: `maintenancePlan.save` en `offline/endpoints/`, igual
+ * que la corrección del último cambio (`maintenancePlan.lastChange`).
  */
 export const MaintenancePlanAPI = {
   /** La pauta de un equipo con su próxima mantención. `plan` es null si no tiene. */

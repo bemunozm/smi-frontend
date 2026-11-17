@@ -57,6 +57,8 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
   'maintenancePlan.save': [ADMIN, MANTENEDOR],
+  // Corregir el último cambio desde la pizarra: solo el administrador.
+  'maintenancePlan.lastChange': [ADMIN],
   // «Asignar mantenciones» de un liviano: los mismos que guardan la pauta.
   'lightVehicleConfig.save': [ADMIN, MANTENEDOR],
   'maintenanceRecord.set': [MANTENEDOR],
