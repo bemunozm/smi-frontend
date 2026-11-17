@@ -13,6 +13,7 @@ import {
   findEquipment,
   formatDate,
   groupWorkshopBoard,
+  responsableDe,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
 import { PreventiveChecklistModal } from '../components/mantenimiento/PreventiveChecklistModal';
@@ -144,7 +145,7 @@ export function HistorialOperacionesView() {
                   <td className={TD}>
                     <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>{TIPO_OT_LABELS[orden.tipo]}</Chip>
                   </td>
-                  <td className={`${TD} whitespace-nowrap`}>{orden.asignadoA?.nombre ?? 'Sin asignar'}</td>
+                  <td className={`${TD} whitespace-nowrap`}>{responsableDe(orden) ?? 'Sin asignar'}</td>
                   <td className={`${TD} whitespace-nowrap`}>
                     {esChecklistPauta(orden) ? (
                       <PreventiveChecklistModal equipment={fleet} orden={orden} soloLectura />

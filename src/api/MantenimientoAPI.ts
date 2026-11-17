@@ -2,12 +2,14 @@ import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import {
   ActividadListResponseSchema,
+  EliminarOrdenResponseSchema,
   IntervencionListResponseSchema,
   OrdenTrabajoListResponseSchema,
   OrdenTrabajoResponseSchema,
   UmbralListResponseSchema,
   type Actividad,
   type CreateMantencionHistoricaInput,
+  type EliminarOrdenOpciones,
   type EstadoOT,
   type Intervencion,
   type OrdenTrabajo,
@@ -49,10 +51,28 @@ async function createMantencionHistorica(input: CreateMantencionHistoricaInput):
   }
 }
 
+/** Borra una operación pendiente o en proceso (ADMIN y MANTENEDOR). */
+async function removeOrden(id: string, opciones: EliminarOrdenOpciones = {}): Promise<{ registradaComoHecha: boolean }> {
+  try {
+    const response = await axiosInstance.delete(`/api/mantenimiento/ordenes/${encodeURIComponent(id)}`, {
+      params: {
+        ...(opciones.yaHecha ? { yaHecha: 'true' } : {}),
+        ...(opciones.yaHecha && opciones.lecturaMantencion != null
+          ? { lecturaMantencion: opciones.lecturaMantencion }
+          : {}),
+      },
+    });
+    return EliminarOrdenResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo eliminar la operación.');
+  }
+}
+
 export const OrdenesAPI = {
   list: listOrdenes,
   getById: getOrdenById,
   createHistorica: createMantencionHistorica,
+  remove: removeOrden,
 };
 
 // ---------------------------------------------------------------------------

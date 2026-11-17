@@ -395,3 +395,16 @@ export interface OrdenFields {
   prioridad: PrioridadOT;
   titulo: string;
 }
+
+/** `DELETE /api/mantenimiento/ordenes/:id`. */
+export const EliminarOrdenResponseSchema = z.object({
+  data: z.object({ registradaComoHecha: z.boolean() }),
+  message: z.string(),
+});
+
+/** Opciones al eliminar: una preventiva de la pauta que ya se hizo se
+ * registra como hecha (con su lectura, o la actual del equipo). */
+export interface EliminarOrdenOpciones {
+  yaHecha?: boolean;
+  lecturaMantencion?: number;
+}
