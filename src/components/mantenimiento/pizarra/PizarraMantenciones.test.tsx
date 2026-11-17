@@ -265,6 +265,25 @@ describe('PizarraMantenciones', () => {
     expect(screen.getByTestId('modal-anterior').getAttribute('data-equipo')).toBe('p2');
   });
 
+  it('al pasar el mouse por un valor de la tabla, el tooltip dice la columna y el equipo', async () => {
+    escritorio.value = true;
+    renderPizarra();
+
+    const celdas = screen.getByTestId('pizarra-fila-p1').querySelectorAll('td');
+    // Horómetro actual (columna 4) y próximo cambio (columna 5).
+    for (const [indice, titulo] of [
+      [4, 'Horómetro actual'],
+      [5, 'Horómetro próximo cambio'],
+    ] as const) {
+      const disparador = (celdas[indice] as HTMLElement).querySelector('.tooltip__trigger') as HTMLElement;
+      // El tooltip por hover solo abre si la última interacción fue con puntero.
+      fireEvent.pointerDown(document.body, { pointerType: 'mouse' });
+      fireEvent.pointerOver(disparador, { pointerType: 'mouse' });
+      fireEvent.pointerMove(disparador, { pointerType: 'mouse' });
+      expect(await screen.findByText(`${titulo} · SEM 02`)).toBeTruthy();
+    }
+  });
+
   it('sin último cambio, el ADMIN ve «Registrar fecha» y lo abre con el equipo', () => {
     renderPizarra();
 

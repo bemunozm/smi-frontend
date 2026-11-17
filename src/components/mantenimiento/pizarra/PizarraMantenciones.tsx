@@ -103,10 +103,41 @@ function BurbujaEstado({ estado }: { estado: keyof typeof BURBUJA }) {
 }
 
 /**
+ * Dice qué es un valor de la tabla al pasar el mouse (o enfocarlo con teclado): al bajar en la pizarra la fila de
+ * encabezados sale de la vista. Lleva el código del equipo porque la fila puede quedar lejos de su primera columna.
+ * No se usa sobre botones ni sobre las burbujas de estado, que ya tienen su propio texto.
+ */
+function ValorConTooltip({
+  titulo,
+  fila,
+  children,
+}: {
+  titulo: string;
+  fila: MaintenanceBoardRow;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip delay={300}>
+      <Tooltip.Trigger className="inline-flex">{children}</Tooltip.Trigger>
+      <Tooltip.Content>{`${titulo} · ${fila.internalCode}`}</Tooltip.Content>
+    </Tooltip>
+  );
+}
+
+/**
  * `conEtiqueta` (tarjetas del teléfono): en táctil el tooltip no se abre con un toque, así que el estado se escribe
  * al lado de la burbuja. En la tabla de escritorio queda solo el ícono con su tooltip.
  */
-function Pendientes({ fila, conEtiqueta = false }: { fila: MaintenanceBoardRow; conEtiqueta?: boolean }) {
+function Pendientes({
+  fila,
+  conEtiqueta = false,
+  tituloNumero,
+}: {
+  fila: MaintenanceBoardRow;
+  conEtiqueta?: boolean;
+  /** Nombre de la columna para el tooltip del número (tabla de escritorio). */
+  tituloNumero?: string;
+}) {
   if (fila.source === 'SIN_PAUTA') return <span className="text-muted-foreground">—</span>;
   const texto = textoPendientes(fila);
   if (texto == null) return <span className="text-muted-foreground">{SIN_LECTURA}</span>;
@@ -122,7 +153,13 @@ function Pendientes({ fila, conEtiqueta = false }: { fila: MaintenanceBoardRow; 
           {BURBUJA[estado].texto}
         </span>
       ) : null}
-      <span className={`tabular-nums ${TONO_CLASE[estado]}`}>{texto}</span>
+      {tituloNumero ? (
+        <ValorConTooltip fila={fila} titulo={tituloNumero}>
+          <span className={`tabular-nums ${TONO_CLASE[estado]}`}>{texto}</span>
+        </ValorConTooltip>
+      ) : (
+        <span className={`tabular-nums ${TONO_CLASE[estado]}`}>{texto}</span>
+      )}
       {/* Sin último cambio el número sale de los hitos absolutos: se avisa
           para que nadie lo tome por exacto. */}
       {fila.estimated ? <span className="text-xs text-muted-foreground italic">estimado</span> : null}
@@ -413,36 +450,48 @@ export function PizarraMantenciones({
                           <Equipo fila={fila} />
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(1)}>
-                          <ConIcono icono="reloj">{lectura(fila.interval, fila.unit) ?? '—'}</ConIcono>
+                          <ValorConTooltip fila={fila} titulo={textos.cambio}>
+                            <ConIcono icono="reloj">{lectura(fila.interval, fila.unit) ?? '—'}</ConIcono>
+                          </ValorConTooltip>
                         </Table.Cell>
                         {/* Sin último cambio, cada columna lleva su botón (es lo que falta para contar desde ahí). */}
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(2)}>
                           {fila.lastChange ? (
-                            <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
+                            <ValorConTooltip fila={fila} titulo="Fecha último cambio">
+                              <ConIcono icono="fecha">{fechaCorta(fila.lastChange.doneAt)}</ConIcono>
+                            </ValorConTooltip>
                           ) : (
                             botonRegistrar(fila, 'fecha')
                           )}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(3)}>
                           {fila.lastChange ? (
-                            <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                            <ValorConTooltip fila={fila} titulo={textos.ultimo}>
+                              <ConIcono icono="reloj">{lectura(fila.lastChange.counterAt, fila.unit)}</ConIcono>
+                            </ValorConTooltip>
                           ) : (
                             botonRegistrar(fila, 'lectura')
                           )}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(4)}>
-                          <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                          <ValorConTooltip fila={fila} titulo={textos.actual}>
+                            <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                          </ValorConTooltip>
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(5)}>
-                          <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
+                          <ValorConTooltip fila={fila} titulo={textos.proximo}>
+                            <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
+                          </ValorConTooltip>
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap" {...fondoColumna(6)}>
-                          <Pendientes fila={fila} />
+                          <Pendientes fila={fila} tituloNumero={textos.pendientes} />
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap" {...fondoColumna(7)}>
-                          <ConIcono icono="fecha">
-                            <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
-                          </ConIcono>
+                          <ValorConTooltip fila={fila} titulo="Fecha estimada de mantención">
+                            <ConIcono icono="fecha">
+                              <FechaEstimadaCelda fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
+                            </ConIcono>
+                          </ValorConTooltip>
                         </Table.Cell>
                         <Table.Cell className="text-right" {...fondoColumna(8)}>
                           {botonVer(fila)}
