@@ -185,7 +185,7 @@ function Equipo({ fila, sinEstado = false }: { fila: MaintenanceBoardRow; sinEst
 
 /**
  * La pizarra de mantenciones: la versión en el sistema de la pizarra blanca de
- * faena (horas cambio, último cambio, próximo cambio, horómetro actual y horas
+ * faena (horas cambio, último cambio, horómetro actual, próximo cambio y horas
  * pendientes en rojo). Es la vista principal de Mantenciones del admin; el
  * registro de órdenes queda detrás de «Ver registro de mantención» y, para el
  * ADMIN, el tablero del mantenedor detrás de «Vista tablero mantenedor».
@@ -395,8 +395,8 @@ export function PizarraMantenciones({
                     <Table.Column className={cabecera(1)}>{textos.cambio}</Table.Column>
                     <Table.Column className={cabecera(2)}>Fecha último cambio</Table.Column>
                     <Table.Column className={cabecera(3)}>{textos.ultimo}</Table.Column>
-                    <Table.Column className={cabecera(4)}>{textos.proximo}</Table.Column>
-                    <Table.Column className={cabecera(5)}>{textos.actual}</Table.Column>
+                    <Table.Column className={cabecera(4)}>{textos.actual}</Table.Column>
+                    <Table.Column className={cabecera(5)}>{textos.proximo}</Table.Column>
                     <Table.Column className={cabecera(6)}>{textos.pendientes}</Table.Column>
                     <Table.Column className={cabecera(7)}>Fecha estimada de mantención</Table.Column>
                     <Table.Column className={cabecera(8)}>Detalle de mantención</Table.Column>
@@ -431,10 +431,10 @@ export function PizarraMantenciones({
                           )}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(4)}>
-                          <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
+                          <ConIcono icono="reloj">{actual(fila)}</ConIcono>
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap tabular-nums" {...fondoColumna(5)}>
-                          <ConIcono icono="reloj">{actual(fila)}</ConIcono>
+                          <ConIcono icono="reloj">{lectura(fila.dueAt, fila.unit) ?? '—'}</ConIcono>
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap" {...fondoColumna(6)}>
                           <Pendientes fila={fila} />
