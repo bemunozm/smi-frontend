@@ -98,7 +98,7 @@ describe('EditarUltimoCambioModal', () => {
     });
     render(<EditarUltimoCambioModal fila={fila} onClose={() => {}} />);
 
-    expect(screen.getByText(/no tiene una orden asociada: solo se pueden corregir fecha, lectura e hito/)).toBeTruthy();
+    expect(screen.getByText(/solo se pueden corregir fecha, lectura e hito\./)).toBeTruthy();
     expect(disparador('select-tipo').disabled).toBe(true);
     expect(campo('titulo').disabled).toBe(true);
     expect(campo('realizadaPor').disabled).toBe(true);
@@ -177,6 +177,17 @@ describe('EditarUltimoCambioModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /01\/10\/2026/ }));
     const futuro = await screen.findByRole('button', { name: /October 25, 2026/ });
     expect(futuro.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('sin orden y sin hito que elegir, la nota habla solo de fecha y lectura', () => {
+    const fila = filaPizarra({
+      unit: 'km',
+      source: 'LIVIANO',
+      lastChange: ultimoCambio({ ordenId: null, tipo: null, titulo: null, realizadaPor: null, observaciones: null }),
+    });
+    render(<EditarUltimoCambioModal fila={fila} onClose={() => {}} />);
+
+    expect(screen.getByText(/no tiene una orden asociada: solo se pueden corregir fecha y lectura\./)).toBeTruthy();
   });
 
   it('un liviano sin pauta habla en km y del servicio, sin elegir hito', () => {

@@ -144,7 +144,8 @@ export function EditarUltimoCambioModal({ fila, onClose }: { fila: MaintenanceBo
               </p>
               {!conOrden ? (
                 <p className="m-0 text-sm text-muted-foreground">
-                  Este último cambio no tiene una orden asociada: solo se pueden corregir fecha, lectura e hito.
+                  Este último cambio no tiene una orden asociada: solo se pueden corregir{' '}
+                  {muestraHito ? 'fecha, lectura e hito' : 'fecha y lectura'}.
                 </p>
               ) : esOtTaller ? (
                 <p className="m-0 text-sm text-muted-foreground">
