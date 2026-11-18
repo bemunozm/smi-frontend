@@ -33,14 +33,14 @@ const PREP_BY_ROUTE: Readonly<Record<string, readonly PrepKey[]>> = {
   '/equipos': ['equipment', 'branches', 'operators'],
   '/inventario': ['inventory', 'branches', 'movimientos'],
   '/operadores': ['operators'],
-  // `dailyChecklists`: el mantenedor llena el checklist diario (M2) en el taller.
+  // `dailyChecklists`: el mantenedor llena el chequeo diario (M2) en el taller.
   // `vencimientos`: el calendario vive en `/mantenimiento/vencimientos` y
   // `/equipos/vencimientos` (ADMIN + MANTENEDOR — los roles que reciben los avisos).
   '/mantenimiento': ['maintenance', 'equipment', 'bitacora', 'dailyChecklists', 'vencimientos'],
   '/notificaciones': ['notificaciones'],
   // «Mi camioneta» del prevencionista: los livianos y sus tarjetas.
   '/camioneta': ['equipment', 'shiftCards'],
-  // `dailyChecklists`: el supervisor valida los checklists (M3). `reporteDiario`:
+  // `dailyChecklists`: el supervisor valida los chequeos (M3). `reporteDiario`:
   // los reportes de la semana y los catálogos (plantas, empresas externas) que
   // ofrece el formulario.
   '/terreno': [

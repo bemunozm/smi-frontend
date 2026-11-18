@@ -36,13 +36,13 @@ const ESTADO: Record<DailyChecklistSummary['status'], { label: string; tono: 'wa
 };
 
 /**
- * Módulo 3 · R25 — validación del supervisor. El mantenedor hace el checklist
+ * Módulo 3 · R25 — validación del supervisor. El mantenedor hace el chequeo
  * (por lo general en la colación) y el supervisor, al volver, prueba el
  * equipo y mira lo declarado: si está todo bien lo acepta y el equipo queda
  * liberado para abrir turno; si no, lo rechaza con lo que hay que corregir y
  * vuelve al mantenedor.
  *
- * `?id=` abre un checklist directo (el aviso de la notificación lleva acá).
+ * `?id=` abre un chequeo directo (el aviso de la notificación lleva acá).
  */
 export function ValidarChecklistsView() {
   const hoy = toDateOnly(new Date());
@@ -65,7 +65,7 @@ export function ValidarChecklistsView() {
 
   return (
     <VistaUnica>
-      <VistaHead titulo="Checklists por validar" contexto={<ChipContexto>{fechaCorta(new Date())}</ChipContexto>} />
+      <VistaHead titulo="Chequeos por validar" contexto={<ChipContexto>{fechaCorta(new Date())}</ChipContexto>} />
 
       <Card>
         <CardHead
@@ -77,7 +77,7 @@ export function ValidarChecklistsView() {
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : !pendientes?.length ? (
           <p className="text-sm text-muted-foreground">
-            Nada por validar. Cuando el mantenedor envíe un checklist, aparece acá.
+            Nada por validar. Cuando el mantenedor envíe un chequeo, aparece acá.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -147,7 +147,7 @@ function DetalleChecklist({ id, onCerrar }: { id: string | null; onCerrar: () =>
     <ModalTerreno
       abierto={!!id}
       detalle={c ? `${c.mechanicName} · ${fechaCorta(fromDateOnly(c.date))}` : undefined}
-      titulo={c ? `Checklist de ${c.equipment.internalCode}` : 'Checklist'}
+      titulo={c ? `Chequeo de ${c.equipment.internalCode}` : 'Chequeo'}
       onAbiertoChange={(v) => !v && onCerrar()}
     >
       {isLoading || !c ? (
@@ -174,7 +174,7 @@ function ContenidoDetalle({ checklist: c, onListo }: { checklist: DailyChecklist
           ['Enviado', `${fmtTime(c.submittedAt)}${c.submissionCount > 1 ? ` · envío ${c.submissionCount}` : ''}`],
           [
             'Declarado',
-            `${c.maintained} con mantención · ${revisados.length} revisados · ${noRevisados.length} sin revisar`,
+            `${c.maintained} con mantención · ${revisados.length} revisados y operativos · ${noRevisados.length} sin revisar`,
           ],
         ]}
       />
@@ -279,7 +279,7 @@ function Decision({ checklist: c, onListo }: { checklist: DailyChecklistDetail; 
   if (!can('dailyChecklist.review')) {
     return (
       <p className="rounded-2xl bg-[var(--warning-soft)] px-3.5 py-3 text-[13.5px] font-semibold text-[var(--warning-soft-foreground)]">
-        Solo el supervisor valida los checklists: es quien prueba el equipo en terreno.
+        Solo el supervisor valida los chequeos: es quien prueba el equipo en terreno.
       </p>
     );
   }

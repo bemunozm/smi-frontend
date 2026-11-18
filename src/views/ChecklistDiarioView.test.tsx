@@ -68,7 +68,7 @@ describe('ChecklistDiarioView', () => {
     // La primera fila parte abierta. «Revisado» en un crítico no pide foto;
     // «Mantención» sí.
     const estados = screen.getByRole('group', { name: 'Estado de Aire acondicionado' });
-    fireEvent.click(within(estados).getByRole('button', { name: 'Revisado' }));
+    fireEvent.click(within(estados).getByRole('button', { name: 'Revisado y operativo' }));
     expect(screen.getByLabelText(/Temperatura/)).toBeTruthy();
     expect(screen.queryByText(/falta la foto obligatoria/)).toBeNull();
     fireEvent.click(within(estados).getByRole('button', { name: 'Mantención' }));
@@ -138,7 +138,7 @@ describe('ChecklistDiarioView', () => {
 
     fireEvent.click(fila('Espejos'));
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Estado de Espejos' })).getByRole('button', { name: 'Revisado' }),
+      within(screen.getByRole('group', { name: 'Estado de Espejos' })).getByRole('button', { name: 'Revisado y operativo' }),
     );
 
     // Espejos quedó listo; el aire acondicionado sigue sin marcar y se abre.
@@ -149,7 +149,7 @@ describe('ChecklistDiarioView', () => {
     // «Revisado» en el aire pide temperatura: no avanza, queda abierto.
     fireEvent.click(
       within(screen.getByRole('group', { name: 'Estado de Aire acondicionado' })).getByRole('button', {
-        name: 'Revisado',
+        name: 'Revisado y operativo',
       }),
     );
     expect(fila('Aire acondicionado').getAttribute('aria-expanded')).toBe('true');
@@ -163,7 +163,7 @@ describe('ChecklistDiarioView', () => {
         <ChecklistDiarioView />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/Solo un mantenedor puede enviar el checklist/)).toBeTruthy();
+    expect(screen.getByText(/Solo un mantenedor puede enviar el chequeo/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Enviar al supervisor' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

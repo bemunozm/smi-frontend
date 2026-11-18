@@ -23,7 +23,7 @@ export function useChecklistItems() {
   });
 }
 
-/** Los checklists enviados de un día (`YYYY-MM-DD`). */
+/** Los chequeos enviados de un día (`YYYY-MM-DD`). */
 export function useDailyChecklists(date: string) {
   return useQuery({
     queryKey: [...DAILY_CHECKLISTS_KEY, 'list', date],
@@ -32,7 +32,7 @@ export function useDailyChecklists(date: string) {
 }
 
 /**
- * Envía el checklist por la cola: sin señal queda guardado en el equipo con
+ * Envía el chequeo por la cola: sin señal queda guardado en el equipo con
  * sus fotos y sale solo. Las fotos van como archivos de la operación y el
  * replay pone cada key en `entries.i.photoKeys.j`.
  */
@@ -49,16 +49,16 @@ export function useSubmitDailyChecklist() {
         avisarGuardadoEnCola();
         return;
       }
-      toast.success('Checklist enviado al supervisor');
+      toast.success('Chequeo enviado al supervisor');
     },
     onError: (error: unknown) => {
-      toast.danger(mensajeErrorFormulario(error, 'No se pudo enviar el checklist.'));
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo enviar el chequeo.'));
     },
   });
 }
 
 /**
- * Los checklists en ciertos estados, de cualquier día: los pendientes del
+ * Los chequeos en ciertos estados, de cualquier día: los pendientes del
  * supervisor (`['SUBMITTED']`) o los rechazados que el mantenedor tiene que
  * corregir (`['REJECTED']`). Se refresca solo cada minuto: el supervisor no
  * tiene campana en Terreno y la pestaña muestra cuántos esperan.
@@ -72,7 +72,7 @@ export function useChecklistsPorEstado(status: readonly ChecklistStatus[], enabl
   });
 }
 
-/** El detalle de un checklist (estados, descripciones, insumos, fotos, revisiones). */
+/** El detalle de un chequeo (estados, descripciones, insumos, fotos, revisiones). */
 export function useChecklistDetalle(id: string | null) {
   return useQuery({
     queryKey: [...DAILY_CHECKLISTS_KEY, 'detail', id],
@@ -96,8 +96,8 @@ export function useReviewChecklist() {
       }
       toast.success(
         input.decision === 'ACCEPTED'
-          ? 'Checklist aceptado: el equipo quedó liberado'
-          : 'Checklist rechazado: vuelve al mantenedor',
+          ? 'Chequeo aceptado: el equipo quedó liberado'
+          : 'Chequeo rechazado: vuelve al mantenedor',
       );
     },
     onError: (error: unknown) => {
@@ -106,7 +106,7 @@ export function useReviewChecklist() {
   });
 }
 
-/** El mantenedor reenvía un checklist rechazado ya corregido. */
+/** El mantenedor reenvía un chequeo rechazado ya corregido. */
 export function useResubmitDailyChecklist() {
   return useMutation({
     mutationFn: ({
@@ -128,10 +128,10 @@ export function useResubmitDailyChecklist() {
         avisarGuardadoEnCola();
         return;
       }
-      toast.success('Checklist corregido y reenviado al supervisor');
+      toast.success('Chequeo corregido y reenviado al supervisor');
     },
     onError: (error: unknown) => {
-      toast.danger(mensajeErrorFormulario(error, 'No se pudo reenviar el checklist.'));
+      toast.danger(mensajeErrorFormulario(error, 'No se pudo reenviar el chequeo.'));
     },
   });
 }

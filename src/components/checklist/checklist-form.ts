@@ -7,7 +7,7 @@ import {
   type SubmitDailyChecklistInput,
 } from '../../types/daily-checklist';
 
-/** Una foto que ya está en el checklist (al corregir uno rechazado). */
+/** Una foto que ya está en el chequeo (al corregir uno rechazado). */
 export interface FotoGuardada {
   id: string;
   url: string;
@@ -208,7 +208,7 @@ export function armarEnvio(
 }
 
 /**
- * Un checklist rechazado, de vuelta en el formulario para corregirlo: lo que
+ * Un chequeo rechazado, de vuelta en el formulario para corregirlo: lo que
  * se había marcado, con sus fotos (que se conservan si no se quitan).
  */
 export function entradasDesdeDetalle(detalle: DailyChecklistDetail): Record<string, EntradaForm> {

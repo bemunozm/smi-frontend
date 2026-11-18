@@ -73,7 +73,7 @@ describe('ValidarChecklistsView (Módulo 3)', () => {
     renderView();
     fireEvent.click(screen.getByRole('button', { name: /CN-007/ }));
 
-    expect(screen.getByText('Checklist de CN-007')).toBeTruthy();
+    expect(screen.getByText('Chequeo de CN-007')).toBeTruthy();
     expect(screen.getByText('Cambio de pastillas delanteras')).toBeTruthy();
     expect(screen.getByText(/Pastilla \(PAS-01\) × 2/)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Abrir foto 1' }).getAttribute('href')).toBe('https://firmada/a.jpg');

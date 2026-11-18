@@ -20,7 +20,7 @@ const ETIQUETAS: Record<PrepKey, string> = {
   movimientos: 'Movimientos de inventario precargados',
   maintenance: 'Mantenimiento precargado',
   bitacora: 'Bitácora de las órdenes recientes precargada',
-  dailyChecklists: 'Checklists diarios precargados',
+  dailyChecklists: 'Chequeos diarios precargados',
   vencimientos: 'Calendario de vencimientos precargado',
   notificaciones: 'Notificaciones precargadas',
   shiftCards: 'Tarjetas propias precargadas',
@@ -45,7 +45,7 @@ function PrepItemRow({ estado, children }: { estado: Estado; children: ReactNode
 }
 
 /**
- * "Preparar para uso sin señal": el botón y el checklist de lo que quedó guardado
+ * "Preparar para uso sin señal": el botón y el chequeo de lo que quedó guardado
  * en el equipo para el rol. Lo comparten la hoja de Terreno y la de oficina.
  */
 export function PrepChecklist({ role, titulo, descripcion }: { role: Role | null; titulo: string; descripcion: string }) {

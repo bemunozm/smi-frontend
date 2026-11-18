@@ -182,7 +182,7 @@ export function RegistroEquipoView() {
   const tarjetasYaRegistradas = (turnosPasados ?? []).flatMap((t) => t.cards);
   const reporteYaEnviado = (turnosPasados ?? []).some((t) => t.exitReports.length > 0);
 
-  // Módulo 3: con el checklist del día por validar o rechazado, el equipo no
+  // Módulo 3: con el chequeo del día por validar o rechazado, el equipo no
   // se libera. Se muestra apagado y con el motivo (el backend igual lo frena).
   const { data: checklistsDelDia } = useDailyChecklists(toDateOnly(ctx.fecha));
   const checklistSinAceptar = new Map(
@@ -190,7 +190,7 @@ export function RegistroEquipoView() {
       .filter((c) => c.status !== 'ACCEPTED')
       .map((c) => [
         c.equipment.id,
-        c.status === 'REJECTED' ? 'Checklist rechazado: falta que lo corrijan' : 'Checklist por validar (Checklists)',
+        c.status === 'REJECTED' ? 'Chequeo rechazado: falta que lo corrijan' : 'Chequeo por validar (Chequeos)',
       ]),
   );
 

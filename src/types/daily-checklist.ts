@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Checklist diario del mantenedor (Módulo 2 · R23 + R24): por equipo y por
+ * Chequeo diario del mantenedor (Módulo 2 · R23 + R24): por equipo y por
  * día, cada ítem del catálogo con uno de tres estados. Ver
  * `smi-backend/src/mantenimiento/daily-checklists/`.
  */
@@ -11,7 +11,7 @@ export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 
 export const entryStatusLabel: Record<EntryStatus, string> = {
   MAINTAINED: 'Se hizo mantención',
-  CHECKED: 'Se revisó',
+  CHECKED: 'Revisado y operativo',
   NOT_CHECKED: 'No se revisó',
 };
 
@@ -60,7 +60,7 @@ export const DailyChecklistSummarySchema = z.object({
   declared: z.number(),
   /** Con «Se hizo mantención». */
   maintained: z.number(),
-  /** Fotos adjuntas en todo el checklist. */
+  /** Fotos adjuntas en todo el chequeo. */
   photos: z.number(),
   /** La última validación del supervisor, o `null` si nunca se revisó. */
   lastReview: ChecklistReviewSchema.nullable(),
@@ -118,13 +118,13 @@ export type SubmitDailyChecklistInput = {
   equipmentId: string;
   /** `YYYY-MM-DD`. */
   date: string;
-  /** Horómetro u odómetro al hacer el checklist. No cambia la lectura del equipo. */
+  /** Horómetro u odómetro al hacer el chequeo. No cambia la lectura del equipo. */
   counter: number;
   branchId?: string;
   entries: DailyChecklistEntryInput[];
 };
 
-/** Corregir un checklist rechazado y reenviarlo (`PUT /api/daily-checklists/:id`). */
+/** Corregir un chequeo rechazado y reenviarlo (`PUT /api/daily-checklists/:id`). */
 export type ResubmitDailyChecklistInput = {
   /** El envío que se corrige (`submissionCount` del rechazado). */
   submission: number;

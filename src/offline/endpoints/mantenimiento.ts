@@ -66,7 +66,7 @@ export interface MantenimientoEndpointMap {
     result: OrdenTrabajo;
   };
   /** Marcar/desmarcar una tarea (`PATCH`, last-write-wins: sin precondición).
-   * El checklist preventivo agrega notas y foto (la cola la sube y la inyecta
+   * El chequeo preventivo agrega notas y foto (la cola la sube y la inyecta
    * como `fotoKey`). */
   'orden.toggleTarea': {
     params: { ordenId: string; tareaId: string };
@@ -102,7 +102,7 @@ export interface MantenimientoEndpointMap {
     body: SetMaintenanceRecordInput;
     result: MaintenanceCycleView;
   };
-  /** Checklist diario de un equipo, enviado entero al supervisor. Las fotos
+  /** Chequeo diario de un equipo, enviado entero al supervisor. Las fotos
    * de cada ítem viajan como archivos y el replay las pone en
    * `entries.i.photoKeys.j`. */
   'dailyChecklist.submit': {
@@ -110,7 +110,7 @@ export interface MantenimientoEndpointMap {
     body: WithId<SubmitDailyChecklistInput>;
     result: DailyChecklistDetail;
   };
-  /** Corregir un checklist rechazado y reenviarlo. Las fotos nuevas viajan
+  /** Corregir un chequeo rechazado y reenviarlo. Las fotos nuevas viajan
    * como archivos (`entries.i.photoKeys.j`); las conservadas, por su id. */
   'dailyChecklist.resubmit': {
     params: { id: string };
@@ -259,11 +259,11 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
   'dailyChecklist.submit': {
     method: 'POST',
     path: () => '/api/daily-checklists',
-    failMessage: 'No se pudo enviar el checklist.',
+    failMessage: 'No se pudo enviar el chequeo.',
     parse: parseWith(DailyChecklistDetailSchema),
     // 'inventory': los insumos de las mantenciones salen del stock de faena.
     invalidate: ['dailyChecklists', 'inventory'],
-    label: (_params, body) => etiqueta('Checklist diario', cachedName('equipment', body.equipmentId)),
+    label: (_params, body) => etiqueta('Chequeo diario', cachedName('equipment', body.equipmentId)),
     notFoundIsDone: false,
     carriesFiles: true,
     creates: true,
@@ -273,11 +273,11 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
   'dailyChecklist.resubmit': {
     method: 'PUT',
     path: (params) => `/api/daily-checklists/${param(params, 'id')}`,
-    failMessage: 'No se pudo reenviar el checklist.',
+    failMessage: 'No se pudo reenviar el chequeo.',
     parse: parseWith(DailyChecklistDetailSchema),
     // 'inventory': devuelve a bodega los insumos anteriores y descuenta los nuevos.
     invalidate: ['dailyChecklists', 'inventory'],
-    label: () => 'Checklist corregido',
+    label: () => 'Chequeo corregido',
     notFoundIsDone: false,
     carriesFiles: true,
     entity: (params) => entityOf(dailyChecklistEntity, params.id),
@@ -298,11 +298,11 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
   'dailyChecklist.review': {
     method: 'POST',
     path: (params) => `/api/daily-checklists/${param(params, 'id')}/review`,
-    failMessage: 'No se pudo guardar la validación del checklist.',
+    failMessage: 'No se pudo guardar la validación del chequeo.',
     parse: parseWith(DailyChecklistDetailSchema),
     invalidate: ['dailyChecklists'],
     label: (_params, body) =>
-      body.decision === 'ACCEPTED' ? 'Checklist aceptado' : 'Checklist rechazado',
+      body.decision === 'ACCEPTED' ? 'Chequeo aceptado' : 'Chequeo rechazado',
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(dailyChecklistEntity, params.id),
