@@ -289,7 +289,10 @@ export function useShiftProjection({
   const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
   const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
   // Las camionetas que abrió este supervisor van primero (y se destacan en la vista).
-  const livianosAbiertos = primeroLasMias(tarjetas.filter((t) => t.liviano && t.estado === 'curso'), userId);
+  const livianosAbiertos = primeroLasMias(
+    tarjetas.filter((t) => t.liviano && t.estado === 'curso'),
+    userId,
+  );
   const livianosCerrados = tarjetas.filter((t) => t.liviano && t.estado === 'cerrada');
   // Solo pesados: las camionetas no «salen» por turno (quedan abiertas hasta
   // la carga de combustible) y no van al reporte de salida (13/11/2026).
