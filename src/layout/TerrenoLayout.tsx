@@ -23,8 +23,8 @@ const tabs: ShellTab[] = [
   { to: '/terreno/reporte-diario', label: 'Informe de producción diaria', corto: 'Producción', icon: FileText },
   { to: '/terreno/trabajos-extra', label: 'Report', corto: 'Report', icon: Briefcase },
   { to: '/terreno/hallazgos', label: 'Hallazgos', corto: 'Hallazgos', icon: TriangleAlert },
-  // Módulo 3: el supervisor valida el checklist del mantenedor y libera el equipo.
-  { to: '/terreno/checklists', label: 'Checklists', corto: 'Checklists', icon: ListChecks },
+  // Módulo 3: el supervisor valida el chequeo del mantenedor y libera el equipo.
+  { to: '/terreno/checklists', label: 'Chequeos', corto: 'Chequeos', icon: ListChecks },
 ];
 
 /**

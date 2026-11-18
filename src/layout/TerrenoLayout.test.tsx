@@ -30,7 +30,7 @@ const { logoutMock, countPendingMock, toastDangerMock } = vi.hoisted(() => ({
   toastDangerMock: vi.fn(),
 }));
 vi.mock('../lib/logout', () => ({ logout: logoutMock }));
-// La pestaña Checklists muestra cuántos esperan la validación del supervisor.
+// La pestaña Chequeos muestra cuántos esperan la validación del supervisor.
 let porValidar: unknown[] = [];
 vi.mock('../hooks/useDailyChecklists', () => ({ useChecklistsPorEstado: () => ({ data: porValidar }) }));
 // `offline/outbox.ts` importa Dexie: acá solo importa el número de registros
@@ -84,8 +84,8 @@ function renderLayout(size: 'phone' | 'desktop') {
  * un único nombre accesible — el que corresponde a la barra que está en uso.
  */
 const SECCIONES = {
-  phone: ['Equipos', 'Producción', 'Report', 'Hallazgos', 'Checklists'],
-  desktop: ['Informe diario equipos', 'Informe de producción diaria', 'Report', 'Hallazgos', 'Checklists'],
+  phone: ['Equipos', 'Producción', 'Report', 'Hallazgos', 'Chequeos'],
+  desktop: ['Informe diario equipos', 'Informe de producción diaria', 'Report', 'Hallazgos', 'Chequeos'],
 } as const;
 
 afterEach(() => {
@@ -105,7 +105,7 @@ describe('TerrenoLayout', () => {
     }
   });
 
-  it('la pestaña Checklists dice cuántos esperan la validación del supervisor', () => {
+  it('la pestaña Chequeos dice cuántos esperan la validación del supervisor', () => {
     porValidar = [{ id: 'a' }, { id: 'b' }];
     renderLayout('phone');
 
@@ -200,7 +200,7 @@ describe('TerrenoLayout', () => {
 
   /**
    * El home del SUPERVISOR es este shell, no el escritorio con Topbar: sin la
-   * campana acá, sus notificaciones (checklist por validar, stock bajo) no
+   * campana acá, sus notificaciones (chequeo por validar, stock bajo) no
    * tenían ninguna superficie in-app.
    */
   it.each(['phone', 'desktop'] as const)('el header muestra la campana de notificaciones en %s', (size) => {

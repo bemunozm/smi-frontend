@@ -78,7 +78,7 @@ function lineaEstadoCorreoMock(emailStatus: string): string {
   }
 }
 
-// Checklists del día (Módulo 3): un equipo con el suyo por validar sale apagado.
+// Chequeos del día (Módulo 3): un equipo con el suyo por validar sale apagado.
 let checklistsDelDia: unknown[] = [];
 vi.mock('../hooks/useDailyChecklists', () => ({ useDailyChecklists: () => ({ data: checklistsDelDia }) }));
 
@@ -329,7 +329,7 @@ describe('RegistroEquipoView', () => {
     expect(lista.getByRole('option', { name: /PE-009/ })).toBeTruthy();
   });
 
-  it('un equipo con el checklist del día por validar sale apagado y dice por qué (Módulo 3)', () => {
+  it('un equipo con el chequeo del día por validar sale apagado y dice por qué (Módulo 3)', () => {
     checklistsDelDia = [{ equipment: { id: 'e1' }, status: 'SUBMITTED' }];
     renderView();
 
@@ -338,7 +338,7 @@ describe('RegistroEquipoView', () => {
     const lista = within(screen.getByRole('listbox'));
     const ex = lista.getByRole('option', { name: /EX-005/ });
     expect(ex.getAttribute('aria-disabled')).toBe('true');
-    expect(ex.textContent).toMatch(/Checklist por validar/);
+    expect(ex.textContent).toMatch(/Chequeo por validar/);
     expect(lista.getByRole('option', { name: /PE-009/ }).getAttribute('aria-disabled')).not.toBe('true');
   });
 
@@ -762,7 +762,7 @@ describe('RegistroEquipoView', () => {
       expect(inputs.some((input) => !input.hasAttribute('capture'))).toBe(true);
     });
 
-    it('en la carga rápida, un equipo con el checklist sin aceptar sale apagado y dice por qué', () => {
+    it('en la carga rápida, un equipo con el chequeo sin aceptar sale apagado y dice por qué', () => {
       checklistsDelDia = [{ equipment: { id: 'e1' }, status: 'REJECTED' }];
       renderView('phone', { turnoSeleccion: 'pasado', ctx: CTX_PASADO, esDiaPasado: true });
 
@@ -771,7 +771,7 @@ describe('RegistroEquipoView', () => {
       const lista = within(screen.getByRole('listbox'));
       const ex = lista.getByRole('option', { name: /EX-005/ });
       expect(ex.getAttribute('aria-disabled')).toBe('true');
-      expect(ex.textContent).toMatch(/Checklist rechazado/);
+      expect(ex.textContent).toMatch(/Chequeo rechazado/);
       expect(lista.getByRole('option', { name: /PE-009/ }).getAttribute('aria-disabled')).not.toBe('true');
     });
 

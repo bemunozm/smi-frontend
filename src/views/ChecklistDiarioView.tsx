@@ -68,7 +68,7 @@ const COLOR_ESTADO: Record<EntryStatus, string> = {
  */
 const ESTADOS: { valor: EntryStatus; label: string; icon: LucideIcon }[] = [
   { valor: 'MAINTAINED', label: 'Mantención', icon: Wrench },
-  { valor: 'CHECKED', label: 'Revisado', icon: Check },
+  { valor: 'CHECKED', label: 'Revisado y operativo', icon: Check },
   { valor: 'NOT_CHECKED', label: 'No revisado', icon: Minus },
 ];
 
@@ -76,7 +76,7 @@ const ESTADOS: { valor: EntryStatus; label: string; icon: LucideIcon }[] = [
 const ANIMACION_MS = 200;
 
 /**
- * Checklist diario del mantenedor (Módulo 2 · R23 + R24). Elige el equipo,
+ * Chequeo diario del mantenedor (Módulo 2 · R23 + R24). Elige el equipo,
  * anota el horómetro u odómetro del día y marca cada ítem de la planilla:
  * «se hizo mantención» (con qué se hizo y los insumos, que salen del stock de
  * faena), «se revisó» o «no se revisó». Los críticos con mantención llevan
@@ -102,7 +102,7 @@ export function ChecklistDiarioView() {
   const [counter, setCounter] = useState('');
   const [entradas, setEntradas] = useState<Record<string, EntradaForm>>({});
 
-  // Corrección de un checklist rechazado: `?corregir=<id>` lo trae al formulario.
+  // Corrección de un chequeo rechazado: `?corregir=<id>` lo trae al formulario.
   const [params, setParams] = useSearchParams();
   const corrigiendo = params.get('corregir');
   const { data: aCorregir } = useChecklistDetalle(corrigiendo);
@@ -136,10 +136,10 @@ export function ChecklistDiarioView() {
   const equipo = equipos?.find((e) => e.id === equipmentId);
   const enviadosPorEquipo = useMemo(() => new Set((enviados ?? []).map((c) => c.equipment.id)), [enviados]);
 
-  // El horómetro se anota a mano y es obligatorio. No se precarga: el checklist
+  // El horómetro se anota a mano y es obligatorio. No se precarga: el chequeo
   // se hace a veces a mitad de turno (en la colación) y una lectura vieja
   // precargada se enviaría sin mirar la máquina. Tampoco actualiza la lectura
-  // del equipo; solo queda en el checklist.
+  // del equipo; solo queda en el chequeo.
   const ultimaLectura = equipo ? (equipo.controlUnit === 'KM' ? equipo.currentMileage : equipo.currentHourmeter) : null;
   const anotado = numero(counter);
   // Al corregir, el horómetro que ya se había enviado vale aunque la lectura
@@ -156,7 +156,7 @@ export function ChecklistDiarioView() {
           valor: e.id,
           titulo: e.internalCode,
           detalle: e.type,
-          ...(enviadosPorEquipo.has(e.id) ? { motivo: 'Checklist de hoy ya enviado' } : {}),
+          ...(enviadosPorEquipo.has(e.id) ? { motivo: 'Chequeo de hoy ya enviado' } : {}),
         }),
       ),
     [equipos, enviadosPorEquipo],
@@ -249,14 +249,14 @@ export function ChecklistDiarioView() {
 
   return (
     <VistaUnica>
-      <VistaHead titulo="Checklist diario" contexto={<ChipContexto>{fechaCorta(new Date())}</ChipContexto>} />
+      <VistaHead titulo="Chequeo diario" contexto={<ChipContexto>{fechaCorta(new Date())}</ChipContexto>} />
 
       {!corrigiendo && <Rechazados checklists={rechazados ?? []} onCorregir={corregir} />}
 
       {corrigiendo && (
         <div className="flex flex-col gap-2 rounded-3xl border-[1.5px] border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3.5">
           <p className="text-[15px] font-bold text-[var(--danger-soft-foreground)]">
-            Corrigiendo el checklist rechazado
+            Corrigiendo el chequeo rechazado
             {aCorregir ? ` de ${aCorregir.equipment.internalCode} del ${fechaCorta(fromDateOnly(aCorregir.date))}` : ''}
           </p>
           {aCorregir?.lastReview?.comment && (
@@ -303,7 +303,7 @@ export function ChecklistDiarioView() {
             }
             hint={
               equipo
-                ? `Lo que marca la máquina ahora. Queda en el checklist y no cambia la lectura del equipo${
+                ? `Lo que marca la máquina ahora. Queda en el chequeo y no cambia la lectura del equipo${
                     ultimaLectura != null ? ` (partió con ${fmtNum(ultimaLectura)} ${unidad})` : ''
                   }.`
                 : undefined
@@ -398,11 +398,11 @@ export function ChecklistDiarioView() {
               </>
             )}
           </div>
-          {/* Sin esto el botón quedaba gris sin decir por qué: el checklist lo
+          {/* Sin esto el botón quedaba gris sin decir por qué: el chequeo lo
               envía el mantenedor, y el administrador entra a Mantención solo a mirar. */}
           {!puedeEnviar && (
             <p className="rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-[13px] font-semibold text-[var(--warning-soft-foreground)]">
-              Solo un mantenedor puede enviar el checklist. Entra con una cuenta de mantenedor para enviarlo.
+              Solo un mantenedor puede enviar el chequeo. Entra con una cuenta de mantenedor para enviarlo.
             </p>
           )}
           {motivos.length > 0 && (
@@ -770,7 +770,7 @@ const ESTADO_ENVIADO: Record<
   REJECTED: { label: 'Rechazado', tono: 'danger' },
 };
 
-/** Los checklists que el supervisor rechazó: hay que corregirlos y reenviarlos. */
+/** Los chequeos que el supervisor rechazó: hay que corregirlos y reenviarlos. */
 function Rechazados({
   checklists,
   onCorregir,
@@ -812,7 +812,7 @@ function Rechazados({
 function Enviados({ checklists }: { checklists: DailyChecklistSummary[] }) {
   return (
     <Card>
-      <CardHead titulo="Enviados hoy" bajada="Los checklists del día y su estado con el supervisor." />
+      <CardHead titulo="Enviados hoy" bajada="Los chequeos del día y su estado con el supervisor." />
       {checklists.length === 0 ? (
         <p className="text-sm text-muted-foreground">Todavía no se envía ninguno.</p>
       ) : (

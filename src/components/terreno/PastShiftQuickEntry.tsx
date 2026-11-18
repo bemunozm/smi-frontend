@@ -40,7 +40,7 @@ export function PastShiftQuickEntry({
   ctx: ContextoTurno;
   disponibles: Equipment[];
   operadores: Operator[];
-  /** equipoId → motivo por el que su checklist del día no está aceptado. */
+  /** equipoId → motivo por el que su chequeo del día no está aceptado. */
   checklistSinAceptar: ReadonlyMap<string, string>;
   /** El día elegido es estrictamente anterior a hoy: ahí el backend deja
    * registrar equipos no operativos. */

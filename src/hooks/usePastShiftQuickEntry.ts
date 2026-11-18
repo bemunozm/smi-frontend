@@ -49,7 +49,7 @@ export interface UsePastShiftQuickEntryParams {
   /** Pesados elegibles (la proyección ya excluye ocupados y livianos). */
   disponibles: Equipment[];
   userId: string | undefined;
-  /** equipoId → motivo por el que su checklist del día no está aceptado. El
+  /** equipoId → motivo por el que su chequeo del día no está aceptado. El
    * backend rechaza abrir un equipo así, y la fila fallaría recién al
    * reproducir el outbox: se frena antes de guardar. */
   checklistSinAceptar?: ReadonlyMap<string, string>;

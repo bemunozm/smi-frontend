@@ -15,9 +15,9 @@ const RECHAZADOS = ['REJECTED'] as const;
  */
 const TABS: ShellTab[] = [
   { to: '/mantenimiento/ordenes', label: 'Órdenes de trabajo', corto: 'Órdenes', icon: ClipboardList },
-  // El checklist diario de cada equipo (Módulo 2): lo llena el mantenedor y
+  // El chequeo diario de cada equipo (Módulo 2): lo llena el mantenedor y
   // lo valida el supervisor.
-  { to: '/mantenimiento/checklist', label: 'Checklist diario', corto: 'Checklist', icon: ClipboardCheck },
+  { to: '/mantenimiento/checklist', label: 'Chequeo diario', corto: 'Chequeo', icon: ClipboardCheck },
   { to: '/mantenimiento/stock', label: 'Stock del taller', corto: 'Stock', icon: Package },
   // Consulta de la flota en solo lectura (mismo ícono que usa el BottomNav
   // del escritorio para Equipos) — ver las rutas `/mantenimiento/equipos/*`.

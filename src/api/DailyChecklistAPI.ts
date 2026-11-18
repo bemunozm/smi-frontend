@@ -11,7 +11,7 @@ import {
 } from '../types/daily-checklist';
 
 /**
- * Lecturas del checklist diario. El envío va por la cola de escrituras:
+ * Lecturas del chequeo diario. El envío va por la cola de escrituras:
  * `dailyChecklist.submit` en `offline/endpoints/`.
  */
 export const DailyChecklistAPI = {
@@ -20,7 +20,7 @@ export const DailyChecklistAPI = {
       const response = await axiosInstance.get('/api/daily-checklists/items');
       return ChecklistItemListResponseSchema.parse(response.data).data;
     } catch (error: unknown) {
-      throw toDomainError(error, 'No se pudo cargar la lista del checklist.');
+      throw toDomainError(error, 'No se pudo cargar la lista del chequeo.');
     }
   },
 
@@ -40,7 +40,7 @@ export const DailyChecklistAPI = {
       });
       return DailyChecklistListResponseSchema.parse(response.data).data;
     } catch (error: unknown) {
-      throw toDomainError(error, 'No se pudieron cargar los checklists enviados.');
+      throw toDomainError(error, 'No se pudieron cargar los chequeos enviados.');
     }
   },
 
@@ -49,7 +49,7 @@ export const DailyChecklistAPI = {
       const response = await axiosInstance.get(`/api/daily-checklists/${id}`);
       return DailyChecklistDetailResponseSchema.parse(response.data).data;
     } catch (error: unknown) {
-      throw toDomainError(error, 'No se pudo cargar el checklist.');
+      throw toDomainError(error, 'No se pudo cargar el chequeo.');
     }
   },
 };
