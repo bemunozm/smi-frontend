@@ -3,7 +3,7 @@ import { toast } from '@heroui/react';
 
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import { validarLitros } from '../lib/litros';
-import { errorFinalBajoCarga, type TarjetaTurno } from './shift-register-helpers';
+import { cargasVigentes, errorFinalBajoCarga, type TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
@@ -109,7 +109,8 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const fotoRequerida = (validacionLitros.valor ?? 0) > 0;
   // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026), salvo en
   // un liviano que ya cargó sin cerrar: su combustible ya quedó registrado.
-  const cargasPrevias = cerrando?.liviano ? (cerrando.cargas?.length ?? 0) : 0;
+  // Una carga rechazada por el servidor no cuenta: no existe allá.
+  const cargasPrevias = cerrando?.liviano ? cargasVigentes(cerrando).length : 0;
   const motivoRequerido = !fotoRequerida && cargasPrevias === 0;
   const faltaMotivo = motivoRequerido && cierre.motivoSinCarga.trim() === '';
 

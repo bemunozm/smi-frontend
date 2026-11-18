@@ -104,12 +104,21 @@ export interface CargaTarjeta {
 }
 
 /**
- * Litros de la tarjeta: las cargas intermedias más la del cierre, sin contar
- * dos veces (la del cierre no viaja en `cargas`). Sin cargas intermedias es la
- * del cierre tal cual (`undefined` en una abierta).
+ * Las cargas sin cerrar que cuentan: todas menos las que el servidor rechazó
+ * (`requiereAtencion`), que no existen allá hasta que se corrijan. Las
+ * pendientes de sincronizar sí cuentan.
+ */
+export function cargasVigentes(t: Pick<TarjetaTurno, 'cargas'>): CargaTarjeta[] {
+  return (t.cargas ?? []).filter((c) => !c.requiereAtencion);
+}
+
+/**
+ * Litros de la tarjeta: las cargas intermedias vigentes más la del cierre, sin
+ * contar dos veces (la del cierre no viaja en `cargas`). Sin cargas intermedias
+ * es la del cierre tal cual (`undefined` en una abierta).
  */
 export function litrosTotales(t: Pick<TarjetaTurno, 'litros' | 'cargas'>): number | undefined {
-  const cargas = t.cargas ?? [];
+  const cargas = cargasVigentes(t);
   if (cargas.length === 0) return t.litros;
   return cargas.reduce((total, c) => total + c.litros, 0) + (t.litros ?? 0);
 }
@@ -121,7 +130,7 @@ export function litrosTotales(t: Pick<TarjetaTurno, 'litros' | 'cargas'>): numbe
  * mayor (el servidor responde `INITIAL_ABOVE_FUEL_LOAD` / `READING_BELOW_FUEL_LOAD`).
  */
 export function kmDeCargas(t: Pick<TarjetaTurno, 'cargas'>): { min: number; max: number } | null {
-  const kms = (t.cargas ?? []).map((c) => c.km);
+  const kms = cargasVigentes(t).map((c) => c.km);
   return kms.length ? { min: Math.min(...kms), max: Math.max(...kms) } : null;
 }
 
@@ -144,9 +153,14 @@ export function errorInicialSobreCarga(t: Pick<TarjetaTurno, 'cargas'>, inicial:
   return `No puede ser mayor que el km de una carga registrada en la tarjeta (${kmTexto(rango.min)}).`;
 }
 
-/** `true` si alguna carga sin cerrar de la tarjeta sigue en el equipo. */
+/** `true` si alguna carga sin cerrar de la tarjeta sigue en el equipo (esperando señal). */
 export function tieneCargasSinSincronizar(t: Pick<TarjetaTurno, 'cargas'>): boolean {
-  return t.cargas?.some((c) => c.sinSincronizar) ?? false;
+  return t.cargas?.some((c) => c.sinSincronizar && !c.requiereAtencion) ?? false;
+}
+
+/** `true` si el servidor rechazó alguna carga sin cerrar de la tarjeta. */
+export function tieneCargasRechazadas(t: Pick<TarjetaTurno, 'cargas'>): boolean {
+  return t.cargas?.some((c) => c.requiereAtencion) ?? false;
 }
 
 /** Un liviano sin conductor registrado: lo maneja el supervisor. */

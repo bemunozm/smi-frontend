@@ -150,6 +150,13 @@ describe('helpers de cargas sin cerrar', () => {
     expect(errorInicialSobreCarga({ cargas: CARGAS }, 45_300)).toBeNull();
   });
 
+  it('las cargas rechazadas no suman litros ni fijan km', () => {
+    const conRechazada = [...CARGAS, { id: 'k3', litros: 500, km: 99_000, fechaIso: 'x', requiereAtencion: true }];
+    expect(litrosTotales({ litros: undefined, cargas: conRechazada })).toBe(110.5);
+    expect(kmDeCargas({ cargas: conRechazada })).toEqual({ min: 45_300, max: 45_600 });
+    expect(kmDeCargas({ cargas: [{ ...CARGAS[0]!, requiereAtencion: true }] })).toBeNull();
+  });
+
   it('mapCardToTarjeta trae las cargas del servidor; sin cargas no agrega el campo', () => {
     const t = mapCardToTarjeta(cardServidor(), CTX);
     expect(t.cargas).toEqual([
@@ -237,6 +244,17 @@ describe('useCierreForm — liviano que ya cargó sin cerrar', () => {
     expect(result.current.faltaMotivo).toBe(true);
   });
 
+  it('una carga rechazada por el servidor no cuenta: con solo esa, sigue pidiendo la carga o el motivo', () => {
+    const { result } = cierre({ ...LIVIANO, cargas: [{ ...CARGAS[0]!, requiereAtencion: true }] });
+    act(() => result.current.setCierre((c) => ({ ...c, final: '45100' })));
+
+    expect(result.current.cargasPrevias).toBe(0);
+    expect(result.current.motivoRequerido).toBe(true);
+    expect(result.current.faltaMotivo).toBe(true);
+    // Tampoco fija un km mínimo para el final.
+    expect(result.current.finalBajoCarga).toBeNull();
+  });
+
   it('un pesado no cambia: sin litros pide motivo aunque traiga cargas', () => {
     const { result } = cierre({ ...PESADO, cargas: CARGAS });
     expect(result.current.cargasPrevias).toBe(0);
@@ -263,15 +281,37 @@ describe('useCargaLiviano', () => {
   const render = (t: TarjetaTurno = LIVIANO) =>
     renderHook(() => useCargaLiviano({ tarjetas: [t, PESADO], equipos: EQUIPOS, ctx: CTX, userId: 'u1' }));
 
-  it('al abrir sugiere el último km conocido: la última carga o el de la camioneta', () => {
+  it('al abrir NO prellena el km: el último conocido (última carga o camioneta) queda de referencia', () => {
     const conCargas = render({ ...LIVIANO, cargas: CARGAS });
     act(() => conCargas.result.current.abrirCarga('card-1'));
-    expect(conCargas.result.current.form.km).toBe('45600');
-    expect(conCargas.result.current.kmSugerido).toBe(45_600);
+    expect(conCargas.result.current.form.km).toBe('');
+    expect(conCargas.result.current.kmUltimo).toBe(45_600);
 
     const sinCargas = render();
     act(() => sinCargas.result.current.abrirCarga('card-1'));
-    expect(sinCargas.result.current.form.km).toBe('45150');
+    expect(sinCargas.result.current.form.km).toBe('');
+    expect(sinCargas.result.current.kmUltimo).toBe(45_150);
+  });
+
+  it('una carga rechazada no cuenta como último km conocido', () => {
+    const rechazada = { ...CARGAS[1]!, km: 99_000, requiereAtencion: true };
+    const { result } = render({ ...LIVIANO, cargas: [CARGAS[0]!, rechazada] });
+    act(() => result.current.abrirCarga('card-1'));
+    expect(result.current.kmUltimo).toBe(45_300);
+  });
+
+  it('un salto grande sobre el último km se avisa sin bloquear', () => {
+    photo.file = new File([new Uint8Array([1])], 'surtidor.jpg', { type: 'image/jpeg' });
+    const { result } = render({ ...LIVIANO, cargas: CARGAS });
+    act(() => result.current.abrirCarga('card-1'));
+    act(() => result.current.setForm((f) => ({ ...f, litros: '40', km: '456000' })));
+
+    expect(result.current.kmAviso).toBe('Es mucho más que el último registrado (45.600 km). Revisa que esté bien.');
+    expect(result.current.kmError).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+
+    act(() => result.current.setForm((f) => ({ ...f, km: '46500' })));
+    expect(result.current.kmAviso).toBeNull();
   });
 
   it('no abre la carga de un pesado', () => {
@@ -306,7 +346,9 @@ describe('useCargaLiviano', () => {
     submitWriteMock.mockResolvedValueOnce({ status: 'queued', opId: 'op-1' });
     const { result } = render();
     act(() => result.current.abrirCarga('card-1'));
-    act(() => result.current.setForm((f) => ({ ...f, litros: '48,493', km: '45320', adBlue: true, adBlueLitros: '5' })));
+    act(() =>
+      result.current.setForm((f) => ({ ...f, litros: '48,493', km: '45320', adBlue: true, adBlueLitros: '5' })),
+    );
 
     expect(result.current.puedeGuardar).toBe(true);
     await act(() => result.current.guardar());

@@ -1,12 +1,14 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Dialog, Heading, OverlayArrow, Popover } from 'react-aria-components';
 import { CircleHelp, Info, X } from 'lucide-react';
 
 /**
  * «?» del encabezado de «Abrir camioneta» con su recuadro de información: cómo
  * se registran las camionetas. Lo controla la vista (se abre solo al entrar a
- * Livianos); se cierra con la X o tocando fuera, sin fondo oscuro. El globo
- * nace del ícono: alineado a su derecha y con una flecha que lo apunta.
+ * Livianos). Es NO modal: no pone una capa encima ni bloquea el scroll, así el
+ * primer toque fuera llega a lo que se tocó y además lo cierra; también se
+ * cierra con la X y con Escape. El globo nace del ícono: alineado a su derecha
+ * y con una flecha que lo apunta.
  */
 export function AyudaCamionetas({
   abierto,
@@ -16,13 +18,35 @@ export function AyudaCamionetas({
   onAbiertoChange: (abierto: boolean) => void;
 }) {
   const ancla = useRef<HTMLButtonElement>(null);
+  const globo = useRef<HTMLElement>(null);
+
+  // Sin capa modal, cerrar al tocar fuera y con Escape corre por cuenta propia.
+  useEffect(() => {
+    if (!abierto) return;
+    const alTocar = (e: PointerEvent) => {
+      const objetivo = e.target as Node | null;
+      if (objetivo && (globo.current?.contains(objetivo) || ancla.current?.contains(objetivo))) return;
+      onAbiertoChange(false);
+    };
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onAbiertoChange(false);
+    };
+    document.addEventListener('pointerdown', alTocar);
+    document.addEventListener('keydown', alTeclear);
+    return () => {
+      document.removeEventListener('pointerdown', alTocar);
+      document.removeEventListener('keydown', alTeclear);
+    };
+  }, [abierto, onAbiertoChange]);
+
   return (
     <>
       <button
         ref={ancla}
         type="button"
-        onClick={() => onAbiertoChange(true)}
+        onClick={() => onAbiertoChange(!abierto)}
         aria-label="Cómo funcionan las camionetas"
+        aria-haspopup="dialog"
         aria-expanded={abierto}
         title="Cómo funcionan las camionetas"
         className="-my-2.5 -mr-2 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -30,6 +54,8 @@ export function AyudaCamionetas({
         <CircleHelp className="h-[22px] w-[22px]" aria-hidden />
       </button>
       <Popover
+        ref={globo}
+        isNonModal
         triggerRef={ancla}
         isOpen={abierto}
         onOpenChange={onAbiertoChange}
@@ -66,17 +92,17 @@ export function AyudaCamionetas({
           </div>
           <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-[13px] leading-snug text-foreground">
             <li>
-              Si la camioneta que vas a usar <b>ya tiene una tarjeta abierta</b> (aparece en «Camionetas abiertas»), no
-              abras otra: sigue sirviendo.
+              Si la camioneta que vas a usar <b>ya tiene una tarjeta abierta</b> (aparece en «Camionetas
+              abiertas»), no abras otra: sigue sirviendo.
             </li>
             <li>
-              Cuando le eches combustible, regístralo con <b>«Cargar combustible»</b> (foto del surtidor, litros y km).
-              La tarjeta sigue abierta y puedes cargar las veces que haga falta.
+              Cuando le eches combustible, regístralo con <b>«Cargar combustible»</b> (foto del surtidor, litros y
+              km). La tarjeta sigue abierta y puedes cargar las veces que haga falta.
             </li>
             <li>
-              Ciérrala con <b>«Cerrar tarjeta»</b> cuando la dejes de usar, con el km final. Si ya registraste cargas, la
-              carga al cerrar es opcional; si no hubo ninguna, se pide la carga o el motivo (por ejemplo, un corte de
-              luz).
+              Ciérrala con <b>«Cerrar tarjeta»</b> cuando la dejes de usar, con el km final. Si ya registraste
+              cargas, la carga al cerrar es opcional; si no hubo ninguna, se pide la carga o el motivo (por ejemplo,
+              un corte de luz).
             </li>
             <li>Cualquier supervisor puede cargarla o cerrarla, aunque la haya abierto otro.</li>
             <li>Las camionetas no van en el reporte de salida a la administración.</li>

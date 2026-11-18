@@ -25,6 +25,7 @@ import {
   litrosTotales,
   registradaDespues,
   rotuloTurno,
+  tieneCargasRechazadas,
   tieneCargasSinSincronizar,
 } from '../hooks/shift-register-helpers';
 import { RecordPhoto } from '../components/RecordPhoto';
@@ -189,12 +190,13 @@ export function RegistroEquipoView() {
     carga.abrirCarga(id);
   };
 
-  // Pesados y livianos se registran distinto (el liviano queda abierto hasta
-  // la carga de combustible y lo cierra cualquier supervisor): van separados.
+  // Pesados y livianos se registran distinto (la camioneta queda abierta
+  // mientras se usa, con sus cargas, y la cierra cualquier supervisor al
+  // dejarla): van separados.
   const [clase, setClase] = useState<Clase>('pesados');
   // «Cómo funcionan las camionetas»: se abre sola cada vez que se entra a
-  // Livianos (también si la pantalla ya parte ahí) y desde el «?» del título.
-  const [ayudaLivianos, setAyudaLivianos] = useState(() => clase === 'livianos');
+  // Livianos (la pantalla siempre parte en Pesados) y desde el «?» del título.
+  const [ayudaLivianos, setAyudaLivianos] = useState(false);
 
   // --- Modo "registrar un turno pasado" (carga histórica) --------------------
   const modoPasado = turnoSeleccion === 'pasado';
@@ -747,7 +749,14 @@ export function RegistroEquipoView() {
       aria-label="Cancelar"
       className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
     >
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+      >
         <path d="M18 6 6 18M6 6l12 12" />
       </svg>
     </button>
@@ -899,6 +908,12 @@ export function RegistroEquipoView() {
               Si cargas y la sigues usando, registra solo la carga. Ciérrala cuando la dejes de usar.
             </p>
           </>
+        )}
+        {tieneCargasRechazadas(t) && (
+          <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--danger)]">
+            <AlertTriangle className="h-[15px] w-[15px]" />
+            Una carga no se pudo enviar · revísala en Sincronización
+          </div>
         )}
         {(t.sinSincronizar || tieneCargasSinSincronizar(t)) && (
           <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
@@ -1362,7 +1377,15 @@ export function RegistroEquipoView() {
           cliente, 04/11). Siempre visible salvo con el modo ya activo. */}
       {!modoPasado && (
         <div className="mb-4">
-          <Boton ancho variante="contorno" onClick={() => setDialogoPasado(true)}>
+          <Boton
+            ancho
+            variante="contorno"
+            onClick={() => {
+              // Un turno pasado no lleva camionetas: la carga a medio registrar se descarta.
+              carga.cancelarCarga();
+              setDialogoPasado(true);
+            }}
+          >
             <History className="h-[18px] w-[18px]" aria-hidden /> Registrar turno pasado
           </Boton>
         </div>

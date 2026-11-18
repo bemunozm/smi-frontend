@@ -25,12 +25,14 @@ function cuando(iso: string): string {
  */
 export function CargasTarjeta({ cargas }: { cargas: CargaTarjeta[] | undefined }) {
   if (!cargas?.length) return null;
-  const total = cargas.reduce((acc, c) => acc + c.litros, 0);
+  // Las rechazadas se listan (marcadas) pero no suman: no existen en el servidor.
+  const vigentes = cargas.filter((c) => !c.requiereAtencion);
+  const total = vigentes.reduce((acc, c) => acc + c.litros, 0);
   return (
     <div className="flex flex-col gap-1.5 rounded-2xl bg-[#f5f6f8] px-3.5 py-2.5">
       <div className="flex items-center gap-1.5 text-[13.5px] font-semibold">
         <Fuel className="h-4 w-4 text-muted-foreground" aria-hidden />
-        {plural(cargas.length, 'carga', 'cargas')} · <span className="tabular">{fmtLitros(total)} L</span>
+        {plural(vigentes.length, 'carga', 'cargas')} · <span className="tabular">{fmtLitros(total)} L</span>
       </div>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {cargas.map((c) => (
@@ -105,9 +107,10 @@ export function CargaLivianoForm({ carga }: { carga: UseCargaLivianoResult }) {
         requerido
         unidad="km"
         error={carga.kmError ?? undefined}
+        aviso={carga.kmAviso ?? undefined}
         hint={
-          carga.kmSugerido != null
-            ? `Sugerido: el último registrado (${fmtKm(carga.kmSugerido)}). Corrígelo con lo que marca el tablero.`
+          carga.kmUltimo != null
+            ? `Último registrado: ${fmtKm(carga.kmUltimo)}. Escribe el que marca el tablero.`
             : 'El que marca el tablero al momento de cargar.'
         }
       >

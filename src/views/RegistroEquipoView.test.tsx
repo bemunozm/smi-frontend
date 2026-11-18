@@ -232,10 +232,11 @@ const CARGA_INACTIVA: UseShiftRegisterResult['carga'] = {
   cancelarCarga: cancelarCargaMock,
   form: { litros: '', km: '', adBlue: false, adBlueLitros: '' },
   setForm: vi.fn(),
-  kmSugerido: null,
+  kmUltimo: null,
   litrosError: null,
   litrosAviso: null,
   kmError: null,
+  kmAviso: null,
   adBlue: { litros: null, error: null, aviso: null },
   adBlueIncompleto: false,
   falta: null,
@@ -1171,7 +1172,8 @@ describe('RegistroEquipoView', () => {
           ...CARGA_INACTIVA,
           cargandoId: 'l-c1',
           cargando: LIVIANO_ABIERTO,
-          kmSugerido: 45200,
+          kmUltimo: 45200,
+          kmAviso: 'Es mucho más que el último registrado (45.200 km). Revisa que esté bien.',
           falta: 'Falta la foto del surtidor.',
         },
       });
@@ -1179,7 +1181,8 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Foto del surtidor')).toBeTruthy();
       expect(screen.getByText('Combustible cargado')).toBeTruthy();
       expect(screen.getByText('Kilometraje al cargar')).toBeTruthy();
-      expect(screen.getByText(/Sugerido: el último registrado \(45\.200 km\)/)).toBeTruthy();
+      expect(screen.getByText(/Último registrado: 45\.200 km/)).toBeTruthy();
+      expect(screen.getByText(/Es mucho más que el último registrado/)).toBeTruthy();
       expect(screen.getByText(/¿Se cargó AdBlue\?/, { selector: 'label, span' })).toBeTruthy();
       expect(screen.getByRole('button', { name: /Registrar carga/ }).hasAttribute('disabled')).toBe(true);
       expect(screen.getByText('Falta la foto del surtidor.')).toBeTruthy();
@@ -1193,6 +1196,27 @@ describe('RegistroEquipoView', () => {
       fireEvent.click(screen.getByRole('button', { name: /Registrar carga/ }));
 
       expect(guardarCargaMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('una carga rechazada se marca en rojo en la tarjeta, no como «falta sincronizar»', () => {
+      const rechazada = { ...CARGAS[1]!, sinSincronizar: true, requiereAtencion: true };
+      renderView('desktop', { livianosAbiertos: [{ ...LIVIANO_ABIERTO, cargas: [CARGAS[0]!, rechazada] }] });
+      verLivianos();
+
+      const tarjeta = screen.getByText('Marta Díaz').closest('article')!;
+      expect(within(tarjeta).getByText(/Una carga no se pudo enviar/)).toBeTruthy();
+      expect(within(tarjeta).getByText(/no se pudo enviar/, { selector: 'li span' })).toBeTruthy();
+      expect(within(tarjeta).queryByText(/Carga guardada en el equipo/)).toBeNull();
+      // No suma: 1 carga · 70 L.
+      expect(within(tarjeta).getByText(/1 carga/)).toBeTruthy();
+    });
+
+    it('elegir «Registrar turno pasado» descarta la carga a medio registrar', () => {
+      renderView('desktop', { carga: { ...CARGA_INACTIVA, cargandoId: 'l-c1', cargando: LIVIANO_ABIERTO } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Registrar turno pasado/ }));
+
+      expect(cancelarCargaMock).toHaveBeenCalled();
     });
 
     it('el km de la carga fuera de rango se muestra en el campo', () => {
@@ -1271,6 +1295,7 @@ describe('RegistroEquipoView', () => {
       const icono = screen.getByRole('button', { name: 'Cómo funcionan las camionetas' });
       expect(screen.getByRole('heading', { name: 'Abrir camioneta' }).parentElement!.nextElementSibling).toBe(icono);
 
+      expect(icono.getAttribute('aria-haspopup')).toBe('dialog');
       fireEvent.click(icono);
       const globo = screen.getByRole('dialog');
       // Nace del ícono: debajo de él y con su flecha.
@@ -1288,6 +1313,19 @@ describe('RegistroEquipoView', () => {
 
       entrarALivianos();
       expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+
+    it('no bloquea la pantalla: tocar fuera la cierra y Escape también', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      entrarALivianos();
+
+      fireEvent.pointerDown(screen.getByRole('heading', { name: 'Abrir camioneta' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cómo funcionan las camionetas' }));
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByRole('dialog')).toBeNull();
     });
 
     it('en modo pasado no se abre', () => {

@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from '@heroui/react';
 
-import type { TarjetaTurno } from './shift-register-helpers';
+import { cargasVigentes, kmTexto, type TarjetaTurno } from './shift-register-helpers';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import { mensajeErrorOperacion } from '../lib/error-messages';
@@ -15,6 +15,9 @@ import type { Equipment } from '../types/equipment';
 
 /** Tope del kilometraje que acepta el servidor. */
 export const KM_MAX = 1_000_000;
+
+/** Un salto mayor sobre el último km conocido se avisa (no bloquea): suele ser un dígito de más. */
+export const KM_SALTO_AVISO = 2_000;
 
 export interface CargaLivianoState {
   litros: string;
@@ -42,12 +45,15 @@ export interface UseCargaLivianoResult {
   form: CargaLivianoState;
   setForm: Dispatch<SetStateAction<CargaLivianoState>>;
   /** El último kilometraje conocido (la última carga o el de la camioneta), si
-   * sirve: con él se prellena el campo al abrir. */
-  kmSugerido: number | null;
+   * sirve: se muestra como referencia, NO se prellena (lo prellenado induce a
+   * dejarlo sin mirar el tablero). */
+  kmUltimo: number | null;
   litrosError: string | null;
   litrosAviso: string | null;
   /** Error del kilometraje (no es número, menor que el inicial, fuera de rango). */
   kmError: string | null;
+  /** Mucho más que el último km conocido: se avisa, no bloquea. */
+  kmAviso: string | null;
   adBlue: ResultadoAdBlue;
   adBlueIncompleto: boolean;
   /** Por qué todavía no se puede guardar, para decirlo bajo el botón; `null` si se puede. */
@@ -62,7 +68,7 @@ export interface UseCargaLivianoResult {
 /** El último km conocido de la tarjeta: su última carga o el de la camioneta,
  * nunca uno menor que el inicial (no serviría de sugerencia). */
 function ultimoKm(t: TarjetaTurno, equipos: Equipment[]): number | null {
-  const ultimaCarga = t.cargas?.at(-1)?.km;
+  const ultimaCarga = cargasVigentes(t).at(-1)?.km;
   const delEquipo = equipos.find((e) => e.id === t.equipoId)?.currentMileage ?? null;
   const candidatos = [ultimaCarga, delEquipo].filter((v): v is number => v != null && v >= t.inicial);
   return candidatos.length ? Math.max(...candidatos) : null;
@@ -84,7 +90,7 @@ export function useCargaLiviano({ tarjetas, equipos, ctx, userId }: UseCargaLivi
   const foto = usePhotoCaptureFlow((litros) => setForm((f) => ({ ...f, litros: formatDecimalInput(litros, 3) })));
 
   const cargando = tarjetas.find((t) => t.id === cargandoId && t.liviano && t.estado === 'curso') ?? null;
-  const kmSugerido = cargando ? ultimoKm(cargando, equipos) : null;
+  const kmUltimo = cargando ? ultimoKm(cargando, equipos) : null;
 
   const validacionLitros = validarLitros(form.litros, { liviano: true });
   const litrosNum = validacionLitros.valor;
@@ -96,10 +102,14 @@ export function useCargaLiviano({ tarjetas, equipos, ctx, userId }: UseCargaLivi
     form.km.trim() !== '' && kmNum == null
       ? 'Escribe un número, por ejemplo 45120.'
       : kmNum != null && cargando && kmNum < cargando.inicial
-        ? `No puede ser menor que el kilometraje inicial de la tarjeta (${cargando.inicial.toLocaleString('es-CL')} km).`
+        ? `No puede ser menor que el kilometraje inicial de la tarjeta (${kmTexto(cargando.inicial)}).`
         : kmNum != null && kmNum > KM_MAX
           ? `No puede superar los ${KM_MAX.toLocaleString('es-CL')} km.`
           : null;
+  const kmAviso =
+    !kmError && kmNum != null && kmUltimo != null && kmNum - kmUltimo > KM_SALTO_AVISO
+      ? `Es mucho más que el último registrado (${kmTexto(kmUltimo)}). Revisa que esté bien.`
+      : null;
 
   const adBlueLitrosNum = parseDecimal(form.adBlueLitros);
   const adBlue = validarAdBlue(form.adBlue, adBlueLitrosNum, form.adBlueLitros.trim() !== '');
@@ -115,10 +125,8 @@ export function useCargaLiviano({ tarjetas, equipos, ctx, userId }: UseCargaLivi
   const listo = falta == null && !litrosError && !kmError && !adBlueFalta && !foto.isReadingPhoto;
 
   const abrirCarga = (id: string) => {
-    const t = tarjetas.find((x) => x.id === id);
-    const sugerido = t ? ultimoKm(t, equipos) : null;
     setCargandoId(id);
-    setForm({ ...VACIO, km: formatDecimalInput(sugerido ?? undefined, 0) });
+    setForm(VACIO);
     // La foto es de ESTA carga: arrastrar otra mezclaría respaldos.
     foto.resetPhoto();
   };
@@ -169,10 +177,11 @@ export function useCargaLiviano({ tarjetas, equipos, ctx, userId }: UseCargaLivi
     cancelarCarga,
     form,
     setForm,
-    kmSugerido,
+    kmUltimo,
     litrosError,
     litrosAviso: validacionLitros.aviso,
     kmError,
+    kmAviso,
     adBlue,
     adBlueIncompleto: adBlueFalta,
     falta,

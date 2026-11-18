@@ -101,7 +101,7 @@ describe('MiCamionetaView (mantenedor)', () => {
     expect('operatorId' in payload).toBe(false);
   });
 
-  it('con su camioneta abierta: la muestra y ofrece cerrarla al cargar combustible', async () => {
+  it('con su camioneta abierta: la muestra y ofrece cargar combustible o cerrarla al dejar de usarla', async () => {
     equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Mario Mantenedor' } }]);
     listMineMock.mockResolvedValue([tarjeta('mant_1')]);
     renderCard();
@@ -135,7 +135,7 @@ describe('MiCamionetaView (mantenedor)', () => {
     expect(screen.getByRole('button', { name: /Cerrar tarjeta/ })).toBeTruthy();
   });
 
-  it('carga combustible sin cerrar: abre el formulario con el km sugerido, y muestra las cargas hechas', async () => {
+  it('carga combustible sin cerrar: abre el formulario con el último km de referencia', async () => {
     equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Mario Mantenedor' } }]);
     listMineMock.mockResolvedValue([
       {
@@ -160,7 +160,7 @@ describe('MiCamionetaView (mantenedor)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Cargar combustible/ }));
 
     expect(await screen.findByText('Kilometraje al cargar')).toBeTruthy();
-    expect(screen.getByText(/Sugerido: el último registrado \(45\.300 km\)/)).toBeTruthy();
+    expect(screen.getByText(/Último registrado: 45\.300 km/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Registrar carga/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Falta la foto del surtidor.')).toBeTruthy();
     // Mientras se registra la carga, no se ofrecen los botones de la tarjeta.
