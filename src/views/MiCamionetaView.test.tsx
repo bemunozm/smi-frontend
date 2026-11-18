@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -86,6 +86,11 @@ describe('MiCamionetaView (mantenedor)', () => {
 
     // En la vista propia el formulario está a la vista: no hay que abrir una ventana.
     const boton = await screen.findByRole('button', { name: /Empezar a usarla/ });
+    // No se preselecciona la camioneta: hasta elegirla, el botón no deja abrir.
+    expect(boton.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Elige la camioneta para empezar a usarla.')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Camioneta'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-001/ }));
     await waitFor(() => expect(boton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(boton);
 

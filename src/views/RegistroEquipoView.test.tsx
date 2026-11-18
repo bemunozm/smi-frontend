@@ -431,6 +431,30 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Elige el operador para agregar el equipo.')).toBeTruthy();
     });
 
+    it('sin equipo elegido (no se preselecciona), el botón queda deshabilitado y pide elegirlo', () => {
+      renderView('desktop', {
+        apertura: { equipoId: '', operatorId: 'op_1', horometro: '' },
+        equipoElegido: undefined,
+        valorInicialApertura: null,
+      });
+
+      expect(screen.getByLabelText('Equipo').textContent).toMatch('Elige el equipo…');
+      expect(screen.getByRole('button', { name: /Agregar equipo/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByText('Elige el equipo para agregarlo.')).toBeTruthy();
+      expect(screen.getByText('Elige un equipo para ver su última lectura.')).toBeTruthy();
+      expect(screen.queryByText('Sin lectura previa para este equipo.')).toBeNull();
+    });
+
+    it('sin equipo ni operador, un solo aviso pide los dos', () => {
+      renderView('desktop', {
+        apertura: { equipoId: '', operatorId: '', horometro: '' },
+        equipoElegido: undefined,
+        valorInicialApertura: null,
+      });
+
+      expect(screen.getByText('Elige el equipo y el operador para agregarlo.')).toBeTruthy();
+    });
+
     it('sin ningún horómetro inicial válido (ni tipeado ni último registrado), el botón queda deshabilitado', () => {
       renderView('desktop', { valorInicialApertura: null });
 
@@ -1022,6 +1046,39 @@ describe('RegistroEquipoView', () => {
       expect(screen.queryByLabelText('Operador')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: /Abrir camioneta/ }));
       expect(abrirLivianoMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('sin camioneta elegida (no se preselecciona), «Abrir camioneta» queda deshabilitado y pide elegirla', () => {
+      renderView('desktop', {
+        aperturaLiviano: {
+          ...APERTURA_LIVIANO,
+          apertura: { equipoId: '', operatorId: '', horometro: '' },
+          equipoElegido: undefined,
+          valorInicialApertura: null,
+        },
+      });
+      verLivianos();
+
+      expect(screen.getByLabelText('Camioneta').textContent).toMatch('Elige la camioneta…');
+      expect(screen.getByRole('button', { name: /Abrir camioneta/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByText('Elige la camioneta para abrirla.')).toBeTruthy();
+      expect(screen.getByText('Elige una camioneta para ver su último kilometraje.')).toBeTruthy();
+      expect(screen.queryByText('Sin kilometraje previo para esta camioneta.')).toBeNull();
+    });
+
+    it('la camioneta que abrí yo se recalca: borde verde, «Usada por mí» y «Abriste tú»', () => {
+      const mia = { ...LIVIANO_ABIERTO, id: 'l-mia', equipo: 'CM-002', supervisor: 'Ana Soto', supervisorId: 'u1' };
+      renderView('desktop', { livianosAbiertos: [mia, LIVIANO_ABIERTO] });
+      verLivianos();
+
+      const tarjetaMia = screen.getByText('CM-002').closest('article')!;
+      expect(within(tarjetaMia).getByText('Usada por mí')).toBeTruthy();
+      expect(within(tarjetaMia).getByText('Abriste tú')).toBeTruthy();
+      expect(tarjetaMia.className).toMatch('border-(--success)');
+
+      const ajena = screen.getByText('Marta Díaz').closest('article')!;
+      expect(within(ajena).queryByText('Usada por mí')).toBeNull();
+      expect(ajena.className).not.toMatch('border-(--success)');
     });
 
     it('lista los livianos abiertos de otro supervisor, y se pueden cerrar', () => {

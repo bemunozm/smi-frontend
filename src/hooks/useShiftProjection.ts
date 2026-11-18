@@ -1,6 +1,13 @@
 import { useMemo } from 'react';
 
-import { esActual, fechaHoraCorta, mapCardToTarjeta, SIN_CONDUCTOR, type TarjetaTurno } from './shift-register-helpers';
+import {
+  esActual,
+  fechaHoraCorta,
+  mapCardToTarjeta,
+  primeroLasMias,
+  SIN_CONDUCTOR,
+  type TarjetaTurno,
+} from './shift-register-helpers';
 import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp, RegisterClosedCardOp } from '../offline/db';
 import type { ContextoTurno } from '../lib/turno';
 import type { Equipment } from '../types/equipment';
@@ -281,7 +288,11 @@ export function useShiftProjection({
   const cerradas = pesadas.filter((t) => t.estado === 'cerrada');
   const abiertasActual = abiertas.filter((t) => t.grupo === 'actual');
   const abiertasAnterior = abiertas.filter((t) => t.grupo === 'anterior');
-  const livianosAbiertos = tarjetas.filter((t) => t.liviano && t.estado === 'curso');
+  // Las camionetas que abrió este supervisor van primero (y se destacan en la vista).
+  const livianosAbiertos = primeroLasMias(
+    tarjetas.filter((t) => t.liviano && t.estado === 'curso'),
+    userId,
+  );
   const livianosCerrados = tarjetas.filter((t) => t.liviano && t.estado === 'cerrada');
   // Solo pesados: las camionetas no «salen» por turno (quedan abiertas hasta
   // la carga de combustible) y no van al reporte de salida (13/11/2026).

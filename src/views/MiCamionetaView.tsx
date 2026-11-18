@@ -343,6 +343,7 @@ export function MiCamionetaView({
           <Campo label="Camioneta">
             <Selector
               etiqueta="Camioneta"
+              placeholder="Elige la camioneta…"
               tituloTabular
               valor={camioneta?.id ?? ''}
               onChange={(id) => {
@@ -370,9 +371,11 @@ export function MiCamionetaView({
                 : undefined
             }
             hint={
-              camioneta?.currentMileage != null
-                ? `Último registrado: ${fmtKm(camioneta.currentMileage)}`
-                : 'Sin kilometraje previo para esta camioneta.'
+              !camioneta
+                ? 'Elige una camioneta para ver su último kilometraje.'
+                : camioneta.currentMileage != null
+                  ? `Último registrado: ${fmtKm(camioneta.currentMileage)}`
+                  : 'Sin kilometraje previo para esta camioneta.'
             }
           >
             <Input
@@ -382,9 +385,18 @@ export function MiCamionetaView({
               onChange={(e) => apertura.setApertura((a) => ({ ...a, horometro: e.target.value }))}
             />
           </Campo>
-          <Boton ancho disabled={apertura.isAbriendo || apertura.valorInicialApertura == null} onClick={apertura.abrir}>
+          <Boton
+            ancho
+            disabled={!camioneta || apertura.isAbriendo || apertura.valorInicialApertura == null}
+            onClick={apertura.abrir}
+          >
             Empezar a usarla <ArrowRight className="size-[19px]" />
           </Boton>
+          {!camioneta && (
+            <p className="m-0 text-center text-[12.5px] text-muted-foreground">
+              Elige la camioneta para empezar a usarla.
+            </p>
+          )}
         </Form>
       )}
     </Card>

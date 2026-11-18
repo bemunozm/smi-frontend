@@ -397,6 +397,9 @@ describe('useShiftRegister', () => {
     expect(payload.shiftDate).toBe('2026-09-24');
     expect(payload.shiftType).toBe('DIURNO');
     expect(payload.id).toMatch(/^[0-9a-f-]{36}$/i);
+    // Tras abrir, el selector vuelve a quedar sin equipo (no salta al primero).
+    await waitFor(() => expect(result.current.apertura.equipoId).toBe(''));
+    expect(result.current.equipoElegido).toBeUndefined();
   });
 
   describe('horómetro inicial de la apertura', () => {
@@ -435,6 +438,20 @@ describe('useShiftRegister', () => {
       expect((await conEquipo('4218,7')).current.bajoUltimaLectura).toBe(false);
       expect((await conEquipo('4300')).current.bajoUltimaLectura).toBe(false);
     });
+  });
+
+  it('no preselecciona equipo: sin elegir uno no hay equipo ni valor, y abrir() no hace nada', async () => {
+    mockApis();
+    const { Wrapper } = withQueryClient();
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.disponibles).toHaveLength(1));
+    act(() => result.current.setApertura((a) => ({ ...a, operatorId: 'op_1' })));
+    expect(result.current.equipoElegido).toBeUndefined();
+    expect(result.current.valorInicialApertura).toBeNull();
+
+    act(() => result.current.abrir());
+    expect(enqueueOpenCardMock).not.toHaveBeenCalled();
   });
 
   it('abrir() no hace nada sin operador elegido (guardia silenciosa)', async () => {
@@ -1143,6 +1160,15 @@ describe('useShiftRegister — livianos', () => {
     const { Wrapper } = withQueryClient();
 
     const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.disponiblesLivianos).toHaveLength(1));
+
+    // Sin preselección: hasta elegir la camioneta no hay nada que abrir.
+    expect(result.current.aperturaLiviano.equipoElegido).toBeUndefined();
+    expect(result.current.aperturaLiviano.valorInicialApertura).toBeNull();
+    act(() => result.current.aperturaLiviano.abrir());
+    expect(enqueueOpenCardMock).not.toHaveBeenCalled();
+
+    act(() => result.current.aperturaLiviano.setApertura((a) => ({ ...a, equipoId: 'eq_l1' })));
     await waitFor(() => expect(result.current.aperturaLiviano.valorInicialApertura).toBe(45120));
 
     act(() => result.current.aperturaLiviano.abrir());
@@ -1151,6 +1177,20 @@ describe('useShiftRegister — livianos', () => {
     const [, payload] = enqueueOpenCardMock.mock.calls[0]!;
     expect(payload).toMatchObject({ equipoId: 'eq_l1', valorInicial: 45120 });
     expect('operatorId' in payload).toBe(false);
+    // Tras abrir, el formulario vuelve a quedar sin camioneta elegida.
+    await waitFor(() => expect(result.current.aperturaLiviano.apertura.equipoId).toBe(''));
+    expect(result.current.aperturaLiviano.equipoElegido).toBeUndefined();
+  });
+
+  it('las camionetas abiertas por el usuario van primero', async () => {
+    const mia: ShiftCardResponse = { ...LIVIANO_AJENO, id: 'l2', equipoId: 'eq_l2', supervisorId: 'u1' };
+    mockApis({ equipos: [CAMIONETA], tarjetas: [LIVIANO_AJENO, mia] });
+    const { Wrapper } = withQueryClient();
+
+    const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.livianosAbiertos).toHaveLength(2));
+    expect(result.current.livianosAbiertos.map((t) => t.id)).toEqual(['l2', 'l1']);
   });
 
   it('cerrar manda el turno de quien cierra', async () => {
