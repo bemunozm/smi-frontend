@@ -230,6 +230,56 @@ describe('carga de combustible sin cerrar (shiftCard.fuelLoad)', () => {
   });
 });
 
+describe('cierre de liviano solo con km rechazado: FUEL_LITERS_REQUIRED', () => {
+  it('sin cargas en curso en el servidor, queda en atención con un mensaje claro y no reintenta solo', async () => {
+    closeCardMock.mockRejectedValue(
+      new DomainError('Indica los litros cargados al cerrar (0 si no cargó).', {
+        code: 'FUEL_LITERS_REQUIRED',
+        status: 400,
+      }),
+    );
+    // Cierre solo con km: sin `fuelLiters` ni foto (la tarjeta tenía una carga que después se descartó).
+    await enqueueCloseCard(
+      'u1',
+      'card-1',
+      { closeClientId: 'close-1', valorFinal: 45_400, capturedAt: '2026-11-18T18:00:00.000Z' },
+      null,
+    );
+    expect(await db.outbox.get('close-1')).toMatchObject({ status: 'pending' });
+
+    await syncAndSettle();
+    await syncAndSettle();
+
+    expect(closeCardMock).toHaveBeenCalledTimes(1);
+    expect(closeCardMock.mock.calls[0]![1]).not.toHaveProperty('fuelLiters');
+    expect(closeCardMock.mock.calls[0]![1]).not.toHaveProperty('tmpPhotoKey');
+    const op = await db.outbox.get('close-1');
+    expect(op?.status).toBe('needs_attention');
+    expect(op?.lastError?.message).toMatch(
+      /La carga de esta camioneta no se registró: indica el combustible al cerrar/,
+    );
+  });
+
+  it('corregir los litros del cierre pendiente lo vuelve a mandar', async () => {
+    closeCardMock
+      .mockRejectedValueOnce(new DomainError('x', { code: 'FUEL_LITERS_REQUIRED', status: 400 }))
+      .mockResolvedValueOnce(camioneta({ closedAt: '2026-11-18T18:00:00.000Z' }));
+    await enqueueCloseCard(
+      'u1',
+      'card-1',
+      { closeClientId: 'close-1', valorFinal: 45_400, capturedAt: '2026-11-18T18:00:00.000Z' },
+      null,
+    );
+    await syncAndSettle();
+
+    expect(await patchCloseCardOp('close-1', 'u1', { fuelLiters: 0 })).toBe('updated');
+    await syncAndSettle();
+
+    expect(closeCardMock.mock.calls[1]![1]).toMatchObject({ fuelLiters: 0 });
+    expect(await db.outbox.get('close-1')).toBeUndefined();
+  });
+});
+
 describe('cierre de liviano rechazado por una carga con km mayor (READING_BELOW_FUEL_LOAD)', () => {
   const rechazo = () =>
     new DomainError(

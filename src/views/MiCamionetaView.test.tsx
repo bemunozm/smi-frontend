@@ -167,7 +167,7 @@ describe('MiCamionetaView (mantenedor)', () => {
     expect(screen.queryByRole('button', { name: /Cerrar tarjeta/ })).toBeNull();
   });
 
-  it('cerrar después de cargar: los litros son opcionales y no pide motivo', async () => {
+  it('cerrar después de cargar: solo km final, sin combustible, foto ni motivo', async () => {
     equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Mario Mantenedor' } }]);
     listMineMock.mockResolvedValue([
       {
@@ -190,8 +190,10 @@ describe('MiCamionetaView (mantenedor)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Cerrar tarjeta/ }));
 
-    expect(await screen.findByText('Combustible al cerrar (opcional)')).toBeTruthy();
-    expect(screen.getByText(/ya tiene 1 carga registrada/)).toBeTruthy();
+    expect(await screen.findByText(/Esta tarjeta ya tiene 1 carga registrada/)).toBeTruthy();
+    expect(screen.getByText('Kilometraje final')).toBeTruthy();
+    expect(screen.queryByText('Foto del surtidor')).toBeNull();
+    expect(screen.queryByText(/Combustible cargado/)).toBeNull();
     expect(screen.queryByText('Motivo sin carga de combustible')).toBeNull();
   });
 });

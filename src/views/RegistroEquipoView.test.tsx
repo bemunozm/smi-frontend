@@ -318,6 +318,7 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     fotoRequerida: false,
     motivoRequerido: false,
     cargasPrevias: 0,
+    soloKm: false,
     faltaMotivo: false,
     isCerrando: false,
     foto: {
@@ -1245,21 +1246,43 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText(/No puede ser menor que el kilometraje inicial de la tarjeta/)).toBeTruthy();
     });
 
-    it('cerrar un liviano que ya cargó: los litros son opcionales y no pide motivo', () => {
+    it('cerrar un liviano que ya cargó: solo km final y observaciones', () => {
       renderView('desktop', {
         cerrandoId: 'l-c1',
         cerrando: { ...LIVIANO_ABIERTO, cargas: CARGAS },
         cargasPrevias: 2,
+        soloKm: true,
         motivoRequerido: false,
         finalNum: 45700,
         horasMaquina: 580,
       });
 
-      expect(screen.getByText('Combustible al cerrar (opcional)')).toBeTruthy();
-      expect(screen.getByText(/Opcional: esta tarjeta ya tiene 2 cargas registradas/)).toBeTruthy();
+      expect(
+        screen.getByText(/Esta tarjeta ya tiene 2 cargas registradas\. Para cerrarla basta el km final\./),
+      ).toBeTruthy();
+      expect(screen.getByText('Kilometraje final')).toBeTruthy();
+      expect(screen.getByText('Observaciones')).toBeTruthy();
+      expect(screen.queryByText('Foto del surtidor')).toBeNull();
+      expect(screen.queryByText(/Combustible cargado/)).toBeNull();
       expect(screen.queryByText('Motivo sin carga de combustible')).toBeNull();
-      expect(screen.getByText(/Sus cargas ya quedaron registradas/)).toBeTruthy();
+      expect(screen.queryByText(/AdBlue/)).toBeNull();
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('sin cargas vigentes, el cierre del liviano pide combustible o motivo como siempre', () => {
+      renderView('desktop', {
+        cerrandoId: 'l-c1',
+        cerrando: { ...LIVIANO_ABIERTO, cargas: [{ ...CARGAS[0]!, requiereAtencion: true }] },
+        motivoRequerido: true,
+        faltaMotivo: true,
+        finalNum: 45700,
+        horasMaquina: 580,
+      });
+
+      expect(screen.getByText('Foto del surtidor')).toBeTruthy();
+      expect(screen.getByText('Combustible cargado (opcional)')).toBeTruthy();
+      expect(screen.getByText('Motivo sin carga de combustible')).toBeTruthy();
+      expect(screen.queryByText(/Para cerrarla basta el km final/)).toBeNull();
     });
 
     it('un km final menor que el de una carga se dice en el campo y no deja cerrar', () => {
@@ -1378,7 +1401,7 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
       expect(screen.getByText('180 km')).toBeTruthy();
       expect(screen.queryByText(/AdBlue/)).toBeNull();
-      expect(screen.getByText(/ciérrala solo con el km e indica el motivo/)).toBeTruthy();
+      expect(screen.getByText(/indica la carga al cerrar o el motivo/)).toBeTruthy();
       expect(screen.queryByText(/reporte de salida del turno/)).toBeNull();
       // Con litros escritos, la foto del surtidor sigue siendo obligatoria.
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);

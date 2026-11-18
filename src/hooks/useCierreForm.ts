@@ -62,6 +62,9 @@ export interface UseCierreFormResult {
   /** Cargas que la tarjeta ya tiene sin cerrar (incluidas las pendientes de
    * sincronizar) — `0` en un pesado. */
   cargasPrevias: number;
+  /** Liviano con cargas vigentes: se cierra solo con km final y observaciones
+   * (sin combustible, foto, AdBlue ni motivo de «sin carga»). */
+  soloKm: boolean;
   /** Sin litros y sin motivo escrito: no se puede cerrar. */
   faltaMotivo: boolean;
   /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
@@ -99,24 +102,29 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
   const finalBajoCarga = cerrando?.liviano && !finalInvalido ? errorFinalBajoCarga(cerrando, finalNum) : null;
 
+  // Un liviano que ya cargó sin cerrar (cargas vigentes: una rechazada por el
+  // servidor no existe allá) cierra solo con el km final: su combustible ya
+  // quedó registrado (pedido del cliente, 18/11/2026).
+  const cargasPrevias = cerrando?.liviano ? cargasVigentes(cerrando).length : 0;
+  const soloKm = cargasPrevias > 0;
+
   // El punto del surtidor es la coma (48.493 = 48,493 L); una camioneta no carga
   // cientos de litros y un pesado con miles se avisa — ver `lib/litros.ts`.
-  const validacionLitros = validarLitros(cierre.litros, { liviano: !!cerrando?.liviano });
+  const validacionLitros = soloKm
+    ? { valor: null, error: null, aviso: null }
+    : validarLitros(cierre.litros, { liviano: !!cerrando?.liviano });
   const litrosError = validacionLitros.error;
   const litrosAviso = validacionLitros.aviso;
   // El combustible es opcional (corte de luz, 16/11/2026): la foto del
   // surtidor solo se exige cuando se escriben litros.
   const fotoRequerida = (validacionLitros.valor ?? 0) > 0;
-  // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026), salvo en
-  // un liviano que ya cargó sin cerrar: su combustible ya quedó registrado.
-  // Una carga rechazada por el servidor no cuenta: no existe allá.
-  const cargasPrevias = cerrando?.liviano ? cargasVigentes(cerrando).length : 0;
-  const motivoRequerido = !fotoRequerida && cargasPrevias === 0;
+  // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026).
+  const motivoRequerido = !fotoRequerida && !soloKm;
   const faltaMotivo = motivoRequerido && cierre.motivoSinCarga.trim() === '';
 
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
   const adBlueCierre = validarAdBlue(cierre.adBlue, adBlueLitrosNum, cierre.adBlueLitros.trim() !== '');
-  const adBlueIncompletoCierre = adBlueIncompleto(cierre.adBlue, adBlueLitrosNum);
+  const adBlueIncompletoCierre = !soloKm && adBlueIncompleto(cierre.adBlue, adBlueLitrosNum);
 
   const [isCerrando, setIsCerrando] = useState(false);
 
@@ -151,18 +159,23 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
         {
           closeClientId: generateUuid(),
           valorFinal: finalNum,
-          fuelLiters: parseDecimal(cierre.litros) ?? 0,
-          adBlue: cierre.adBlue,
-          ...(cierre.adBlue ? { adBlueLiters: adBlueCierre.litros ?? undefined } : {}),
+          // Solo km: sin litros, foto, AdBlue ni motivo (el servidor ve sus cargas en curso).
+          ...(soloKm
+            ? {}
+            : {
+                fuelLiters: parseDecimal(cierre.litros) ?? 0,
+                adBlue: cierre.adBlue,
+                ...(cierre.adBlue ? { adBlueLiters: adBlueCierre.litros ?? undefined } : {}),
+              }),
           observaciones: cierre.observaciones.trim() || undefined,
           ...(motivoRequerido ? { noFuelReason: cierre.motivoSinCarga.trim() } : {}),
           capturedAt: new Date().toISOString(),
-          photoCapturedAt: foto.captureDate ? foto.captureDate.toISOString() : undefined,
+          photoCapturedAt: !soloKm && foto.captureDate ? foto.captureDate.toISOString() : undefined,
           // El turno de quien cierra: un liviano entra en el reporte de ESE turno.
           shiftDate: toDateOnly(ctx.fecha),
           shiftType: ctx.turno,
         },
-        foto.file ?? null,
+        soloKm ? null : (foto.file ?? null),
       );
       setCerrandoId(null);
       foto.resetPhoto();
@@ -173,5 +186,5 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, finalBajoCarga, litrosError, litrosAviso, fotoRequerida, motivoRequerido, cargasPrevias, faltaMotivo, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, finalBajoCarga, litrosError, litrosAviso, fotoRequerida, motivoRequerido, cargasPrevias, soloKm, faltaMotivo, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

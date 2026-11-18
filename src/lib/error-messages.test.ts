@@ -204,6 +204,14 @@ describe('lecturas que chocan con una carga hecha sin cerrar', () => {
     expect(mensajeErrorEdicionCarga(new DomainError('Not found', { status: 404 }))).toMatch(/ya no existe/);
   });
 
+  it('FUEL_LITERS_REQUIRED explica que la carga no quedó y qué corregir', () => {
+    const error = new DomainError('Indica los litros cargados al cerrar (0 si no cargó).', {
+      code: 'FUEL_LITERS_REQUIRED',
+      status: 400,
+    });
+    expect(mensajeErrorOperacion(error)).toMatch(/^La carga de esta camioneta no se registró/);
+  });
+
   it('FUEL_LOAD_LIGHT_ONLY tiene mensaje propio', () => {
     expect(mensajeErrorOperacion(new DomainError('x', { code: 'FUEL_LOAD_LIGHT_ONLY', status: 400 }))).toMatch(
       /Solo una camioneta/,

@@ -211,8 +211,11 @@ export interface AdminCloseShiftCardInput {
 export interface CloseShiftCardInput {
   closeClientId: string;
   valorFinal: number;
-  /** Litros cargados al cierre — 0 si no se cargó (p. ej. un corte de luz). */
-  fuelLiters: number;
+  /** Litros cargados al cierre — 0 si no se cargó (p. ej. un corte de luz).
+   * Ausente en un liviano que ya cargó con la tarjeta abierta: cierra solo con
+   * el km final. Si el servidor no ve cargas en curso, responde
+   * `FUEL_LITERS_REQUIRED`. */
+  fuelLiters?: number;
   /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` (ver
    * `api/UploadsAPI.ts#uploadFile`). Solo obligatoria con litros > 0: sin
    * carga la tarjeta se cierra sin foto (16/11/2026). */

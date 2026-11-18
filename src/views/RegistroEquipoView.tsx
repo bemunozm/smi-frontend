@@ -154,6 +154,7 @@ export function RegistroEquipoView() {
     fotoRequerida,
     motivoRequerido,
     cargasPrevias,
+    soloKm,
     faltaMotivo,
     adBlueCierre,
     adBlueIncompletoCierre,
@@ -1232,33 +1233,43 @@ export function RegistroEquipoView() {
       */}
       {/* El combustible es opcional (16/11/2026): con un corte de luz no se
           puede cargar y la tarjeta se cierra igual. La foto del surtidor solo
-          se exige cuando se escriben litros. */}
-      <FotoRespaldoField
-        file={foto.file}
-        isReadingPhoto={foto.isReadingPhoto}
-        captureDate={foto.captureDate}
-        onSelect={foto.handleSelectPhoto}
-        onClear={foto.handleClearPhoto}
-        requerida={fotoRequerida}
-        title="Foto del surtidor"
-        subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-        staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
-      />
-
-      <Campo
-        label={cargasPrevias > 0 ? 'Combustible al cerrar (opcional)' : 'Combustible cargado (opcional)'}
-        unidad="L"
-        litros
-        hint={
-          cargasPrevias > 0
-            ? `Opcional: esta tarjeta ya tiene ${plural(cargasPrevias, 'carga registrada', 'cargas registradas')}. Déjalo vacío si no cargaste ahora.`
-            : `${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`
-        }
-        error={litrosError ?? undefined}
-        aviso={litrosAviso ?? undefined}
-      >
-        <Input numerico value={cierre.litros} onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))} />
-      </Campo>
+          se exige cuando se escriben litros. Una camioneta que ya cargó sin
+          cerrar (`soloKm`) se cierra solo con el km: no se piden. */}
+      {soloKm && (
+        <Hint>
+          Esta tarjeta ya tiene {plural(cargasPrevias, 'carga registrada', 'cargas registradas')}. Para cerrarla basta
+          el km final.
+        </Hint>
+      )}
+      {!soloKm && (
+        <FotoRespaldoField
+          file={foto.file}
+          isReadingPhoto={foto.isReadingPhoto}
+          captureDate={foto.captureDate}
+          onSelect={foto.handleSelectPhoto}
+          onClear={foto.handleClearPhoto}
+          requerida={fotoRequerida}
+          title="Foto del surtidor"
+          subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+          staleQuestion={cerrando.liviano ? '¿Es la carga de esta camioneta?' : '¿Es la carga de este turno?'}
+        />
+      )}
+      {!soloKm && (
+        <Campo
+          label="Combustible cargado (opcional)"
+          unidad="L"
+          litros
+          hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
+          error={litrosError ?? undefined}
+          aviso={litrosAviso ?? undefined}
+        >
+          <Input
+            numerico
+            value={cierre.litros}
+            onChange={(e) => setCierre((c) => ({ ...c, litros: e.target.value }))}
+          />
+        </Campo>
+      )}
 
       {/* Sin litros hay que justificar por qué no se cargó (pedido del
           cliente, 16/11/2026): queda en la tarjeta y en el reporte. */}
@@ -1285,9 +1296,9 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          {cargasPrevias > 0
-            ? 'Sus cargas ya quedaron registradas: para cerrarla basta el km final. '
-            : 'Ciérrala al cargar combustible, con los litros y la foto. Si no se cargó, ciérrala solo con el km e indica el motivo. '}
+          {!soloKm &&
+            'Ciérrala cuando la dejes de usar. Si no tiene cargas registradas, indica la carga al cerrar ' +
+              'o el motivo. '}
           Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}

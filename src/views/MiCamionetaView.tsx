@@ -244,11 +244,14 @@ export function MiCamionetaView({
     <Card>
       <CardHead
         titulo={cerrandoAjena ? `Cerrar ${cerrandoLiviano.equipo}` : 'Cerrar la camioneta'}
-        bajada={
-          cerrandoAjena
-            ? `La abrió ${cerrandoLiviano.supervisor}. Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.`
-            : 'Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.'
-        }
+        bajada={[
+          cerrandoAjena ? `La abrió ${cerrandoLiviano.supervisor}.` : '',
+          cierre.soloKm
+            ? 'Basta el kilometraje final: sus cargas ya quedaron registradas.'
+            : 'Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         extra={
           <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.setCerrandoId(null)}>
             Cancelar
@@ -285,36 +288,43 @@ export function MiCamionetaView({
           }
           valor={cierre.horasMaquina != null && cierre.horasMaquina >= 0 ? fmtKm(cierre.horasMaquina) : '—'}
         />
+        {/* Ya cargó sin cerrar: se cierra solo con el km final (sin litros, foto ni motivo). */}
+        {cierre.soloKm && (
+          <Hint>
+            Esta tarjeta ya tiene {plural(cierre.cargasPrevias, 'carga registrada', 'cargas registradas')}. Para
+            cerrarla basta el km final.
+          </Hint>
+        )}
         {/* La foto antes que los litros: el OCR los lee de ella y se revisan después. */}
-        <FotoRespaldoField
-          file={cierre.foto.file}
-          isReadingPhoto={cierre.foto.isReadingPhoto}
-          captureDate={cierre.foto.captureDate}
-          onSelect={cierre.foto.handleSelectPhoto}
-          onClear={cierre.foto.handleClearPhoto}
-          requerida={cierre.fotoRequerida}
-          title="Foto del surtidor"
-          subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-          staleQuestion="¿Es la carga de esta camioneta?"
-        />
-        <Campo
-          label={cierre.cargasPrevias > 0 ? 'Combustible al cerrar (opcional)' : 'Combustible cargado (opcional)'}
-          unidad="L"
-          litros
-          hint={
-            cierre.cargasPrevias > 0
-              ? `Opcional: esta tarjeta ya tiene ${plural(cierre.cargasPrevias, 'carga registrada', 'cargas registradas')}. Déjalo vacío si no cargaste ahora.`
-              : `${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`
-          }
-          error={cierre.litrosError ?? undefined}
-          aviso={cierre.litrosAviso ?? undefined}
-        >
-          <Input
-            numerico
-            value={cierre.cierre.litros}
-            onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
+        {!cierre.soloKm && (
+          <FotoRespaldoField
+            file={cierre.foto.file}
+            isReadingPhoto={cierre.foto.isReadingPhoto}
+            captureDate={cierre.foto.captureDate}
+            onSelect={cierre.foto.handleSelectPhoto}
+            onClear={cierre.foto.handleClearPhoto}
+            requerida={cierre.fotoRequerida}
+            title="Foto del surtidor"
+            subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+            staleQuestion="¿Es la carga de esta camioneta?"
           />
-        </Campo>
+        )}
+        {!cierre.soloKm && (
+          <Campo
+            label="Combustible cargado (opcional)"
+            unidad="L"
+            litros
+            hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
+            error={cierre.litrosError ?? undefined}
+            aviso={cierre.litrosAviso ?? undefined}
+          >
+            <Input
+              numerico
+              value={cierre.cierre.litros}
+              onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
+            />
+          </Campo>
+        )}
         {cierre.motivoRequerido && (
           <Campo label="Motivo sin carga de combustible" requerido hint="Por ejemplo: corte de luz, surtidor sin combustible o no le tocaba cargar.">
             <Textarea

@@ -228,20 +228,38 @@ describe('useCierreForm — liviano que ya cargó sin cerrar', () => {
     return hook;
   };
 
-  it('con cargas previas, cerrar con 0 L no pide motivo', () => {
+  it('con cargas previas cierra solo con km: sin litros, foto, AdBlue ni motivo en el cierre encolado', async () => {
     const { result } = cierre({ ...LIVIANO, cargas: CARGAS });
-    act(() => result.current.setCierre((c) => ({ ...c, final: '45700' })));
+    // Aunque quedara algo escrito, no se pide ni se manda.
+    act(() => result.current.setCierre((c) => ({ ...c, final: '45700', litros: '30', observaciones: 'ok' })));
 
     expect(result.current.cargasPrevias).toBe(2);
+    expect(result.current.soloKm).toBe(true);
     expect(result.current.motivoRequerido).toBe(false);
     expect(result.current.faltaMotivo).toBe(false);
+    expect(result.current.fotoRequerida).toBe(false);
+
+    await act(() => result.current.cerrar());
+    expect(enqueueCloseCardMock).toHaveBeenCalledTimes(1);
+    const [, cardId, input, foto] = enqueueCloseCardMock.mock.calls[0]!;
+    expect(cardId).toBe('card-1');
+    expect(input).toMatchObject({ valorFinal: 45_700, observaciones: 'ok' });
+    for (const campo of ['fuelLiters', 'adBlue', 'adBlueLiters', 'noFuelReason', 'photoCapturedAt']) {
+      expect(input[campo]).toBeUndefined();
+    }
+    expect(foto).toBeNull();
   });
 
-  it('sin cargas previas, la regla de siempre: sin litros pide el motivo', () => {
+  it('sin cargas previas, la regla de siempre: sin litros pide el motivo y manda fuelLiters', async () => {
     const { result } = cierre(LIVIANO);
     expect(result.current.cargasPrevias).toBe(0);
+    expect(result.current.soloKm).toBe(false);
     expect(result.current.motivoRequerido).toBe(true);
     expect(result.current.faltaMotivo).toBe(true);
+
+    act(() => result.current.setCierre((c) => ({ ...c, final: '45100', motivoSinCarga: 'Corte de luz' })));
+    await act(() => result.current.cerrar());
+    expect(enqueueCloseCardMock.mock.calls[0]![2]).toMatchObject({ fuelLiters: 0, noFuelReason: 'Corte de luz' });
   });
 
   it('una carga rechazada por el servidor no cuenta: con solo esa, sigue pidiendo la carga o el motivo', () => {
@@ -249,6 +267,7 @@ describe('useCierreForm — liviano que ya cargó sin cerrar', () => {
     act(() => result.current.setCierre((c) => ({ ...c, final: '45100' })));
 
     expect(result.current.cargasPrevias).toBe(0);
+    expect(result.current.soloKm).toBe(false);
     expect(result.current.motivoRequerido).toBe(true);
     expect(result.current.faltaMotivo).toBe(true);
     // Tampoco fija un km mínimo para el final.
@@ -258,6 +277,7 @@ describe('useCierreForm — liviano que ya cargó sin cerrar', () => {
   it('un pesado no cambia: sin litros pide motivo aunque traiga cargas', () => {
     const { result } = cierre({ ...PESADO, cargas: CARGAS });
     expect(result.current.cargasPrevias).toBe(0);
+    expect(result.current.soloKm).toBe(false);
     expect(result.current.motivoRequerido).toBe(true);
   });
 

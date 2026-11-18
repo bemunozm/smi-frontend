@@ -128,6 +128,8 @@ export interface UseShiftRegisterResult {
   motivoRequerido: boolean;
   /** Cargas que la tarjeta en cierre ya tiene sin cerrar (solo livianos). */
   cargasPrevias: number;
+  /** Liviano con cargas vigentes: se cierra solo con km final y observaciones. */
+  soloKm: boolean;
   faltaMotivo: boolean;
   adBlueCierre: ResultadoAdBlue;
   adBlueIncompletoCierre: boolean;

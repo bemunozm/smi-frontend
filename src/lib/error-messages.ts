@@ -61,6 +61,10 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   // Carga sin cerrar (`POST /shift-cards/:id/fuel-loads`): solo camionetas.
   FUEL_LOAD_LIGHT_ONLY:
     'Solo una camioneta puede cargar combustible sin cerrar su tarjeta. Descarta esta carga y regístrala al cerrar.',
+  // Cierre de camioneta solo con km (tenía cargas sin cerrar) que llegó cuando
+  // el servidor ya no ve ninguna (p. ej. se descartó la única carga en la cola).
+  FUEL_LITERS_REQUIRED:
+    'La carga de esta camioneta no se registró: indica el combustible al cerrar. Corrige los litros de la tarjeta (Editar) y reintenta.',
   NO_CARDS: 'No hay tarjetas para incluir en el reporte de salida — abrí o cerrá al menos un equipo antes de enviarlo.',
   SHIFT_NOT_FOUND:
     'El turno de este reporte no existe en el servidor — revisá la fecha y el tipo de turno, o descartá y reintentá.',

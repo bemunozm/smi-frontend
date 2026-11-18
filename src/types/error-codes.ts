@@ -30,6 +30,7 @@ export const ERROR_CODES = [
   'FUEL_LOAD_LIGHT_ONLY',
   'READING_BELOW_FUEL_LOAD',
   'INITIAL_ABOVE_FUEL_LOAD',
+  'FUEL_LITERS_REQUIRED',
   // Códigos SOLO del cliente — nunca los manda el backend.
   'PHOTO_MISSING',
   'INVALID_RESPONSE',
