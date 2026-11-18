@@ -1267,8 +1267,16 @@ describe('RegistroEquipoView', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(screen.getByRole('heading', { name: 'Abrir camioneta' })).toBeTruthy();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Cómo funcionan las camionetas' }));
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      // El «?» va a la derecha del encabezado, fuera del título.
+      const icono = screen.getByRole('button', { name: 'Cómo funcionan las camionetas' });
+      expect(screen.getByRole('heading', { name: 'Abrir camioneta' }).parentElement!.nextElementSibling).toBe(icono);
+
+      fireEvent.click(icono);
+      const globo = screen.getByRole('dialog');
+      // Nace del ícono: debajo de él y con su flecha.
+      const popover = globo.closest('[data-placement]')!;
+      expect(popover.getAttribute('data-placement')).toBe('bottom');
+      expect(popover.querySelector('svg path[d="M0 9 L8 1 L16 9"]')).toBeTruthy();
     });
 
     it('se vuelve a abrir cada vez que se entra a Livianos, y no queda abierta al volver a Pesados', () => {

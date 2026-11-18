@@ -324,7 +324,7 @@ export function RegistroEquipoView() {
     <Card>
       <CardHead
         titulo="Abrir camioneta"
-        junto={
+        extra={
           <AyudaCamionetas abierto={ayudaLivianos && claseVista === 'livianos'} onAbiertoChange={setAyudaLivianos} />
         }
         bajada="Abre solo una camioneta que vas a usar y que no tenga tarjeta abierta."

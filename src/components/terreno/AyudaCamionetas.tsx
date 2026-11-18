@@ -1,13 +1,12 @@
 import { useRef } from 'react';
-import { Dialog, Heading, Popover } from 'react-aria-components';
+import { Dialog, Heading, OverlayArrow, Popover } from 'react-aria-components';
 import { CircleHelp, Info, X } from 'lucide-react';
 
 /**
- * «?» junto al título «Abrir camioneta» con su recuadro de información
- * anclado: cómo se registran las camionetas. Lo controla la vista (se abre
- * solo al entrar a Livianos); se cierra con la X o tocando fuera, sin fondo
- * oscuro ni bloquear la pantalla. Antes era un recuadro fijo que empujaba el
- * formulario hacia abajo.
+ * «?» del encabezado de «Abrir camioneta» con su recuadro de información: cómo
+ * se registran las camionetas. Lo controla la vista (se abre solo al entrar a
+ * Livianos); se cierra con la X o tocando fuera, sin fondo oscuro. El globo
+ * nace del ícono: alineado a su derecha y con una flecha que lo apunta.
  */
 export function AyudaCamionetas({
   abierto,
@@ -26,7 +25,7 @@ export function AyudaCamionetas({
         aria-label="Cómo funcionan las camionetas"
         aria-expanded={abierto}
         title="Cómo funcionan las camionetas"
-        className="-my-2.5 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="-my-2.5 -mr-2 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <CircleHelp className="h-[22px] w-[22px]" aria-hidden />
       </button>
@@ -34,11 +33,22 @@ export function AyudaCamionetas({
         triggerRef={ancla}
         isOpen={abierto}
         onOpenChange={onAbiertoChange}
-        placement="bottom start"
-        offset={4}
+        placement="bottom end"
+        offset={10}
         containerPadding={16}
-        className="w-[min(320px,calc(100vw-32px))] rounded-2xl border border-[var(--accent-soft-foreground)]/20 bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-[0_12px_32px_rgba(20,23,28,.14)]"
+        // Entra desde el ícono (fade + scale); sin animación si el equipo pide menos movimiento.
+        className="w-[min(320px,calc(100vw-32px))] origin-(--trigger-anchor-point) rounded-2xl border border-[color-mix(in_srgb,var(--accent-soft-foreground)_22%,transparent)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-[0_12px_32px_rgba(20,23,28,.14)] transition-[opacity,scale] duration-150 ease-out data-[entering]:scale-95 data-[entering]:opacity-0 data-[exiting]:scale-95 data-[exiting]:opacity-0 motion-reduce:transition-none"
       >
+        <OverlayArrow className="block">
+          {/* Mismo fondo y borde que el globo; el trazo de abajo queda tapado por el globo. */}
+          <svg width={16} height={9} viewBox="0 0 16 9" className="block translate-y-px" aria-hidden>
+            <path
+              d="M0 9 L8 1 L16 9"
+              className="fill-[var(--accent-soft)] stroke-[color-mix(in_srgb,var(--accent-soft-foreground)_22%,transparent)]"
+              strokeWidth={1}
+            />
+          </svg>
+        </OverlayArrow>
         <Dialog className="flex flex-col gap-2 px-3.5 py-3 outline-none">
           <div className="flex items-start gap-2">
             <Info className="mt-0.5 h-[18px] w-[18px] shrink-0" aria-hidden />
