@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clock,
   Download,
+  Fuel,
   History,
   Lock,
   Mail,
@@ -19,10 +20,17 @@ import {
 } from 'lucide-react';
 
 import { lineaEstadoCorreo, useShiftRegister, type EstadoReporte, type TarjetaTurno } from '../hooks/useShiftRegister';
-import { agruparPorTurno, registradaDespues, rotuloTurno } from '../hooks/shift-register-helpers';
+import {
+  agruparPorTurno,
+  litrosTotales,
+  registradaDespues,
+  rotuloTurno,
+  tieneCargasSinSincronizar,
+} from '../hooks/shift-register-helpers';
 import { RecordPhoto } from '../components/RecordPhoto';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
+import { CargaLivianoForm, CargasTarjeta } from '../components/terreno/CargaLivianoForm';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import { PastShiftDialog } from '../components/terreno/PastShiftDialog';
@@ -138,13 +146,16 @@ export function RegistroEquipoView() {
     finalNum,
     horasMaquina,
     finalInvalido,
+    finalBajoCarga,
     litrosError,
     litrosAviso,
     fotoRequerida,
     motivoRequerido,
+    cargasPrevias,
     faltaMotivo,
     adBlueCierre,
     adBlueIncompletoCierre,
+    carga,
     edicion,
     motivoSinCierre,
     isCerrando,
@@ -166,6 +177,16 @@ export function RegistroEquipoView() {
     elegirTurnoPasado,
     esDiaPasado,
   } = useShiftRegister();
+
+  // Cierre y carga sin cerrar usan la misma columna (u hoja): abrir uno cierra el otro.
+  const abrirCierreTarjeta = (id: string) => {
+    carga.cancelarCarga();
+    abrirCierre(id);
+  };
+  const abrirCargaLiviano = (id: string) => {
+    setCerrandoId(null);
+    carga.abrirCarga(id);
+  };
 
   // Pesados y livianos se registran distinto (el liviano queda abierto hasta
   // la carga de combustible y lo cierra cualquier supervisor): van separados.
@@ -311,6 +332,10 @@ export function RegistroEquipoView() {
           • <b className="text-foreground">Ciérrala al cargar combustible</b>, con el km, los litros y la foto del
           surtidor. También se puede cerrar sin carga: basta el km y el motivo por el que no se cargó (por ejemplo,
           un corte de luz). Puede cerrarla cualquier supervisor, aunque la haya abierto otro.
+        </span>
+        <span>
+          • Si cargas y la <b className="text-foreground">sigues usando</b>, registra solo la carga con «Cargar
+          combustible»: la tarjeta queda abierta.
         </span>
         <span>• Las camionetas no van en el reporte de salida a la administración.</span>
       </div>
@@ -605,7 +630,7 @@ export function RegistroEquipoView() {
               ancho
               disabled={motivoSinCierre(t) != null}
               aria-label={motivoSinCierre(t) ? `Cerrar tarjeta de ${t.equipo}. ${motivoSinCierre(t)}` : undefined}
-              onClick={() => abrirCierre(t.id)}
+              onClick={() => abrirCierreTarjeta(t.id)}
             >
               {motivoSinCierre(t) ? <Lock className="h-[17px] w-[17px]" /> : null}
               Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
@@ -674,7 +699,7 @@ export function RegistroEquipoView() {
                   disabled={motivoSinCierre(t) != null}
                   title={motivoSinCierre(t) ?? undefined}
                   aria-label={motivoSinCierre(t) ? `Cerrar tarjeta de ${t.equipo}. ${motivoSinCierre(t)}` : undefined}
-                  onClick={() => abrirCierre(t.id)}
+                  onClick={() => abrirCierreTarjeta(t.id)}
                 >
                   {motivoSinCierre(t) ? <Lock className="h-4 w-4" /> : null}
                   Cerrar
@@ -718,6 +743,25 @@ export function RegistroEquipoView() {
           `${anterior.turno} ${fechaAnterior}`,
         )}`
       : '';
+
+  /** La carga sin cerrar: quién abrió la camioneta y que la tarjeta sigue abierta. */
+  const bajadaCarga = carga.cargando
+    ? `Abierta por ${carga.cargando.supervisor} · ${carga.cargando.abiertaEl ?? ''} · la tarjeta sigue abierta`
+    : '';
+
+  /** La X de la columna de escritorio (cierre o carga). */
+  const botonCancelar = (onClick: () => void) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Cancelar"
+      className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
+    >
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+        <path d="M18 6 6 18M6 6l12 12" />
+      </svg>
+    </button>
+  );
 
   /**
    * Un bloque de turno: separador + tarjetas (o tabla en escritorio). Los dos
@@ -837,9 +881,11 @@ export function RegistroEquipoView() {
             { label: 'Km inicial', valor: fmtKm(t.inicial) },
             { label: 'Km final', valor: fmtKm(t.final) },
             { label: 'Recorrido', valor: cerrada ? fmtKm(t.final! - t.inicial) : '—', destacado: true },
-            { label: 'Litros', valor: fmtLitros(t.litros) },
+            // Las cargas sin cerrar más la del cierre, sin contarla dos veces.
+            { label: 'Litros', valor: fmtLitros(litrosTotales(t)) },
           ]}
         />
+        <CargasTarjeta cargas={t.cargas} />
         {cerrada ? (
           <div className="flex flex-col gap-1 text-[13px] text-muted-foreground">
             <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -850,18 +896,24 @@ export function RegistroEquipoView() {
           </div>
         ) : (
           <>
-            <Boton variante="contorno" ancho onClick={() => abrirCierre(t.id)}>
-              Cerrar camioneta <ArrowRight className="h-[19px] w-[19px]" />
-            </Boton>
+            {/* Cargar sin cerrar: a veces cargan y siguen usando la camioneta. */}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Boton className="sm:flex-1" onClick={() => abrirCargaLiviano(t.id)}>
+                <Fuel className="h-[18px] w-[18px]" aria-hidden /> Cargar combustible
+              </Boton>
+              <Boton variante="contorno" className="sm:flex-1" onClick={() => abrirCierreTarjeta(t.id)}>
+                Cerrar tarjeta <ArrowRight className="h-[19px] w-[19px]" />
+              </Boton>
+            </div>
             <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-              Al echarle combustible, o sin carga si hubo un corte de luz.
+              Si cargas y la sigues usando, registra solo la carga. Ciérrala cuando la dejes de usar.
             </p>
           </>
         )}
-        {t.sinSincronizar && (
+        {(t.sinSincronizar || tieneCargasSinSincronizar(t)) && (
           <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning-soft-foreground)]">
             <Clock className="h-[15px] w-[15px]" />
-            Guardada en el equipo · falta sincronizar
+            {t.sinSincronizar ? 'Guardada en el equipo' : 'Carga guardada en el equipo'} · falta sincronizar
           </div>
         )}
       </Tarjeta>
@@ -906,6 +958,7 @@ export function RegistroEquipoView() {
       onChange={(c) => {
         setClase(c);
         setCerrandoId(null);
+        carga.cancelarCarga();
       }}
       opciones={[
         {
@@ -1135,6 +1188,7 @@ export function RegistroEquipoView() {
         label={cerrando.liviano ? 'Kilometraje final' : 'Horómetro final'}
         requerido
         unidad={cerrando.liviano ? 'km' : 'h'}
+        error={finalBajoCarga ?? undefined}
       >
         <Input numerico value={cierre.final} onChange={(e) => setCierre((c) => ({ ...c, final: e.target.value }))} />
       </Campo>
@@ -1186,10 +1240,14 @@ export function RegistroEquipoView() {
       />
 
       <Campo
-        label="Combustible cargado (opcional)"
+        label={cargasPrevias > 0 ? 'Combustible al cerrar (opcional)' : 'Combustible cargado (opcional)'}
         unidad="L"
         litros
-        hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
+        hint={
+          cargasPrevias > 0
+            ? `Opcional: esta tarjeta ya tiene ${plural(cargasPrevias, 'carga registrada', 'cargas registradas')}. Déjalo vacío si no cargaste ahora.`
+            : `${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`
+        }
         error={litrosError ?? undefined}
         aviso={litrosAviso ?? undefined}
       >
@@ -1221,8 +1279,10 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          Ciérrala al cargar combustible, con los litros y la foto. Si no se cargó, ciérrala solo con el km e indica el
-          motivo. Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
+          {cargasPrevias > 0
+            ? 'Sus cargas ya quedaron registradas: para cerrarla basta el km final. '
+            : 'Ciérrala al cargar combustible, con los litros y la foto. Si no se cargó, ciérrala solo con el km e indica el motivo. '}
+          Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}
 
@@ -1245,6 +1305,7 @@ export function RegistroEquipoView() {
           isCerrando ||
           finalNum == null ||
           finalInvalido ||
+          finalBajoCarga != null ||
           litrosError != null ||
           adBlueIncompletoCierre
         }
@@ -1400,27 +1461,22 @@ export function RegistroEquipoView() {
                     </>
                   }
                   bajada={bajadaCierre}
-                  extra={
-                    <button
-                      type="button"
-                      onClick={() => setCerrandoId(null)}
-                      aria-label="Cancelar"
-                      className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                      >
-                        <path d="M18 6 6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  }
+                  extra={botonCancelar(() => setCerrandoId(null))}
                 />
                 <Form>{formularioCierre}</Form>
+              </Card>
+            ) : esEscritorio && carga.cargando ? (
+              <Card>
+                <CardHead
+                  titulo={
+                    <>
+                      Cargar combustible · <span className="tabular">{carga.cargando.equipo}</span>
+                    </>
+                  }
+                  bajada={bajadaCarga}
+                  extra={botonCancelar(carga.cancelarCarga)}
+                />
+                <CargaLivianoForm carga={carga} />
               </Card>
             ) : modoPasado ? null : claseVista === 'livianos' ? (
               formAperturaLiviano
@@ -1431,6 +1487,17 @@ export function RegistroEquipoView() {
         }
         historial={claseVista === 'livianos' ? historialLivianos : historial}
       />
+
+      {!esEscritorio && carga.cargando && (
+        <Hoja
+          eyebrow="Cargar combustible"
+          titulo={`${carga.cargando.equipo} · ${carga.cargando.tipo}`}
+          bajada={bajadaCarga}
+          onCerrar={carga.cancelarCarga}
+        >
+          <CargaLivianoForm carga={carga} />
+        </Hoja>
+      )}
 
       {!esEscritorio && cerrando && (
         <Hoja

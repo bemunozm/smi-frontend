@@ -6,6 +6,7 @@ import {
   mapCardToTarjeta,
   primeroLasMias,
   SIN_CONDUCTOR,
+  type CargaTarjeta,
   type TarjetaTurno,
 } from './shift-register-helpers';
 import type { CloseCardOp, HttpWriteOp, OpenCardOp, OutboxOp, RegisterClosedCardOp } from '../offline/db';
@@ -154,6 +155,31 @@ function overlayEditOp(base: TarjetaTurno, op: HttpWriteOp, operadores: Operator
   };
 }
 
+/** Superpone una carga de combustible pendiente (`POST /shift-cards/:id/fuel-loads`
+ * en la cola) sobre la tarjeta del liviano: aparece en su lista y suma a sus
+ * litros mientras el servidor no la confirma. Si el servidor ya la trae (el
+ * replay la envió y la cola todavía no se refrescó) no se duplica. */
+function overlayFuelLoadOp(base: TarjetaTurno, op: HttpWriteOp, supervisor: string): TarjetaTurno {
+  const { body } = op;
+  const litros = numero(body.liters);
+  const km = numero(body.reading);
+  if (litros == null || km == null) return base;
+  const id = typeof body.id === 'string' ? body.id : op.id;
+  if (base.cargas?.some((c) => c.id === id)) return base;
+  const adBlueLitros = numero(body.adBlueLiters);
+  const carga: CargaTarjeta = {
+    id,
+    litros,
+    km,
+    ...(adBlueLitros != null ? { adBlueLitros } : {}),
+    fechaIso: typeof body.capturedAt === 'string' ? body.capturedAt : new Date(op.createdAt).toISOString(),
+    por: supervisor,
+    sinSincronizar: true,
+    requiereAtencion: op.status === 'needs_attention',
+  };
+  return { ...base, cargas: [...(base.cargas ?? []), carga] };
+}
+
 function construirHintEquipo(enTaller: Equipment[], ocupados: Equipment[]): string {
   const partes: string[] = [];
   if (enTaller.length === 1) {
@@ -240,6 +266,10 @@ export function useShiftProjection({
     () => ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'shiftCard.edit'),
     [ops],
   );
+  const opsCargar = useMemo(
+    () => ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'shiftCard.fuelLoad'),
+    [ops],
+  );
 
   const tarjetas = useMemo(() => {
     const porId = new Map<string, TarjetaTurno>();
@@ -255,6 +285,12 @@ export function useShiftProjection({
     opsRegistrarCerrada.forEach((op) => {
       if (porId.has(op.id)) return;
       porId.set(op.id, mapRegisterClosedOpToTarjeta(op, ctx, equipos, operadores, supervisor));
+    });
+    // Las cargas sin cerrar van antes que el cierre: en la cola también.
+    opsCargar.forEach((op) => {
+      const id = op.params.id;
+      const base = id ? porId.get(id) : undefined;
+      if (id && base) porId.set(id, overlayFuelLoadOp(base, op, supervisor));
     });
     // Un cierre pendiente se superpone sobre la que ya esté en el mapa
     // (servidor o apertura pendiente) — si no hay base (no debería pasar,
@@ -276,6 +312,7 @@ export function useShiftProjection({
     opsRegistrarCerrada,
     opsCerrar,
     opsEditar,
+    opsCargar,
     ctx,
     equipos,
     operadores,

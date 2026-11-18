@@ -209,6 +209,8 @@ const EDICION_INACTIVA: UseShiftRegisterResult['edicion'] = {
   soloEnElEquipo: false,
   adBlue: { litros: null, error: null, aviso: null },
   finalInvalido: false,
+  inicialSobreCarga: null,
+  finalBajoCarga: null,
   faltante: null,
   puedeGuardar: false,
   guardar: vi.fn(),
@@ -218,6 +220,44 @@ const EDICION_INACTIVA: UseShiftRegisterResult['edicion'] = {
   cargandoCambios: false,
   historialDisponible: false,
 };
+
+const abrirCargaMock = vi.fn();
+const cancelarCargaMock = vi.fn();
+const guardarCargaMock = vi.fn();
+
+const CARGA_INACTIVA: UseShiftRegisterResult['carga'] = {
+  cargandoId: null,
+  cargando: null,
+  abrirCarga: abrirCargaMock,
+  cancelarCarga: cancelarCargaMock,
+  form: { litros: '', km: '', adBlue: false, adBlueLitros: '' },
+  setForm: vi.fn(),
+  kmSugerido: null,
+  litrosError: null,
+  litrosAviso: null,
+  kmError: null,
+  adBlue: { litros: null, error: null, aviso: null },
+  adBlueIncompleto: false,
+  falta: null,
+  puedeGuardar: false,
+  guardar: guardarCargaMock,
+  isGuardando: false,
+  foto: {
+    file: null,
+    isReadingPhoto: false,
+    captureDate: null,
+    ocr: null,
+    handleSelectPhoto: vi.fn(),
+    handleClearPhoto: vi.fn(),
+    resetPhoto: vi.fn(),
+  },
+};
+
+/** Dos cargas hechas sin cerrar: una ya en el servidor y otra todavía en el equipo. */
+const CARGAS = [
+  { id: 'k1', litros: 70, km: 45300, fechaIso: '2026-09-23T12:00:00.000Z', por: 'Marta Díaz' },
+  { id: 'k2', litros: 70, km: 45600, fechaIso: '2026-09-24T12:00:00.000Z', por: 'Ana Soto', sinSincronizar: true },
+];
 
 let mockResult: UseShiftRegisterResult;
 
@@ -264,16 +304,19 @@ function baseResult(overrides: Partial<UseShiftRegisterResult> = {}): UseShiftRe
     adBlueCierre: { litros: null, error: null, aviso: null },
     adBlueIncompletoCierre: false,
     edicion: EDICION_INACTIVA,
+    carga: CARGA_INACTIVA,
     setCierre,
     abrirCierre: setCerrandoId,
     cerrar: cerrarMock,
     finalNum: null,
     horasMaquina: null,
     finalInvalido: false,
+    finalBajoCarga: null,
     litrosError: null,
     litrosAviso: null,
     fotoRequerida: false,
     motivoRequerido: false,
+    cargasPrevias: 0,
     faltaMotivo: false,
     isCerrando: false,
     foto: {
@@ -1087,8 +1130,108 @@ describe('RegistroEquipoView', () => {
 
       expect(screen.getByText('Marta Díaz')).toBeTruthy();
       expect(screen.getByText(/mar 22\/09 08:15/)).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: /Cerrar camioneta/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Cerrar tarjeta/ }));
       expect(setCerrandoId).toHaveBeenCalledWith('l-c1');
+      // Abrir el cierre suelta una carga a medio registrar.
+      expect(cancelarCargaMock).toHaveBeenCalled();
+    });
+
+    it('una camioneta abierta ofrece «Cargar combustible» sin cerrar la tarjeta', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      verLivianos();
+
+      fireEvent.click(screen.getByRole('button', { name: /Cargar combustible/ }));
+
+      expect(abrirCargaMock).toHaveBeenCalledWith('l-c1');
+      expect(setCerrandoId).toHaveBeenCalledWith(null);
+    });
+
+    it('muestra sus cargas («2 cargas · 140 L») y la cifra Litros suma todas, con las pendientes marcadas', () => {
+      renderView('desktop', { livianosAbiertos: [{ ...LIVIANO_ABIERTO, cargas: CARGAS }] });
+      verLivianos();
+
+      const tarjeta = screen.getByText('Marta Díaz').closest('article')!;
+      expect(within(tarjeta).getByText(/2 cargas/)).toBeTruthy();
+      expect(within(tarjeta).getAllByText(/140 L/).length).toBeGreaterThan(0);
+      expect(within(tarjeta).getByText('140')).toBeTruthy();
+      expect(within(tarjeta).getByText(/45\.600 km/)).toBeTruthy();
+      expect(within(tarjeta).getByText(/falta sincronizar/, { selector: 'li span' })).toBeTruthy();
+      expect(within(tarjeta).getByText(/Carga guardada en el equipo/)).toBeTruthy();
+    });
+
+    it('el formulario de carga pide foto, litros y km, y no deja registrar mientras falte algo', () => {
+      renderView('desktop', {
+        livianosAbiertos: [LIVIANO_ABIERTO],
+        carga: {
+          ...CARGA_INACTIVA,
+          cargandoId: 'l-c1',
+          cargando: LIVIANO_ABIERTO,
+          kmSugerido: 45200,
+          falta: 'Falta la foto del surtidor.',
+        },
+      });
+
+      expect(screen.getByText('Foto del surtidor')).toBeTruthy();
+      expect(screen.getByText('Combustible cargado')).toBeTruthy();
+      expect(screen.getByText('Kilometraje al cargar')).toBeTruthy();
+      expect(screen.getByText(/Sugerido: el último registrado \(45\.200 km\)/)).toBeTruthy();
+      expect(screen.getByText(/¿Se cargó AdBlue\?/, { selector: 'label, span' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Registrar carga/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByText('Falta la foto del surtidor.')).toBeTruthy();
+    });
+
+    it('con todo listo, «Registrar carga» guarda', () => {
+      renderView('desktop', {
+        carga: { ...CARGA_INACTIVA, cargandoId: 'l-c1', cargando: LIVIANO_ABIERTO, puedeGuardar: true },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Registrar carga/ }));
+
+      expect(guardarCargaMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('el km de la carga fuera de rango se muestra en el campo', () => {
+      renderView('desktop', {
+        carga: {
+          ...CARGA_INACTIVA,
+          cargandoId: 'l-c1',
+          cargando: LIVIANO_ABIERTO,
+          kmError: 'No puede ser menor que el kilometraje inicial de la tarjeta (45.120 km).',
+        },
+      });
+
+      expect(screen.getByText(/No puede ser menor que el kilometraje inicial de la tarjeta/)).toBeTruthy();
+    });
+
+    it('cerrar un liviano que ya cargó: los litros son opcionales y no pide motivo', () => {
+      renderView('desktop', {
+        cerrandoId: 'l-c1',
+        cerrando: { ...LIVIANO_ABIERTO, cargas: CARGAS },
+        cargasPrevias: 2,
+        motivoRequerido: false,
+        finalNum: 45700,
+        horasMaquina: 580,
+      });
+
+      expect(screen.getByText('Combustible al cerrar (opcional)')).toBeTruthy();
+      expect(screen.getByText(/Opcional: esta tarjeta ya tiene 2 cargas registradas/)).toBeTruthy();
+      expect(screen.queryByText('Motivo sin carga de combustible')).toBeNull();
+      expect(screen.getByText(/Sus cargas ya quedaron registradas/)).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    it('un km final menor que el de una carga se dice en el campo y no deja cerrar', () => {
+      renderView('desktop', {
+        cerrandoId: 'l-c1',
+        cerrando: { ...LIVIANO_ABIERTO, cargas: CARGAS },
+        cargasPrevias: 2,
+        finalNum: 45500,
+        horasMaquina: 380,
+        finalBajoCarga: 'No puede ser menor que el km de una carga registrada en la tarjeta (45.600 km).',
+      });
+
+      expect(screen.getByText(/menor que el km de una carga registrada/)).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
 
     it('explica cómo funcionan: no abrir una ya abierta y cerrar solo al cargar combustible', () => {
@@ -1099,7 +1242,7 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText(/no abras otra ni la toques/)).toBeTruthy();
       expect(screen.getByText(/Ciérrala al cargar combustible/)).toBeTruthy();
       expect(screen.getByText(/basta el km y el motivo/)).toBeTruthy();
-      expect(screen.getByText(/sin carga si hubo un corte de luz/)).toBeTruthy();
+      expect(screen.getByText(/registra solo la carga con «Cargar/)).toBeTruthy();
     });
 
     it('en Livianos no aparece el reporte de salida a la administración', () => {

@@ -79,6 +79,74 @@ export interface TarjetaTurno {
   cerradaPor?: string;
   cerradaPorId?: string;
   cerradaEnActual?: boolean;
+  /** Cargas de combustible hechas con la tarjeta todavía abierta (solo
+   * livianos), de la más vieja a la más nueva — incluye las que siguen en el
+   * equipo. La del cierre NO está acá: sigue en `litros`. */
+  cargas?: CargaTarjeta[];
+}
+
+/** Una carga intermedia de un liviano (`ShiftCardResponse.fuelLoads`, o una
+ * pendiente en la cola). */
+export interface CargaTarjeta {
+  id: string;
+  litros: number;
+  /** Kilometraje al cargar. */
+  km: number;
+  adBlueLitros?: number;
+  /** Cuándo se registró, en ISO. */
+  fechaIso: string;
+  /** Quién la registró. */
+  por?: string;
+  /** Guardada en el equipo, todavía sin confirmar por el servidor. */
+  sinSincronizar?: boolean;
+  /** El servidor la rechazó: espera una acción en la hoja de sincronización. */
+  requiereAtencion?: boolean;
+}
+
+/**
+ * Litros de la tarjeta: las cargas intermedias más la del cierre, sin contar
+ * dos veces (la del cierre no viaja en `cargas`). Sin cargas intermedias es la
+ * del cierre tal cual (`undefined` en una abierta).
+ */
+export function litrosTotales(t: Pick<TarjetaTurno, 'litros' | 'cargas'>): number | undefined {
+  const cargas = t.cargas ?? [];
+  if (cargas.length === 0) return t.litros;
+  return cargas.reduce((total, c) => total + c.litros, 0) + (t.litros ?? 0);
+}
+
+/**
+ * El rango de km de las cargas sin cerrar de la tarjeta (incluidas las que
+ * siguen en el equipo), o `null` sin cargas. Fija los km intermedios: el
+ * inicial no puede quedar por encima del menor ni el final por debajo del
+ * mayor (el servidor responde `INITIAL_ABOVE_FUEL_LOAD` / `READING_BELOW_FUEL_LOAD`).
+ */
+export function kmDeCargas(t: Pick<TarjetaTurno, 'cargas'>): { min: number; max: number } | null {
+  const kms = (t.cargas ?? []).map((c) => c.km);
+  return kms.length ? { min: Math.min(...kms), max: Math.max(...kms) } : null;
+}
+
+/** `45.300 km` — para los mensajes de lectura contra las cargas. */
+export function kmTexto(n: number): string {
+  return `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} km`;
+}
+
+/** Final menor que el km de una carga de la tarjeta: el mensaje para el campo, o `null`. */
+export function errorFinalBajoCarga(t: Pick<TarjetaTurno, 'cargas'>, final: number | null): string | null {
+  const rango = kmDeCargas(t);
+  if (final == null || !rango || final >= rango.max) return null;
+  return `No puede ser menor que el km de una carga registrada en la tarjeta (${kmTexto(rango.max)}).`;
+}
+
+/** Inicial mayor que el km de una carga de la tarjeta: el mensaje para el campo, o `null`. */
+export function errorInicialSobreCarga(t: Pick<TarjetaTurno, 'cargas'>, inicial: number | null): string | null {
+  const rango = kmDeCargas(t);
+  if (inicial == null || !rango || inicial <= rango.min) return null;
+  return `No puede ser mayor que el km de una carga registrada en la tarjeta (${kmTexto(rango.min)}).`;
+}
+
+/** `true` si alguna carga sin cerrar de la tarjeta sigue en el equipo. */
+export function tieneCargasSinSincronizar(t: Pick<TarjetaTurno, 'cargas'>): boolean {
+  return t.cargas?.some((c) => c.sinSincronizar) ?? false;
 }
 
 /** Un liviano sin conductor registrado: lo maneja el supervisor. */
@@ -214,6 +282,18 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
     cerradaPor: card.closedByName ?? undefined,
     cerradaPorId: card.closedById ?? undefined,
     cerradaEnActual: card.closedShift != null && esActual(card.closedShift.date, card.closedShift.type, ctx),
+    ...(card.fuelLoads?.length
+      ? {
+          cargas: card.fuelLoads.map((c) => ({
+            id: c.id,
+            litros: c.liters,
+            km: c.reading,
+            adBlueLitros: c.adBlueLiters ?? undefined,
+            fechaIso: c.createdAt,
+            por: c.createdByName ?? undefined,
+          })),
+        }
+      : {}),
   };
 }
 

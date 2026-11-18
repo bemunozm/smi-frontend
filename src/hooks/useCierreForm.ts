@@ -3,7 +3,7 @@ import { toast } from '@heroui/react';
 
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import { validarLitros } from '../lib/litros';
-import type { TarjetaTurno } from './shift-register-helpers';
+import { errorFinalBajoCarga, type TarjetaTurno } from './shift-register-helpers';
 import { enqueueCloseCard } from '../offline/outbox';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
 import { toDateOnly, type ContextoTurno } from '../lib/turno';
@@ -44,6 +44,9 @@ export interface UseCierreFormResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  /** Liviano: el km final queda por debajo del de una carga registrada sin
+   * cerrar (incluidas las pendientes) — el mensaje para el campo. */
+  finalBajoCarga: string | null;
   /** Texto que no es número o litros fuera de 0–100.000: no se puede cerrar
    * (el servidor lo rechazaría y la tarjeta quedaría trabada en la cola). */
   litrosError: string | null;
@@ -53,8 +56,12 @@ export interface UseCierreFormResult {
    * obligatoria. Sin combustible se cierra sin foto. */
   fotoRequerida: boolean;
   /** `true` si no se escribieron litros: entonces hay que justificar por qué
-   * (corte de luz, surtidor sin combustible…). */
+   * (corte de luz, surtidor sin combustible…). Nunca en un liviano que ya
+   * cargó con la tarjeta abierta: ahí cerrar sin litros es lo normal. */
   motivoRequerido: boolean;
+  /** Cargas que la tarjeta ya tiene sin cerrar (incluidas las pendientes de
+   * sincronizar) — `0` en un pesado. */
+  cargasPrevias: number;
   /** Sin litros y sin motivo escrito: no se puede cerrar. */
   faltaMotivo: boolean;
   /** Validación del AdBlue: `error` impide cerrar, `aviso` (> 30 L) no. */
@@ -90,6 +97,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   const finalNum = parseDecimal(cierre.final);
   const horasMaquina = cerrando && finalNum != null ? finalNum - cerrando.inicial : null;
   const finalInvalido = horasMaquina != null && horasMaquina < 0;
+  const finalBajoCarga = cerrando?.liviano && !finalInvalido ? errorFinalBajoCarga(cerrando, finalNum) : null;
 
   // El punto del surtidor es la coma (48.493 = 48,493 L); una camioneta no carga
   // cientos de litros y un pesado con miles se avisa — ver `lib/litros.ts`.
@@ -99,8 +107,10 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
   // El combustible es opcional (corte de luz, 16/11/2026): la foto del
   // surtidor solo se exige cuando se escriben litros.
   const fotoRequerida = (validacionLitros.valor ?? 0) > 0;
-  // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026).
-  const motivoRequerido = !fotoRequerida;
+  // Sin carga hay que decir por qué (pedido del cliente, 16/11/2026), salvo en
+  // un liviano que ya cargó sin cerrar: su combustible ya quedó registrado.
+  const cargasPrevias = cerrando?.liviano ? (cerrando.cargas?.length ?? 0) : 0;
+  const motivoRequerido = !fotoRequerida && cargasPrevias === 0;
   const faltaMotivo = motivoRequerido && cierre.motivoSinCarga.trim() === '';
 
   const adBlueLitrosNum = parseDecimal(cierre.adBlueLitros);
@@ -122,6 +132,7 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
       !cerrando ||
       finalNum == null ||
       finalInvalido ||
+      finalBajoCarga ||
       litrosError ||
       adBlueIncompletoCierre ||
       (fotoRequerida && !foto.file) ||
@@ -161,5 +172,5 @@ export function useCierreForm({ tarjetas, ctx, userId }: UseCierreFormParams): U
     }
   };
 
-  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, litrosError, litrosAviso, fotoRequerida, motivoRequerido, faltaMotivo, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
+  return { cerrandoId, setCerrandoId, cerrando, cierre, setCierre, abrirCierre, cerrar, finalNum, horasMaquina, finalInvalido, finalBajoCarga, litrosError, litrosAviso, fotoRequerida, motivoRequerido, cargasPrevias, faltaMotivo, adBlueCierre, adBlueIncompletoCierre, isCerrando, foto };
 }

@@ -113,13 +113,13 @@ export function EditorTarjeta({
             />
           </Campo>
         )}
-        <Campo label={`${lectura} inicial`} unidad={unidad}>
+        <Campo label={`${lectura} inicial`} unidad={unidad} error={edicion.inicialSobreCarga ?? undefined}>
           <Input numerico value={form.inicial} onChange={(e) => setForm((f) => ({ ...f, inicial: e.target.value }))} />
         </Campo>
 
         {edicion.esCerrada && (
           <>
-            <Campo label={`${lectura} final`} unidad={unidad}>
+            <Campo label={`${lectura} final`} unidad={unidad} error={edicion.finalBajoCarga ?? undefined}>
               <Input numerico value={form.final} onChange={(e) => setForm((f) => ({ ...f, final: e.target.value }))} />
             </Campo>
             {edicion.finalInvalido && (

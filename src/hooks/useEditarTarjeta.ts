@@ -5,7 +5,7 @@ import { LITROS_MAX } from './useCierreForm';
 import { validarLitros } from '../lib/litros';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedMutation } from './useQueuedMutation';
-import type { TarjetaTurno } from './shift-register-helpers';
+import { errorFinalBajoCarga, errorInicialSobreCarga, type TarjetaTurno } from './shift-register-helpers';
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import { diferenciaEdicion, precondicion, type DiffEdicion } from '../lib/edit-diff';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
@@ -79,6 +79,10 @@ export interface UseEditarTarjetaResult {
   soloEnElEquipo: boolean;
   adBlue: ResultadoAdBlue;
   finalInvalido: boolean;
+  /** Liviano con cargas sin cerrar: el km inicial quedó por encima de una carga. */
+  inicialSobreCarga: string | null;
+  /** Liviano con cargas sin cerrar: el km final quedó por debajo de una carga. */
+  finalBajoCarga: string | null;
   /** Qué falta para guardar una tarjeta cerrada; `null` si nada falta o si lo
    * dice ya el propio campo (final menor que el inicial, AdBlue). */
   faltante: string | null;
@@ -180,6 +184,11 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
   // Mismo criterio que el cierre: 48493 en una camioneta no se guarda (era 48,493).
   const revisionLitros = validarLitros(form.litros, { liviano: !!editando?.liviano });
   const finalInvalido = esCerrada && inicialNum != null && finalNum != null && finalNum < inicialNum;
+  // Las cargas registradas con la tarjeta abierta fijan km intermedios (mismo
+  // freno que el servidor: `INITIAL_ABOVE_FUEL_LOAD` / `READING_BELOW_FUEL_LOAD`).
+  const inicialSobreCarga = editando?.liviano ? errorInicialSobreCarga(editando, inicialNum) : null;
+  const finalBajoCarga =
+    editando?.liviano && esCerrada && !finalInvalido ? errorFinalBajoCarga(editando, finalNum) : null;
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
@@ -200,7 +209,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
       : litrosNum == null || litrosNum < 0
         ? 'Indica los litros de combustible (cero si no cargó).'
         : revisionLitros.error;
-  const puedeGuardar = editando != null && !incompleto && !finalInvalido && !isGuardando;
+  const puedeGuardar =
+    editando != null && !incompleto && !finalInvalido && !inicialSobreCarga && !finalBajoCarga && !isGuardando;
 
   const abrirEdicion = (id: string) => {
     const t = tarjetas.find((x) => x.id === id);
@@ -278,6 +288,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
     soloEnElEquipo,
     adBlue,
     finalInvalido,
+    inicialSobreCarga,
+    finalBajoCarga,
     faltante,
     puedeGuardar,
     guardar,

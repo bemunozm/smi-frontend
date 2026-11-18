@@ -106,14 +106,15 @@ describe('MiCamionetaView (mantenedor)', () => {
     listMineMock.mockResolvedValue([tarjeta('mant_1')]);
     renderCard();
 
-    expect(await screen.findByRole('button', { name: /Cerrar camioneta/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Cerrar tarjeta/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cargar combustible/ })).toBeTruthy();
     expect(screen.getByText('CM-001')).toBeTruthy();
     expect(screen.getByText('En uso')).toBeTruthy();
     expect(screen.getByText('45.120 km')).toBeTruthy();
     // Se ve qué camioneta es: abre su ficha en el taller.
     expect(screen.getByRole('button', { name: /Ver camioneta/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Cerrar camioneta/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Cerrar tarjeta/ }));
     expect(await screen.findByText('Kilometraje final')).toBeTruthy();
     // El cierre va en la misma vista, con Cancelar para volver.
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy();
@@ -129,5 +130,68 @@ describe('MiCamionetaView (mantenedor)', () => {
 
     expect(await screen.findByText('Usar una camioneta')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Cerrar camioneta/ })).toBeNull();
+    // La de otra persona igual se puede cargar o cerrar desde «Abiertas por otros».
+    expect(await screen.findByRole('button', { name: /Cargar/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cerrar tarjeta/ })).toBeTruthy();
+  });
+
+  it('carga combustible sin cerrar: abre el formulario con el km sugerido, y muestra las cargas hechas', async () => {
+    equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Mario Mantenedor' } }]);
+    listMineMock.mockResolvedValue([
+      {
+        ...tarjeta('mant_1'),
+        fuelLoads: [
+          {
+            id: 'k1',
+            liters: 70,
+            reading: 45300,
+            adBlueLiters: null,
+            pumpPhotoUrl: null,
+            fecha: '2026-10-24',
+            createdAt: '2026-10-24T15:00:00.000Z',
+            createdByName: 'Mario Mantenedor',
+          },
+        ],
+      },
+    ]);
+    renderCard();
+
+    expect(await screen.findByText(/1 carga/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Cargar combustible/ }));
+
+    expect(await screen.findByText('Kilometraje al cargar')).toBeTruthy();
+    expect(screen.getByText(/Sugerido: el último registrado \(45\.300 km\)/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Registrar carga/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Falta la foto del surtidor.')).toBeTruthy();
+    // Mientras se registra la carga, no se ofrecen los botones de la tarjeta.
+    expect(screen.queryByRole('button', { name: /Cerrar tarjeta/ })).toBeNull();
+  });
+
+  it('cerrar después de cargar: los litros son opcionales y no pide motivo', async () => {
+    equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Mario Mantenedor' } }]);
+    listMineMock.mockResolvedValue([
+      {
+        ...tarjeta('mant_1'),
+        fuelLoads: [
+          {
+            id: 'k1',
+            liters: 70,
+            reading: 45300,
+            adBlueLiters: null,
+            pumpPhotoUrl: null,
+            fecha: '2026-10-24',
+            createdAt: '2026-10-24T15:00:00.000Z',
+            createdByName: 'Mario Mantenedor',
+          },
+        ],
+      },
+    ]);
+    renderCard();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Cerrar tarjeta/ }));
+
+    expect(await screen.findByText('Combustible al cerrar (opcional)')).toBeTruthy();
+    expect(screen.getByText(/ya tiene 1 carga registrada/)).toBeTruthy();
+    expect(screen.queryByText('Motivo sin carga de combustible')).toBeNull();
   });
 });
