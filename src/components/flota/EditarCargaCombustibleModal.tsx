@@ -5,6 +5,7 @@ import { Button, FieldError, Input, Label, ListBox, Modal, Select, Spinner, Swit
 
 import { DecimalField } from '../DecimalField';
 import { adBlueIncompleto, validarAdBlue } from '../../lib/adblue';
+import { errorLecturaDeCarga } from '../../lib/error-messages';
 import { revisarLitros } from '../../lib/litros';
 import { useEditarCargaCombustible } from '../../hooks/useCombustible';
 import type { UpdateCombustibleBody } from '../../api/CombustibleAPI';
@@ -45,6 +46,8 @@ type EdicionValues = z.infer<typeof EdicionSchema>;
  */
 export function EditarCargaCombustibleModal({ carga, onClose }: { carga: RegistroCombustible; onClose: () => void }) {
   const editar = useEditarCargaCombustible();
+  // El servidor rechazó la lectura (fuera del km de su tarjeta): se dice en el campo.
+  const lecturaRechazada = errorLecturaDeCarga(editar.error);
   const esDeTarjeta = Boolean(carga.registroHorometroId);
   const esLiviano = carga.equipo?.equipmentClass === 'LIGHT';
 
@@ -168,14 +171,18 @@ export function EditarCargaCombustibleModal({ carga, onClose }: { carga: Registr
                     name="lectura"
                     render={({ field }) => (
                       <DecimalField
-                        errorMessage={errors.lectura?.message}
-                        isInvalid={!!errors.lectura}
+                        errorMessage={errors.lectura?.message ?? lecturaRechazada ?? undefined}
+                        isInvalid={!!errors.lectura || lecturaRechazada != null}
                         label={esLiviano ? 'Kilometraje al cargar (km)' : 'Horómetro al cargar (h)'}
                         // El contador del equipo solo AVANZA con una lectura
                         // mayor: si quedó inflado por el typo, se corrige en la
                         // ficha del equipo.
                         onBlur={field.onBlur}
-                        onChange={field.onChange}
+                        onChange={(valor) => {
+                          // Al corregirla, el rechazo anterior ya no aplica.
+                          if (lecturaRechazada) editar.reset();
+                          field.onChange(valor);
+                        }}
                         value={field.value}
                       />
                     )}
