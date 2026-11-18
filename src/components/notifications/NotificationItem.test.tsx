@@ -61,6 +61,55 @@ describe('NotificationItem — reporte de salida', () => {
   });
 });
 
+describe('NotificationItem — carga de combustible', () => {
+  const cargaDeCamioneta = (data: Notificacion['data']): Notificacion => ({
+    id: 'n7',
+    userId: 'u1',
+    tipo: 'fuel.loaded',
+    titulo: 'Carga de combustible · MB-008',
+    cuerpo: '42,5 L a 22.037 km · Supervisor Jorge SMI · tarjeta abierta',
+    data,
+    leida: false,
+    createdAt: '2026-11-18T10:00:00.000Z',
+  });
+
+  it('se reconoce: etiqueta propia con ícono, no la genérica', () => {
+    const { container } = render(
+      <NotificationItem
+        notificacion={cargaDeCamioneta({ cargaId: 'c9', cardId: 'k1', equipmentId: 'e1', origin: 'TARJETA_ABIERTA' })}
+      />,
+    );
+
+    expect(screen.getByText('Carga de combustible')).toBeTruthy();
+    expect(screen.queryByText('Notificación')).toBeNull();
+    expect(container.querySelector('svg.lucide-fuel')).toBeTruthy();
+  });
+
+  it('al tocarla abre esa carga en el panel de cargas de combustible', () => {
+    roleRef.value = 'ADMIN';
+    const onAfterClick = vi.fn();
+    render(
+      <NotificationItem
+        notificacion={cargaDeCamioneta({ cargaId: 'c 9', cardId: 'k1', equipmentId: 'e1', origin: 'CIERRE' })}
+        onAfterClick={onAfterClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible?id=c%209');
+    expect(onAfterClick).toHaveBeenCalled();
+  });
+
+  it('sin cargaId lleva al listado de cargas, no a la ficha del equipo', () => {
+    render(<NotificationItem notificacion={cargaDeCamioneta({ equipmentId: 'e1', equipoId: 'e1' })} />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(navigateMock).toHaveBeenCalledWith('/cargas-combustible');
+  });
+});
+
 describe('NotificationItem — registro corregido', () => {
   it('lleva etiqueta propia, no la genérica', () => {
     render(<NotificationItem notificacion={editada({ entity: 'hallazgo', entityId: 'h1' })} />);

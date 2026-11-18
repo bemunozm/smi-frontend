@@ -18,6 +18,15 @@ function equipoIdFrom(data: Notificacion['data']): string | null {
   return typeof equipoId === 'string' && equipoId.length > 0 ? equipoId : null;
 }
 
+/** `/cargas-combustible?id=<carga>`: la vista abre el detalle de esa carga (y,
+ * si ya no existe, solo muestra el listado). Sin `cargaId`, el listado. */
+function rutaDeCarga(data: Notificacion['data']): string {
+  const cargaId = data?.cargaId;
+  return typeof cargaId === 'string' && cargaId.length > 0
+    ? `/cargas-combustible?id=${encodeURIComponent(cargaId)}`
+    : '/cargas-combustible';
+}
+
 function reportIdFrom(data: Notificacion['data']): string | null {
   if (!data) return null;
   const { reportId } = data;
@@ -43,7 +52,7 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
   const abrirPdf = useAbrirPdfReporte();
   const navigate = useNavigate();
   const { role } = useCurrentUser();
-  const { label, color } = notificacionTipoConfig(notificacion.tipo);
+  const { label, color, icono: Icono } = notificacionTipoConfig(notificacion.tipo);
 
   const handleClick = (): void => {
     markRead.mutate(notificacion.id);
@@ -64,6 +73,14 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
     // Informe diario.
     if (notificacion.tipo === NOTIF_TIPOS.SHIFT_OPEN_CARDS) {
       navigate('/terreno/registro');
+      onAfterClick?.();
+      return;
+    }
+
+    // Carga de combustible de una camioneta (solo la recibe el administrador): su
+    // detalle en el panel de cargas.
+    if (notificacion.tipo === NOTIF_TIPOS.FUEL_LOADED) {
+      navigate(rutaDeCarga(notificacion.data));
       onAfterClick?.();
       return;
     }
@@ -121,6 +138,7 @@ export function NotificationItem({ notificacion, onAfterClick }: NotificationIte
             <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-accent" />
           )}
           <Chip color={color} size="sm" variant="soft">
+            {Icono ? <Icono aria-hidden className="size-3.5" /> : null}
             {label}
           </Chip>
         </div>
