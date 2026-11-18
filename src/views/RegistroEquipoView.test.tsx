@@ -1211,12 +1211,25 @@ describe('RegistroEquipoView', () => {
       expect(within(tarjeta).getByText(/1 carga/)).toBeTruthy();
     });
 
-    it('elegir «Registrar turno pasado» descarta la carga a medio registrar', () => {
+    it('entrar a un turno pasado descarta la carga a medio registrar; solo abrir el diálogo, no', () => {
       renderView('desktop', { carga: { ...CARGA_INACTIVA, cargandoId: 'l-c1', cargando: LIVIANO_ABIERTO } });
 
       fireEvent.click(screen.getByRole('button', { name: /Registrar turno pasado/ }));
+      expect(cancelarCargaMock).not.toHaveBeenCalled();
 
+      fireEvent.click(screen.getByRole('button', { name: 'Registrar este turno' }));
       expect(cancelarCargaMock).toHaveBeenCalled();
+      expect(elegirTurnoPasadoMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('con todas sus cargas rechazadas no muestra «0 cargas · 0 L»', () => {
+      const rechazada = { ...CARGAS[0]!, sinSincronizar: true, requiereAtencion: true };
+      renderView('desktop', { livianosAbiertos: [{ ...LIVIANO_ABIERTO, cargas: [rechazada] }] });
+      verLivianos();
+
+      const tarjeta = screen.getByText('Marta Díaz').closest('article')!;
+      expect(within(tarjeta).queryByText(/0 cargas/)).toBeNull();
+      expect(within(tarjeta).getByText(/Una carga no se pudo enviar/)).toBeTruthy();
     });
 
     it('el km de la carga fuera de rango se muestra en el campo', () => {
@@ -1322,10 +1335,18 @@ describe('RegistroEquipoView', () => {
       fireEvent.pointerDown(screen.getByRole('heading', { name: 'Abrir camioneta' }));
       expect(screen.queryByRole('dialog')).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Cómo funcionan las camionetas' }));
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      const ayuda = { name: 'Cómo funcionan las camionetas' };
+      fireEvent.click(screen.getByRole('button', ayuda));
+      expect(screen.getByRole('dialog', ayuda)).toBeTruthy();
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByRole('dialog', ayuda)).toBeNull();
+
+      // También al tocar un control de react-aria (detiene el pointerdown en burbuja).
+      fireEvent.click(screen.getByRole('button', ayuda));
+      expect(screen.getByRole('dialog', ayuda)).toBeTruthy();
+      fireEvent.pointerDown(screen.getByLabelText('Camioneta'));
+      // (El selector abre su propia lista: se mira solo el globo de ayuda.)
+      expect(screen.queryByRole('dialog', ayuda)).toBeNull();
     });
 
     it('en modo pasado no se abre', () => {

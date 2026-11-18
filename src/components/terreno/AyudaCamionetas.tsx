@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Dialog, Heading, OverlayArrow, Popover } from 'react-aria-components';
 import { CircleHelp, Info, X } from 'lucide-react';
 
+/** Cierres por scroll que se ignoran justo después de abrir (reacomodo de la pantalla). */
+const VENTANA_REACOMODO_MS = 300;
+
 /**
  * «?» del encabezado de «Abrir camioneta» con su recuadro de información: cómo
  * se registran las camionetas. Lo controla la vista (se abre solo al entrar a
@@ -19,10 +22,14 @@ export function AyudaCamionetas({
 }) {
   const ancla = useRef<HTMLButtonElement>(null);
   const globo = useRef<HTMLElement>(null);
+  /** Cuándo se abrió: react-aria cierra un globo no modal al hacer scroll, y al
+   * entrar a Livianos la pantalla puede reacomodarse (scroll) justo después. */
+  const abiertoDesde = useRef(0);
 
   // Sin capa modal, cerrar al tocar fuera y con Escape corre por cuenta propia.
   useEffect(() => {
     if (!abierto) return;
+    abiertoDesde.current = Date.now();
     const alTocar = (e: PointerEvent) => {
       const objetivo = e.target as Node | null;
       if (objetivo && (globo.current?.contains(objetivo) || ancla.current?.contains(objetivo))) return;
@@ -31,10 +38,12 @@ export function AyudaCamionetas({
     const alTeclear = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onAbiertoChange(false);
     };
-    document.addEventListener('pointerdown', alTocar);
+    // En captura: el `usePress` de react-aria detiene el pointerdown en burbuja, y
+    // tocar un control suyo (el selector de camioneta) no cerraba el globo.
+    document.addEventListener('pointerdown', alTocar, true);
     document.addEventListener('keydown', alTeclear);
     return () => {
-      document.removeEventListener('pointerdown', alTocar);
+      document.removeEventListener('pointerdown', alTocar, true);
       document.removeEventListener('keydown', alTeclear);
     };
   }, [abierto, onAbiertoChange]);
@@ -58,16 +67,27 @@ export function AyudaCamionetas({
         isNonModal
         triggerRef={ancla}
         isOpen={abierto}
-        onOpenChange={onAbiertoChange}
+        // Lo único que cierra por acá es el scroll de react-aria: se ignora el del reacomodo inicial.
+        onOpenChange={(abrir) => {
+          if (!abrir && Date.now() - abiertoDesde.current < VENTANA_REACOMODO_MS) return;
+          onAbiertoChange(abrir);
+        }}
         placement="bottom end"
         offset={10}
         containerPadding={16}
         // Entra desde el ícono (fade + scale); sin animación si el equipo pide menos movimiento.
-        className="w-[min(320px,calc(100vw-32px))] origin-(--trigger-anchor-point) rounded-2xl border border-[color-mix(in_srgb,var(--accent-soft-foreground)_22%,transparent)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-[0_12px_32px_rgba(20,23,28,.14)] transition-[opacity,scale] duration-150 ease-out data-[entering]:scale-95 data-[entering]:opacity-0 data-[exiting]:scale-95 data-[exiting]:opacity-0 motion-reduce:transition-none"
+        className="w-[min(320px,calc(100vw-32px))] origin-(--trigger-anchor-point) rounded-2xl data-[placement=bottom]:rounded-tr-md data-[placement=top]:rounded-br-md border border-[color-mix(in_srgb,var(--accent-soft-foreground)_22%,transparent)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-[0_12px_32px_rgba(20,23,28,.14)] transition-[opacity,scale] duration-150 ease-out data-[entering]:scale-95 data-[entering]:opacity-0 data-[exiting]:scale-95 data-[exiting]:opacity-0 motion-reduce:transition-none"
       >
-        <OverlayArrow className="block">
-          {/* Mismo fondo y borde que el globo; el trazo de abajo queda tapado por el globo. */}
-          <svg width={16} height={9} viewBox="0 0 16 9" className="block translate-y-px" aria-hidden>
+        <OverlayArrow className="group block">
+          {/* Mismo fondo y borde que el globo; la base queda tapada por el globo. Si el globo se
+              invierte hacia arriba (no cabe abajo), la flecha se da vuelta y apunta hacia abajo. */}
+          <svg
+            width={16}
+            height={9}
+            viewBox="0 0 16 9"
+            className="block group-data-[placement=bottom]:translate-y-px group-data-[placement=top]:-translate-y-px group-data-[placement=top]:rotate-180"
+            aria-hidden
+          >
             <path
               d="M0 9 L8 1 L16 9"
               className="fill-[var(--accent-soft)] stroke-[color-mix(in_srgb,var(--accent-soft-foreground)_22%,transparent)]"

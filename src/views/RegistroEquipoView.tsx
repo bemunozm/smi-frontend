@@ -1377,15 +1377,7 @@ export function RegistroEquipoView() {
           cliente, 04/11). Siempre visible salvo con el modo ya activo. */}
       {!modoPasado && (
         <div className="mb-4">
-          <Boton
-            ancho
-            variante="contorno"
-            onClick={() => {
-              // Un turno pasado no lleva camionetas: la carga a medio registrar se descarta.
-              carga.cancelarCarga();
-              setDialogoPasado(true);
-            }}
-          >
+          <Boton ancho variante="contorno" onClick={() => setDialogoPasado(true)}>
             <History className="h-[18px] w-[18px]" aria-hidden /> Registrar turno pasado
           </Boton>
         </div>
@@ -1555,7 +1547,15 @@ export function RegistroEquipoView() {
         <EditorTarjeta edicion={edicion} operadores={opcionesOperadorEdicion} eliminar={eliminarEnEdicion} />
       </ModalTerreno>
 
-      <PastShiftDialog abierto={dialogoPasado} onAbiertoChange={setDialogoPasado} onConfirmar={elegirTurnoPasado} />
+      <PastShiftDialog
+        abierto={dialogoPasado}
+        onAbiertoChange={setDialogoPasado}
+        onConfirmar={(fecha, turno) => {
+          // Un turno pasado no lleva camionetas: la carga a medio registrar se descarta al entrar.
+          carga.cancelarCarga();
+          elegirTurnoPasado(fecha, turno);
+        }}
+      />
 
       {verReporte && (
         <Hoja

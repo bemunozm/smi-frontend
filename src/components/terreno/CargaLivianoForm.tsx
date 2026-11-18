@@ -30,10 +30,13 @@ export function CargasTarjeta({ cargas }: { cargas: CargaTarjeta[] | undefined }
   const total = vigentes.reduce((acc, c) => acc + c.litros, 0);
   return (
     <div className="flex flex-col gap-1.5 rounded-2xl bg-[#f5f6f8] px-3.5 py-2.5">
-      <div className="flex items-center gap-1.5 text-[13.5px] font-semibold">
-        <Fuel className="h-4 w-4 text-muted-foreground" aria-hidden />
-        {plural(vigentes.length, 'carga', 'cargas')} · <span className="tabular">{fmtLitros(total)} L</span>
-      </div>
+      {/* Sin cargas vigentes (todas rechazadas) no hay nada que resumir: «0 cargas · 0 L» confunde. */}
+      {vigentes.length > 0 && (
+        <div className="flex items-center gap-1.5 text-[13.5px] font-semibold">
+          <Fuel className="h-4 w-4 text-muted-foreground" aria-hidden />
+          {plural(vigentes.length, 'carga', 'cargas')} · <span className="tabular">{fmtLitros(total)} L</span>
+        </div>
+      )}
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {cargas.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted-foreground">
