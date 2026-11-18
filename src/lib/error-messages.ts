@@ -64,7 +64,8 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   // Cierre de camioneta solo con km (tenía cargas sin cerrar) que llegó cuando
   // el servidor ya no ve ninguna (p. ej. se descartó la única carga en la cola).
   FUEL_LITERS_REQUIRED:
-    'La carga de esta camioneta no se registró: indica el combustible al cerrar. Corrige los litros de la tarjeta (Editar) y reintenta.',
+    'La carga de esta camioneta no se registró, así que este cierre ya no sirve: ' +
+    'descártalo y vuelve a cerrar la tarjeta con el combustible.',
   NO_CARDS: 'No hay tarjetas para incluir en el reporte de salida — abrí o cerrá al menos un equipo antes de enviarlo.',
   SHIFT_NOT_FOUND:
     'El turno de este reporte no existe en el servidor — revisá la fecha y el tipo de turno, o descartá y reintentá.',

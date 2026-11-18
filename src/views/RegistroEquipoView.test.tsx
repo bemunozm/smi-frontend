@@ -204,6 +204,7 @@ const EDICION_INACTIVA: UseShiftRegisterResult['edicion'] = {
   },
   setForm: vi.fn(),
   esCerrada: false,
+  editaCombustible: false,
   editaTurno: false,
   opcionesEquipo: [],
   soloEnElEquipo: false,
@@ -1401,7 +1402,7 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByText('Kilómetros recorridos')).toBeTruthy();
       expect(screen.getByText('180 km')).toBeTruthy();
       expect(screen.queryByText(/AdBlue/)).toBeNull();
-      expect(screen.getByText(/indica la carga al cerrar o el motivo/)).toBeTruthy();
+      expect(screen.getByText(/Ciérrala cuando la dejes de usar/)).toBeTruthy();
       expect(screen.queryByText(/reporte de salida del turno/)).toBeNull();
       // Con litros escritos, la foto del surtidor sigue siendo obligatoria.
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
@@ -1442,6 +1443,7 @@ describe('RegistroEquipoView', () => {
           ...EDICION_INACTIVA,
           editando: TARJETA_CERRADA,
           esCerrada: true,
+          editaCombustible: true,
           historialDisponible: true,
           cambios: [
             {
@@ -1482,6 +1484,7 @@ describe('RegistroEquipoView', () => {
           ...EDICION_INACTIVA,
           editando: TARJETA_CERRADA,
           esCerrada: true,
+          editaCombustible: true,
           finalInvalido: true,
           faltante: 'Indica los litros de combustible (cero si no cargó).',
           form: { ...EDICION_INACTIVA.form, operatorId: 'op_1', inicial: '12487,3', final: '12480' },
@@ -1525,6 +1528,7 @@ describe('RegistroEquipoView', () => {
           ...EDICION_INACTIVA,
           editando: { ...TARJETA_CERRADA, turnoFecha: '2026-09-24', turnoTipo: 'DIURNO' },
           esCerrada: true,
+          editaCombustible: true,
           editaTurno: true,
           opcionesEquipo: [{ valor: 'e-ex002', titulo: 'EX-002', detalle: 'Excavadora' }],
           form: { ...EDICION_INACTIVA.form, equipoId: 'e-ex002', turno: 'DIURNO' },

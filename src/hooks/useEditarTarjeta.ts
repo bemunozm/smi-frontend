@@ -5,7 +5,12 @@ import { LITROS_MAX } from './useCierreForm';
 import { validarLitros } from '../lib/litros';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedMutation } from './useQueuedMutation';
-import { errorFinalBajoCarga, errorInicialSobreCarga, type TarjetaTurno } from './shift-register-helpers';
+import {
+  cargasVigentes,
+  errorFinalBajoCarga,
+  errorInicialSobreCarga,
+  type TarjetaTurno,
+} from './shift-register-helpers';
 import { formatDecimalInput, parseDecimal } from '../lib/decimal';
 import { diferenciaEdicion, precondicion, type DiffEdicion } from '../lib/edit-diff';
 import { adBlueIncompleto, validarAdBlue, type ResultadoAdBlue } from '../lib/adblue';
@@ -70,6 +75,10 @@ export interface UseEditarTarjetaResult {
   setForm: (cambio: (actual: EdicionTarjetaState) => EdicionTarjetaState) => void;
   /** Tarjeta ya cerrada: el horómetro final, los litros y el AdBlue también se editan. */
   esCerrada: boolean;
+  /** Cerrada y con combustible propio del cierre: se muestran y exigen litros y
+   * AdBlue. `false` en una camioneta con cargas vigentes hechas sin cerrar: se
+   * cerró solo con el km (mismo criterio que el cierre). */
+  editaCombustible: boolean;
   /** Con turno conocido (abierta o cerrada): se puede corregir si salió DIURNO o NOCTURNO. */
   editaTurno: boolean;
   /** Opciones del selector de máquina (misma clase pesado/liviano que la tarjeta). */
@@ -189,26 +198,27 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
   const inicialSobreCarga = editando?.liviano ? errorInicialSobreCarga(editando, inicialNum) : null;
   const finalBajoCarga =
     editando?.liviano && esCerrada && !finalInvalido ? errorFinalBajoCarga(editando, finalNum) : null;
+  // Camioneta con cargas vigentes: su cierre fue solo con km; el editor tampoco pide combustible.
+  const editaCombustible = esCerrada && !(editando?.liviano && cargasVigentes(editando).length > 0);
   const incompleto =
     inicialNum == null ||
     (pideOperador && !form.operatorId) ||
     !form.equipoId ||
-    (esCerrada &&
-      (finalNum == null ||
-        litrosNum == null ||
-        litrosNum < 0 ||
-        litrosNum > LITROS_MAX ||
-        revisionLitros.error != null)) ||
-    (esCerrada && adBlueIncompleto(form.adBlue, adBlueLitros));
+    (esCerrada && finalNum == null) ||
+    (editaCombustible &&
+      (litrosNum == null || litrosNum < 0 || litrosNum > LITROS_MAX || revisionLitros.error != null)) ||
+    (editaCombustible && adBlueIncompleto(form.adBlue, adBlueLitros));
   const faltante = !esCerrada
     ? null
     : inicialNum == null || finalNum == null
       ? editando?.liviano
         ? 'Falta el kilometraje.'
         : 'Faltan los horómetros.'
-      : litrosNum == null || litrosNum < 0
-        ? 'Indica los litros de combustible (cero si no cargó).'
-        : revisionLitros.error;
+      : !editaCombustible
+        ? null
+        : litrosNum == null || litrosNum < 0
+          ? 'Indica los litros de combustible (cero si no cargó).'
+          : revisionLitros.error;
   const puedeGuardar =
     editando != null && !incompleto && !finalInvalido && !inicialSobreCarga && !finalBajoCarga && !isGuardando;
 
@@ -222,8 +232,21 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
 
   const cerrarEdicion = () => setEditandoId(null);
 
-  const motivoSinEdicion = (t: TarjetaTurno): string | null =>
-    t.edicionRequiereAtencion ? 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.' : null;
+  const motivoSinEdicion = (t: TarjetaTurno): string | null => {
+    if (t.edicionRequiereAtencion) return 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.';
+    // Un cierre solo con km que el servidor rechazó porque ya no ve cargas: el
+    // editor no puede pedir el motivo ni adjuntar la foto de un cierre normal.
+    const cierreSinCarga = ops.some(
+      (o) =>
+        o.type === 'closeCard' &&
+        o.payload.cardId === t.id &&
+        o.status === 'needs_attention' &&
+        o.lastError?.code === 'FUEL_LITERS_REQUIRED',
+    );
+    return cierreSinCarga
+      ? 'Este cierre ya no sirve: descártalo en Sincronización y vuelve a cerrar la tarjeta con el combustible.'
+      : null;
+  };
 
   const guardar = async () => {
     if (!editando || !puedeGuardar || !userId || inicialNum == null) return;
@@ -234,9 +257,9 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
       equipoId: form.equipoId,
       ...(editaTurno ? { turno: form.turno as ShiftType } : {}),
       valorInicial: inicialNum,
-      ...(esCerrada
+      ...(esCerrada ? { valorFinal: finalNum ?? undefined } : {}),
+      ...(editaCombustible
         ? {
-            valorFinal: finalNum ?? undefined,
             fuelLiters: litrosNum ?? undefined,
             adBlue: form.adBlue,
             adBlueLiters: form.adBlue ? (adBlue.litros ?? undefined) : undefined,
@@ -249,7 +272,8 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
       'equipoId',
       ...(editaTurno ? (['turno'] as const) : []),
       'valorInicial',
-      ...(esCerrada ? (['valorFinal', 'fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
+      ...(esCerrada ? (['valorFinal'] as const) : []),
+      ...(editaCombustible ? (['fuelLiters', 'adBlue', 'adBlueLiters'] as const) : []),
       'observaciones',
     ];
     const diff = diferenciaEdicion(base, nuevo, campos);
@@ -283,6 +307,7 @@ export function useEditarTarjeta({ tarjetas, ops, userId, equipos }: UseEditarTa
     form,
     setForm: (cambio) => setFormState(cambio),
     esCerrada,
+    editaCombustible,
     editaTurno,
     opcionesEquipo,
     soloEnElEquipo,

@@ -255,9 +255,7 @@ describe('cierre de liviano solo con km rechazado: FUEL_LITERS_REQUIRED', () => 
     expect(closeCardMock.mock.calls[0]![1]).not.toHaveProperty('tmpPhotoKey');
     const op = await db.outbox.get('close-1');
     expect(op?.status).toBe('needs_attention');
-    expect(op?.lastError?.message).toMatch(
-      /La carga de esta camioneta no se registró: indica el combustible al cerrar/,
-    );
+    expect(op?.lastError?.message).toMatch(/este cierre ya no sirve: descártalo y vuelve a cerrar la tarjeta/);
   });
 
   it('corregir los litros del cierre pendiente lo vuelve a mandar', async () => {

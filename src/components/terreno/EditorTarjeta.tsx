@@ -137,20 +137,25 @@ export function EditorTarjeta({
               }
               valor={horas != null ? `${fmt(horas)} ${unidad}` : '—'}
             />
-            <Campo label="Combustible cargado" unidad="L" litros hint={`${AYUDA_LITROS} Cero si no cargó.`}>
-              <Input
-                numerico
-                value={form.litros}
-                onChange={(e) => setForm((f) => ({ ...f, litros: e.target.value }))}
-              />
-            </Campo>
-            <AdBlueCampos
-              adBlue={form.adBlue}
-              litros={form.adBlueLitros}
-              resultado={edicion.adBlue}
-              onAdBlue={(adBlue) => setForm((f) => ({ ...f, adBlue }))}
-              onLitros={(adBlueLitros) => setForm((f) => ({ ...f, adBlueLitros }))}
-            />
+            {/* Camioneta con cargas hechas sin cerrar: su combustible está en esas cargas. */}
+            {edicion.editaCombustible && (
+              <>
+                <Campo label="Combustible cargado" unidad="L" litros hint={`${AYUDA_LITROS} Cero si no cargó.`}>
+                  <Input
+                    numerico
+                    value={form.litros}
+                    onChange={(e) => setForm((f) => ({ ...f, litros: e.target.value }))}
+                  />
+                </Campo>
+                <AdBlueCampos
+                  adBlue={form.adBlue}
+                  litros={form.adBlueLitros}
+                  resultado={edicion.adBlue}
+                  onAdBlue={(adBlue) => setForm((f) => ({ ...f, adBlue }))}
+                  onLitros={(adBlueLitros) => setForm((f) => ({ ...f, adBlueLitros }))}
+                />
+              </>
+            )}
           </>
         )}
 

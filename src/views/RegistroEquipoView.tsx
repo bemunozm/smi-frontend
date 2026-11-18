@@ -1296,9 +1296,7 @@ export function RegistroEquipoView() {
 
       {cerrando.liviano && (
         <Hint>
-          {!soloKm &&
-            'Ciérrala cuando la dejes de usar. Si no tiene cargas registradas, indica la carga al cerrar ' +
-              'o el motivo. '}
+          {!soloKm && 'Ciérrala cuando la dejes de usar. '}
           Queda a tu nombre en el turno <b>{ctx.turno}</b> del <b>{ctx.fechaCorta}</b>.
         </Hint>
       )}
