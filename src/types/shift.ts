@@ -28,6 +28,25 @@ const ShiftCardShiftSchema = z.object({
 });
 
 /**
+ * Carga de combustible hecha con la tarjeta de un liviano todavía ABIERTA
+ * (`POST /shift-cards/:id/fuel-loads`): la camioneta carga y se sigue usando.
+ * No incluye la carga del cierre (esa sigue en `fuelLiters`/`pumpPhotoUrl`).
+ */
+export const ShiftCardFuelLoadSchema = z.object({
+  id: z.string(),
+  liters: z.number(),
+  /** Kilometraje al cargar. */
+  reading: z.number(),
+  adBlueLiters: z.number().nullable(),
+  pumpPhotoUrl: z.string().nullable(),
+  /** Día de negocio de la carga (`YYYY-MM-DD`). */
+  fecha: z.string(),
+  createdAt: z.string(),
+  createdByName: z.string().nullable(),
+});
+export type ShiftCardFuelLoad = z.infer<typeof ShiftCardFuelLoadSchema>;
+
+/**
  * Forma pública de una tarjeta de turno — LA MISMA en `open`, `close` y
  * `mine` (`ShiftsService#shapeCard`, backend): nunca expone
  * `pumpPhotoKey`/`closeClientId` crudos (claves internas de storage/
@@ -79,6 +98,9 @@ export const ShiftCardResponseSchema = z.object({
   closedByName: z.string().nullish(),
   /** Turno de quien la cerró — el liviano entra en el reporte de ESE turno. */
   closedShift: z.object({ id: z.string(), date: z.string(), type: z.string() }).nullish(),
+  /** Cargas intermedias de un liviano abierto, de la más vieja a la más nueva.
+   * Opcional: respuestas guardadas por el Service Worker antes del campo. */
+  fuelLoads: z.array(ShiftCardFuelLoadSchema).optional(),
 });
 export type ShiftCardResponse = z.infer<typeof ShiftCardResponseSchema>;
 
@@ -210,6 +232,25 @@ export interface CloseShiftCardInput {
   photoCapturedAt?: string;
   /** Turno de QUIEN CIERRA. Lo exige un liviano (lo puede cerrar otro
    * supervisor, horas o días después); en un pesado el servidor lo ignora. */
+  shiftDate?: string;
+  shiftType?: ShiftType;
+}
+
+/** Body de `POST /api/shift-cards/:id/fuel-loads` — solo livianos abiertos.
+ * `id` es el UUID v4 del cliente: PK de la carga y clave de idempotencia. */
+export interface AddShiftCardFuelLoadInput {
+  id: string;
+  /** > 0 y ≤ 100.000. */
+  liters: number;
+  /** Kilometraje al cargar: obligatorio y ≥ el inicial de la tarjeta. */
+  reading: number;
+  adBlueLiters?: number | null;
+  /** Key `tmp/<userId>/<uuid>.<ext>` de `POST /api/files` — la foto es obligatoria. */
+  tmpPhotoKey: string;
+  /** Hora del DISPOSITIVO al registrar la carga. */
+  capturedAt: string;
+  photoCapturedAt?: string;
+  /** Turno de quien carga — van juntos, igual que en el cierre del liviano. */
   shiftDate?: string;
   shiftType?: ShiftType;
 }

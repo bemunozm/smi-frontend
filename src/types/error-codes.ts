@@ -27,6 +27,9 @@ export const ERROR_CODES = [
   'STALE_UPDATE',
   'CARD_NOT_CLOSED',
   'INSUFFICIENT_STOCK',
+  'FUEL_LOAD_LIGHT_ONLY',
+  'READING_BELOW_FUEL_LOAD',
+  'INITIAL_ABOVE_FUEL_LOAD',
   // Códigos SOLO del cliente — nunca los manda el backend.
   'PHOTO_MISSING',
   'INVALID_RESPONSE',

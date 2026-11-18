@@ -1,7 +1,7 @@
 import type { EndpointKey } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA, PREVENCIONISTA } = ROLES;
 
 /**
  * Quién puede hacer cada escritura: espejo de los `@Roles` del backend
@@ -73,6 +73,8 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'operator.delete': [ADMIN],
   // Terreno
   'shiftCard.edit': [ADMIN, SUPERVISOR],
+  // Mismos roles que el cierre: la camioneta la usa también el mantenedor y el prevencionista.
+  'shiftCard.fuelLoad': [ADMIN, SUPERVISOR, MANTENEDOR, PREVENCIONISTA],
   // SECRETARIA completa y corrige lo que un supervisor olvidó (pedido del
   // cliente, 03/11).
   'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA],

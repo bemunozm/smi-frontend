@@ -15,7 +15,10 @@ import type { ErrorCode } from '../types/error-codes';
  * cuándo (`EQUIPMENT_BUSY`), qué hacer en su lugar (`OPERATOR_IN_USE`), lo
  * disponible, lo pedido y lo que hay en otras sucursales (`INSUFFICIENT_STOCK`),
  * las dos lecturas del horómetro (`HOURMETER_BELOW_INITIAL`)—, así que se
- * muestra `error.message` tal cual en vez de taparlo con un texto genérico
+ * muestra `error.message` tal cual en vez de taparlo con un texto genérico.
+ * Lo mismo `READING_BELOW_FUEL_LOAD` / `INITIAL_ABOVE_FUEL_LOAD` (lectura final
+ * bajo una carga hecha con la tarjeta abierta, o inicial sobre una): el
+ * servidor ya da las dos lecturas en números
  * (ver `mensajeErrorOperacion` más abajo). `STALE_UPDATE` también conserva lo
  * que el servidor sabe: los nombres de los campos en conflicto.
  */
@@ -55,6 +58,9 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   // cola contra esa tarjeta ya no tiene nada que cerrar.
   SHIFT_CARD_CLOSE_ELSEWHERE:
     'Esta tarjeta se cerró por otra vía antes de sincronizar. Este cierre pendiente ya no se puede aplicar — descartalo y revisá la tarjeta.',
+  // Carga sin cerrar (`POST /shift-cards/:id/fuel-loads`): solo camionetas.
+  FUEL_LOAD_LIGHT_ONLY:
+    'Solo una camioneta puede cargar combustible sin cerrar su tarjeta. Descarta esta carga y regístrala al cerrar.',
   NO_CARDS: 'No hay tarjetas para incluir en el reporte de salida — abrí o cerrá al menos un equipo antes de enviarlo.',
   SHIFT_NOT_FOUND:
     'El turno de este reporte no existe en el servidor — revisá la fecha y el tipo de turno, o descartá y reintentá.',
@@ -89,14 +95,50 @@ function esConflicto(error: unknown): boolean {
  * `api/<X>API.ts` es un `Error` con `.message` ya resuelto — así que esta
  * rama casi nunca se ejercita en la práctica).
  */
+/**
+ * Lecturas que chocan con una carga hecha con la tarjeta abierta: el mensaje del
+ * servidor trae los dos km y se conserva; se le suma qué hacer, porque el
+ * rechazo es permanente (otro supervisor pudo registrar la carga mientras el
+ * cierre esperaba señal) y reintentar sin corregir no sirve.
+ */
+const QUE_HACER_LECTURA_CARGA: Partial<Record<ErrorCode, string>> = {
+  READING_BELOW_FUEL_LOAD: 'Corrige el km final de la tarjeta (Editar) y reintenta.',
+  INITIAL_ABOVE_FUEL_LOAD: 'Corrige el km inicial de la tarjeta y vuelve a guardar.',
+};
+
 export function mensajeErrorOperacion(error: unknown, fallback = 'No se pudo completar la operación.'): string {
   if (error instanceof DomainError) {
     if (error.status === 403) return FORBIDDEN_MESSAGE;
     if (esConflicto(error)) return mensajeDeConflicto(error, CONFLICTO_EN_HOJA);
     const mensaje = error.code ? ERROR_MESSAGES[error.code as ErrorCode] : undefined;
     if (mensaje) return mensaje;
+    const queHacer = error.code ? QUE_HACER_LECTURA_CARGA[error.code as ErrorCode] : undefined;
+    if (queHacer) return `${error.message.replace(/\.?\s*$/, '.')} ${queHacer}`;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * Lectura de una carga sin cerrar (`tarjetaEnCursoId`) corregida desde el panel
+ * fuera del rango de su tarjeta (`PATCH /combustible/:id`): menor que su km
+ * inicial o mayor que su km final. `null` si el error es otro. El mensaje del
+ * servidor trae las dos lecturas; se le suma qué hacer.
+ */
+export function errorLecturaDeCarga(error: unknown): string | null {
+  if (!(error instanceof DomainError)) return null;
+  if (error.code !== 'INITIAL_ABOVE_FUEL_LOAD' && error.code !== 'READING_BELOW_FUEL_LOAD') return null;
+  return `${error.message.replace(/\.?\s*$/, '.')} Corrige la lectura de la carga.`;
+}
+
+/** Error al corregir una carga desde el panel admin (`EditarCargaCombustibleModal`). */
+export function mensajeErrorEdicionCarga(error: unknown): string {
+  const lectura = errorLecturaDeCarga(error);
+  if (lectura) return lectura;
+  // La carga (o la tarjeta abierta con que se registró) se eliminó mientras tanto.
+  if (error instanceof DomainError && error.status === 404) {
+    return 'Esta carga ya no existe: se eliminó mientras la editabas (o se eliminó su tarjeta). Actualiza la lista.';
+  }
+  return mensajeErrorOperacion(error, 'No se pudo corregir la carga.');
 }
 
 /**
