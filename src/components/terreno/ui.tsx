@@ -899,29 +899,46 @@ export function Tarjeta({
   );
 }
 
+/** Columnas de `Cifras`: hasta 3 van en una fila; 4 o más van de a 2 en una
+ * tarjeta angosta (teléfono) y en una sola fila cuando la tarjeta da el ancho
+ * — en 4 columnas de ~80 px «22.000 km» o «12.345,6 h» se cortaban. */
+function columnasCifras(n: number): string {
+  if (n <= 1) return 'grid-cols-1';
+  if (n === 2) return 'grid-cols-2';
+  if (n === 3) return 'grid-cols-3';
+  if (n === 4) return 'grid-cols-2 @min-[26rem]:grid-cols-4';
+  // 5 (cerradas con AdBlue): 3 + 2 con la última ocupando dos celdas, o una fila si cabe.
+  return 'grid-cols-3 @min-[34rem]:grid-cols-5 [&>*:last-child]:col-span-2 @min-[34rem]:[&>*:last-child]:col-span-1';
+}
+
 /**
  * Bloque de cifras de una tarjeta. Van juntas y alineadas porque se comparan
- * entre sí y entre tarjetas — sueltas en el texto hay que ir a buscarlas.
+ * entre sí y entre tarjetas — sueltas en el texto hay que ir a buscarlas. Las
+ * líneas entre celdas son el fondo del bloque asomando por el `gap-px`: valen
+ * igual en una fila o en 2×2.
  */
 export function Cifras({ items }: { items: { label: string; valor: ReactNode; destacado?: boolean }[] }) {
   return (
-    <dl
-      className="m-0 grid overflow-hidden rounded-2xl border border-[#e6e8eb]"
-      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-    >
-      {items.map((i) => (
-        <div key={i.label} className="bg-[#fafbfc] px-2.5 py-2 not-first:border-l not-first:border-[#e6e8eb]">
-          <dt className="text-[10.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{i.label}</dt>
-          <dd
-            className={`tabular mt-0.5 text-[14.5px] whitespace-nowrap ${
-              i.destacado ? 'font-semibold text-[#0f2a7a]' : 'font-medium'
-            }`}
-          >
-            {i.valor}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className="@container">
+      <dl
+        className={`m-0 grid gap-px overflow-hidden rounded-2xl border border-[#e6e8eb] bg-[#e6e8eb] ${columnasCifras(items.length)}`}
+      >
+        {items.map((i) => (
+          <div key={i.label} className="min-w-0 bg-[#fafbfc] px-2.5 py-2">
+            <dt className="text-[10.5px] font-bold tracking-[0.06em] whitespace-nowrap text-muted-foreground uppercase">
+              {i.label}
+            </dt>
+            <dd
+              className={`tabular mt-0.5 text-[14.5px] whitespace-nowrap ${
+                i.destacado ? 'font-semibold text-[#0f2a7a]' : 'font-medium'
+              }`}
+            >
+              {i.valor}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
