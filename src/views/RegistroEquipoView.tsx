@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Camera,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -206,6 +207,7 @@ export function RegistroEquipoView() {
           <Campo label="Equipo" hint={equipoHint}>
             <Selector
               etiqueta="Equipo"
+              placeholder="Elige el equipo…"
               tituloTabular
               valor={equipoElegido?.id ?? ''}
               onChange={(id) => {
@@ -240,7 +242,9 @@ export function RegistroEquipoView() {
                 : undefined
             }
             hint={
-              equipoElegido?.currentHourmeter != null ? (
+              !equipoElegido ? (
+                'Elige un equipo para ver su última lectura.'
+              ) : equipoElegido.currentHourmeter != null ? (
                 <>
                   Último registrado: <b className="tabular">{fmt(equipoElegido.currentHourmeter)} h</b>
                 </>
@@ -270,13 +274,17 @@ export function RegistroEquipoView() {
           <Boton
             ancho
             onClick={agregarEquipo}
-            disabled={!apertura.operatorId || isAbriendo || valorInicialApertura == null}
+            disabled={!equipoElegido || !apertura.operatorId || isAbriendo || valorInicialApertura == null}
           >
             {isAbriendo ? 'Abriendo…' : 'Agregar equipo'} <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
-          {!apertura.operatorId && (
+          {(!equipoElegido || !apertura.operatorId) && (
             <p className="m-0 text-center text-[12.5px] text-muted-foreground">
-              Elige el operador para agregar el equipo.
+              {!equipoElegido && !apertura.operatorId
+                ? 'Elige el equipo y el operador para agregarlo.'
+                : !equipoElegido
+                  ? 'Elige el equipo para agregarlo.'
+                  : 'Elige el operador para agregar el equipo.'}
             </p>
           )}
         </Form>
@@ -313,6 +321,7 @@ export function RegistroEquipoView() {
           <Campo label="Camioneta" hint="Solo livianos operativos y sin tarjeta abierta.">
             <Selector
               etiqueta="Camioneta"
+              placeholder="Elige la camioneta…"
               tituloTabular
               valor={camioneta?.id ?? ''}
               onChange={(id) => {
@@ -342,7 +351,9 @@ export function RegistroEquipoView() {
                 : undefined
             }
             hint={
-              camioneta?.currentMileage != null ? (
+              !camioneta ? (
+                'Elige una camioneta para ver su último kilometraje.'
+              ) : camioneta.currentMileage != null ? (
                 <>
                   Último registrado: <b className="tabular">{fmtKm(camioneta.currentMileage)}</b>
                 </>
@@ -367,10 +378,13 @@ export function RegistroEquipoView() {
           <Boton
             ancho
             onClick={aperturaLiviano.abrir}
-            disabled={aperturaLiviano.isAbriendo || aperturaLiviano.valorInicialApertura == null}
+            disabled={!camioneta || aperturaLiviano.isAbriendo || aperturaLiviano.valorInicialApertura == null}
           >
             {aperturaLiviano.isAbriendo ? 'Abriendo…' : 'Abrir camioneta'} <ArrowRight className="h-[19px] w-[19px]" />
           </Boton>
+          {!camioneta && (
+            <p className="m-0 text-center text-[12.5px] text-muted-foreground">Elige la camioneta para abrirla.</p>
+          )}
         </Form>
       )}
     </Card>
@@ -786,19 +800,35 @@ export function RegistroEquipoView() {
 
   const tarjetaLiviano = (t: TarjetaTurno) => {
     const cerrada = t.estado === 'cerrada';
+    // La camioneta abierta por quien mira va primera (`primeroLasMias`) y se
+    // recalca con borde verde y «Usada por mí»: es la que está usando él.
+    const mia = !cerrada && supervisorId != null && t.supervisorId === supervisorId;
     return (
-      <Tarjeta key={t.id}>
+      <Tarjeta key={t.id} className={mia ? '!border-2 !border-(--success)' : ''}>
         <div className="flex items-start justify-between gap-2.5">
           <div>
             <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{t.equipo}</div>
             <div className="text-[13px] text-muted-foreground">{t.tipo}</div>
           </div>
-          <Chip tono={cerrada ? 'success' : 'info'}>{cerrada ? 'Cerrada' : 'Abierta'}</Chip>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {mia && (
+              <Chip tono="success">
+                <Check className="h-3.5 w-3.5" strokeWidth={2.6} aria-hidden /> Usada por mí
+              </Chip>
+            )}
+            <Chip tono={cerrada ? 'success' : 'info'}>{cerrada ? 'Cerrada' : 'Abierta'}</Chip>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-[14px]">
           <User className="h-[17px] w-[17px] text-muted-foreground" />
           <span>
-            Abrió <b className="font-semibold">{t.supervisor}</b>
+            {mia ? (
+              <b className="font-semibold">Abriste tú</b>
+            ) : (
+              <>
+                Abrió <b className="font-semibold">{t.supervisor}</b>
+              </>
+            )}
             {t.abiertaEl && <span className="text-muted-foreground"> · {t.abiertaEl}</span>}
           </span>
         </div>

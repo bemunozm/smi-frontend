@@ -26,6 +26,7 @@ export interface UseAperturaFormParams {
 export interface UseAperturaFormResult {
   apertura: AperturaState;
   setApertura: Dispatch<SetStateAction<AperturaState>>;
+  /** `undefined` hasta que el supervisor elige uno: no se preselecciona nada. */
   equipoElegido: Equipment | undefined;
   /** el horómetro tipeado, o el último registrado si el campo está vacío, SIN
    * fallback a `0` — `null` cuando no hay ningún valor válido, así el botón
@@ -53,7 +54,10 @@ export function useAperturaForm({
   liviano = false,
 }: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
-  const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId) ?? disponibles[0];
+  // Sin preselección: hasta que el supervisor elija, no hay equipo. Precargar el
+  // primero de la lista inducía a abrir el equipo equivocado (pedido del
+  // cliente, 18/11/2026).
+  const equipoElegido = disponibles.find((e) => e.id === apertura.equipoId);
   const lecturaEquipo = liviano ? equipoElegido?.currentMileage : equipoElegido?.currentHourmeter;
   // Vacío conserva la lectura previa del equipo (lo esperado al precargar); un
   // texto que no es un número NO cae en silencio a ella: es un error.

@@ -132,6 +132,17 @@ export function agruparPorTurno(
   return [...grupos.values()].sort((a, b) => (a.clave < b.clave ? 1 : a.clave > b.clave ? -1 : 0));
 }
 
+/**
+ * Las tarjetas que abrió `userId` primero; el resto queda en su orden. Para
+ * las camionetas abiertas: el supervisor ve arriba la que está usando él
+ * (pedido del cliente, 18/11/2026). Sin usuario no reordena nada.
+ */
+export function primeroLasMias(tarjetas: TarjetaTurno[], userId: string | undefined): TarjetaTurno[] {
+  if (!userId) return tarjetas;
+  const mias = tarjetas.filter((t) => t.supervisorId === userId);
+  return mias.length ? [...mias, ...tarjetas.filter((t) => t.supervisorId !== userId)] : tarjetas;
+}
+
 /** El día (`YYYY-MM-DD`, hora local) de una fecha ISO. */
 function diaLocal(iso: string): string {
   return toDateOnly(new Date(iso));

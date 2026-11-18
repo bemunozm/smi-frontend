@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { agruparPorTurno, registradaDespues, rotuloTurno, type TarjetaTurno } from './shift-register-helpers';
+import {
+  agruparPorTurno,
+  primeroLasMias,
+  registradaDespues,
+  rotuloTurno,
+  type TarjetaTurno,
+} from './shift-register-helpers';
 
 const tarjeta = (extra: Partial<TarjetaTurno>): TarjetaTurno => ({
   id: extra.id ?? 'x',
@@ -86,5 +92,23 @@ describe('registradaDespues', () => {
       cerradaIso: new Date(2026, 10, 11, 7, 45).toISOString(),
     });
     expect(registradaDespues(t)).toBeUndefined();
+  });
+});
+
+describe('primeroLasMias', () => {
+  const lista = [
+    tarjeta({ id: 'a', supervisorId: 'otro' }),
+    tarjeta({ id: 'b', supervisorId: 'yo' }),
+    tarjeta({ id: 'c' }),
+    tarjeta({ id: 'd', supervisorId: 'yo' }),
+  ];
+
+  it('las que abrió el usuario van primero y el resto conserva su orden', () => {
+    expect(primeroLasMias(lista, 'yo').map((t) => t.id)).toEqual(['b', 'd', 'a', 'c']);
+  });
+
+  it('sin usuario o sin tarjetas propias no reordena', () => {
+    expect(primeroLasMias(lista, undefined).map((t) => t.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(primeroLasMias(lista, 'nadie').map((t) => t.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });
