@@ -1074,7 +1074,12 @@ describe('RegistroEquipoView', () => {
   });
 
   describe('livianos', () => {
-    const verLivianos = () => fireEvent.click(screen.getByRole('button', { name: /Livianos/ }));
+    const entrarALivianos = () => fireEvent.click(screen.getByRole('button', { name: /Livianos/ }));
+    /** Entra a Livianos y cierra la explicación que se abre sola. */
+    const verLivianos = () => {
+      entrarALivianos();
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cerrar' }));
+    };
 
     it('pesados y livianos van separados: la camioneta se abre sin operador y con el kilometraje', () => {
       renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
@@ -1234,15 +1239,53 @@ describe('RegistroEquipoView', () => {
       expect(screen.getByRole('button', { name: /Cerrar tarjeta/ }).hasAttribute('disabled')).toBe(true);
     });
 
-    it('explica cómo funcionan: no abrir una ya abierta y cerrar solo al cargar combustible', () => {
+    it('al entrar a Livianos se abre sola la explicación de cómo funcionan las camionetas', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      // En Pesados no aparece.
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      entrarALivianos();
+
+      const ventana = within(screen.getByRole('dialog'));
+      expect(ventana.getByRole('heading', { name: 'Cómo funcionan las camionetas' })).toBeTruthy();
+      expect(ventana.getByText(/no abras otra: sigue sirviendo/)).toBeTruthy();
+      expect(ventana.getByText(/puedes cargar las veces que haga falta/)).toBeTruthy();
+      expect(ventana.getByText(/la carga al cerrar es opcional/)).toBeTruthy();
+      expect(ventana.getByText(/aunque la haya abierto otro/)).toBeTruthy();
+      expect(ventana.getByText(/no van en el reporte de salida/)).toBeTruthy();
+      // Ya no es un recuadro fijo en la tarjeta de apertura.
+      fireEvent.click(ventana.getByRole('button', { name: 'Cerrar' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByText(/no abras otra: sigue sirviendo/)).toBeNull();
+    });
+
+    it('se cierra con la X y el «?» junto al título la vuelve a abrir', () => {
+      renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
+      entrarALivianos();
+
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cerrar' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Abrir camioneta' })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cómo funcionan las camionetas' }));
+      expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+
+    it('se vuelve a abrir cada vez que se entra a Livianos, y no queda abierta al volver a Pesados', () => {
       renderView('desktop', { livianosAbiertos: [LIVIANO_ABIERTO] });
       verLivianos();
 
-      expect(screen.getByText('Cómo funcionan las camionetas')).toBeTruthy();
-      expect(screen.getByText(/no abras otra ni la toques/)).toBeTruthy();
-      expect(screen.getByText(/Ciérrala al cargar combustible/)).toBeTruthy();
-      expect(screen.getByText(/basta el km y el motivo/)).toBeTruthy();
-      expect(screen.getByText(/registra solo la carga con «Cargar/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Pesados/ }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      entrarALivianos();
+      expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+
+    it('en modo pasado no se abre', () => {
+      renderView('desktop', { turnoSeleccion: 'pasado', livianosAbiertos: [LIVIANO_ABIERTO] });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Livianos/ })).toBeNull();
     });
 
     it('en Livianos no aparece el reporte de salida a la administración', () => {

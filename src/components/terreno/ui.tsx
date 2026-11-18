@@ -243,11 +243,26 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 }
 
 /** Encabezado de tarjeta: qué es y, en una línea, para qué sirve. */
-export function CardHead({ titulo, bajada, extra }: { titulo: ReactNode; bajada?: ReactNode; extra?: ReactNode }) {
+export function CardHead({
+  titulo,
+  bajada,
+  extra,
+  junto,
+}: {
+  titulo: ReactNode;
+  bajada?: ReactNode;
+  extra?: ReactNode;
+  /** Va pegado al título, fuera del encabezado (p. ej. el «?» de ayuda): así no
+   * se suma al nombre del encabezado para un lector de pantalla. */
+  junto?: ReactNode;
+}) {
   return (
     <div className="mb-3.5 flex items-start justify-between gap-3">
       <div>
-        <h2 className="text-[17px] leading-tight font-bold tracking-[-0.01em]">{titulo}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-[17px] leading-tight font-bold tracking-[-0.01em]">{titulo}</h2>
+          {junto}
+        </div>
         {bajada && <p className="mt-0.5 text-[13px] text-muted-foreground">{bajada}</p>}
       </div>
       {extra}

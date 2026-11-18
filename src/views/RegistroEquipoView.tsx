@@ -30,6 +30,7 @@ import {
 import { RecordPhoto } from '../components/RecordPhoto';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import { AdBlueCampos } from '../components/terreno/AdBlueCampos';
+import { AyudaCamionetas } from '../components/terreno/AyudaCamionetas';
 import { CargaLivianoForm, CargasTarjeta } from '../components/terreno/CargaLivianoForm';
 import { EditorTarjeta } from '../components/terreno/EditorTarjeta';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
@@ -191,6 +192,9 @@ export function RegistroEquipoView() {
   // Pesados y livianos se registran distinto (el liviano queda abierto hasta
   // la carga de combustible y lo cierra cualquier supervisor): van separados.
   const [clase, setClase] = useState<Clase>('pesados');
+  // «Cómo funcionan las camionetas»: se abre sola cada vez que se entra a
+  // Livianos (también si la pantalla ya parte ahí) y desde el «?» del título.
+  const [ayudaLivianos, setAyudaLivianos] = useState(() => clase === 'livianos');
 
   // --- Modo "registrar un turno pasado" (carga histórica) --------------------
   const modoPasado = turnoSeleccion === 'pasado';
@@ -320,25 +324,11 @@ export function RegistroEquipoView() {
     <Card>
       <CardHead
         titulo="Abrir camioneta"
+        junto={
+          <AyudaCamionetas abierto={ayudaLivianos && claseVista === 'livianos'} onAbiertoChange={setAyudaLivianos} />
+        }
         bajada="Abre solo una camioneta que vas a usar y que no tenga tarjeta abierta."
       />
-      <div className="flex flex-col gap-1.5 rounded-2xl bg-[#f5f6f8] px-3.5 py-3 text-[13px] leading-snug text-muted-foreground">
-        <b className="text-[13.5px] text-foreground">Cómo funcionan las camionetas</b>
-        <span>
-          • Si la camioneta que vas a usar <b className="text-foreground">ya tiene una tarjeta abierta</b> (aparece en
-          «Camionetas abiertas»), no abras otra ni la toques: sigue sirviendo.
-        </span>
-        <span>
-          • <b className="text-foreground">Ciérrala al cargar combustible</b>, con el km, los litros y la foto del
-          surtidor. También se puede cerrar sin carga: basta el km y el motivo por el que no se cargó (por ejemplo,
-          un corte de luz). Puede cerrarla cualquier supervisor, aunque la haya abierto otro.
-        </span>
-        <span>
-          • Si cargas y la <b className="text-foreground">sigues usando</b>, registra solo la carga con «Cargar
-          combustible»: la tarjeta queda abierta.
-        </span>
-        <span>• Las camionetas no van en el reporte de salida a la administración.</span>
-      </div>
       {disponiblesLivianos.length === 0 ? (
         <Hint>Todas las camionetas operativas ya tienen una tarjeta abierta.</Hint>
       ) : (
@@ -956,6 +946,7 @@ export function RegistroEquipoView() {
       etiqueta="Tipo de equipo"
       valor={clase}
       onChange={(c) => {
+        if (c === 'livianos' && clase !== 'livianos') setAyudaLivianos(true);
         setClase(c);
         setCerrandoId(null);
         carga.cancelarCarga();
