@@ -5,8 +5,8 @@ import { Cifras } from './ui';
 
 afterEach(cleanup);
 
-const items = (n: number) =>
-  ['Km inicial', 'Km final', 'Recorrido', 'Litros', 'AdBlue'].slice(0, n).map((label) => ({ label, valor: '22.000 km' }));
+const LABELS = ['Km inicial', 'Km final', 'Recorrido', 'Litros', 'AdBlue', 'Otra'];
+const items = (n: number) => LABELS.slice(0, n).map((label) => ({ label, valor: '22.000 km' }));
 
 const grilla = () => screen.getByText('Km inicial').closest('dl')!;
 
@@ -18,10 +18,22 @@ describe('Cifras', () => {
     expect(grilla().parentElement!.className).toContain('@container');
   });
 
-  it('con 3 cifras o menos, una sola fila', () => {
+  it('con 3 cifras, 2 + 1 en una tarjeta angosta y una fila cuando cabe', () => {
     render(<Cifras items={items(3)} />);
-    expect(grilla().className).toContain('grid-cols-3');
+    expect(grilla().className).toContain('grid-cols-2');
+    expect(grilla().className).toContain('@min-[22rem]:grid-cols-3');
+  });
+
+  it('con 2 cifras, una sola fila', () => {
+    render(<Cifras items={items(2)} />);
+    expect(grilla().className).toContain('grid-cols-2');
     expect(grilla().className).not.toContain('@min-');
+  });
+
+  it('con 6 o más, filas de 3', () => {
+    render(<Cifras items={items(6)} />);
+    expect(grilla().className).not.toContain('@min-');
+    expect(grilla().className).toContain('grid-cols-3');
   });
 
   it('con 5 cifras, 3 + 2 en angosto y una fila cuando cabe', () => {

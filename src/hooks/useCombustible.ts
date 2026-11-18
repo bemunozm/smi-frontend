@@ -6,7 +6,7 @@ import type { CreateCombustibleBody, UpdateCombustibleBody } from '../api/Combus
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { DomainError } from '../lib/api-error';
-import { mensajeErrorEdicionCarga, mensajeErrorOperacion } from '../lib/error-messages';
+import { errorLecturaDeCarga, mensajeErrorEdicionCarga, mensajeErrorOperacion } from '../lib/error-messages';
 import { COMBUSTIBLE_KEY as KEY, EQUIPMENT_KEY } from '../lib/query-keys';
 import type { RegistroCombustible } from '../types/combustible';
 import { generateUuid } from '../lib/uuid';
@@ -111,6 +111,8 @@ export function useEditarCargaCombustible() {
       void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
     },
     onError: (error: unknown) => {
+      // El rechazo de la lectura lo muestra el modal en el propio campo: sin aviso repetido.
+      if (errorLecturaDeCarga(error)) return;
       toast.danger(mensajeErrorEdicionCarga(error));
       // Se borró mientras tanto: que la lista deje de mostrarla.
       if (error instanceof DomainError && error.status === 404) void queryClient.invalidateQueries({ queryKey: KEY });

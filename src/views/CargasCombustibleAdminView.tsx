@@ -43,7 +43,7 @@ function tipoDe(carga: RegistroCombustible): string {
 
 function origenDe(carga: RegistroCombustible): string {
   // Una carga sin cerrar llega como MANUAL, pero nació de una tarjeta de camioneta abierta.
-  if (carga.tarjetaEnCursoId) return 'Tarjeta en curso';
+  if (carga.tarjetaEnCursoId) return 'Con tarjeta abierta';
   return (carga.origen && ORIGEN_LABEL[carga.origen]) || '—';
 }
 

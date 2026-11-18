@@ -905,10 +905,17 @@ export function Tarjeta({
 function columnasCifras(n: number): string {
   if (n <= 1) return 'grid-cols-1';
   if (n === 2) return 'grid-cols-2';
-  if (n === 3) return 'grid-cols-3';
+  // 3 (Mi camioneta: «EN USO HACE», fechas): en ~320 px no caben de a 3; 2 + 1 a lo ancho.
+  if (n === 3) {
+    return 'grid-cols-2 @min-[22rem]:grid-cols-3 [&>*:last-child]:col-span-2 @min-[22rem]:[&>*:last-child]:col-span-1';
+  }
   if (n === 4) return 'grid-cols-2 @min-[26rem]:grid-cols-4';
   // 5 (cerradas con AdBlue): 3 + 2 con la última ocupando dos celdas, o una fila si cabe.
-  return 'grid-cols-3 @min-[34rem]:grid-cols-5 [&>*:last-child]:col-span-2 @min-[34rem]:[&>*:last-child]:col-span-1';
+  if (n === 5) {
+    return 'grid-cols-3 @min-[34rem]:grid-cols-5 [&>*:last-child]:col-span-2 @min-[34rem]:[&>*:last-child]:col-span-1';
+  }
+  // 6 o más: filas de 3 (hoy ninguna tarjeta trae tantas).
+  return 'grid-cols-3';
 }
 
 /**

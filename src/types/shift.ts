@@ -39,7 +39,7 @@ export const ShiftCardFuelLoadSchema = z.object({
   reading: z.number(),
   adBlueLiters: z.number().nullable(),
   pumpPhotoUrl: z.string().nullable(),
-  /** Día de negocio de la carga (`YYYY-MM-DD`). */
+  /** Cuándo cuenta la carga, como fecha-hora ISO (día de negocio del servidor). */
   fecha: z.string(),
   createdAt: z.string(),
   createdByName: z.string().nullable(),

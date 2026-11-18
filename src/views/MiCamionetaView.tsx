@@ -265,7 +265,9 @@ export function MiCamionetaView({
           requerido
           unidad="km"
           error={
-            cierre.finalInvalido ? 'No puede ser menor que el kilometraje inicial.' : (cierre.finalBajoCarga ?? undefined)
+            cierre.finalInvalido
+              ? 'No puede ser menor que el kilometraje inicial.'
+              : (cierre.finalBajoCarga ?? undefined)
           }
         >
           <Input
@@ -384,7 +386,7 @@ export function MiCamionetaView({
     <Card>
       <CardHead
         titulo="Usar una camioneta"
-        bajada="Anota el kilometraje al tomarla. Se cierra al cargar combustible o, si no se pudo cargar, indicando el motivo."
+        bajada="Anota el km al tomarla. Registra cada carga de combustible y ciérrala cuando la dejes de usar."
       />
       {proyeccion.disponiblesLivianos.length === 0 ? (
         <Hint>No hay camionetas libres: todas tienen una tarjeta abierta.</Hint>

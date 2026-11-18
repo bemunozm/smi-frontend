@@ -88,14 +88,6 @@ function esConflicto(error: unknown): boolean {
 }
 
 /**
- * Mensaje amigable para un error de dominio de Tarjetas de turno, asignación
- * de equipos o Trabajos extra. `fallback` cubre el caso ultra raro en que
- * `error` no sea ni un `DomainError` con `code` mapeado ni un `Error` común
- * (`toDomainError`, `lib/api-error.ts`, garantiza que todo lo que sale de un
- * `api/<X>API.ts` es un `Error` con `.message` ya resuelto — así que esta
- * rama casi nunca se ejercita en la práctica).
- */
-/**
  * Lecturas que chocan con una carga hecha con la tarjeta abierta: el mensaje del
  * servidor trae los dos km y se conserva; se le suma qué hacer, porque el
  * rechazo es permanente (otro supervisor pudo registrar la carga mientras el
@@ -106,6 +98,14 @@ const QUE_HACER_LECTURA_CARGA: Partial<Record<ErrorCode, string>> = {
   INITIAL_ABOVE_FUEL_LOAD: 'Corrige el km inicial de la tarjeta y vuelve a guardar.',
 };
 
+/**
+ * Mensaje amigable para un error de dominio de Tarjetas de turno, asignación
+ * de equipos o Trabajos extra. `fallback` cubre el caso ultra raro en que
+ * `error` no sea ni un `DomainError` con `code` mapeado ni un `Error` común
+ * (`toDomainError`, `lib/api-error.ts`, garantiza que todo lo que sale de un
+ * `api/<X>API.ts` es un `Error` con `.message` ya resuelto — así que esta
+ * rama casi nunca se ejercita en la práctica).
+ */
 export function mensajeErrorOperacion(error: unknown, fallback = 'No se pudo completar la operación.'): string {
   if (error instanceof DomainError) {
     if (error.status === 403) return FORBIDDEN_MESSAGE;

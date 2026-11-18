@@ -180,7 +180,9 @@ describe('carga de combustible sin cerrar (shiftCard.fuelLoad)', () => {
 
   it('ALREADY_CLOSED: queda en atención con el mensaje, sin reintentar en bucle ni perder la foto', async () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/surtidor.jpg', url: 'u' });
-    sendWriteMock.mockRejectedValue(new DomainError('La tarjeta ya está cerrada', { code: 'ALREADY_CLOSED', status: 409 }));
+    sendWriteMock.mockRejectedValue(
+      new DomainError('La tarjeta ya está cerrada', { code: 'ALREADY_CLOSED', status: 409 }),
+    );
     await cargar();
 
     await syncAndSettle();
@@ -255,7 +257,9 @@ describe('cierre de liviano rechazado por una carga con km mayor (READING_BELOW_
   });
 
   it('corregir el km final la vuelve a poner en cola y se envía con el valor nuevo', async () => {
-    closeCardMock.mockRejectedValueOnce(rechazo()).mockResolvedValueOnce(camioneta({ closedAt: '2026-11-18T18:00:00.000Z' }));
+    closeCardMock
+      .mockRejectedValueOnce(rechazo())
+      .mockResolvedValueOnce(camioneta({ closedAt: '2026-11-18T18:00:00.000Z' }));
     await enqueueCloseCard(
       'u1',
       'card-1',
