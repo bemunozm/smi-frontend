@@ -48,4 +48,8 @@ export interface RegistroCombustible {
    * del alta manual, o el declarado al cierre de la tarjeta vinculada. Null =
    * sin AdBlue; ausente en respuestas del backend anterior. */
   adBlueLitros?: number | null;
+  /** Tarjeta de liviano TODAVÍA abierta con la que se registró la carga (carga
+   * sin cerrar, `POST /shift-cards/:id/fuel-loads`). Viene como `MANUAL`;
+   * null/ausente en el resto. */
+  tarjetaEnCursoId?: string | null;
 }

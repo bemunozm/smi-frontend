@@ -6,6 +6,7 @@ import { useOperators } from './useOperators';
 import { useShiftCardsMine } from './useShiftCards';
 import { useOutboxOps } from '../offline/useOutboxOps';
 import { useAperturaForm, type AperturaState, type UseAperturaFormResult } from './useAperturaForm';
+import { useCargaLiviano, type UseCargaLivianoResult } from './useCargaLiviano';
 import { useCierreForm, type CierreState } from './useCierreForm';
 import { useEditarTarjeta, type UseEditarTarjetaResult } from './useEditarTarjeta';
 import { useExitReportState } from './useExitReportState';
@@ -116,17 +117,27 @@ export interface UseShiftRegisterResult {
   finalNum: number | null;
   horasMaquina: number | null;
   finalInvalido: boolean;
+  /** Liviano: km final por debajo del de una de sus cargas sin cerrar. */
+  finalBajoCarga: string | null;
   litrosError: string | null;
   litrosAviso: string | null;
   /** Con litros escritos la foto del surtidor es obligatoria; sin ellos, no. */
   fotoRequerida: boolean;
-  /** Sin litros hay que justificar por qué no se cargó combustible. */
+  /** Sin litros hay que justificar por qué no se cargó combustible (salvo un
+   * liviano que ya cargó sin cerrar). */
   motivoRequerido: boolean;
+  /** Cargas que la tarjeta en cierre ya tiene sin cerrar (solo livianos). */
+  cargasPrevias: number;
+  /** Liviano con cargas vigentes: se cierra solo con km final y observaciones. */
+  soloKm: boolean;
   faltaMotivo: boolean;
   adBlueCierre: ResultadoAdBlue;
   adBlueIncompletoCierre: boolean;
   isCerrando: boolean;
   foto: UsePhotoCaptureFlowResult;
+
+  /** Cargar combustible a una camioneta sin cerrar su tarjeta — ver `useCargaLiviano`. */
+  carga: UseCargaLivianoResult;
 
   /** Editar una tarjeta (abierta o cerrada) — ver `useEditarTarjeta`. */
   edicion: UseEditarTarjetaResult;
@@ -202,6 +213,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
     liviano: true,
   });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx: turno.ctx, userId: user?.id });
+  const carga = useCargaLiviano({ tarjetas: proyeccion.tarjetas, equipos, ctx: turno.ctx, userId: user?.id });
   const edicion = useEditarTarjeta({ tarjetas: proyeccion.tarjetas, ops, userId: user?.id, equipos });
   const reporte = useExitReportState({
     tarjetasServidor,
@@ -257,6 +269,7 @@ export function useShiftRegister(): UseShiftRegisterResult {
     aperturaLiviano,
     ...apertura,
     ...cierre,
+    carga,
     edicion,
     motivoSinCierre,
     verReporte,

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Clock, Eye, Fuel, Lock, Truck } from 'lucide-react';
 
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
+import { CargaLivianoForm, CargasTarjeta } from '../components/terreno/CargaLivianoForm';
 import {
   Boton,
   Calculado,
@@ -22,14 +23,15 @@ import {
   VistaSplit,
 } from '../components/terreno/ui';
 import { useAperturaForm } from '../hooks/useAperturaForm';
+import { useCargaLiviano } from '../hooks/useCargaLiviano';
 import { useCierreForm } from '../hooks/useCierreForm';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useEquipment } from '../hooks/useEquipment';
 import { useShiftCardsMine } from '../hooks/useShiftCards';
 import { useShiftProjection } from '../hooks/useShiftProjection';
-import type { TarjetaTurno } from '../hooks/shift-register-helpers';
+import { litrosTotales, type TarjetaTurno } from '../hooks/shift-register-helpers';
 import { formatDecimalInput } from '../lib/decimal';
-import { fmtLitros } from '../lib/format';
+import { fmtLitros, plural } from '../lib/format';
 import { AYUDA_LITROS } from '../lib/litros';
 import { tiempoEnUso } from '../lib/tiempo-en-uso';
 import { contextoTurno } from '../lib/turno';
@@ -53,10 +55,13 @@ function desdeCorto(iso: string | undefined): string {
 /** Cada cuánto se revisa si alguien más la abrió o la cerró (otro equipo, un supervisor). */
 const REFRESCO_MS = 60_000;
 
-/** La operación de la cola (abrir o cerrar) que todavía no llega al servidor para esa tarjeta. */
+/** La operación de la cola (abrir, cargar o cerrar) que todavía no llega al servidor para esa tarjeta. */
 function opDe(ops: readonly OutboxOp[], cardId: string): OutboxOp | undefined {
   const deLaTarjeta = ops.filter(
-    (op) => (op.type === 'openCard' && op.id === cardId) || (op.type === 'closeCard' && op.payload.cardId === cardId),
+    (op) =>
+      (op.type === 'openCard' && op.id === cardId) ||
+      (op.type === 'closeCard' && op.payload.cardId === cardId) ||
+      (op.type === 'httpWrite' && op.endpoint === 'shiftCard.fuelLoad' && op.params.id === cardId),
   );
   return deLaTarjeta.find((op) => op.status === 'needs_attention') ?? deLaTarjeta[0];
 }
@@ -101,9 +106,10 @@ function UsoCerrado({ t, op }: { t: TarjetaTurno; op: OutboxOp | undefined }) {
           { label: 'Km inicial', valor: fmtKm(t.inicial) },
           { label: 'Km final', valor: fmtKm(t.final) },
           { label: 'Recorrido', valor: t.final != null ? fmtKm(t.final - t.inicial) : '—', destacado: true },
-          { label: 'Litros', valor: fmtLitros(t.litros) },
+          { label: 'Litros', valor: fmtLitros(litrosTotales(t)) },
         ]}
       />
+      <CargasTarjeta cargas={t.cargas} />
       <EstadoSync op={op} />
     </Tarjeta>
   );
@@ -159,12 +165,25 @@ export function MiCamionetaView({
 
   const apertura = useAperturaForm({ disponibles: proyeccion.disponiblesLivianos, ctx, userId, liviano: true });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx, userId });
+  const carga = useCargaLiviano({ tarjetas: proyeccion.tarjetas, equipos, ctx, userId });
   const camioneta = apertura.equipoElegido;
   const equipoEnUso = mia ? equipos.find((e) => e.internalCode === mia.equipo) : undefined;
   const cerrandoMia = mia != null && cierre.cerrandoId === mia.id;
   // La camioneta que se está cerrando: la propia o una abierta por otro.
   const cerrandoLiviano = proyeccion.livianosAbiertos.find((t) => t.id === cierre.cerrandoId);
   const cerrandoAjena = cerrandoLiviano != null && cerrandoLiviano.supervisorId !== userId;
+  // Cargar sin cerrar (a veces cargan y la siguen usando): la propia o una ajena.
+  const cargandoMia = mia != null && carga.cargandoId === mia.id;
+  const cargandoAjena = carga.cargando != null && carga.cargando.supervisorId !== userId;
+  // Cierre y carga comparten el lugar del formulario: abrir uno cierra el otro.
+  const abrirCierre = (id: string) => {
+    carga.cancelarCarga();
+    cierre.abrirCierre(id);
+  };
+  const abrirCarga = (id: string) => {
+    cierre.setCerrandoId(null);
+    carga.abrirCarga(id);
+  };
 
   const enUso = mia && (
     <Card>
@@ -198,12 +217,17 @@ export function MiCamionetaView({
           ]}
         />
 
+        <CargasTarjeta cargas={mia.cargas} />
+
         <EstadoSync op={opDe(ops, mia.id)} />
 
-        {!cerrandoMia && (
+        {!cerrandoMia && !cargandoMia && (
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-            <Boton className="sm:flex-1 lg:flex-none" onClick={() => cierre.abrirCierre(mia.id)}>
-              <Fuel className="size-[18px]" aria-hidden /> Cerrar camioneta
+            <Boton className="sm:flex-1 lg:flex-none" onClick={() => abrirCarga(mia.id)}>
+              <Fuel className="size-[18px]" aria-hidden /> Cargar combustible
+            </Boton>
+            <Boton variante="contorno" className="sm:flex-1 lg:flex-none" onClick={() => abrirCierre(mia.id)}>
+              Cerrar tarjeta <ArrowRight className="size-[18px]" aria-hidden />
             </Boton>
             {conFicha && equipoEnUso && (
               <Boton variante="contorno" onClick={() => navigate(`/mantenimiento/equipos/${equipoEnUso.id}`)}>
@@ -220,11 +244,14 @@ export function MiCamionetaView({
     <Card>
       <CardHead
         titulo={cerrandoAjena ? `Cerrar ${cerrandoLiviano.equipo}` : 'Cerrar la camioneta'}
-        bajada={
-          cerrandoAjena
-            ? `La abrió ${cerrandoLiviano.supervisor}. Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.`
-            : 'Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.'
-        }
+        bajada={[
+          cerrandoAjena ? `La abrió ${cerrandoLiviano.supervisor}.` : '',
+          cierre.soloKm
+            ? 'Basta el kilometraje final: sus cargas ya quedaron registradas.'
+            : 'Kilometraje final y, si se cargó combustible, los litros y la foto del surtidor.',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         extra={
           <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.setCerrandoId(null)}>
             Cancelar
@@ -240,7 +267,11 @@ export function MiCamionetaView({
           label="Kilometraje final"
           requerido
           unidad="km"
-          error={cierre.finalInvalido ? 'No puede ser menor que el kilometraje inicial.' : undefined}
+          error={
+            cierre.finalInvalido
+              ? 'No puede ser menor que el kilometraje inicial.'
+              : (cierre.finalBajoCarga ?? undefined)
+          }
         >
           <Input
             numerico
@@ -257,32 +288,43 @@ export function MiCamionetaView({
           }
           valor={cierre.horasMaquina != null && cierre.horasMaquina >= 0 ? fmtKm(cierre.horasMaquina) : '—'}
         />
+        {/* Ya cargó sin cerrar: se cierra solo con el km final (sin litros, foto ni motivo). */}
+        {cierre.soloKm && (
+          <Hint>
+            Esta tarjeta ya tiene {plural(cierre.cargasPrevias, 'carga registrada', 'cargas registradas')}. Para
+            cerrarla basta el km final.
+          </Hint>
+        )}
         {/* La foto antes que los litros: el OCR los lee de ella y se revisan después. */}
-        <FotoRespaldoField
-          file={cierre.foto.file}
-          isReadingPhoto={cierre.foto.isReadingPhoto}
-          captureDate={cierre.foto.captureDate}
-          onSelect={cierre.foto.handleSelectPhoto}
-          onClear={cierre.foto.handleClearPhoto}
-          requerida={cierre.fotoRequerida}
-          title="Foto del surtidor"
-          subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
-          staleQuestion="¿Es la carga de esta camioneta?"
-        />
-        <Campo
-          label="Combustible cargado (opcional)"
-          unidad="L"
-          litros
-          hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
-          error={cierre.litrosError ?? undefined}
-          aviso={cierre.litrosAviso ?? undefined}
-        >
-          <Input
-            numerico
-            value={cierre.cierre.litros}
-            onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
+        {!cierre.soloKm && (
+          <FotoRespaldoField
+            file={cierre.foto.file}
+            isReadingPhoto={cierre.foto.isReadingPhoto}
+            captureDate={cierre.foto.captureDate}
+            onSelect={cierre.foto.handleSelectPhoto}
+            onClear={cierre.foto.handleClearPhoto}
+            requerida={cierre.fotoRequerida}
+            title="Foto del surtidor"
+            subtitle="Solo si se cargó combustible: debe verse el totalizador. Los litros se leen de la foto y quedan editables."
+            staleQuestion="¿Es la carga de esta camioneta?"
           />
-        </Campo>
+        )}
+        {!cierre.soloKm && (
+          <Campo
+            label="Combustible cargado (opcional)"
+            unidad="L"
+            litros
+            hint={`${AYUDA_LITROS} Déjalo vacío si no se cargó (por ejemplo, un corte de luz).`}
+            error={cierre.litrosError ?? undefined}
+            aviso={cierre.litrosAviso ?? undefined}
+          >
+            <Input
+              numerico
+              value={cierre.cierre.litros}
+              onChange={(e) => cierre.setCierre((c) => ({ ...c, litros: e.target.value }))}
+            />
+          </Campo>
+        )}
         {cierre.motivoRequerido && (
           <Campo label="Motivo sin carga de combustible" requerido hint="Por ejemplo: corte de luz, surtidor sin combustible o no le tocaba cargar.">
             <Textarea
@@ -311,6 +353,7 @@ export function MiCamionetaView({
             cierre.isCerrando ||
             cierre.finalNum == null ||
             cierre.finalInvalido ||
+            cierre.finalBajoCarga != null ||
             cierre.litrosError != null
           }
         >
@@ -330,11 +373,30 @@ export function MiCamionetaView({
     </Card>
   );
 
+  const formCarga = carga.cargando && (
+    <Card>
+      <CardHead
+        titulo={cargandoAjena ? `Cargar combustible · ${carga.cargando.equipo}` : 'Cargar combustible'}
+        bajada={
+          cargandoAjena
+            ? `La abrió ${carga.cargando.supervisor}. La tarjeta sigue abierta: se cierra aparte.`
+            : 'La tarjeta sigue abierta: ciérrala cuando dejes de usar la camioneta.'
+        }
+        extra={
+          <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={carga.cancelarCarga}>
+            Cancelar
+          </Boton>
+        }
+      />
+      <CargaLivianoForm carga={carga} />
+    </Card>
+  );
+
   const formApertura = !mia && (
     <Card>
       <CardHead
         titulo="Usar una camioneta"
-        bajada="Anota el kilometraje al tomarla. Se cierra al cargar combustible o, si no se pudo cargar, indicando el motivo."
+        bajada="Anota el km al tomarla. Registra cada carga de combustible y ciérrala cuando la dejes de usar."
       />
       {proyeccion.disponiblesLivianos.length === 0 ? (
         <Hint>No hay camionetas libres: todas tienen una tarjeta abierta.</Hint>
@@ -402,13 +464,13 @@ export function MiCamionetaView({
     </Card>
   );
 
-  // Abiertas por otros, sin la que ya se está cerrando (esa muestra el formulario).
-  const otrasVisibles = deOtros.filter((t) => t.id !== cierre.cerrandoId);
+  // Abiertas por otros, sin la que ya se está cerrando o cargando (esa muestra el formulario).
+  const otrasVisibles = deOtros.filter((t) => t.id !== cierre.cerrandoId && t.id !== carga.cargandoId);
   const abiertasPorOtros = otrasVisibles.length > 0 && (
     <Card>
       <CardHead
         titulo="Abiertas por otros"
-        bajada="Si estás usando una y le cargas combustible, ciérrala tú: no hace falta que la cierre quien la abrió."
+        bajada="Si estás usando una, puedes registrarle una carga o cerrarla tú: no hace falta que lo haga quien la abrió."
       />
       <div className="flex flex-col gap-3">
         {otrasVisibles.map((t) => (
@@ -420,11 +482,17 @@ export function MiCamionetaView({
               <span className="tabular text-[17px] font-bold text-foreground">{t.equipo}</span>
               <span className="text-[13px] text-[var(--label-color)]">
                 Abierta por {t.supervisor} · {desdeCorto(t.abiertaIso)} · Km inicial {fmtKm(t.inicial)}
+                {t.cargas?.length ? ` · ${plural(t.cargas.length, 'carga', 'cargas')}` : ''}
               </span>
             </div>
-            <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => cierre.abrirCierre(t.id)}>
-              <Fuel className="size-4" aria-hidden /> Cerrar camioneta
-            </Boton>
+            <div className="flex flex-wrap gap-2">
+              <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirCarga(t.id)}>
+                <Fuel className="size-4" aria-hidden /> Cargar
+              </Boton>
+              <Boton variante="contorno" className="!min-h-10 !text-[13.5px]" onClick={() => abrirCierre(t.id)}>
+                Cerrar tarjeta
+              </Boton>
+            </div>
           </div>
         ))}
       </div>
@@ -451,8 +519,9 @@ export function MiCamionetaView({
         formulario={
           <>
             {enUso}
+            {formCarga}
             {formCierre}
-            {!cerrandoAjena && formApertura}
+            {!cerrandoAjena && !cargandoAjena && formApertura}
             {abiertasPorOtros}
           </>
         }

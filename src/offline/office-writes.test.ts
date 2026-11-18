@@ -125,6 +125,8 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
         'intervencion.create',
         // La foto de respaldo de cada tarea del checklist preventivo.
         'orden.toggleTarea',
+        // La foto del surtidor de una carga de camioneta sin cerrar su tarjeta.
+        'shiftCard.fuelLoad',
         // Las fotos de cada ítem del checklist diario (varias por ítem).
         'dailyChecklist.submit',
         // Las fotos nuevas al corregir un checklist rechazado.

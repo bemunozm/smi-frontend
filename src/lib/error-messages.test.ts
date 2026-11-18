@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { FORBIDDEN_MESSAGE, mensajeErrorFormulario, mensajeErrorOperacion } from './error-messages';
+import {
+  errorLecturaDeCarga,
+  FORBIDDEN_MESSAGE,
+  mensajeErrorEdicionCarga,
+  mensajeErrorFormulario,
+  mensajeErrorOperacion,
+} from './error-messages';
 import { DomainError } from './api-error';
 
 describe('mensajeErrorOperacion', () => {
@@ -158,5 +164,57 @@ describe('mensajeErrorFormulario', () => {
       'Ya existe una sucursal con ese nombre',
     );
     expect(mensajeErrorFormulario('rareza', 'Fallback propio')).toBe('Fallback propio');
+  });
+});
+
+describe('lecturas que chocan con una carga hecha sin cerrar', () => {
+  const finalBajo = () =>
+    new DomainError(
+      'La lectura final (45.200) no puede ser menor que la de una carga de combustible registrada en la tarjeta (45.300)',
+      { code: 'READING_BELOW_FUEL_LOAD', status: 400 },
+    );
+
+  it('READING_BELOW_FUEL_LOAD conserva las dos lecturas del servidor y dice qué hacer', () => {
+    expect(mensajeErrorOperacion(finalBajo())).toBe(
+      'La lectura final (45.200) no puede ser menor que la de una carga de combustible registrada en la tarjeta (45.300). Corrige el km final de la tarjeta (Editar) y reintenta.',
+    );
+  });
+
+  it('INITIAL_ABOVE_FUEL_LOAD también dice qué corregir', () => {
+    const error = new DomainError('La lectura inicial (45.400) no puede ser mayor que la de una carga (45.300).', {
+      code: 'INITIAL_ABOVE_FUEL_LOAD',
+      status: 400,
+    });
+    expect(mensajeErrorOperacion(error)).toMatch(/\(45\.300\)\. Corrige el km inicial/);
+  });
+
+  it('al editar una carga del panel, el rechazo de lectura se redacta para la carga', () => {
+    const error = new DomainError('La lectura de la carga (44.000) no puede ser menor que la inicial de su tarjeta (45.000)', {
+      code: 'INITIAL_ABOVE_FUEL_LOAD',
+      status: 400,
+    });
+    expect(errorLecturaDeCarga(error)).toBe(
+      'La lectura de la carga (44.000) no puede ser menor que la inicial de su tarjeta (45.000). Corrige la lectura de la carga.',
+    );
+    expect(mensajeErrorEdicionCarga(error)).toBe(errorLecturaDeCarga(error));
+    expect(errorLecturaDeCarga(new DomainError('otro', { code: 'STALE_UPDATE', status: 409 }))).toBeNull();
+  });
+
+  it('al editar una carga que se borró mientras tanto (404), lo dice', () => {
+    expect(mensajeErrorEdicionCarga(new DomainError('Not found', { status: 404 }))).toMatch(/ya no existe/);
+  });
+
+  it('FUEL_LITERS_REQUIRED explica que la carga no quedó y qué corregir', () => {
+    const error = new DomainError('Indica los litros cargados al cerrar (0 si no cargó).', {
+      code: 'FUEL_LITERS_REQUIRED',
+      status: 400,
+    });
+    expect(mensajeErrorOperacion(error)).toMatch(/^La carga de esta camioneta no se registró/);
+  });
+
+  it('FUEL_LOAD_LIGHT_ONLY tiene mensaje propio', () => {
+    expect(mensajeErrorOperacion(new DomainError('x', { code: 'FUEL_LOAD_LIGHT_ONLY', status: 400 }))).toMatch(
+      /Solo una camioneta/,
+    );
   });
 });

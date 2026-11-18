@@ -40,6 +40,10 @@ export const NOTIF_TIPOS = {
   /** Terminó el turno del supervisor con pesados abiertos (solo a él) —
    * `data: { shiftId, shiftDate, shiftType }`. */
   SHIFT_OPEN_CARDS: 'shift.open-cards',
+  /** Una camioneta cargó combustible, con la tarjeta abierta o al cerrarla (a
+   * los administradores) — `data: { cargaId, cardId, equipmentId, origin }`,
+   * `origin` = `'TARJETA_ABIERTA' | 'CIERRE'`. Sin link: el front rutea por `tipo`. */
+  FUEL_LOADED: 'fuel.loaded',
 } as const;
 
 /** Qué registro corrigieron, tal como lo manda el backend en `data.entity`. */

@@ -1,3 +1,5 @@
+import { Fuel, type LucideIcon } from 'lucide-react';
+
 import { NOTIF_TIPOS, type NotificacionTipo } from '../types/notificacion';
 
 /** Mismo set de colores semánticos que acepta `Chip`/`Avatar` de HeroUI. */
@@ -6,6 +8,8 @@ export type NotifChipColor = 'accent' | 'success' | 'warning' | 'danger' | 'defa
 interface NotifTipoConfig {
   label: string;
   color: NotifChipColor;
+  /** Ícono opcional dentro del chip, para reconocer el aviso de un vistazo. */
+  icono?: LucideIcon;
 }
 
 const NOTIF_TIPO_CONFIG: Record<NotificacionTipo, NotifTipoConfig> = {
@@ -21,6 +25,7 @@ const NOTIF_TIPO_CONFIG: Record<NotificacionTipo, NotifTipoConfig> = {
   [NOTIF_TIPOS.LIGHT_SERVICE_DUE]: { label: 'Mantención por km', color: 'warning' },
   [NOTIF_TIPOS.PREVENTIVE_SERVICE_DUE]: { label: 'Mantención preventiva', color: 'warning' },
   [NOTIF_TIPOS.SHIFT_OPEN_CARDS]: { label: 'Equipos abiertos', color: 'danger' },
+  [NOTIF_TIPOS.FUEL_LOADED]: { label: 'Carga de combustible', color: 'accent', icono: Fuel },
 };
 
 /**

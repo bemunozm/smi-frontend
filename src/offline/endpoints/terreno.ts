@@ -6,7 +6,12 @@ import {
   type EditReporteDiarioBody,
   type ReporteDiario,
 } from '../../types/reporte-diario';
-import { ShiftCardResponseSchema, type EditShiftCardBody, type ShiftCardResponse } from '../../types/shift';
+import {
+  ShiftCardResponseSchema,
+  type AddShiftCardFuelLoadInput,
+  type EditShiftCardBody,
+  type ShiftCardResponse,
+} from '../../types/shift';
 import {
   TrabajoExtraordinarioSchema,
   type EditTrabajoExtraBody,
@@ -27,6 +32,12 @@ import {
 
 export interface TerrenoEndpointMap {
   'shiftCard.edit': { params: { id: string }; body: EditShiftCardBody; result: ShiftCardResponse };
+  /** La key de la foto (`tmpPhotoKey`) la pone el replay al subirla (`files`). */
+  'shiftCard.fuelLoad': {
+    params: { id: string };
+    body: Omit<AddShiftCardFuelLoadInput, 'tmpPhotoKey'>;
+    result: ShiftCardResponse;
+  };
   'hallazgo.edit': { params: { id: string }; body: EditHallazgoBody; result: Hallazgo };
   'trabajoExtra.edit': { params: { id: string }; body: EditTrabajoExtraBody; result: TrabajoExtraordinario };
   'reporteDiario.create': { params: NoParams; body: WithId<CreateReporteDiarioInput>; result: ReporteDiario };
@@ -44,6 +55,21 @@ export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
     label: (params) => etiqueta('Edición de tarjeta', cachedEquipoCode('shift-card', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,
+    entity: (params) => entityOf(shiftCardEntity, params.id),
+  },
+  // Carga de un liviano sin cerrar su tarjeta. Va sobre la entidad de la
+  // tarjeta: queda detrás de su apertura si sigue en la cola (y se descarta con
+  // ella) y delante de un cierre encolado después. Idempotente por `body.id`.
+  'shiftCard.fuelLoad': {
+    method: 'POST',
+    path: (params) => `/api/shift-cards/${param(params, 'id')}/fuel-loads`,
+    failMessage: 'No se pudo registrar la carga de combustible.',
+    parse: parseWith(ShiftCardResponseSchema),
+    apply: applyCardToCache,
+    invalidate: ['shiftCards', 'equipment', 'combustible'],
+    label: (params) => etiqueta('Carga de combustible', cachedEquipoCode('shift-card', params.id)),
+    notFoundIsDone: false,
+    carriesFiles: true,
     entity: (params) => entityOf(shiftCardEntity, params.id),
   },
   'hallazgo.edit': {

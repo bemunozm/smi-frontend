@@ -225,7 +225,7 @@ export async function enqueueClosedCard(
     shiftType: open.shiftType,
     capturedAt: close.capturedAt,
     closeClientId: close.closeClientId,
-    fuelLiters: close.fuelLiters,
+    fuelLiters: close.fuelLiters ?? 0,
     ...(close.adBlue !== undefined ? { adBlue: close.adBlue } : {}),
     ...(close.adBlueLiters !== undefined ? { adBlueLiters: close.adBlueLiters } : {}),
     ...(close.observaciones !== undefined ? { observaciones: close.observaciones } : {}),

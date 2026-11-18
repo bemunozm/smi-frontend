@@ -578,3 +578,91 @@ describe('useEditarTarjeta — tarjeta que todavía vive en el outbox', () => {
     });
   });
 });
+
+describe('useEditarTarjeta — camioneta con cargas hechas sin cerrar', () => {
+  const liviano: TarjetaTurno = {
+    ...cerrada,
+    id: 'c1',
+    equipoId: 'l1',
+    equipo: 'CM-001',
+    tipo: 'Camioneta',
+    operatorId: null,
+    liviano: true,
+    inicial: 45_000,
+    final: 45_700,
+    litros: 0,
+    adBlue: false,
+    adBlueLitros: undefined,
+    cargas: [
+      { id: 'k1', litros: 70, km: 45_300, fechaIso: '2026-11-18T12:00:00.000Z' },
+      { id: 'k2', litros: 40, km: 45_600, fechaIso: '2026-11-18T15:00:00.000Z', sinSincronizar: true },
+    ],
+  };
+
+  it('no deja subir el km inicial por encima de una carga', () => {
+    const { result } = render(liviano);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, inicial: '45400' })));
+
+    expect(result.current.inicialSobreCarga).toMatch(/mayor que el km de una carga.*45\.300 km/);
+    expect(result.current.puedeGuardar).toBe(false);
+  });
+
+  it('no deja bajar el km final por debajo de una carga (incluida la pendiente)', () => {
+    const { result } = render(liviano);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, final: '45500' })));
+
+    expect(result.current.finalBajoCarga).toMatch(/menor que el km de una carga.*45\.600 km/);
+    expect(result.current.puedeGuardar).toBe(false);
+  });
+
+  it('cerrada solo con km (tiene cargas vigentes): no muestra ni exige litros ni AdBlue', () => {
+    const { result } = render({ ...liviano, litros: undefined });
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.editaCombustible).toBe(false);
+    expect(result.current.faltante).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+  });
+
+  it('con solo cargas rechazadas, el editor vuelve a pedir los litros como siempre', () => {
+    const rechazadas = liviano.cargas!.map((c) => ({ ...c, requiereAtencion: true }));
+    const { result } = render({ ...liviano, litros: undefined, cargas: rechazadas });
+    act(() => result.current.abrirEdicion('c1'));
+
+    expect(result.current.editaCombustible).toBe(true);
+    expect(result.current.faltante).toBe('Indica los litros de combustible (cero si no cargó).');
+    expect(result.current.puedeGuardar).toBe(false);
+  });
+
+  it('un cierre rechazado con FUEL_LITERS_REQUIRED no se corrige en el editor: se descarta y se cierra de nuevo', () => {
+    const cierreRechazado = {
+      id: 'close-1',
+      type: 'closeCard',
+      v: 1,
+      userId: 'u1',
+      status: 'needs_attention',
+      attempts: 0,
+      seq: 2,
+      createdAt: 2,
+      updatedAt: 2,
+      entityKey: 'shift-card:c1',
+      payload: { cardId: 'c1', input: { closeClientId: 'close-1', valorFinal: 45_700, capturedAt: 'x' } },
+      lastError: { code: 'FUEL_LITERS_REQUIRED', status: 400, message: 'x' },
+    } as OutboxOp;
+    const { result } = render({ ...liviano, cargas: [] }, [cierreRechazado]);
+
+    expect(result.current.motivoSinEdicion({ ...liviano, cargas: [] })).toMatch(/descártalo en Sincronización/);
+  });
+
+  it('dentro del rango de las cargas se puede guardar', () => {
+    const { result } = render(liviano);
+    act(() => result.current.abrirEdicion('c1'));
+    act(() => result.current.setForm((f) => ({ ...f, inicial: '45100', final: '45650' })));
+
+    expect(result.current.inicialSobreCarga).toBeNull();
+    expect(result.current.finalBajoCarga).toBeNull();
+    expect(result.current.puedeGuardar).toBe(true);
+  });
+});

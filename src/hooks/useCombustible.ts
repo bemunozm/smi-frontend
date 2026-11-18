@@ -5,7 +5,8 @@ import { createCombustible, deleteCombustible, listCombustible, updateCombustibl
 import type { CreateCombustibleBody, UpdateCombustibleBody } from '../api/CombustibleAPI';
 import { ShiftCardAPI } from '../api/ShiftCardAPI';
 import { uploadFile } from '../api/UploadsAPI';
-import { mensajeErrorOperacion } from '../lib/error-messages';
+import { DomainError } from '../lib/api-error';
+import { errorLecturaDeCarga, mensajeErrorEdicionCarga, mensajeErrorOperacion } from '../lib/error-messages';
 import { COMBUSTIBLE_KEY as KEY, EQUIPMENT_KEY } from '../lib/query-keys';
 import type { RegistroCombustible } from '../types/combustible';
 import { generateUuid } from '../lib/uuid';
@@ -110,7 +111,11 @@ export function useEditarCargaCombustible() {
       void queryClient.invalidateQueries({ queryKey: EQUIPMENT_KEY });
     },
     onError: (error: unknown) => {
-      toast.danger(mensajeErrorOperacion(error, 'No se pudo corregir la carga.'));
+      // El rechazo de la lectura lo muestra el modal en el propio campo: sin aviso repetido.
+      if (errorLecturaDeCarga(error)) return;
+      toast.danger(mensajeErrorEdicionCarga(error));
+      // Se borró mientras tanto: que la lista deje de mostrarla.
+      if (error instanceof DomainError && error.status === 404) void queryClient.invalidateQueries({ queryKey: KEY });
     },
   });
 }
