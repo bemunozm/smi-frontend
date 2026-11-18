@@ -476,12 +476,17 @@ function afterServerAccepted(what: string, step: () => void): void {
 /** Upsert del reporte en `shift.exitReports` de cada tarjeta incluida —
  * evita esperar el próximo refetch para que "Reporte de salida" pase a
  * 'enviado' (mismo criterio de "nunca parpadea" que `applyCardToCache`). */
-function applyReportToCache(cardIds: readonly string[], report: ShiftReportResponse): void {
+function applyReportToCache(cardIds: readonly string[], report: ShiftReportResponse, pedidoId: string): void {
   const idSet = new Set(cardIds);
   queryClient.setQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY, (old) => {
     if (!old) return old;
+    // El reporte es del TURNO: se anota en todas sus tarjetas, también en las de
+    // camionetas (que no van en el reporte). El panel lee el turno desde su
+    // tarjeta más reciente; si esa era una camioneta, sin esto volvía a «Sin
+    // enviar» hasta el siguiente refetch y el supervisor lo mandaba de nuevo.
+    const turnos = new Set(old.filter((card) => idSet.has(card.id) && card.shift).map((card) => card.shift!.id));
     return old.map((card) => {
-      if (!idSet.has(card.id) || !card.shift) return card;
+      if (!card.shift || !turnos.has(card.shift.id)) return card;
       const yaEsta = card.shift.exitReports.some((r) => r.id === report.id);
       const exitReports = yaEsta
         ? card.shift.exitReports
@@ -497,6 +502,15 @@ function applyReportToCache(cardIds: readonly string[], report: ShiftReportRespo
       return { ...card, shift: { ...card.shift, exitReports } };
     });
   });
+
+  // El servidor devolvió OTRO reporte (el que ya existía): estos equipos ya
+  // estaban informados y no se mandó nada de nuevo. Se avisa para que el
+  // supervisor no siga reenviando lo mismo.
+  if (report.id !== pedidoId) {
+    useEngineStore.setState({
+      notice: 'Esos equipos ya estaban informados a la administración: no se envió un reporte repetido.',
+    });
+  }
 
   if (report.missingCardIds.length > 0) {
     // No hay un lugar persistido natural para esto (la operación ya se
@@ -527,12 +541,10 @@ function hasNoNetwork(error: DomainError): boolean {
  * calza con el contrato; reintentar a ciegas repetiría el mismo parseo roto para
  * siempre y trabaría la cola). Por eso se chequean ANTES que `status == null`.
  *
- * `429` con `code: 'REPORT_RATE_LIMITED'` (límite de reportes por turno,
- * `offline/outbox.ts#enqueueExitReport`/backend) tampoco es transitorio en
- * el sentido de "reintentar pronto arregla esto": reintentar automático
- * mientras el límite sigue vigente solo la deja rebotando — es un caso de
- * negocio, `needs_attention`. Un 429 SIN ese code (rate-limit genérico de
- * otro endpoint) sigue tratándose como transitorio.
+ * `429` con `code: 'REPORT_RATE_LIMITED'` (límite de reportes por turno) es
+ * transitorio como cualquier 429: el límite se libera solo en minutos y el
+ * servidor ya devuelve el reporte existente si los equipos ya se informaron,
+ * así que un reporte no puede quedar esperando que alguien lo reintente a mano.
  *
  * Los 5xx: solo 500 y 501 cuentan para el tope (`MAX_SERVER_ERROR_ATTEMPTS`) — la
  * operación misma rompe al servidor y reintentarla para siempre retendría todo lo
@@ -550,7 +562,6 @@ function classify(error: DomainError, op: OutboxOp): 'auth' | 'business' | 'tran
     return 'business';
   }
   if (error.status === 401) return 'auth';
-  if (error.status === 429 && error.code === 'REPORT_RATE_LIMITED') return 'business';
   if (error.status == null) return 'transient';
   if (error.status >= 500) {
     if (!COUNTED_SERVER_STATUSES.has(error.status)) return 'transient';
@@ -948,7 +959,7 @@ async function processOp(userId: string, candidate: OutboxOp): Promise<ProcessOu
       afterServerAccepted('la apertura de la tarjeta', () => applyCardToCache(card));
     } else if (op.type === 'sendExitReport') {
       const report = await ShiftReportAPI.sendExitReport(op.payload, replayConfig(JSON_TIMEOUT_MS));
-      afterServerAccepted('el reporte de salida', () => applyReportToCache(op.payload.cardIds, report));
+      afterServerAccepted('el reporte de salida', () => applyReportToCache(op.payload.cardIds, report, op.payload.id));
     } else {
       // Una operación guardada por una versión futura (o dañada): no se sabe
       // enviarla y reintentar no lo arregla.

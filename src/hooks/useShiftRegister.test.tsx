@@ -891,6 +891,29 @@ describe('useShiftRegister', () => {
       expect(result.current.reporteUrl('rep-1')).toBe('/api/shift-reports/rep-1/file');
     });
 
+    it('el reporte se lee de cualquier tarjeta del turno: una camioneta más reciente sin la copia al día no lo vuelve «sin enviar»', async () => {
+      const reporte = { id: 'rep-1', requestedAt: '2026-09-24T09:10:00.000Z', cardCount: 1, emailStatus: 'SENT' as const };
+      // La camioneta va primero (la más reciente) y su copia del turno no trae el reporte.
+      const camioneta: ShiftCardResponse = {
+        ...CARD_ABIERTA_ACTUAL,
+        id: 'cam-1',
+        equipoId: 'eq_cam',
+        equipo: { internalCode: 'CM-001', type: 'Camioneta', controlUnit: 'KM', equipmentClass: 'LIGHT' },
+        fecha: '2026-09-24T09:30:00.000Z',
+      };
+      const pesado: ShiftCardResponse = {
+        ...CARD_ABIERTA_ACTUAL,
+        shift: { ...CARD_ABIERTA_ACTUAL.shift!, exitReports: [reporte] },
+      };
+      mockApis({ tarjetas: [camioneta, pesado] });
+      const { Wrapper } = withQueryClient();
+
+      const { result } = renderHook(() => useShiftRegister(), { wrapper: Wrapper });
+
+      await waitFor(() => expect(result.current.reporteEstado).toBe('enviado'));
+      expect(result.current.reporteUltimo?.id).toBe('rep-1');
+    });
+
     it('"enviado" pero con MÁS equipos en curso que `cardCount` del último reporte: puede reenviar', async () => {
       const otraTarjeta: ShiftCardResponse = { ...CARD_ABIERTA_ACTUAL, id: 'c2', equipoId: 'eq_2' };
       const conReporte: ShiftCardResponse = {

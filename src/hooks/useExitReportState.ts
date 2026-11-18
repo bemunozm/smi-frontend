@@ -64,15 +64,22 @@ export function useExitReportState({
   const abrirPdfReporte = useAbrirPdfReporte();
   const opsReporte = useMemo(() => ops.filter((op): op is SendExitReportOp => op.type === 'sendExitReport'), [ops]);
 
-  const shiftActualServidor = useMemo(
-    () => tarjetasServidor.find((c) => c.shift != null && esActual(c.shift.date, c.shift.type, ctx))?.shift ?? null,
-    [tarjetasServidor, ctx],
-  );
+  // Los reportes del turno actual, juntando los de TODAS sus tarjetas (sin
+  // repetir): cada tarjeta trae su copia del turno, y una copia puede ir
+  // atrasada respecto de otra (p. ej. la de una camioneta tras enviar).
+  const reportesTurno = useMemo(() => {
+    const porId = new Map<string, ShiftCardExitReport>();
+    for (const c of tarjetasServidor) {
+      if (c.shift == null || !esActual(c.shift.date, c.shift.type, ctx)) continue;
+      for (const r of c.shift.exitReports) porId.set(r.id, r);
+    }
+    return [...porId.values()];
+  }, [tarjetasServidor, ctx]);
   const reporteUltimo = useMemo(() => {
-    const reports = shiftActualServidor?.exitReports ?? [];
+    const reports = reportesTurno;
     if (reports.length === 0) return null;
     return reports.reduce((latest, r) => (r.requestedAt > latest.requestedAt ? r : latest));
-  }, [shiftActualServidor]);
+  }, [reportesTurno]);
 
   const opReporteActual = useMemo(
     () => opsReporte.find((op) => op.payload.shiftDate === toDateOnly(ctx.fecha) && op.payload.shiftType === ctx.turno),

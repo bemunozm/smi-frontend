@@ -1109,7 +1109,7 @@ describe('RegistroEquipoView', () => {
       verLivianos();
 
       expect(screen.queryByText('Falta avisar a la administración')).toBeNull();
-      expect(screen.queryByRole('button', { name: /Enviar reporte de salida/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Informar equipos en terreno/ })).toBeNull();
     });
 
     it('el cierre de un liviano pide km final, sin AdBlue, y explica que sin carga se cierra igual', () => {

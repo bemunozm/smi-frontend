@@ -661,6 +661,54 @@ describe('replay — reporte de salida', () => {
       { id: 'report-1', requestedAt: report.requestedAt, cardCount: 1, emailStatus: 'SENT' },
     ]);
   });
+
+  it('anota el reporte en TODAS las tarjetas del turno, también en la camioneta que no va en él', async () => {
+    queryClient.setQueryData(SHIFT_CARDS_MINE_KEY, [
+      // La camioneta es la más reciente: es la que el panel mira primero.
+      baseCard({ id: 'camioneta', fecha: '2026-09-24T10:00:00.000Z' }),
+      baseCard({ id: 'card-1' }),
+      baseCard({ id: 'otro-turno', shift: { id: 'sh-2', date: '2026-09-23', type: 'DIURNO', exitReports: [] } }),
+    ]);
+    sendExitReportMock.mockResolvedValueOnce({
+      id: 'report-1',
+      shiftId: 'sh-1',
+      fileName: 'reporte.pdf',
+      cardCount: 1,
+      requestedAt: '2026-09-24T20:00:00.000Z',
+      createdAt: '2026-09-24T20:00:01.000Z',
+      emailStatus: 'SENT',
+      missingCardIds: [],
+    });
+    await putReportOp();
+
+    await syncAndSettle();
+
+    const cache = queryClient.getQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY) ?? [];
+    const reportes = (id: string) => cache.find((c) => c.id === id)?.shift?.exitReports.map((r) => r.id);
+    expect(reportes('camioneta')).toEqual(['report-1']);
+    expect(reportes('card-1')).toEqual(['report-1']);
+    expect(reportes('otro-turno')).toEqual([]);
+  });
+
+  it('si el servidor devuelve el reporte que ya existía, avisa que no se envió uno repetido', async () => {
+    queryClient.setQueryData(SHIFT_CARDS_MINE_KEY, [baseCard({ id: 'card-1' })]);
+    sendExitReportMock.mockResolvedValueOnce({
+      id: 'reporte-anterior',
+      shiftId: 'sh-1',
+      fileName: 'reporte.pdf',
+      cardCount: 1,
+      requestedAt: '2026-09-24T19:00:00.000Z',
+      createdAt: '2026-09-24T19:00:01.000Z',
+      emailStatus: 'SENT',
+      missingCardIds: [],
+    });
+    await putReportOp();
+
+    await syncAndSettle();
+
+    expect(await db.outbox.get('report-1')).toBeUndefined();
+    expect(useEngineStoreForTests.getState().notice).toMatch(/ya estaban informados/);
+  });
 });
 
 describe('replay — candado', () => {
@@ -908,7 +956,7 @@ describe('replay — clasificación de errores sin status', () => {
 });
 
 describe('replay — 429 REPORT_RATE_LIMITED', () => {
-  it('con code REPORT_RATE_LIMITED: needs_attention, no reintenta en bucle', async () => {
+  it('con code REPORT_RATE_LIMITED: queda pendiente y se reintenta solo (no pide acción)', async () => {
     sendExitReportMock.mockRejectedValueOnce(
       new DomainError('Demasiados reportes', { status: 429, code: 'REPORT_RATE_LIMITED' }),
     );
@@ -917,8 +965,8 @@ describe('replay — 429 REPORT_RATE_LIMITED', () => {
     await syncAndSettle();
 
     const op = await db.outbox.get('report-1');
-    expect(op?.status).toBe('needs_attention');
-    expect(op?.lastError).toMatchObject({ code: 'REPORT_RATE_LIMITED' });
+    expect(op?.status).toBe('pending');
+    expect(op?.attempts).toBe(1);
   });
 
   it('un 429 SIN ese code sigue siendo transitorio (pending + intento, run cortado)', async () => {
