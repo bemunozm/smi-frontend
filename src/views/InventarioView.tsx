@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
+  Card,
   Input,
   Label,
   ListBox,
@@ -40,6 +41,7 @@ import {
   stockStatus,
   type RowMenuOption,
 } from '../components/inventario/shared';
+import { CEBRA_COLUMNAS, cabeceraDe, fondoColumna } from '../components/ui/tabla-pizarra';
 import { useBranches } from '../hooks/useBranches';
 import { useCategories } from '../hooks/useCategories';
 import { usePermissions } from '../hooks/usePermissions';
@@ -134,9 +136,12 @@ function ItemRow({
       : []),
   ];
 
+  // Índice lógico de cada columna para la cebra: «Mínimo» no existe en «Todas».
+  const col = (nombre: (typeof COLUMNAS)[number]) => fondoColumna(columnasDe(isAll).indexOf(nombre));
+
   return (
-    <Table.Row>
-      <Table.Cell>
+    <Table.Row className={CEBRA_COLUMNAS}>
+      <Table.Cell {...col('sku')}>
         <Link
           className="font-mono text-sm font-medium text-(--accent) hover:underline"
           to={`/inventario/${item.id}`}
@@ -144,7 +149,7 @@ function ItemRow({
           {item.sku}
         </Link>
       </Table.Cell>
-      <Table.Cell>
+      <Table.Cell {...col('nombre')}>
         <div className="flex flex-col">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-foreground">{item.name}</span>
@@ -158,7 +163,7 @@ function ItemRow({
           ) : null}
         </div>
       </Table.Cell>
-      <Table.Cell className="text-sm text-muted-foreground">
+      <Table.Cell className="text-sm text-muted-foreground" {...col('categoria')}>
         {item.category?.name ?? 'Sin categoría'}
       </Table.Cell>
       <Table.Cell
@@ -167,24 +172,25 @@ function ItemRow({
             ? 'font-semibold text-danger'
             : 'text-foreground'
         }`}
+        {...col('existencia')}
       >
         {NUMBER.format(quantity)} {UNIT_SYMBOLS[item.unit]}
       </Table.Cell>
-      <Table.Cell>
+      <Table.Cell {...col('sucursal')}>
         <BranchBreakdown
           highlightBranchId={isAll ? undefined : branchId}
           item={item}
         />
       </Table.Cell>
       {isAll ? null : (
-        <Table.Cell className="font-mono text-sm text-muted-foreground">
+        <Table.Cell className="font-mono text-sm text-muted-foreground" {...col('minimo')}>
           {minimum > 0 ? NUMBER.format(minimum) : '—'}
         </Table.Cell>
       )}
-      <Table.Cell>
+      <Table.Cell {...col('estado')}>
         <StatusChip label={status.label} tone={status.tone} />
       </Table.Cell>
-      <Table.Cell>
+      <Table.Cell {...col('acciones')}>
         <div className="flex justify-end">
           <RowMenu
             label={`Acciones de ${item.sku}`}
@@ -216,7 +222,11 @@ function EmptyState() {
   );
 }
 
-const COLUMN_CLASS = 'text-xs font-bold tracking-[0.06em] uppercase';
+/** Columnas de la tabla en orden; «Mínimo» solo con una sucursal elegida. */
+const COLUMNAS = ['sku', 'nombre', 'categoria', 'existencia', 'sucursal', 'minimo', 'estado', 'acciones'] as const;
+
+const columnasDe = (isAll: boolean): readonly (typeof COLUMNAS)[number][] =>
+  isAll ? COLUMNAS.filter((c) => c !== 'minimo') : COLUMNAS;
 
 function ItemsList({
   items,
@@ -252,25 +262,31 @@ function ItemsList({
     );
   }
 
+  const columnas = columnasDe(isAll);
+  /** Bloque de cabecera de la pizarra, con el degradado repartido entre las columnas que hay. */
+  const cab = (nombre: (typeof COLUMNAS)[number]) => cabeceraDe(columnas.indexOf(nombre), columnas.length);
+
   return (
+    <Card>
+      <Card.Content>
     <Table variant="secondary">
       <Table.ScrollContainer>
         <Table.Content aria-label="Inventario" className="min-w-240">
           <Table.Header>
-            <Table.Column className={COLUMN_CLASS} isRowHeader>
+            <Table.Column className={cab('sku')} isRowHeader>
               SKU
             </Table.Column>
-            <Table.Column className={COLUMN_CLASS}>Nombre</Table.Column>
-            <Table.Column className={COLUMN_CLASS}>Categoría</Table.Column>
-            <Table.Column className={COLUMN_CLASS}>
+            <Table.Column className={cab('nombre')}>Nombre</Table.Column>
+            <Table.Column className={cab('categoria')}>Categoría</Table.Column>
+            <Table.Column className={cab('existencia')}>
               {isAll ? 'Existencia · total' : 'Existencia acá'}
             </Table.Column>
-            <Table.Column className={COLUMN_CLASS}>Sucursal</Table.Column>
+            <Table.Column className={cab('sucursal')}>Sucursal</Table.Column>
             {isAll ? null : (
-              <Table.Column className={COLUMN_CLASS}>Mínimo</Table.Column>
+              <Table.Column className={cab('minimo')}>Mínimo</Table.Column>
             )}
-            <Table.Column className={COLUMN_CLASS}>Estado</Table.Column>
-            <Table.Column className={COLUMN_CLASS}>Acciones</Table.Column>
+            <Table.Column className={cab('estado')}>Estado</Table.Column>
+            <Table.Column className={cab('acciones')}>Acciones</Table.Column>
           </Table.Header>
           <Table.Body>
             {items.map((item) => (
@@ -287,6 +303,8 @@ function ItemsList({
         </Table.Content>
       </Table.ScrollContainer>
     </Table>
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -423,13 +441,15 @@ export function InventarioView() {
     [all, branchId],
   );
 
-  const items = useMemo(
-    () =>
+  // Los críticos van arriba (pedido del cliente): son los que no pueden faltar.
+  // Orden estable: dentro de cada grupo se mantiene el orden del servidor.
+  const items = useMemo(() => {
+    const filtrados =
       stockFilter === 'atencion'
         ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
-        : all,
-    [all, stockFilter, branchId],
-  );
+        : all;
+    return [...filtrados].sort((a, b) => Number(b.isCritical) - Number(a.isCritical));
+  }, [all, stockFilter, branchId]);
 
   const branchOptions = [
     { id: ALL_BRANCHES, label: 'Todas' },

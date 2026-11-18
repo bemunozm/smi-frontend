@@ -284,6 +284,15 @@ describe('InventarioView', () => {
       expect(screen.getByText('Crítico')).toBeTruthy();
       expect(screen.getByText('OK')).toBeTruthy();
     });
+
+    it('pone los ítems críticos arriba, sin desordenar el resto', () => {
+      const critico = item({ ...SIN_STOCK, isCritical: true });
+      renderView([OK, RIESGO, critico, BAJO], { size: 'desktop' });
+
+      const filas = within(screen.getByLabelText('Inventario')).getAllByRole('row').slice(1);
+      const skus = filas.map((fila) => within(fila).getByRole('link').textContent);
+      expect(skus).toEqual(['BAT-001', 'FIL-001', 'ACE-001', 'COR-001']);
+    });
   });
 
   describe('según el ancho de pantalla', () => {

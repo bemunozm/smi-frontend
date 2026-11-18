@@ -12,6 +12,7 @@ import type { MaintenanceForecastRow } from '../../../types/maintenance-forecast
 import { MantencionAnteriorModal } from '../MantencionAnteriorModal';
 import { PautaMantencionModal } from '../PautaMantencionModal';
 import { Chip } from '../../ui/Chip';
+import { CEBRA_COLUMNAS, cabecera, fondoColumna } from '../../ui/tabla-pizarra';
 import { MantencionARealizarModal } from './MantencionARealizarModal';
 import { etiquetas, fechaCorta, lectura, separarSinPauta, textoPendientes, tono } from './pizarra';
 
@@ -25,39 +26,6 @@ const TONO_CLASE = {
 
 /** Lo que dice el «Horómetro actual» cuando el equipo no tiene lectura. */
 const SIN_LECTURA = 'Sin lectura';
-
-// Columnas alternadas (gris desde la primera) por índice lógico de columna, no por `nth-child`, para no depender de
-// cuántas celdas trae cada fila. Las celdas de HeroUI traen fondo propio con más especificidad, por eso el gris va
-// con `!` y solo si la fila no está en hover; el hover verde (tinte del token success) va sobre todas las celdas de
-// la fila y le gana al gris. El relieve (luz arriba, sombra fina abajo y a la derecha) separa cada celda sin rayar.
-const CEBRA_COLUMNAS =
-  '[&_td]:border-b-0! [&_td]:shadow-pizarra-celda [&:not(:hover)_td[data-gris]]:bg-default/70! hover:[&_td]:bg-success/15!';
-
-/** Columnas pares (0, 2, 4…) en gris. */
-const fondoColumna = (indice: number) => (indice % 2 === 0 ? { 'data-gris': '' } : {});
-
-// Cabecera tipo tabla de precios: cada columna es un bloque propio (degradado de azul oscuro a azul claro,
-// texto blanco en negrita, esquinas de arriba redondeadas y relieve). El borde blanco a los lados hace de separación
-// entre bloques; `z-1` deja la sombra por encima de la primera fila del cuerpo. El `::after` es la rayita separadora
-// de HeroUI, que acá sobra.
-const BLOQUE_CABECERA =
-  'z-1 border-x-2 border-surface rounded-t-lg! rounded-b-none! py-3! text-xs font-bold! text-white! shadow-pizarra-cabecera after:hidden';
-
-/** Los nueve pasos del degradado (tokens de `index.css`), escritos enteros para que Tailwind los encuentre. */
-const COLOR_CABECERA = [
-  'bg-pizarra-1!',
-  'bg-pizarra-2!',
-  'bg-pizarra-3!',
-  'bg-pizarra-4!',
-  'bg-pizarra-5!',
-  'bg-pizarra-6!',
-  'bg-pizarra-7!',
-  'bg-pizarra-8!',
-  'bg-pizarra-9!',
-] as const;
-
-/** Clases del bloque de cabecera en el paso `paso` (0 a 8) del degradado. */
-const cabecera = (paso: number) => `${BLOQUE_CABECERA} ${COLOR_CABECERA[paso]}`;
 
 /** La tabla de sin pauta tiene cuatro columnas: toma pasos repartidos para recorrer igual todo el degradado. */
 const PASOS_SIN_PAUTA = [0, 3, 6, 8] as const;
