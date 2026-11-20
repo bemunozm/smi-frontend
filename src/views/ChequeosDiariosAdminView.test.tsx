@@ -4,10 +4,15 @@ import { render, cleanup, screen, within, fireEvent } from '@testing-library/rea
 import type { DailyChecklistDetail, DailyChecklistSummary } from '../types/daily-checklist';
 import { toDateOnly } from '../lib/turno';
 
-const { periodoHook, detalleHook, escritorio } = vi.hoisted(() => ({
+const { periodoHook, detalleHook, escritorio, query } = vi.hoisted(() => ({
   periodoHook: vi.fn(),
   detalleHook: vi.fn(),
   escritorio: { value: true },
+  query: { value: '' },
+}));
+
+vi.mock('react-router-dom', () => ({
+  useSearchParams: () => [new URLSearchParams(query.value)],
 }));
 
 vi.mock('../hooks/useDailyChecklists', () => ({
@@ -107,6 +112,7 @@ beforeEach(() => {
   periodoHook.mockReturnValue(ok(LISTA));
   detalleHook.mockReturnValue({ data: undefined, isPending: false, isError: false, error: null });
   escritorio.value = true;
+  query.value = '';
 });
 
 afterEach(() => {
@@ -173,6 +179,17 @@ describe('ChequeosDiariosAdminView', () => {
     expect(screen.getByRole('tab', { name: 'Rechazados' }).getAttribute('aria-selected')).toBe('true');
 
     fireEvent.click(screen.getByRole('button', { name: /^Rechazados/ }));
+    expect(screen.getAllByTestId(/chequeo-fila-/)).toHaveLength(3);
+  });
+
+  it('abre ya filtrada con ?estado= (atajo del dashboard) e ignora un estado inválido', () => {
+    query.value = 'estado=ACCEPTED';
+    render(<ChequeosDiariosAdminView />);
+    expect(screen.getAllByTestId(/chequeo-fila-/).map((f) => f.dataset.testid)).toEqual(['chequeo-fila-c2']);
+    cleanup();
+
+    query.value = 'estado=CUALQUIERA';
+    render(<ChequeosDiariosAdminView />);
     expect(screen.getAllByTestId(/chequeo-fila-/)).toHaveLength(3);
   });
 

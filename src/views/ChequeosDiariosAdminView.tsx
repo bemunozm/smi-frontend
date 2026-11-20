@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Input, Label, Modal, Spinner, Table, TextField } from '@heroui/react';
 import { Camera, ChevronRight, Wrench } from 'lucide-react';
 
@@ -11,12 +12,17 @@ import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useChecklistDetalle, useChecklistsDelPeriodo } from '../hooks/useDailyChecklists';
 import { fmtTime } from '../lib/format';
 import { fechaCorta, fromDateOnly, toDateOnly } from '../lib/turno';
-import type { ChecklistStatus, DailyChecklistSummary } from '../types/daily-checklist';
+import { CHECKLIST_STATUSES, type ChecklistStatus, type DailyChecklistSummary } from '../types/daily-checklist';
 
 /** Lo máximo que acepta el backend para un rango (días, ambos extremos incluidos). */
 const MAX_DIAS = 92;
 
 type FiltroEstado = 'TODOS' | ChecklistStatus;
+
+/** `?estado=` lo manda la tarjeta del dashboard para abrir la vista ya filtrada. */
+function estadoInicial(valor: string | null): FiltroEstado {
+  return CHECKLIST_STATUSES.find((e) => e === valor) ?? 'TODOS';
+}
 
 const SELECTOR_FECHA = 'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground';
 const BOTON_FECHA = 'rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground disabled:opacity-40';
@@ -79,7 +85,8 @@ export function ChequeosDiariosAdminView() {
   const [modo, setModo] = useState<'dia' | 'rango'>('dia');
   const [desde, setDesde] = useState(hoy);
   const [hasta, setHasta] = useState(hoy);
-  const [estado, setEstado] = useState<FiltroEstado>('TODOS');
+  const [searchParams] = useSearchParams();
+  const [estado, setEstado] = useState<FiltroEstado>(() => estadoInicial(searchParams.get('estado')));
   const [busqueda, setBusqueda] = useState('');
   const [abierto, setAbierto] = useState<string | null>(null);
   const esTabla = useMediaQuery(TABLE_LAYOUT_QUERY);
