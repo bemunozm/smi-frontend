@@ -24,9 +24,14 @@ export const DailyChecklistAPI = {
     }
   },
 
-  /** `status`: p. ej. `['SUBMITTED']` para los pendientes del supervisor. */
+  /**
+   * `status`: p. ej. `['SUBMITTED']` para los pendientes del supervisor.
+   * `from`/`to` (`YYYY-MM-DD`, inclusive, hasta 92 días): el listado del panel.
+   */
   async list(filtro: {
     date?: string;
+    from?: string;
+    to?: string;
     equipmentId?: string;
     status?: readonly ChecklistStatus[];
   }): Promise<DailyChecklistSummary[]> {
@@ -34,6 +39,7 @@ export const DailyChecklistAPI = {
       const response = await axiosInstance.get('/api/daily-checklists', {
         params: {
           ...(filtro.date ? { date: filtro.date } : {}),
+          ...(filtro.from && filtro.to ? { from: filtro.from, to: filtro.to } : {}),
           ...(filtro.equipmentId ? { equipmentId: filtro.equipmentId } : {}),
           ...(filtro.status?.length ? { status: filtro.status.join(',') } : {}),
         },
