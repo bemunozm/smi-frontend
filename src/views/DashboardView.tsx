@@ -48,6 +48,7 @@ import { UNIT_SYMBOLS } from '../types/inventory';
 import { SECCION_LABEL } from '../types/reporte-diario';
 import type { HallazgoResumen, MetricasEquipo, RangoDashboard } from '../types/dashboard';
 import { mantencionesProximas } from '../lib/mantenciones-proximas';
+import { ChequeosHoyCard } from '../components/dashboard/ChequeosHoyCard';
 import { ResumenDia } from '../components/dashboard/ResumenDia';
 import { KpiDetailModal } from '../components/dashboard/KpiDetailModal';
 import { NUM_CL, NUM_CL_1, formatDia } from '../lib/dashboard-format';
@@ -1428,6 +1429,8 @@ export function DashboardView() {
       {/* Primero lo accionable: mantenciones próximas, stock bajo y hallazgos
          (pedido del administrador: estas cards abren el dashboard). */}
       <SummaryCards />
+
+      <ChequeosHoyCard />
 
       <ResumenDia mantenciones={mantenciones} />
 

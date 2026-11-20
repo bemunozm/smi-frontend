@@ -36,6 +36,7 @@ describe('routes', () => {
       '/reportes-diarios/cargar',
       '/mantenciones',
       '/reportes',
+      '/chequeos-diarios',
     ]) {
       const guard = findGuardOf(router.routes as unknown as Rt[], path);
       expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);

@@ -41,6 +41,7 @@ import { ActivityLogView } from './views/ActivityLogView';
 import { MantencionesAdminView } from './views/MantencionesAdminView';
 import { ReportesDiariosAdminView } from './views/ReportesDiariosAdminView';
 import { ReportesView } from './views/ReportesView';
+import { ChequeosDiariosAdminView } from './views/ChequeosDiariosAdminView';
 import { ValidarChecklistsView } from './views/ValidarChecklistsView';
 import { VencimientosView } from './views/VencimientosView';
 import { ReporteDiarioCargarView, ReporteDiarioView } from './views/ReporteDiarioView';
@@ -173,6 +174,9 @@ export const router = createBrowserRouter([
                   // Registro de reportes de salida de turno de los
                   // supervisores: ver sus tarjetas y descargar el PDF.
                   { path: '/reportes', element: <ReportesView /> },
+                  // Chequeos diarios del mantenedor y su validación, en solo
+                  // lectura (validar sigue siendo del supervisor, en Terreno).
+                  { path: '/chequeos-diarios', element: <ChequeosDiariosAdminView /> },
                   // Grilla mensual de días trabajados (la hoja «DIAS TRABAJO
                   // MES» de la secretaria), derivada de tarjetas y Reports.
                   { path: '/asistencia', element: <AsistenciaView /> },

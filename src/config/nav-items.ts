@@ -81,6 +81,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // --- Reportes (vistas del administrador, no las de Terreno) ---------------
   // Reportes de salida de turno (equipos usados en el día, por supervisor).
   { label: 'Informe diario equipos', to: '/reportes', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
+  // Chequeos diarios del mantenedor y su validación (solo lectura).
+  { label: 'Chequeos diarios', to: '/chequeos-diarios', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Reportes diarios de producción de los supervisores.
   { label: 'Informe de producción diaria', to: '/reportes-diarios', roles: [ROLES.ADMIN, ROLES.SECRETARIA], seccion: 'Reportes' },
   // Gestión de hallazgos (corregir/eliminar/crear).

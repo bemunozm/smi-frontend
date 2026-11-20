@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-const { navigateMock, itemsHook, abiertosHook, recientesHook, trabajosExtraHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook } = vi.hoisted(() => ({
+const { navigateMock, itemsHook, abiertosHook, recientesHook, trabajosExtraHook, hallazgosResumenHook, resumenHook, equiposMock, equiposHook, mantHook, supHook, mantenedoresHook, vueltasHook, chequeosHook } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   itemsHook: vi.fn(),
   abiertosHook: vi.fn(),
@@ -15,6 +15,7 @@ const { navigateMock, itemsHook, abiertosHook, recientesHook, trabajosExtraHook,
   supHook: vi.fn(),
   mantenedoresHook: vi.fn(),
   vueltasHook: vi.fn(),
+  chequeosHook: vi.fn(),
 }));
 
 const idle = { data: undefined, isPending: true, isError: false, error: null };
@@ -41,6 +42,9 @@ vi.mock('../hooks/useDashboard', () => ({
   useHallazgosAbiertosResumen: () => hallazgosResumenHook(),
   useHallazgosAbiertosRecientes: () => abiertosHook(),
   useHallazgosRecientes: () => recientesHook(),
+}));
+vi.mock('../hooks/useDailyChecklists', () => ({
+  useDailyChecklists: () => chequeosHook(),
 }));
 vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => trabajosExtraHook(),
@@ -69,6 +73,7 @@ const equipo = (
 ) => ({ equipmentId, internalCode, horas, litros, rendimiento, serieDiaria });
 
 beforeEach(() => {
+  chequeosHook.mockReturnValue({ data: [], isPending: false, isError: false, error: null });
   mockEquipos(undefined);
   mockMant([]);
   supHook.mockReturnValue(idle);
@@ -600,6 +605,46 @@ describe('DashboardView', () => {
       expect(within(screen.getByTestId('vueltas-dia-2026-09-03')).getByText('Sin vueltas')).toBeTruthy();
       // Sin pie «Ver todo»: el detalle ya es completo.
       expect(within(dialog).queryByRole('button', { name: 'Ver todo →' })).toBeNull();
+    });
+  });
+
+  describe('tarjeta «Chequeos de hoy»', () => {
+    const chequeo = (id: string, status: string) => ({ id, status });
+    const conChequeos = (data: object[]) =>
+      chequeosHook.mockReturnValue({ data, isPending: false, isError: false, error: null });
+
+    it('cuenta enviados, por validar y rechazados del día', () => {
+      conChequeos([
+        chequeo('a', 'SUBMITTED'),
+        chequeo('b', 'SUBMITTED'),
+        chequeo('c', 'ACCEPTED'),
+        chequeo('d', 'REJECTED'),
+      ]);
+      render(<DashboardView />);
+
+      const tarjeta = screen.getByLabelText('Chequeos de hoy');
+      expect(within(tarjeta).getByTestId('chequeos-hoy-enviados').textContent).toContain('4');
+      expect(within(tarjeta).getByTestId('chequeos-hoy-por-validar').textContent).toContain('2');
+      expect(within(tarjeta).getByTestId('chequeos-hoy-rechazados').textContent).toContain('1');
+    });
+
+    it('«Ver chequeos» lleva a /chequeos-diarios', () => {
+      conChequeos([chequeo('a', 'SUBMITTED')]);
+      render(<DashboardView />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ver chequeos →' }));
+      expect(navigateMock).toHaveBeenCalledWith('/chequeos-diarios');
+    });
+
+    it('sin chequeos hoy lo dice, y si falla muestra el error sin romper el dashboard', () => {
+      render(<DashboardView />);
+      expect(screen.getByText('Todavía no se envía ningún chequeo hoy.')).toBeTruthy();
+      cleanup();
+
+      chequeosHook.mockReturnValue({ data: undefined, isPending: false, isError: true, error: new Error('Sin conexión') });
+      render(<DashboardView />);
+      expect(within(screen.getByLabelText('Chequeos de hoy')).getByRole('alert').textContent).toBe('Sin conexión');
+      expect(screen.getByText('Hola, Admin')).toBeTruthy();
     });
   });
 });
