@@ -106,7 +106,7 @@ describe('MovimientosView', () => {
   it('montada en el taller vuelve al stock del taller y sus fichas se abren SIN salir del shell', () => {
     renderView([COMPRA], 'desktop', 'taller');
 
-    const volver = screen.getByRole('link', { name: '← Volver al stock del taller' });
+    const volver = screen.getByRole('link', { name: 'Volver al stock del taller' });
     expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
     expect(screen.queryByText('Volver al inventario')).toBeNull();
     expect(screen.queryByText('SMI · Inventario')).toBeNull();

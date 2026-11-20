@@ -1,6 +1,7 @@
+import { BackLink } from '../components/ui/BackLink';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { Boton, Card, Input, Segmentado } from '../components/terreno/ui';
 import { TablaPorDocumento, TarjetasPorDocumento } from '../components/vencimientos/PorDocumento';
@@ -64,12 +65,7 @@ export function VencimientosView({ contexto = 'flota' }: { contexto?: 'flota' | 
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        className="inline-flex w-fit items-center gap-1.5 text-[15px] font-semibold text-[var(--accent)] hover:underline"
-        to={base}
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden /> Equipos
-      </Link>
+      <BackLink to={base}>Volver a Equipos</BackLink>
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-[24px] leading-tight font-bold tracking-[-0.02em] text-foreground">
           Vencimientos de livianos

@@ -1,3 +1,4 @@
+import { BackLink } from '../components/ui/BackLink';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -190,29 +191,27 @@ export function MovimientosView({
   return (
     <div className="flex flex-col gap-4">
       {contexto === 'inventario' ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
-            SMI · Inventario
-          </span>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
-            Historial de inventario
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
-            renglón deja el stock que quedó en esa bodega.{' '}
-            <Link className="text-(--accent) hover:underline" to="/inventario">
-              Volver al inventario
-            </Link>
-          </p>
+        <div className="flex flex-col gap-3">
+          <BackLink to="/inventario">Volver al inventario</BackLink>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase">
+              SMI · Inventario
+            </span>
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+              Historial de inventario
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Todo lo que entró, salió, se traspasó o se ajustó, en orden. Cada
+              renglón deja el stock que quedó en esa bodega.
+            </p>
+          </div>
         </div>
       ) : (
         // Dentro del taller la marca ya la pone el header del shell: acá basta
         // el volver arriba —mismo formato que la ficha— y el título al tamaño
         // de las demás sub-vistas.
         <div className="flex flex-col gap-3">
-          <Link className="text-sm text-(--accent) hover:underline" to="/mantenimiento/stock">
-            ← Volver al stock del taller
-          </Link>
+          <BackLink to="/mantenimiento/stock">Volver al stock del taller</BackLink>
           <div className="flex flex-col gap-1">
             <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
               Historial de inventario

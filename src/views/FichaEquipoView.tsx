@@ -1,5 +1,6 @@
+import { BackLink } from '../components/ui/BackLink';
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Button, Card, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
 
@@ -81,9 +82,7 @@ export function FichaEquipoView({
         >
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha consolidada del equipo.'}
         </div>
-        <Link className="text-sm text-(--accent) hover:underline" to={base}>
-          ← Volver a equipos
-        </Link>
+        <BackLink to={base}>Volver a equipos</BackLink>
       </div>
     );
   }
@@ -93,12 +92,7 @@ export function FichaEquipoView({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <Link
-          className="text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
-          to={`${base}/${equipo.id}`}
-        >
-          ← SMI · Ficha del equipo
-        </Link>
+        <BackLink to={`${base}/${equipo.id}`}>Volver a la ficha del equipo</BackLink>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
             {equipo.internalCode}
