@@ -613,7 +613,7 @@ describe('DashboardView', () => {
     const conChequeos = (data: object[]) =>
       chequeosHook.mockReturnValue({ data, isPending: false, isError: false, error: null });
 
-    it('cuenta enviados, por validar y rechazados del día', () => {
+    it('cuenta enviados, por validar, aceptados y rechazados del día, con el avance de la validación', () => {
       conChequeos([
         chequeo('a', 'SUBMITTED'),
         chequeo('b', 'SUBMITTED'),
@@ -625,15 +625,23 @@ describe('DashboardView', () => {
       const tarjeta = screen.getByLabelText('Chequeos de hoy');
       expect(within(tarjeta).getByTestId('chequeos-hoy-enviados').textContent).toContain('4');
       expect(within(tarjeta).getByTestId('chequeos-hoy-por-validar').textContent).toContain('2');
+      expect(within(tarjeta).getByTestId('chequeos-hoy-aceptados').textContent).toContain('1');
       expect(within(tarjeta).getByTestId('chequeos-hoy-rechazados').textContent).toContain('1');
+      expect(tarjeta.textContent).toContain('2 de 4 validados por el supervisor');
     });
 
-    it('«Ver chequeos» lleva a /chequeos-diarios', () => {
+    it('«Ver chequeos» lleva a /chequeos-diarios y cada recuadro la abre filtrada', () => {
       conChequeos([chequeo('a', 'SUBMITTED')]);
       render(<DashboardView />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Ver chequeos →' }));
-      expect(navigateMock).toHaveBeenCalledWith('/chequeos-diarios');
+      fireEvent.click(screen.getByRole('button', { name: 'Ver chequeos' }));
+      expect(navigateMock).toHaveBeenLastCalledWith('/chequeos-diarios');
+
+      fireEvent.click(screen.getByTestId('chequeos-hoy-aceptados'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/chequeos-diarios?estado=ACCEPTED');
+
+      fireEvent.click(screen.getByTestId('chequeos-hoy-por-validar'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/chequeos-diarios?estado=SUBMITTED');
     });
 
     it('sin chequeos hoy lo dice, y si falla muestra el error sin romper el dashboard', () => {
