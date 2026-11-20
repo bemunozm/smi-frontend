@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { Button, Dropdown, Label } from '@heroui/react';
 import {
+  Archive,
   CheckCircle2,
   EllipsisVertical,
   OctagonAlert,
+  Star,
   TriangleAlert,
 } from 'lucide-react';
 
@@ -123,14 +125,29 @@ export function StatusChip({ label, tone }: StockStatus) {
 }
 
 /**
- * Distintivo del ítem crítico. A propósito NO es un chip de color: el color en
- * esta pantalla habla del stock, y un segundo chip rojo al lado del estado
- * haría dudar de cuál de los dos es el que manda.
+ * Distintivo del ítem crítico: relleno en el color de acento para que salte a
+ * la vista (pedido del cliente, 20/11/2026). No usa rojo ni ámbar a propósito:
+ * esos colores hablan del stock en esta pantalla, y un segundo chip rojo al
+ * lado del estado haría dudar de cuál de los dos es el que manda.
  */
 export function CriticalBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--accent) px-2 py-0.5 text-xs font-semibold text-(--accent-foreground)">
+      <Star aria-hidden className="h-3 w-3 fill-current" />
       Crítico
+    </span>
+  );
+}
+
+/**
+ * Ítem dado de baja: relleno oscuro y neutro, distinto de los chips de stock y
+ * del de crítico, para que no se confunda con un ítem en uso.
+ */
+export function InactiveBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-2 py-0.5 text-xs font-semibold text-background">
+      <Archive aria-hidden className="h-3 w-3" />
+      Dado de baja
     </span>
   );
 }
@@ -267,7 +284,7 @@ export function Segmented<T extends string>({
         return (
           <button
             aria-selected={isSelected}
-            className={`h-10 flex-1 rounded-[7px] px-3 text-sm font-semibold transition-colors ${
+            className={`h-10 flex-1 rounded-[7px] px-3 text-sm font-semibold whitespace-nowrap transition-colors ${
               isSelected
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'

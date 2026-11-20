@@ -12,13 +12,13 @@ import { EditItemModal } from '../components/inventario/ItemFormModal';
 import {
   ALL_BRANCHES,
   CriticalBadge,
+  InactiveBadge,
   MovementKindChip,
   NUMBER,
   StatusChip,
   movementKind,
   stockStatus,
 } from '../components/inventario/shared';
-import { Chip } from '../components/ui/Chip';
 import { useBranches } from '../hooks/useBranches';
 import { usePermissions } from '../hooks/usePermissions';
 import { MOVEMENT_ACTIONS } from '../lib/permissions';
@@ -435,11 +435,7 @@ export function FichaItemView({
               {ITEM_TYPE_LABELS[item.type]}
             </span>
             {item.isCritical ? <CriticalBadge /> : null}
-            {item.isActive ? null : (
-              <Chip color="default" size="sm" variant="soft">
-                Dado de baja
-              </Chip>
-            )}
+            {item.isActive ? null : <InactiveBadge />}
             <StatusChip {...status} />
           </div>
           <p className="text-sm text-muted-foreground">
