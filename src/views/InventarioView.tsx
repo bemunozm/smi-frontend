@@ -23,7 +23,6 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { Chip } from '../components/ui/Chip';
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
 import {
   ItemActionsModal,
@@ -38,6 +37,7 @@ import {
   ALL_BRANCHES,
   BranchBreakdown,
   CriticalBadge,
+  InactiveBadge,
   NUMBER,
   RowMenu,
   Segmented,
@@ -167,11 +167,7 @@ function ItemRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-foreground">{item.name}</span>
             {item.isCritical ? <CriticalBadge /> : null}
-            {item.isActive ? null : (
-              <Chip color="default" size="sm" variant="soft">
-                Dado de baja
-              </Chip>
-            )}
+            {item.isActive ? null : <InactiveBadge />}
           </div>
           <MarcaPendiente marca={marca} />
           {item.partNumber ? (
@@ -511,7 +507,7 @@ export function InventarioView() {
 
       <div className="flex flex-wrap gap-2">
         <Link
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
+          className="inline-flex h-12 items-center gap-2 rounded-(--field-radius) border border-border bg-card px-4 text-sm font-semibold text-foreground hover:bg-[var(--surface-secondary)]"
           to="/inventario/movimientos"
         >
           <History size={16} />
@@ -545,26 +541,55 @@ export function InventarioView() {
         value={tab}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <TextField aria-label="Buscar ítem" onChange={setSearch} value={search}>
+      {/* Los cuatro filtros con el mismo esquema (label afuera + control de
+          48px) para que en escritorio queden en una sola fila nivelada; el
+          switch de dados de baja va aparte, debajo, porque no es un filtro
+          del mismo tipo y desarmaba la grilla. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto]">
+        <TextField
+          aria-label="Buscar ítem"
+          className="label-outside"
+          onChange={setSearch}
+          value={search}
+        >
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
-        {puedeDarDeBaja ? (
-          <Switch isSelected={verDadosDeBaja} onChange={setVerDadosDeBaja}>
-            <Switch.Content>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-              Mostrar dados de baja
-            </Switch.Content>
-          </Switch>
-        ) : null}
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-(--label-color)">
-            Sucursal
-          </span>
+        <Select
+          className="label-outside"
+          onChange={(value) => {
+            if (value) setCategoryId(String(value));
+          }}
+          value={categoryId}
+        >
+          <Label>Categoría</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
+                Todas
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+              {(categories ?? []).map((category) => (
+                <ListBox.Item
+                  id={category.id}
+                  key={category.id}
+                  textValue={category.name}
+                >
+                  {category.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+
+        <div className="flex flex-col gap-1">
+          <span className="label">Sucursal</span>
           {useSegmentedBranches ? (
             <Segmented
               label="Filtro de sucursal"
@@ -602,41 +627,8 @@ export function InventarioView() {
           )}
         </div>
 
-        <Select
-          onChange={(value) => {
-            if (value) setCategoryId(String(value));
-          }}
-          value={categoryId}
-        >
-          <Label>Categoría</Label>
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
-                Todas
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-              {(categories ?? []).map((category) => (
-                <ListBox.Item
-                  id={category.id}
-                  key={category.id}
-                  textValue={category.name}
-                >
-                  {category.name}
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-(--label-color)">
-            Estado
-          </span>
+        <div className="flex flex-col gap-1">
+          <span className="label">Estado</span>
           {/* El filtro junta ámbar y rojo: los dos piden una decisión de
               compra, y separarlos obligaba a mirar dos listas. */}
           <Segmented
@@ -650,6 +642,17 @@ export function InventarioView() {
           />
         </div>
       </div>
+
+      {puedeDarDeBaja ? (
+        <Switch isSelected={verDadosDeBaja} onChange={setVerDadosDeBaja}>
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            Mostrar dados de baja
+          </Switch.Content>
+        </Switch>
+      ) : null}
 
       {isError ? (
         <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
