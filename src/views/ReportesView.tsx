@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertDialog, Button, Card, Spinner, Table } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
 import { Download, Eye, Trash2 } from 'lucide-react';
 
 import { ShiftReportAPI } from '../api/ShiftReportAPI';
 import { RegistroTurnoModal } from '../components/reportes/RegistroTurnoModal';
+import { SortControl, type SortOption } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAbrirPdfReporte, useDeleteShiftReport, useShiftReports } from '../hooks/useShiftReports';
 import { turnoLabel } from '../config/flota-colors';
 import { canDeleteShiftReport } from '../lib/permissions';
+import { sortRows, toTimestamp, type SortColumn, type TableSort } from '../lib/table-sort';
 import { fromDateOnly } from '../lib/turno';
 import type { ShiftReportListItem } from '../types/shift';
 
@@ -40,6 +43,39 @@ function formatEnviado(iso: string): string {
   }).format(date);
 }
 
+/** Orden real de los turnos dentro de un día: el diurno va antes que el nocturno. */
+const TURNO_ORDEN: Record<string, number> = { DIURNO: 0, NOCTURNO: 1 };
+const turnoOrden = (turno: string): number => TURNO_ORDEN[turno] ?? 9;
+
+/** Desempate por fecha de envío (más antiguo primero, en sentido ascendente). */
+const porEnvio = (a: ShiftReportListItem, b: ShiftReportListItem): number =>
+  (toTimestamp(a.createdAt) ?? 0) - (toTimestamp(b.createdAt) ?? 0);
+/** Desempate por día reportado, luego turno, luego envío. */
+const porTurnoReportado = (a: ShiftReportListItem, b: ShiftReportListItem): number =>
+  (toTimestamp(a.shiftDate) ?? 0) - (toTimestamp(b.shiftDate) ?? 0) ||
+  turnoOrden(a.shiftType) - turnoOrden(b.shiftType) ||
+  porEnvio(a, b);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). Correo, Registro, PDF y Eliminar no ordenan. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<ShiftReportListItem>> = {
+  turnoReportado: { kind: 'date', value: (r) => r.shiftDate, tiebreak: porTurnoReportado },
+  turno: { kind: 'number', value: (r) => turnoOrden(r.shiftType), tiebreak: porTurnoReportado },
+  supervisor: { kind: 'text', value: (r) => r.supervisor, tiebreak: porTurnoReportado },
+  equipos: { kind: 'number', value: (r) => r.cardCount, tiebreak: porTurnoReportado },
+  enviado: { kind: 'date', value: (r) => r.createdAt },
+};
+
+const OPCIONES_ORDEN: SortOption[] = [
+  { id: 'turnoReportado', label: 'Turno reportado' },
+  { id: 'turno', label: 'Turno' },
+  { id: 'supervisor', label: 'Supervisor' },
+  { id: 'equipos', label: 'Equipos' },
+  { id: 'enviado', label: 'Enviado' },
+];
+
+/** Por defecto: el turno reportado más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'turnoReportado', direction: 'descending' };
+
 function EstadoCorreo({ reporte }: { reporte: ShiftReportListItem }) {
   const estado = CORREO[reporte.emailStatus] ?? { label: reporte.emailStatus, color: 'default' as const };
   return (
@@ -58,10 +94,14 @@ function TablaCompacta({
   reportes,
   onVer,
   puedeEliminar,
+  orden,
+  onOrden,
 }: {
   reportes: ShiftReportListItem[];
   onVer: (reporte: ShiftReportListItem) => void;
   puedeEliminar: boolean;
+  orden: TableSort;
+  onOrden: (orden: TableSort) => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -70,15 +110,31 @@ function TablaCompacta({
           ? 'Toca un envío para ver su registro, descargar el PDF o eliminarlo.'
           : 'Toca un envío para ver su registro o descargar el PDF.'}
       </p>
+      <SortControl onChange={onOrden} options={OPCIONES_ORDEN} sort={orden} />
       <Table variant="secondary">
         <Table.ScrollContainer>
-          <Table.Content aria-label="Informe diario equipos" className="min-w-full">
+          <Table.Content
+            aria-label="Informe diario equipos"
+            className="min-w-full"
+            onSortChange={(d) => onOrden({ column: d.column, direction: d.direction })}
+            sortDescriptor={orden}
+          >
             <Table.Header>
-              <Table.Column isRowHeader>Fecha</Table.Column>
-              <Table.Column>Turno</Table.Column>
-              <Table.Column>Supervisor</Table.Column>
-              <Table.Column className="text-right">Equipos</Table.Column>
-              <Table.Column>Enviado</Table.Column>
+              <Table.Column allowsSorting id="turnoReportado" isRowHeader>
+                {sortableHeader('Fecha')}
+              </Table.Column>
+              <Table.Column allowsSorting id="turno">
+                {sortableHeader('Turno')}
+              </Table.Column>
+              <Table.Column allowsSorting id="supervisor">
+                {sortableHeader('Supervisor')}
+              </Table.Column>
+              <Table.Column allowsSorting className="text-right" id="equipos">
+                {sortableHeader('Equipos')}
+              </Table.Column>
+              <Table.Column allowsSorting id="enviado">
+                {sortableHeader('Enviado')}
+              </Table.Column>
             </Table.Header>
             <Table.Body>
               {reportes.map((reporte) => (
@@ -122,7 +178,8 @@ function TablaCompacta({
  */
 export function ReportesView() {
   const { data, isPending, isError, error } = useShiftReports();
-  const reportes = data ?? [];
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+  const reportes = useMemo(() => sortRows(data ?? [], orden, COLUMNAS_ORDEN), [data, orden]);
   // En escritorio, la tabla completa con sus acciones; en tablet y celular, la
   // tabla compacta (`TablaCompacta`).
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -155,7 +212,7 @@ export function ReportesView() {
       <Card>
         <Card.Header>
           <Card.Title>Registro</Card.Title>
-          <Card.Description>Del más reciente al más antiguo. Un turno puede tener más de un envío.</Card.Description>
+          <Card.Description>Ordenado por turno reportado, del más reciente al más antiguo; toca el título de una columna para cambiar el orden. Un turno puede tener más de un envío.</Card.Description>
         </Card.Header>
         <Card.Content>
           {isPending ? (
@@ -178,19 +235,40 @@ export function ReportesView() {
           ) : null}
 
           {!isPending && !isError && reportes.length > 0 && !esEscritorio ? (
-            <TablaCompacta onVer={setAbierto} puedeEliminar={puedeEliminar} reportes={reportes} />
+            <TablaCompacta
+              onOrden={setOrden}
+              onVer={setAbierto}
+              orden={orden}
+              puedeEliminar={puedeEliminar}
+              reportes={reportes}
+            />
           ) : null}
 
           {!isPending && !isError && reportes.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Informe diario equipos" className="min-w-full">
+                <Table.Content
+                  aria-label="Informe diario equipos"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Turno reportado</Table.Column>
-                    <Table.Column>Turno</Table.Column>
-                    <Table.Column className="w-full">Supervisor</Table.Column>
-                    <Table.Column className="text-right">Equipos</Table.Column>
-                    <Table.Column>Enviado</Table.Column>
+                    <Table.Column allowsSorting id="turnoReportado" isRowHeader>
+                      {sortableHeader('Turno reportado')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="turno">
+                      {sortableHeader('Turno')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="w-full" id="supervisor">
+                      {sortableHeader('Supervisor')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="equipos">
+                      {sortableHeader('Equipos')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="enviado">
+                      {sortableHeader('Enviado')}
+                    </Table.Column>
                     <Table.Column>Correo</Table.Column>
                     <Table.Column>Registro</Table.Column>
                     <Table.Column>PDF</Table.Column>

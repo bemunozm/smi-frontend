@@ -167,4 +167,50 @@ describe('ReportesView', () => {
       expect(eliminarMutate).toHaveBeenCalledWith('r1', expect.anything());
     });
   });
+
+  describe('orden', () => {
+    const DESORDENADA: ShiftReportListItem[] = [
+      reporte({ id: 'a20', shiftDate: '2026-11-20', createdAt: '2026-11-20T10:00:00.000Z', supervisor: 'Zoila', cardCount: 3 }),
+      reporte({ id: 'a01', shiftDate: '2026-11-01', createdAt: '2026-11-25T10:00:00.000Z', supervisor: 'Ana', cardCount: 10 }),
+      reporte({ id: 'b10n', shiftDate: '2026-11-10', shiftType: 'NOCTURNO', createdAt: '2026-11-11T10:00:00.000Z', supervisor: 'Mario', cardCount: 2 }),
+      reporte({ id: 'b10d', shiftDate: '2026-11-10', shiftType: 'DIURNO', createdAt: '2026-11-11T12:00:00.000Z', supervisor: 'Berta', cardCount: 5 }),
+    ];
+    const orden = () =>
+      screen.getAllByTestId(/reporte-fila-/).map((f) => f.getAttribute('data-testid')?.replace('reporte-fila-', ''));
+
+    it('por defecto: turno reportado, del más reciente al más antiguo (Nocturno antes que Diurno en el mismo día)', () => {
+      reportesHook.mockReturnValue(ok(DESORDENADA));
+      render(<ReportesView />);
+      expect(orden()).toEqual(['a20', 'b10n', 'b10d', 'a01']);
+    });
+
+    it('tocar el título invierte el orden: 1 al 20 de noviembre, Diurno primero', () => {
+      reportesHook.mockReturnValue(ok(DESORDENADA));
+      render(<ReportesView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Turno reportado/ }));
+      expect(orden()).toEqual(['a01', 'b10d', 'b10n', 'a20']);
+    });
+
+    it('ordena por supervisor (A-Z), equipos (numérico) y enviado', () => {
+      reportesHook.mockReturnValue(ok(DESORDENADA));
+      render(<ReportesView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Supervisor/ }));
+      expect(orden()).toEqual(['a01', 'b10d', 'b10n', 'a20']);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Equipos/ }));
+      expect(orden()).toEqual(['b10n', 'a20', 'b10d', 'a01']);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Enviado/ }));
+      expect(orden()).toEqual(['b10n', 'b10d', 'a20', 'a01']);
+    });
+
+    it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+      escritorio.value = false;
+      reportesHook.mockReturnValue(ok(DESORDENADA));
+      render(<ReportesView />);
+      expect(orden()).toEqual(['a20', 'b10n', 'b10d', 'a01']);
+      fireEvent.click(screen.getByTestId('orden-direccion'));
+      expect(orden()).toEqual(['a01', 'b10d', 'b10n', 'a20']);
+      fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'equipos' } });
+      expect(orden()).toEqual(['b10n', 'a20', 'b10d', 'a01']);
+    });
+  });
 });

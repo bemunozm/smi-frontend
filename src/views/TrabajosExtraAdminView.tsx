@@ -20,6 +20,8 @@ import {
   ToggleButtonGroup,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl, type SortOption } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { Group } from 'react-aria-components/Group';
 import type { DateValue } from 'react-aria-components/Calendar';
 
@@ -47,6 +49,7 @@ import {
   textoPistaFolio,
 } from '../lib/trabajos-extra';
 import { parseDecimal } from '../lib/decimal';
+import { sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { construirExcelReport } from '../lib/report-excel';
 import {
@@ -114,6 +117,47 @@ function lugaresDe(trabajo: TrabajoExtraordinario): string {
   if (filas.length === 0) return '—';
   return [...new Set(filas.map((f) => lugarDeFila(f)))].join(', ');
 }
+
+/** Orden real de los turnos dentro de un día: el diurno va antes que el nocturno. */
+const TURNO_ORDEN: Record<string, number> = { DIURNO: 0, NOCTURNO: 1 };
+const turnoOrden = (turno: string): number => TURNO_ORDEN[turno] ?? 9;
+
+/** Desempate de la fecha: turno y luego correlativo (los sin correlativo, al final). */
+const porTurnoYCorrelativo = (a: TrabajoExtraordinario, b: TrabajoExtraordinario): number =>
+  turnoOrden(a.turno) - turnoOrden(b.turno) ||
+  (a.numero ?? Number.MAX_SAFE_INTEGER) - (b.numero ?? Number.MAX_SAFE_INTEGER);
+/** Desempate del resto de las columnas: por día, y luego turno y correlativo. */
+const porFecha = (a: TrabajoExtraordinario, b: TrabajoExtraordinario): number =>
+  diaLocal(a.fecha).localeCompare(diaLocal(b.fecha)) || porTurnoYCorrelativo(a, b);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). Actividades no ordena. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<TrabajoExtraordinario>> = {
+  numero: { kind: 'number', value: (t) => t.numero, tiebreak: porFecha },
+  fecha: { kind: 'date', value: (t) => diaLocal(t.fecha) || null, tiebreak: porTurnoYCorrelativo },
+  equipo: { kind: 'text', value: (t) => t.equipo?.internalCode, tiebreak: porFecha },
+  operador: { kind: 'text', value: (t) => t.operador, tiebreak: porFecha },
+  turno: { kind: 'number', value: (t) => turnoOrden(t.turno), tiebreak: porFecha },
+  // Texto con orden numérico: «2» antes que «10»; los folios con letras también ordenan.
+  reportNumero: { kind: 'text', value: (t) => t.reportNumero, tiebreak: porFecha },
+  tipo: { kind: 'text', value: (t) => (lugaresDe(t) === '—' ? null : lugaresDe(t)), tiebreak: porFecha },
+  registradoPor: { kind: 'text', value: (t) => t.registradoPor, tiebreak: porFecha },
+  horas: { kind: 'number', value: (t) => t.totalHoras, tiebreak: porFecha },
+};
+
+const OPCIONES_ORDEN: SortOption[] = [
+  { id: 'numero', label: 'Correlativo' },
+  { id: 'fecha', label: 'Fecha' },
+  { id: 'equipo', label: 'Equipo' },
+  { id: 'operador', label: 'Operador' },
+  { id: 'turno', label: 'Turno' },
+  { id: 'reportNumero', label: 'Report N°' },
+  { id: 'tipo', label: 'Tipo' },
+  { id: 'registradoPor', label: 'Registrado por' },
+  { id: 'horas', label: 'HM' },
+];
+
+/** Por defecto: la fecha más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
 function Dato({ label, value }: { label: string; value: string }) {
   return (
@@ -729,6 +773,7 @@ export function TrabajosExtraAdminView() {
   const [searchParams] = useSearchParams();
   const [equipoFiltro, setEquipoFiltro] = useState(() => searchParams.get('equipo') ?? 'TODOS');
   const [turnoFiltro, setTurnoFiltro] = useState('TODOS');
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
   const [desde, setDesde] = useState(() => searchParams.get('desde') ?? '');
   const [hasta, setHasta] = useState(() => searchParams.get('hasta') ?? '');
   const [detalle, setDetalle] = useState<TrabajoExtraordinario | null>(null);
@@ -767,17 +812,22 @@ export function TrabajosExtraAdminView() {
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
+  // El orden se aplica DESPUÉS de filtrar.
   const lista = useMemo(
     () =>
-      trabajos.filter((t) => {
+      sortRows(
+        trabajos.filter((t) => {
         if (equipoEfectivo !== 'TODOS' && t.equipoId !== equipoEfectivo) return false;
         if (turnoFiltro !== 'TODOS' && t.turno !== turnoFiltro) return false;
         const dia = diaLocal(t.fecha);
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
         return true;
-      }),
-    [trabajos, equipoEfectivo, turnoFiltro, desde, hasta],
+        }),
+        orden,
+        COLUMNAS_ORDEN,
+      ),
+    [trabajos, equipoEfectivo, turnoFiltro, desde, hasta, orden],
   );
 
   const totalHoras = lista.reduce((acc, t) => acc + t.totalHoras, 0);
@@ -841,7 +891,7 @@ export function TrabajosExtraAdminView() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <Card.Title>Listado</Card.Title>
-              <Card.Description>Del más reciente al más antiguo. El total de arriba sigue al filtro.</Card.Description>
+              <Card.Description>Ordenado por fecha, del más reciente al más antiguo; toca el título de una columna para cambiar el orden. El total de arriba sigue al filtro.</Card.Description>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -919,6 +969,8 @@ export function TrabajosExtraAdminView() {
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <>
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {lista.map((t) => (
                 <li key={t.id}>
@@ -968,23 +1020,29 @@ export function TrabajosExtraAdminView() {
                 </li>
               ))}
             </ul>
+            </>
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Report" className="min-w-full">
+                <Table.Content
+                  aria-label="Report"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Correlativo</Table.Column>
-                    <Table.Column>Fecha</Table.Column>
-                    <Table.Column>Equipo</Table.Column>
-                    <Table.Column>Operador</Table.Column>
-                    <Table.Column>Turno</Table.Column>
-                    <Table.Column>Report N°</Table.Column>
-                    <Table.Column>Tipo</Table.Column>
-                    <Table.Column>Registrado por</Table.Column>
+                    <Table.Column allowsSorting id="numero" isRowHeader>{sortableHeader('Correlativo')}</Table.Column>
+                    <Table.Column allowsSorting id="fecha">{sortableHeader('Fecha')}</Table.Column>
+                    <Table.Column allowsSorting id="equipo">{sortableHeader('Equipo')}</Table.Column>
+                    <Table.Column allowsSorting id="operador">{sortableHeader('Operador')}</Table.Column>
+                    <Table.Column allowsSorting id="turno">{sortableHeader('Turno')}</Table.Column>
+                    <Table.Column allowsSorting id="reportNumero">{sortableHeader('Report N°')}</Table.Column>
+                    <Table.Column allowsSorting id="tipo">{sortableHeader('Tipo')}</Table.Column>
+                    <Table.Column allowsSorting id="registradoPor">{sortableHeader('Registrado por')}</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
-                    <Table.Column className="text-right">HM</Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="horas">{sortableHeader('HM')}</Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {lista.map((t) => (
