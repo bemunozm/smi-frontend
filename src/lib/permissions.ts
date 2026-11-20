@@ -163,6 +163,7 @@ export function canDeleteOrden(role: Role | null | undefined): boolean {
 const RUTAS_SECRETARIA = [
   '/',
   '/reportes',
+  '/chequeos-diarios',
   '/reportes-diarios',
   '/hallazgos',
   '/trabajos-extra',

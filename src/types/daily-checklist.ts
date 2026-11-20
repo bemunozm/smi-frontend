@@ -51,6 +51,8 @@ export const DailyChecklistSummarySchema = z.object({
   equipment: z.object({ id: z.string(), internalCode: z.string() }),
   date: z.string(),
   counter: z.number(),
+  /** En qué se mide `counter`: horas (horómetro) o km (odómetro). */
+  counterUnit: z.enum(['HOURS', 'KM']).optional(),
   status: z.enum(CHECKLIST_STATUSES),
   mechanicName: z.string(),
   submittedAt: z.string(),

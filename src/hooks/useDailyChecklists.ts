@@ -32,6 +32,19 @@ export function useDailyChecklists(date: string) {
 }
 
 /**
+ * Los chequeos de un rango de días (`YYYY-MM-DD`, ambos incluidos): el listado
+ * de «Chequeos diarios» del panel (ADMIN y SECRETARIA, solo lectura). Se
+ * refresca solo cada minuto: es la foto del día en curso.
+ */
+export function useChecklistsDelPeriodo(from: string, to: string) {
+  return useQuery({
+    queryKey: [...DAILY_CHECKLISTS_KEY, 'range', from, to],
+    queryFn: () => DailyChecklistAPI.list({ from, to }),
+    refetchInterval: 60_000,
+  });
+}
+
+/**
  * Envía el chequeo por la cola: sin señal queda guardado en el equipo con
  * sus fotos y sale solo. Las fotos van como archivos de la operación y el
  * replay pone cada key en `entries.i.photoKeys.j`.

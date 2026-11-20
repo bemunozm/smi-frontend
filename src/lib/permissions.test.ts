@@ -93,6 +93,11 @@ describe('canOpenPath (SECRETARIA)', () => {
     expect(canOpenPath(SECRETARIA, '/inventario/movimientos')).toBe(true);
     expect(canOpenPath(SECRETARIA, '/usuarios')).toBe(false);
   });
+
+  it('abre los chequeos diarios del panel (solo lectura)', () => {
+    expect(canOpenPath(SECRETARIA, '/chequeos-diarios')).toBe(true);
+    expect(canOpenPath(SECRETARIA, '/chequeos-diarios?x=1')).toBe(true);
+  });
 });
 
 describe('canCloseShiftCardFromFleet (SECRETARIA)', () => {
