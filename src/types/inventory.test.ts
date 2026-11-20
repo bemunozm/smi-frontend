@@ -226,7 +226,7 @@ describe('contenido por unidad', () => {
 
   it('al editar, pasar a litros borra el contenido (null explícito)', () => {
     expect(
-      toUpdateItemPayload({ ...base, unit: 'LITER', contentPerUnit: '10', contentUnit: 'LITER', isActive: true }),
+      toUpdateItemPayload({ ...base, unit: 'LITER', contentPerUnit: '10', contentUnit: 'LITER' }),
     ).toMatchObject({ contentPerUnit: null, contentUnit: null });
   });
 });
@@ -247,10 +247,11 @@ describe('toUpdateItemPayload', () => {
       partNumber: '',
       defaultSupplier: '',
       isCritical: false,
-      isActive: true,
     });
 
     expect(payload.categoryId).toBeNull();
+    // El estado activo no se edita desde el formulario: no viaja en el PATCH.
+    expect(payload).not.toHaveProperty('isActive');
   });
 
   it('carga la ficha guardada sin perder los campos nulos', () => {

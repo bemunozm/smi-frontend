@@ -30,7 +30,7 @@ const kindLabel = (k: string) => planItemKindLabel[k as PlanItemKind] ?? k;
 /** Ven el ciclo los mismos que ven la pauta: administrador, mantenedor y supervisor. */
 function usePuedeVerCiclo(): boolean {
   const { role } = useCurrentUser();
-  return role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR;
+  return role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR || role === ROLES.SECRETARIA;
 }
 
 /**

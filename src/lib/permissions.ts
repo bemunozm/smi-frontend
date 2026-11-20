@@ -15,24 +15,30 @@ const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
  */
 export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   // Flota
-  'equipment.create': [ADMIN],
-  'equipment.update': [ADMIN],
-  'equipment.status': [ADMIN, SUPERVISOR],
-  'equipment.assign': [ADMIN, SUPERVISOR],
+  // SECRETARIA opera Flota (equipos, estado, asignación, documentos, pauta y
+  // horómetro) y crea/edita artículos (pedido del cliente 20/11/2026);
+  // eliminar equipos/artículos y los movimientos de stock siguen sin ella.
+  'equipment.create': [ADMIN, SECRETARIA],
+  'equipment.update': [ADMIN, SECRETARIA],
+  'equipment.status': [ADMIN, SUPERVISOR, SECRETARIA],
+  'equipment.assign': [ADMIN, SUPERVISOR, SECRETARIA],
   'equipment.delete': [ADMIN],
-  // Módulo 4: los documentos los carga solo el administrador (decisión de
-  // Joaquín, 19/10); mantenedor y administrador reciben los avisos.
-  'equipmentDocument.create': [ADMIN],
-  'equipmentDocument.update': [ADMIN],
-  'equipmentDocument.delete': [ADMIN],
-  'horometro.create': [ADMIN, SUPERVISOR],
-  'horometro.close': [ADMIN, SUPERVISOR],
+  // Módulo 4: los documentos los cargaban solo el administrador (decisión de
+  // Joaquín, 19/10); desde el 20/11 también SECRETARIA. Los avisos siguen
+  // llegando a mantenedor y administrador.
+  'equipmentDocument.create': [ADMIN, SECRETARIA],
+  'equipmentDocument.update': [ADMIN, SECRETARIA],
+  'equipmentDocument.delete': [ADMIN, SECRETARIA],
+  'horometro.create': [ADMIN, SUPERVISOR, SECRETARIA],
+  'horometro.close': [ADMIN, SUPERVISOR, SECRETARIA],
   // SECRETARIA registra la carga que un supervisor olvidó — mismo criterio
   // que trabajos extra y hallazgos (espejo del @Roles del backend).
   'combustible.create': [ADMIN, SUPERVISOR, SECRETARIA],
   // Inventario
-  'item.create': [ADMIN],
-  'item.update': [ADMIN],
+  'item.create': [ADMIN, SECRETARIA],
+  'item.update': [ADMIN, SECRETARIA],
+  // Dar de baja o reactivar un ítem (PATCH /items/:id/active): ADMIN y SECRETARIA.
+  'item.setActive': [ADMIN, SECRETARIA],
   'item.delete': [ADMIN],
   'item.adjust': [ADMIN],
   'item.setMinimum': [ADMIN, MANTENEDOR],
@@ -56,9 +62,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
-  'maintenancePlan.save': [ADMIN, MANTENEDOR],
+  'maintenancePlan.save': [ADMIN, MANTENEDOR, SECRETARIA],
   // «Asignar mantenciones» de un liviano: los mismos que guardan la pauta.
-  'lightVehicleConfig.save': [ADMIN, MANTENEDOR],
+  'lightVehicleConfig.save': [ADMIN, MANTENEDOR, SECRETARIA],
   'maintenanceRecord.set': [MANTENEDOR],
   'dailyChecklist.submit': [MANTENEDOR],
   'dailyChecklist.resubmit': [MANTENEDOR],
@@ -163,6 +169,8 @@ const RUTAS_SECRETARIA = [
   '/cargas-combustible',
   '/mantenciones',
   '/asistencia',
+  '/equipos',
+  '/inventario',
   '/notificaciones',
   '/perfil',
 ];

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ENDPOINTS } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
-import { MOVEMENT_ACTIONS, WRITE_ROLES, canCloseShiftCardFromFleet, canWrite, canWriteAny } from './permissions';
+import { MOVEMENT_ACTIONS, WRITE_ROLES, canCloseShiftCardFromFleet, canOpenPath, canWrite, canWriteAny } from './permissions';
 
 const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
 
@@ -18,11 +18,23 @@ describe('WRITE_ROLES', () => {
     ['item.adjust', [ADMIN]],
     ['movement.create', [ADMIN, MANTENEDOR]],
     ['item.setMinimum', [ADMIN, MANTENEDOR]],
-    ['horometro.create', [ADMIN, SUPERVISOR]],
-    ['horometro.close', [ADMIN, SUPERVISOR]],
+    ['horometro.create', [ADMIN, SUPERVISOR, SECRETARIA]],
+    ['horometro.close', [ADMIN, SUPERVISOR, SECRETARIA]],
     ['combustible.create', [ADMIN, SUPERVISOR, SECRETARIA]],
-    ['equipment.create', [ADMIN]],
-    ['equipment.status', [ADMIN, SUPERVISOR]],
+    ['equipment.create', [ADMIN, SECRETARIA]],
+    ['equipment.update', [ADMIN, SECRETARIA]],
+    ['equipment.delete', [ADMIN]],
+    ['item.create', [ADMIN, SECRETARIA]],
+    ['item.update', [ADMIN, SECRETARIA]],
+    ['item.delete', [ADMIN]],
+    ['item.setActive', [ADMIN, SECRETARIA]],
+    ['equipmentDocument.create', [ADMIN, SECRETARIA]],
+    ['equipmentDocument.update', [ADMIN, SECRETARIA]],
+    ['equipmentDocument.delete', [ADMIN, SECRETARIA]],
+    ['equipment.status', [ADMIN, SUPERVISOR, SECRETARIA]],
+    ['equipment.assign', [ADMIN, SUPERVISOR, SECRETARIA]],
+    ['maintenancePlan.save', [ADMIN, MANTENEDOR, SECRETARIA]],
+    ['lightVehicleConfig.save', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['intervencion.create', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['umbral.create', [ADMIN]],
     ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA]],
@@ -71,5 +83,21 @@ describe('canCloseShiftCardFromFleet', () => {
     expect(canCloseShiftCardFromFleet(SUPERVISOR)).toBe(false);
     expect(canCloseShiftCardFromFleet(MANTENEDOR)).toBe(false);
     expect(canCloseShiftCardFromFleet(null)).toBe(false);
+  });
+});
+
+describe('canOpenPath (SECRETARIA)', () => {
+  it('abre Equipos e Inventario con sus subrutas, pero no los vencimientos', () => {
+    expect(canOpenPath(SECRETARIA, '/equipos')).toBe(true);
+    expect(canOpenPath(SECRETARIA, '/equipos/abc/ficha')).toBe(true);
+    expect(canOpenPath(SECRETARIA, '/inventario/movimientos')).toBe(true);
+    expect(canOpenPath(SECRETARIA, '/usuarios')).toBe(false);
+  });
+});
+
+describe('canCloseShiftCardFromFleet (SECRETARIA)', () => {
+  it('cerrar la tarjeta de un turno abierto sigue siendo solo del administrador', () => {
+    expect(canCloseShiftCardFromFleet(SECRETARIA)).toBe(false);
+    expect(canCloseShiftCardFromFleet(ADMIN)).toBe(true);
   });
 });

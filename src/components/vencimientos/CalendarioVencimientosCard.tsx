@@ -24,7 +24,7 @@ export function CalendarioVencimientosCard({
   base: string;
 }) {
   const { role } = useCurrentUser();
-  const puedeVer = role === ROLES.ADMIN || role === ROLES.MANTENEDOR;
+  const puedeVer = role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SECRETARIA;
   const esLiviano = equipo.equipmentClass === 'LIGHT';
   const [desde, setDesde] = useState<string | undefined>(undefined);
   const { data, isLoading, isError } = useCalendarioVencimientos(desde, equipo.id, puedeVer && esLiviano);

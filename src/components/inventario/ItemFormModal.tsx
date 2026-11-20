@@ -790,30 +790,9 @@ export function EditItemModal({
                       ítem.
                     </p>
 
-                    <SectionLabel>Estado</SectionLabel>
-                    <Controller
-                      control={control}
-                      name="isActive"
-                      render={({ field }) => (
-                        <Switch
-                          isSelected={field.value}
-                          onChange={field.onChange}
-                        >
-                          <Switch.Content>
-                            <Switch.Control>
-                              <Switch.Thumb />
-                            </Switch.Control>
-                            Activo en los selectores
-                          </Switch.Content>
-                        </Switch>
-                      )}
-                    />
-
                     <p className="text-xs text-muted-foreground">
-                      Darlo de baja lo saca de los listados y selectores sin
-                      borrar su kardex: los movimientos históricos lo siguen
-                      nombrando. El SKU y la existencia no se editan acá — la
-                      existencia se corrige con «Ajustar por conteo».
+                      El SKU y la existencia no se editan acá — la existencia se
+                      corrige con «Ajustar por conteo».
                     </p>
                   </form>
                 </Modal.Body>

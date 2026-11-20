@@ -9,6 +9,7 @@ import {
   Modal,
   Select,
   Spinner,
+  Switch,
   Table,
   TextField,
 } from '@heroui/react';
@@ -16,10 +17,13 @@ import {
   ArrowLeftRight,
   FileText,
   History,
+  PackageCheck,
+  PackageMinus,
   Pencil,
   Trash2,
 } from 'lucide-react';
 
+import { Chip } from '../components/ui/Chip';
 import { CategoriesModal } from '../components/inventario/CategoriesModal';
 import {
   ItemActionsModal,
@@ -124,6 +128,15 @@ function ItemRow({
         ]
       : []),
     { id: 'ficha', label: 'Ver ficha', icon: <FileText size={MENU_ICON} /> },
+    ...(can('item.setActive')
+      ? [
+          {
+            id: 'deactivate',
+            label: item.isActive ? 'Dar de baja' : 'Reactivar',
+            icon: item.isActive ? <PackageMinus size={MENU_ICON} /> : <PackageCheck size={MENU_ICON} />,
+          },
+        ]
+      : []),
     ...(can('item.delete')
       ? [
           {
@@ -154,6 +167,11 @@ function ItemRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-foreground">{item.name}</span>
             {item.isCritical ? <CriticalBadge /> : null}
+            {item.isActive ? null : (
+              <Chip color="default" size="sm" variant="soft">
+                Dado de baja
+              </Chip>
+            )}
           </div>
           <MarcaPendiente marca={marca} />
           {item.partNumber ? (
@@ -396,6 +414,7 @@ function PickItemModal({
 
 export function InventarioView() {
   const { can, canAny } = usePermissions();
+  const puedeDarDeBaja = can('item.setActive');
 
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const setSelectedBranchId = useUiStore((state) => state.setSelectedBranchId);
@@ -414,6 +433,7 @@ export function InventarioView() {
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isPicking, setIsPicking] = useState(false);
+  const [verDadosDeBaja, setVerDadosDeBaja] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
   // Las categorías siguen a la pestaña: ofrecer «Neumáticos y llantas»
@@ -429,7 +449,8 @@ export function InventarioView() {
 
   const { data, isPending, isError, error } = useItems({
     type: tab,
-    isActive: true,
+    // Quien puede dar de baja ve también los dados de baja si lo pide (para reactivarlos).
+    ...(verDadosDeBaja && puedeDarDeBaja ? {} : { isActive: true }),
     ...(search.trim() ? { q: search.trim() } : {}),
     ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
   });
@@ -529,6 +550,16 @@ export function InventarioView() {
           <Label>Buscar</Label>
           <Input placeholder="SKU, nombre o nº de parte" />
         </TextField>
+        {puedeDarDeBaja ? (
+          <Switch isSelected={verDadosDeBaja} onChange={setVerDadosDeBaja}>
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              Mostrar dados de baja
+            </Switch.Content>
+          </Switch>
+        ) : null}
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-(--label-color)">

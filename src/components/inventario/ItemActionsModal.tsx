@@ -16,6 +16,8 @@ import {
   ArrowLeftRight,
   Pencil,
   FileText,
+  PackageMinus,
+  PackageCheck,
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
@@ -24,6 +26,7 @@ import {
   useAdjustStock,
   useCreateMovement,
   useDeleteItem,
+  useSetItemActive,
   useTransferStock,
 } from '../../hooks/useInventory';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -55,7 +58,7 @@ import {
  * la fila viven fuera: la ficha tiene su propio formulario y el historial es
  * una pantalla.
  */
-export type ItemAction = 'actions' | 'movement' | 'delete';
+export type ItemAction = 'actions' | 'movement' | 'deactivate' | 'delete';
 
 /*
  * Los cuatro modos van juntos en un formulario a propósito: responden a la misma
@@ -447,6 +450,59 @@ function DeletePanel({
   );
 }
 
+/** Dar de baja (o reactivar) el ítem: lo saca de listados y selectores sin tocar su kardex. */
+function ActivePanel({
+  item,
+  close,
+  back,
+}: {
+  item: InventoryItem;
+  close: () => void;
+  back: () => void;
+}) {
+  const setActive = useSetItemActive();
+  const reactivar = !item.isActive;
+
+  return (
+    <>
+      <Modal.Body>
+        <div className="flex flex-col gap-4">
+          <BackButton onPress={back} />
+          <SectionLabel>{reactivar ? 'Reactivar ítem' : 'Dar de baja el ítem'}</SectionLabel>
+          <p className="text-sm text-muted-foreground">
+            {reactivar ? (
+              <>
+                <strong className="text-foreground">{item.name}</strong> ({item.sku}) volverá a
+                aparecer en los listados y selectores.
+              </>
+            ) : (
+              <>
+                <strong className="text-foreground">{item.name}</strong> ({item.sku}) saldrá de los
+                listados y selectores. Su kardex se conserva: los movimientos históricos lo siguen
+                nombrando. Se puede reactivar después.
+              </>
+            )}
+          </p>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button onPress={back} variant="secondary">
+          Cancelar
+        </Button>
+        <Button
+          isPending={setActive.isPending}
+          onPress={() => setActive.mutate({ item, isActive: reactivar }, { onSuccess: () => close() })}
+          variant={reactivar ? 'primary' : 'danger'}
+        >
+          {({ isPending }) =>
+            isPending ? <Spinner color="current" size="sm" /> : reactivar ? 'Reactivar' : 'Dar de baja'
+          }
+        </Button>
+      </Modal.Footer>
+    </>
+  );
+}
+
 function BackButton({ onPress }: { onPress: () => void }) {
   return (
     <button
@@ -565,6 +621,13 @@ export function ItemActionsModal({
                             void navigate(`/inventario/${item.id}`);
                           }}
                         />
+                        {can('item.setActive') ? (
+                          <QuickAction
+                            icon={item.isActive ? <PackageMinus size={ICON} /> : <PackageCheck size={ICON} />}
+                            label={item.isActive ? 'Dar de baja' : 'Reactivar'}
+                            onPress={() => setView('deactivate')}
+                          />
+                        ) : null}
                         {can('item.delete') ? (
                           <QuickAction
                             icon={<Trash2 size={ICON} />}
@@ -591,6 +654,10 @@ export function ItemActionsModal({
                     defaultBranchId={isAll ? '' : branchId}
                     item={item}
                   />
+                ) : null}
+
+                {view === 'deactivate' ? (
+                  <ActivePanel back={back} close={close} item={item} />
                 ) : null}
 
                 {view === 'delete' ? (

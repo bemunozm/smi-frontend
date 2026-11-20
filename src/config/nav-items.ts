@@ -50,13 +50,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     label: 'Equipos',
     to: '/equipos',
-    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.SECRETARIA],
     seccion: 'Administración',
   },
   {
     label: 'Inventario',
     to: '/inventario',
-    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR],
+    roles: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.SECRETARIA],
     seccion: 'Administración',
   },
   // Para registrar el uso de la camioneta que tenga asignada (km de salida y

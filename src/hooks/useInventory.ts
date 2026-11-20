@@ -138,7 +138,6 @@ const CAMPOS_DE_ITEM = [
   'partNumber',
   'defaultSupplier',
   'isCritical',
-  'isActive',
 ] as const satisfies readonly (keyof ItemFields)[];
 
 export interface UpdateItemVars {
@@ -234,6 +233,18 @@ export function useSaveItemWithMinimums() {
     onError: (error) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo actualizar el ítem.'));
     },
+  });
+}
+
+/** Dar de baja o reactivar un ítem (sale o vuelve a listados y selectores; el kardex no cambia). */
+export function useSetItemActive() {
+  return useQueuedMutation<'item.setActive', { item: InventoryItem; isActive: boolean }>({
+    endpoint: 'item.setActive',
+    build: ({ item, isActive }) => ({ params: { id: item.id }, body: { isActive } }),
+    onSent: (_data, { item, isActive }) => {
+      toast.success(isActive ? 'Ítem reactivado' : 'Ítem dado de baja', { description: item.name });
+    },
+    errorFallback: 'No se pudo cambiar el estado del ítem.',
   });
 }
 
