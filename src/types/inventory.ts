@@ -291,7 +291,6 @@ export type UpdateItemInput = Omit<
   contentUnit?: UnitOfMeasure | null;
   /** `null` desvincula la categoría; omitirlo la deja como está. */
   categoryId?: string | null;
-  isActive?: boolean;
 };
 
 /** Los campos de la ficha de un ítem tal como los guarda el servidor (los textos
@@ -307,7 +306,6 @@ export interface ItemFields {
   partNumber: string | null;
   defaultSupplier: string | null;
   isCritical: boolean;
-  isActive: boolean;
 }
 
 export interface CreateMovementInput {
@@ -373,10 +371,7 @@ export type ItemFormValues = z.infer<typeof ItemFormSchema>;
  * viejos hablando de otro código — y el saldo solo se mueve con movimientos.
  * El backend rechaza ambos campos, así que el formulario ni los ofrece.
  */
-export const ItemEditFormSchema = ItemCardSchema.extend({
-  /** Baja lógica: lo saca de los selectores sin perder su kardex. */
-  isActive: z.boolean(),
-});
+export const ItemEditFormSchema = ItemCardSchema;
 export type ItemEditFormValues = z.infer<typeof ItemEditFormSchema>;
 
 /**
@@ -491,7 +486,6 @@ export function toUpdateItemPayload(
     // omitirlo significa "no lo toques", y entonces un ítem mal clasificado se
     // podría reclasificar pero nunca dejar sin categoría.
     categoryId: values.categoryId || null,
-    isActive: values.isActive,
   };
 }
 
@@ -511,6 +505,5 @@ export function toItemEditValues(item: InventoryItem): ItemEditFormValues {
     partNumber: item.partNumber ?? '',
     defaultSupplier: item.defaultSupplier ?? '',
     isCritical: item.isCritical,
-    isActive: item.isActive,
   };
 }

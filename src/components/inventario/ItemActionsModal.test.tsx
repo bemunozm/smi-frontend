@@ -37,7 +37,7 @@ const ITEM = {
   stocks: [{ branchId: 'b1', branchName: 'Casa Matriz', quantity: 10, minimumQuantity: 0 }],
 } as unknown as InventoryItem;
 
-function renderModal(rol: Role, initialView: 'actions' | 'movement' = 'movement') {
+function renderModal(rol: Role, initialView: 'actions' | 'movement' | 'deactivate' = 'movement', item: InventoryItem = ITEM) {
   rolActual = rol;
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -47,7 +47,7 @@ function renderModal(rol: Role, initialView: 'actions' | 'movement' = 'movement'
           branches={BRANCHES}
           initialView={initialView}
           isOpen
-          item={ITEM}
+          item={item}
           onEdit={vi.fn()}
           onOpenChange={vi.fn()}
         />
@@ -86,6 +86,37 @@ describe('ItemActionsModal — qué ofrece cada rol', () => {
     expect(screen.getByText('Ver ficha')).toBeTruthy();
     expect(screen.queryByText('Editar ítem')).toBeNull();
     expect(screen.queryByText('Eliminar')).toBeNull();
+  });
+});
+
+describe('ItemActionsModal — dar de baja', () => {
+  it.each<Role>(['ADMIN', 'SECRETARIA'])('%s ve «Dar de baja» y no «Eliminar» si no es admin', (rol) => {
+    renderModal(rol, 'actions');
+
+    expect(screen.getByText('Dar de baja')).toBeTruthy();
+    expect(screen.queryByText('Eliminar') !== null).toBe(rol === 'ADMIN');
+  });
+
+  it('mantenedor y supervisor no pueden darlo de baja', () => {
+    renderModal('MANTENEDOR', 'actions');
+    expect(screen.queryByText('Dar de baja')).toBeNull();
+    cleanup();
+    renderModal('SUPERVISOR', 'actions');
+    expect(screen.queryByText('Dar de baja')).toBeNull();
+  });
+
+  it('pide confirmación y explica que el kardex se conserva', () => {
+    renderModal('SECRETARIA', 'deactivate');
+
+    expect(screen.getByText(/Su kardex se conserva/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Dar de baja' })).toBeTruthy();
+  });
+
+  it('un ítem dado de baja ofrece «Reactivar»', () => {
+    renderModal('SECRETARIA', 'actions', { ...ITEM, isActive: false });
+
+    expect(screen.getByText('Reactivar')).toBeTruthy();
+    expect(screen.queryByText('Dar de baja')).toBeNull();
   });
 });
 

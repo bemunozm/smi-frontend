@@ -45,6 +45,6 @@ describe('FichaEquipoView (error)', () => {
 
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toContain('No se pudo obtener la ficha consolidada del equipo.');
-    expect(screen.getByRole('link', { name: '← Volver a equipos' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Volver a equipos' })).toBeTruthy();
   });
 });

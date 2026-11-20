@@ -333,10 +333,17 @@ describe('InventarioView', () => {
         'Editar ítem',
         'Registrar movimiento',
         'Ver ficha',
+        'Dar de baja',
         'Eliminar ítem',
       ]) {
         expect(menu.getByText(label)).toBeTruthy();
       }
+    });
+
+    it('quien puede dar de baja ve el interruptor «Mostrar dados de baja»', () => {
+      renderView([OK], { size: 'desktop' });
+
+      expect(screen.getByText('Mostrar dados de baja')).toBeTruthy();
     });
 
     it('en teléfono las cuatro viven en el panel de la tarjeta', () => {

@@ -43,4 +43,13 @@ describe('routes', () => {
     const usuarios = findGuardOf(router.routes as unknown as Rt[], '/usuarios');
     expect(usuarios?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN]);
   });
+
+  it('SECRETARIA entra a Equipos e Inventario, y a los vencimientos (ADMIN, MANTENEDOR y SECRETARIA)', () => {
+    for (const path of ['/equipos', '/equipos/:id', '/equipos/:id/ficha', '/inventario', '/inventario/movimientos', '/inventario/:id']) {
+      const guard = findGuardOf(router.routes as unknown as Rt[], path);
+      expect(guard?.element?.props?.allowedRoles).toContain(ROLES.SECRETARIA);
+    }
+    const venc = findGuardOf(router.routes as unknown as Rt[], '/equipos/vencimientos');
+    expect(venc?.element?.props?.allowedRoles).toEqual([ROLES.ADMIN, ROLES.MANTENEDOR, ROLES.SECRETARIA]);
+  });
 });

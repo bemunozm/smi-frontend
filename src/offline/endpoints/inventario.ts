@@ -46,6 +46,8 @@ export interface SetMinimumBody {
 export interface InventarioEndpointMap {
   'item.create': { params: NoParams; body: WithId<CreateItemInput>; result: InventoryItem };
   'item.update': { params: { id: string }; body: Partial<ItemFields>; result: InventoryItem };
+  /** Baja lógica o reactivación del ítem (ADMIN y SECRETARIA). */
+  'item.setActive': { params: { id: string }; body: { isActive: boolean }; result: InventoryItem };
   'item.delete': { params: { id: string }; body: NoParams; result: true };
   /** El `id` es el del movimiento que genera el conteo, no el del ítem. */
   'item.adjust': { params: { id: string }; body: WithId<AdjustStockInput>; result: AdjustResult };
@@ -94,6 +96,18 @@ export const INVENTARIO_ENDPOINTS = defineDomain<InventarioEndpointMap>({
     carriesFiles: false,
     entity: (params) => entityOf(itemEntity, params.id),
     parents: (_params, body) => referencias(entityOf(categoryEntity, bodyText(body, 'categoryId'))),
+  },
+  'item.setActive': {
+    method: 'PATCH',
+    path: (params) => `/api/inventory/items/${param(params, 'id')}/active`,
+    failMessage: 'No se pudo cambiar el estado del ítem.',
+    parse: parseWith(InventoryItemSchema),
+    invalidate: ['inventory'],
+    label: (params, body) =>
+      etiqueta(body.isActive ? 'Reactivación de ítem' : 'Baja de ítem', cachedName('item', params.id)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    entity: (params) => entityOf(itemEntity, params.id),
   },
   'item.delete': {
     method: 'DELETE',

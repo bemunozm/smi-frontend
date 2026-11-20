@@ -396,7 +396,7 @@ describe('EquipoDetalleView', () => {
     expect(screen.queryByText(/Registrar/)).toBeNull();
 
     // Y los enlaces se quedan dentro del shell del taller.
-    const volver = screen.getByRole('link', { name: '← Volver a Equipos' });
+    const volver = screen.getByRole('link', { name: 'Volver a Equipos' });
     expect(volver.getAttribute('href')).toBe('/mantenimiento/equipos');
     const bitacora = await screen.findByRole('link', { name: 'Ver bitácora completa →' });
     expect(bitacora.getAttribute('href')).toBe('/mantenimiento/equipos/eq_1/ficha');

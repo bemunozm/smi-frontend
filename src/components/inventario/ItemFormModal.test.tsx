@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { Branch } from '../../types/branch';
-import { NewItemModal } from './ItemFormModal';
+import type { InventoryItem } from '../../types/inventory';
+import { EditItemModal, NewItemModal } from './ItemFormModal';
 
 vi.mock('../../api/CategoryAPI', () => ({ CategoryAPI: { list: vi.fn().mockResolvedValue([]) } }));
 
@@ -66,5 +67,39 @@ describe('NewItemModal stock mínimo', () => {
     expect(screen.getByText(/Stock mínimo por sucursal/)).toBeTruthy();
     expect(screen.getByLabelText(/^Faena/)).toBeTruthy();
     expect((screen.getByLabelText(/^Faena/) as HTMLInputElement).value).toBe('');
+  });
+});
+
+describe('EditItemModal sin estado', () => {
+  it('no ofrece «Activo en los selectores» y deja la nota del SKU y la existencia', () => {
+    const item = {
+      id: 'i1',
+      sku: 'SKU-1',
+      name: 'Filtro',
+      description: null,
+      unit: 'UNIT',
+      contentPerUnit: null,
+      contentUnit: null,
+      type: 'PART',
+      categoryId: null,
+      category: null,
+      partNumber: null,
+      defaultSupplier: null,
+      isCritical: false,
+      isActive: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      stocks: [],
+    } as unknown as InventoryItem;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EditItemModal item={item} branches={[]} isOpen onOpenChange={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('Estado')).toBeNull();
+    expect(screen.queryByText(/Activo en los selectores/)).toBeNull();
+    expect(screen.queryByText(/Darlo de baja/)).toBeNull();
+    expect(screen.getByText(/El SKU y la existencia no se editan acá/)).toBeTruthy();
   });
 });

@@ -99,7 +99,7 @@ export const router = createBrowserRouter([
               {
                 element: (
                   <ProtectedRoute
-                    allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR]}
+                    allowedRoles={[ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.SECRETARIA]}
                   />
                 ),
                 children: [
@@ -112,7 +112,7 @@ export const router = createBrowserRouter([
                   // ficha), no como módulo aparte. Lo ven quienes reciben los
                   // avisos. Antes que `:id`, que lo leería como un id.
                   {
-                    element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR]} />,
+                    element: <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.MANTENEDOR, ROLES.SECRETARIA]} />,
                     children: [{ path: '/equipos/vencimientos', element: <VencimientosView /> }],
                   },
                   { path: '/equipos/:id', element: <EquipoDetalleView /> },

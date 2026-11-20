@@ -417,10 +417,11 @@ function CreateEquipoModal({ isOpen, onOpenChange }: CreateEquipoModalProps) {
  */
 function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
   // Los ítems "Marcar como…" solo se muestran a quien el backend le deja cambiar
-  // el estado (ADMIN y SUPERVISOR); editar y eliminar, solo a ADMIN.
+  // el estado (ADMIN y SUPERVISOR); editar, a ADMIN y SECRETARIA; eliminar, solo a ADMIN.
   const { can } = usePermissions();
   const puedeCambiarEstado = can('equipment.status');
-  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
+  const puedeEditarFicha = can('equipment.update');
+  const puedeEliminar = can('equipment.delete');
   const { puedeVerPauta, puedeEditarPauta } = usePermisosPauta();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -437,7 +438,7 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
         </Button>
         <Dropdown.Popover placement="bottom end">
           <Dropdown.Menu
-            disabledKeys={puedeEditarFicha ? [] : ['edit', 'delete']}
+            disabledKeys={[...(puedeEditarFicha ? [] : ['edit']), ...(puedeEliminar ? [] : ['delete'])]}
             onAction={(key) => {
               const clave = String(key);
               if (clave === 'edit') return setIsEditOpen(true);
@@ -506,7 +507,8 @@ function EquipoActionsMenu({ equipo }: { equipo: Equipment }) {
 function usePermisosPauta() {
   const { role, can } = usePermissions();
   return {
-    puedeVerPauta: role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR,
+    puedeVerPauta:
+      role === ROLES.ADMIN || role === ROLES.MANTENEDOR || role === ROLES.SUPERVISOR || role === ROLES.SECRETARIA,
     puedeEditarPauta: can('maintenancePlan.save'),
   };
 }
@@ -621,7 +623,8 @@ function EquipoCardMobile({
   const navigate = useNavigate();
   const { can, canAny } = usePermissions();
   const puedeCambiarEstado = can('equipment.status');
-  const puedeEditarFicha = can('equipment.update') && can('equipment.delete');
+  const puedeEditarFicha = can('equipment.update');
+  const puedeEliminar = can('equipment.delete');
   const puedeRegistrarHorometro = canAny(['horometro.create', 'horometro.close']);
   const puedeRegistrarCombustible = can('combustible.create');
   const cambioEstado = useCambiarEstadoEquipo();
@@ -831,7 +834,7 @@ function EquipoCardMobile({
                         }}
                       />
                     ) : null}
-                    {puedeEditarFicha ? (
+                    {puedeEliminar ? (
                       <ActionTile
                         icon={Trash2}
                         label="Eliminar equipo"
@@ -904,7 +907,8 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
   const enTaller = contexto === 'taller';
   // Módulo 4: el calendario lo ven los que reciben los avisos de vencimiento.
   const { role: rolActual } = usePermissions();
-  const puedeVerVencimientos = rolActual === ROLES.ADMIN || rolActual === ROLES.MANTENEDOR;
+  const puedeVerVencimientos =
+    rolActual === ROLES.ADMIN || rolActual === ROLES.MANTENEDOR || rolActual === ROLES.SECRETARIA;
   // Detalle en el MISMO shell: desde el taller la barra del módulo no cambia.
   const detalleBase = enTaller ? '/mantenimiento/equipos' : '/equipos';
   // La próxima mantención de todos los equipos con pauta, en una sola llamada;

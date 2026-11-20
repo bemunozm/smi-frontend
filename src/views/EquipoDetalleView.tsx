@@ -1,3 +1,4 @@
+import { BackLink } from '../components/ui/BackLink';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -804,9 +805,7 @@ export function EquipoDetalleView({
           {error instanceof Error ? error.message : 'No se pudo cargar la ficha del equipo.'}
         </div>
         {!enModal ? (
-          <Link className="text-sm text-(--accent) hover:underline" to={volverA}>
-            ← Volver a equipos
-          </Link>
+          <BackLink to={volverA}>Volver a equipos</BackLink>
         ) : null}
       </div>
     );
@@ -854,12 +853,9 @@ export function EquipoDetalleView({
   return (
     <div className="flex flex-col gap-6">
       {!enModal ? (
-        <Link
-          className="w-fit text-[11px] font-medium tracking-[0.14em] text-(--eyebrow-color) uppercase hover:underline"
-          to={volverA}
-        >
-          {desde === '/' ? '← Volver al dashboard' : enTaller ? '← Volver a Equipos' : '← SMI · Flota'}
-        </Link>
+        <BackLink to={volverA}>
+          {desde === '/' ? 'Volver al dashboard' : 'Volver a Equipos'}
+        </BackLink>
       ) : null}
 
       <PendientesStrip recursos={RECURSOS_DE_FLOTA} />

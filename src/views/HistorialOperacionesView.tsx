@@ -1,7 +1,6 @@
+import { BackLink } from '../components/ui/BackLink';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Spinner } from '@heroui/react';
-import { ArrowLeft } from 'lucide-react';
 
 import { Chip, Input, Segmentado, TD, TH, Tabla } from '../components/terreno/ui';
 import { useEquipment } from '../hooks/useEquipment';
@@ -49,12 +48,7 @@ export function HistorialOperacionesView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Link
-          className="inline-flex w-fit items-center gap-1.5 text-[15px] font-semibold text-[var(--accent)] hover:underline"
-          to="/mantenimiento/ordenes"
-        >
-          <ArrowLeft aria-hidden className="h-4 w-4" /> Volver al tablero
-        </Link>
+        <BackLink to="/mantenimiento/ordenes">Volver al tablero</BackLink>
         <h2 className="font-display text-[24px] leading-tight font-bold tracking-[-0.02em] text-foreground">
           Historial de finalizadas
         </h2>

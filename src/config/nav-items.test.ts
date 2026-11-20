@@ -37,10 +37,12 @@ describe('NAV_ITEMS', () => {
     expect(dashboard?.roles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
   });
 
-  it('SECRETARIA ve el dashboard, los ocho reportes del administrador y notificaciones', () => {
+  it('SECRETARIA ve el dashboard, Equipos, Inventario, los ocho reportes del administrador y notificaciones', () => {
     const suyos = NAV_ITEMS.filter((item) => item.roles.includes(ROLES.SECRETARIA)).map((item) => item.to);
     expect(suyos).toEqual([
       '/',
+      '/equipos',
+      '/inventario',
       '/reportes',
       '/reportes-diarios',
       '/hallazgos',

@@ -1,6 +1,7 @@
+import { BackLink } from '../components/ui/BackLink';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Button, Label, ListBox, Select, Spinner, Table } from '@heroui/react';
 
 import {
@@ -17,6 +18,7 @@ import {
   movementKind,
   stockStatus,
 } from '../components/inventario/shared';
+import { Chip } from '../components/ui/Chip';
 import { useBranches } from '../hooks/useBranches';
 import { usePermissions } from '../hooks/usePermissions';
 import { MOVEMENT_ACTIONS } from '../lib/permissions';
@@ -376,8 +378,8 @@ export function FichaItemView({
 
   const volver =
     contexto === 'taller'
-      ? { to: '/mantenimiento/stock', label: '← Volver al stock del taller' }
-      : { to: '/inventario', label: '← Volver a Inventario' };
+      ? { to: '/mantenimiento/stock', label: 'Volver al stock del taller' }
+      : { to: '/inventario', label: 'Volver a Inventario' };
 
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const [branchFilter, setBranchFilter] = useState<string>(TODAS);
@@ -401,9 +403,7 @@ export function FichaItemView({
   if (isError || !data) {
     return (
       <div className="flex flex-col gap-4">
-        <Link className="text-sm text-(--accent) hover:underline" to={volver.to}>
-          {volver.label}
-        </Link>
+        <BackLink to={volver.to}>{volver.label}</BackLink>
         <div className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-soft-foreground">
           {error instanceof Error
             ? error.message
@@ -418,9 +418,7 @@ export function FichaItemView({
 
   return (
     <div className="flex max-w-280 flex-col gap-5">
-      <Link className="text-sm text-(--accent) hover:underline" to={volver.to}>
-        {volver.label}
-      </Link>
+      <BackLink to={volver.to}>{volver.label}</BackLink>
 
       <PendientesStrip recursos={RECURSOS_DE_FICHA_ITEM} />
 
@@ -437,6 +435,11 @@ export function FichaItemView({
               {ITEM_TYPE_LABELS[item.type]}
             </span>
             {item.isCritical ? <CriticalBadge /> : null}
+            {item.isActive ? null : (
+              <Chip color="default" size="sm" variant="soft">
+                Dado de baja
+              </Chip>
+            )}
             <StatusChip {...status} />
           </div>
           <p className="text-sm text-muted-foreground">
@@ -464,6 +467,11 @@ export function FichaItemView({
             {can('item.update') ? (
               <Button onPress={() => setIsEditing(true)} variant="secondary">
                 Editar ítem
+              </Button>
+            ) : null}
+            {can('item.setActive') ? (
+              <Button onPress={() => setAction('deactivate')} variant="secondary">
+                {item.isActive ? 'Dar de baja' : 'Reactivar'}
               </Button>
             ) : null}
             {canAny(MOVEMENT_ACTIONS) ? (

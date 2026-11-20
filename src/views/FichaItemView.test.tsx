@@ -131,9 +131,9 @@ describe('FichaItemView', () => {
     expect(screen.queryByText('Registrar movimiento')).toBeNull();
     expect(screen.queryByText('Editar ítem')).toBeNull();
 
-    const volver = screen.getByRole('link', { name: '← Volver al stock del taller' });
+    const volver = screen.getByRole('link', { name: 'Volver al stock del taller' });
     expect(volver.getAttribute('href')).toBe('/mantenimiento/stock');
-    expect(screen.queryByText('← Volver a Inventario')).toBeNull();
+    expect(screen.queryByText('Volver a Inventario')).toBeNull();
   });
 
   it('montada en Inventario conserva sus acciones (rol mediante)', () => {
@@ -141,7 +141,7 @@ describe('FichaItemView', () => {
 
     expect(screen.getByText('Registrar movimiento')).toBeTruthy();
     expect(screen.getByText('Editar ítem')).toBeTruthy();
-    expect(screen.getByRole('link', { name: '← Volver a Inventario' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Volver a Inventario' })).toBeTruthy();
   });
 
   it('encabeza con qué es el ítem, no solo con su código', () => {
