@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   EllipsisVertical,
   OctagonAlert,
-  Star,
+  Siren,
   TriangleAlert,
 } from 'lucide-react';
 
@@ -133,7 +133,7 @@ export function StatusChip({ label, tone }: StockStatus) {
 export function CriticalBadge() {
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-(--accent) px-2 py-0.5 text-xs font-semibold text-(--accent-foreground)">
-      <Star aria-hidden className="h-3 w-3 fill-current" />
+      <Siren aria-hidden className="h-3 w-3" />
       Crítico
     </span>
   );

@@ -344,4 +344,77 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
     expect(crearMock).not.toHaveBeenCalled();
   });
+
+  describe('orden', () => {
+    const DESORDENADOS: TrabajoExtraordinario[] = [
+      trabajo({ id: 'x20', numero: 3, fecha: '2026-11-20T15:00:00.000Z', operador: 'Zoila', totalHoras: 2, reportNumero: '10' }),
+      trabajo({ id: 'x01', numero: 1, fecha: '2026-11-01T15:00:00.000Z', operador: 'Ana', totalHoras: 8, reportNumero: '2' }),
+      trabajo({ id: 'x10n', numero: 2, fecha: '2026-11-10T15:00:00.000Z', turno: 'NOCTURNO', operador: 'Mario', totalHoras: 5, reportNumero: null }),
+      trabajo({ id: 'x10d', numero: 4, fecha: '2026-11-10T15:00:00.000Z', turno: 'DIURNO', operador: 'Berta', totalHoras: 1, reportNumero: '7' }),
+    ];
+    const orden = () =>
+      screen.getAllByTestId(/trabajo-fila-/).map((f) => f.getAttribute('data-testid')?.replace('trabajo-fila-', ''));
+    const original = window.matchMedia;
+    const comoEscritorio = (si: boolean) => {
+      window.matchMedia = ((query: string) => ({
+        matches: si,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+    };
+    afterEach(() => {
+      window.matchMedia = original;
+    });
+
+    it('por defecto: fecha, del más reciente al más antiguo; el clic en el título lo invierte', () => {
+      comoEscritorio(true);
+      listHook.mockReturnValue(ok(DESORDENADOS));
+      render(<TrabajosExtraAdminView />);
+      expect(orden()).toEqual(['x20', 'x10n', 'x10d', 'x01']);
+      fireEvent.click(screen.getByRole('columnheader', { name: /^Fecha/ }));
+      expect(orden()).toEqual(['x01', 'x10d', 'x10n', 'x20']);
+    });
+
+    it('Report N° ordena numérico y deja los vacíos al final en ambos sentidos', () => {
+      comoEscritorio(true);
+      listHook.mockReturnValue(ok(DESORDENADOS));
+      render(<TrabajosExtraAdminView />);
+      const th = () => screen.getByRole('columnheader', { name: /Report N°/ });
+      fireEvent.click(th());
+      expect(orden()).toEqual(['x01', 'x10d', 'x20', 'x10n']);
+      fireEvent.click(th());
+      expect(orden()).toEqual(['x20', 'x10d', 'x01', 'x10n']);
+    });
+
+    it('Correlativo y HM ordenan como número', () => {
+      comoEscritorio(true);
+      listHook.mockReturnValue(ok(DESORDENADOS));
+      render(<TrabajosExtraAdminView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Correlativo/ }));
+      expect(orden()).toEqual(['x01', 'x10n', 'x20', 'x10d']);
+      fireEvent.click(screen.getByRole('columnheader', { name: /HM/ }));
+      expect(orden()).toEqual(['x10d', 'x20', 'x10n', 'x01']);
+    });
+
+    it('el orden se aplica después de filtrar', () => {
+      comoEscritorio(true);
+      listHook.mockReturnValue(ok(DESORDENADOS));
+      render(<TrabajosExtraAdminView />);
+      fireEvent.change(screen.getByLabelText(/^Turno/), { target: { value: 'DIURNO' } });
+      fireEvent.click(screen.getByRole('columnheader', { name: /^Fecha/ }));
+      expect(orden()).toEqual(['x01', 'x10d', 'x20']);
+    });
+
+    it('en celular hay selector «Ordenar por» y botón de dirección', () => {
+      comoEscritorio(false);
+      listHook.mockReturnValue(ok(DESORDENADOS));
+      render(<TrabajosExtraAdminView />);
+      expect(orden()).toEqual(['x20', 'x10n', 'x10d', 'x01']);
+      fireEvent.click(screen.getByTestId('orden-direccion'));
+      expect(orden()).toEqual(['x01', 'x10d', 'x10n', 'x20']);
+      fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'horas' } });
+      expect(orden()).toEqual(['x10d', 'x20', 'x10n', 'x01']);
+    });
+  });
 });
