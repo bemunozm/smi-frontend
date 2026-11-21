@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Toast } from '@heroui/react';
 
-import { ReloadPrompt } from './ReloadPrompt';
+import { REPROMPT_AFTER_MS } from '../../pwa/update-policy';
+import { ReloadPrompt, type NavigationSource } from './ReloadPrompt';
 
 // `vi.mock` se hoistea sobre los imports: las variables que su factory lee
 // deben venir de `vi.hoisted` para no pisar el TDZ (mismo motivo por el que
@@ -17,22 +18,40 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('virtual:pwa-register/react', () => ({
-  useRegisterSW: () => ({
+  useRegisterSW: (_options?: unknown) => ({
     needRefresh: [mocks.needRefresh, mocks.setNeedRefresh],
     offlineReady: [mocks.offlineReady, mocks.setOfflineReady],
     updateServiceWorker: mocks.updateServiceWorker,
   }),
 }));
 
-function renderPrompt() {
+function renderPrompt(navigation?: NavigationSource) {
   // El toast se pinta donde vive el `Toast.Provider` (portal), igual que en
   // `AppProviders` real — sin este provider en el árbol no hay dónde pintar.
   return render(
     <>
       <Toast.Provider placement="bottom end" />
-      <ReloadPrompt />
+      <ReloadPrompt navigation={navigation} />
     </>,
   );
+}
+
+/** Router de mentira: `navegar` avisa a los suscriptores como lo haría el real. */
+function navegacionFalsa(inicial: string) {
+  let actual = inicial;
+  const oyentes = new Set<(pathname: string) => void>();
+  const navigation: NavigationSource = {
+    pathname: () => actual,
+    subscribe: (oyente) => {
+      oyentes.add(oyente);
+      return () => oyentes.delete(oyente);
+    },
+  };
+  const navegar = (ruta: string) => {
+    actual = ruta;
+    act(() => oyentes.forEach((oyente) => oyente(ruta)));
+  };
+  return { navigation, navegar };
 }
 
 afterEach(() => {
@@ -69,6 +88,60 @@ describe('ReloadPrompt', () => {
     fireEvent.click(actionButton);
 
     expect(mocks.updateServiceWorker).toHaveBeenCalledWith(true);
+  });
+
+  it('cerrar el aviso no descarta la versión nueva: vuelve a aparecer pasado un rato', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.needRefresh = true;
+      renderPrompt();
+
+      expect(await screen.findByText('Nueva versión disponible')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /cerrar|close/i }));
+      // HeroUI llama a onClose en el siguiente frame de animación.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      await vi.waitFor(() => expect(screen.queryByText('Nueva versión disponible')).toBeNull());
+      expect(mocks.setNeedRefresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REPROMPT_AFTER_MS);
+      });
+      expect(await screen.findByText('Nueva versión disponible')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('en el panel, cambiar de pantalla con una versión en espera la instala sin preguntar', () => {
+    mocks.needRefresh = true;
+    const { navigation, navegar } = navegacionFalsa('/reportes');
+    renderPrompt(navigation);
+
+    navegar('/reportes');
+    expect(mocks.updateServiceWorker).not.toHaveBeenCalled();
+
+    navegar('/trabajos-extra');
+    expect(mocks.updateServiceWorker).toHaveBeenCalledWith(true);
+  });
+
+  it('en Terreno no se instala sola al navegar (puede haber un formulario a medio llenar)', () => {
+    mocks.needRefresh = true;
+    const { navigation, navegar } = navegacionFalsa('/terreno/registro');
+    renderPrompt(navigation);
+
+    navegar('/terreno/hallazgos');
+    navegar('/');
+    expect(mocks.updateServiceWorker).not.toHaveBeenCalled();
+  });
+
+  it('sin versión en espera, navegar no hace nada', () => {
+    const { navigation, navegar } = navegacionFalsa('/reportes');
+    renderPrompt(navigation);
+
+    navegar('/trabajos-extra');
+    expect(mocks.updateServiceWorker).not.toHaveBeenCalled();
   });
 
   it('muestra el toast de "listo sin conexión" cuando offlineReady es true', async () => {

@@ -4,10 +4,12 @@ import { Toast } from '@heroui/react';
 
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { queryClient } from '../lib/query-client';
-import { ReloadPrompt } from '../components/pwa/ReloadPrompt';
+import { ReloadPrompt, type NavigationSource } from '../components/pwa/ReloadPrompt';
 
 export interface AppProvidersProps {
   children: ReactNode;
+  /** Ruta actual del router, para que `ReloadPrompt` sepa cuándo se cambia de pantalla. */
+  navigation?: NavigationSource;
 }
 
 /**
@@ -24,14 +26,14 @@ export interface AppProvidersProps {
  * `Toast.Provider` para avisar de actualizaciones/modo offline — va acá
  * porque, igual que el toast, es transversal a toda la app.
  */
-export function AppProviders({ children }: AppProvidersProps) {
+export function AppProviders({ children, navigation }: AppProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Envuelve al router entero: un error de render en cualquier pantalla
           deja el mensaje a la vista en vez de una página en blanco. */}
       <ErrorBoundary>{children}</ErrorBoundary>
       <Toast.Provider placement="bottom end" />
-      <ReloadPrompt />
+      <ReloadPrompt navigation={navigation} />
     </QueryClientProvider>
   );
 }

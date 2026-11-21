@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import './index.css';
+import type { NavigationSource } from './components/pwa/ReloadPrompt';
 import { AppProviders } from './context/AppProviders';
 import { startSignOutRevocation } from './lib/server-signout';
 import { instalarReboteAtras } from './pwa/back-trap';
@@ -17,9 +18,16 @@ capturarInvitacionInstalar();
 // del que depende el rebote (ver `pwa/back-trap.ts`).
 instalarReboteAtras();
 
+// El aviso de versión nueva vive fuera del router: le pasamos la ruta actual
+// para que en el panel se actualice al cambiar de pantalla.
+const navigation: NavigationSource = {
+  pathname: () => router.state.location.pathname,
+  subscribe: (listener) => router.subscribe((state) => listener(state.location.pathname)),
+};
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppProviders>
+    <AppProviders navigation={navigation}>
       <RouterProvider router={router} />
     </AppProviders>
   </StrictMode>,
