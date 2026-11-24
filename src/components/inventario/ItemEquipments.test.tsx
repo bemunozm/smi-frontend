@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -20,10 +20,10 @@ afterEach(() => {
   saveMock.mutate.mockClear();
 });
 
-const equipo = (id: string, internalCode: string, licensePlate: string | null = null) =>
-  ({ id, internalCode, licensePlate, type: 'Excavadora', brand: 'CAT', model: '320' }) as unknown as Equipment;
+const equipo = (id: string, internalCode: string, licensePlate: string | null = null, equipmentClass: 'HEAVY' | 'LIGHT' = 'HEAVY') =>
+  ({ id, internalCode, licensePlate, equipmentClass, type: 'Excavadora', brand: 'CAT', model: '320' }) as unknown as Equipment;
 
-const EQUIPOS = [equipo('e1', 'EXC-01'), equipo('e2', 'CAM-02', 'AB1234'), equipo('e3', 'CAR-03')];
+const EQUIPOS = [equipo('e1', 'EXC-01'), equipo('e2', 'CAM-02', 'AB1234', 'LIGHT'), equipo('e3', 'CAR-03')];
 
 /** El picker es controlado: este envoltorio guarda el set y lo expone a la prueba. */
 function Wrapper({ inicial = [], onValue }: { inicial?: CompatibilityEntry[]; onValue?: (v: CompatibilityEntry[]) => void }) {
@@ -86,6 +86,24 @@ describe('ItemEquipmentsCell', () => {
 });
 
 describe('EquipmentPicker', () => {
+  it('sin escribir muestra todos los equipos: pesados primero, después livianos, cada grupo separado', () => {
+    renderPicker();
+    const grupos = within(screen.getByRole('group', { name: 'Equipos disponibles' })).getAllByRole('region');
+    expect(grupos.map((g) => g.getAttribute('aria-label'))).toEqual(['Equipos pesados', 'Equipos livianos']);
+    expect(within(grupos[0]!).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      expect.stringContaining('CAR-03'),
+      expect.stringContaining('EXC-01'),
+    ]);
+    expect(within(grupos[1]!).getByRole('button').textContent).toContain('CAM-02');
+  });
+
+  it('escribir filtra dentro de los grupos y deja solo los que tienen coincidencias', () => {
+    renderPicker();
+    fireEvent.change(screen.getByLabelText('Agregar equipo'), { target: { value: 'ab12' } });
+    const grupos = within(screen.getByRole('group', { name: 'Equipos disponibles' })).getAllByRole('region');
+    expect(grupos.map((g) => g.getAttribute('aria-label'))).toEqual(['Equipos livianos']);
+  });
+
   it('busca por código o patente y agrega el equipo elegido', () => {
     const onValue = vi.fn();
     renderPicker({ onValue });

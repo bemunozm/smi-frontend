@@ -181,8 +181,11 @@ export function EditEquipmentsModal({
   );
 }
 
-/** Máximo de sugerencias que se muestran bajo el buscador. */
-const MAX_SUGGESTIONS = 6;
+/** Orden y nombre de los grupos del selector: pesados primero, como en la pizarra y en Equipos. */
+const EQUIPMENT_GROUPS: ReadonlyArray<{ equipmentClass: Equipment['equipmentClass']; label: string }> = [
+  { equipmentClass: 'HEAVY', label: 'Equipos pesados' },
+  { equipmentClass: 'LIGHT', label: 'Equipos livianos' },
+];
 
 const normalize = (text: string): string => text.trim().toLowerCase();
 
@@ -214,13 +217,18 @@ export function EquipmentPicker({
   const byId = useMemo(() => new Map((equipments ?? []).map((e) => [e.id, e])), [equipments]);
   const selected = useMemo(() => new Set(value.map((entry) => entry.equipmentId)), [value]);
 
-  const suggestions = useMemo(() => {
-    if (!query.trim()) return [];
-    return (equipments ?? [])
+  // Todos los equipos a la vista sin escribir nada (pedido del cliente, 24/11/2026), pesados primero y después
+  // livianos, como en el resto de la app; escribir solo filtra dentro de los mismos grupos.
+  const groups = useMemo(() => {
+    const available = (equipments ?? [])
       .filter((e) => !selected.has(e.id) && matches(e, query))
-      .sort((a, b) => a.internalCode.localeCompare(b.internalCode, 'es-CL', { numeric: true }))
-      .slice(0, MAX_SUGGESTIONS);
+      .sort((a, b) => a.internalCode.localeCompare(b.internalCode, 'es-CL', { numeric: true }));
+    return EQUIPMENT_GROUPS.map((group) => ({
+      ...group,
+      items: available.filter((e) => e.equipmentClass === group.equipmentClass),
+    })).filter((group) => group.items.length > 0);
   }, [equipments, query, selected]);
+  const suggestions = groups.flatMap((group) => group.items);
 
   const add = (equipment: Equipment): void => {
     onChange([...value, { equipmentId: equipment.id }]);
@@ -249,30 +257,45 @@ export function EquipmentPicker({
         <Input placeholder="Código o patente" />
       </TextField>
 
-      {suggestions.length > 0 ? (
-        <ul aria-label="Equipos encontrados" className="flex flex-col gap-1 rounded-lg border border-border p-1">
-          {suggestions.map((equipment) => (
-            <li key={equipment.id}>
-              <button
-                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-secondary)]"
-                onClick={() => add(equipment)}
-                type="button"
-              >
-                <Plus aria-hidden className="size-4 shrink-0 text-(--accent)" />
-                <span className="font-mono font-medium text-foreground">{equipment.internalCode}</span>
-                <span className="truncate text-muted-foreground">
-                  {[equipment.licensePlate, equipment.brand, equipment.model].filter(Boolean).join(' · ')}
-                </span>
-              </button>
-            </li>
+      {groups.length > 0 ? (
+        <div
+          aria-label="Equipos disponibles"
+          className="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-border"
+          role="group"
+        >
+          {groups.map((group, index) => (
+            <section aria-label={group.label} className={index > 0 ? 'border-t border-border' : ''} key={group.equipmentClass}>
+              <p className="sticky top-0 z-10 m-0 bg-(--surface-secondary) px-3 py-1.5 text-[11px] font-semibold tracking-wider text-(--label-color) uppercase">
+                {group.label} · {group.items.length}
+              </p>
+              <ul className="flex flex-col gap-0.5 p-1">
+                {group.items.map((equipment) => (
+                  <li key={equipment.id}>
+                    <button
+                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-secondary)]"
+                      onClick={() => add(equipment)}
+                      type="button"
+                    >
+                      <Plus aria-hidden className="size-4 shrink-0 text-(--accent)" />
+                      <span className="font-mono font-medium text-foreground">{equipment.internalCode}</span>
+                      <span className="truncate text-muted-foreground">
+                        {[equipment.licensePlate, equipment.brand, equipment.model].filter(Boolean).join(' · ')}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       ) : query.trim() ? (
         <p className="text-xs text-muted-foreground">Ningún equipo coincide con «{query.trim()}».</p>
+      ) : equipments && equipments.length > 0 ? (
+        <p className="text-xs text-muted-foreground">Todos los equipos ya están asignados.</p>
       ) : null}
 
       {value.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Sin equipos asignados. Busca arriba para agregar uno.</p>
+        <p className="text-xs text-muted-foreground">Sin equipos asignados. Elige uno de la lista o busca por código o patente.</p>
       ) : (
         <ul className="flex flex-col gap-2" data-testid="equipment-picker-selected">
           {value.map((entry) => {
