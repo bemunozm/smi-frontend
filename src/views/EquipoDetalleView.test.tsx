@@ -41,6 +41,11 @@ vi.mock('../api/EquipmentDocumentAPI', () => ({ EquipmentDocumentAPI: { list: do
 // Los seeds de ['ficha','eq_1'] siguen mandando (staleTime: Infinity).
 const { fichaGetMock } = vi.hoisted(() => ({ fichaGetMock: vi.fn() }));
 
+// Ítems asignados a la unidad (`GET /inventory/items?equipmentId=`).
+const { listItemsMock } = vi.hoisted(() => ({ listItemsMock: vi.fn() }));
+
+vi.mock('../api/InventoryAPI', () => ({ InventoryAPI: { listItems: listItemsMock } }));
+
 vi.mock('../api/FichaAPI', () => ({ FichaAPI: { getFicha: fichaGetMock } }));
 
 /** Lo encolado para un endpoint, en orden. */
@@ -59,6 +64,7 @@ afterEach(() => {
 // les importa esta sección) no se queden esperando una promesa nunca resuelta.
 beforeEach(() => {
   docListMock.mockResolvedValue([]);
+  listItemsMock.mockResolvedValue([]);
   fichaGetMock.mockResolvedValue(FICHA);
   // jsdom no implementa los object URL con los que se previsualiza un archivo elegido.
   URL.createObjectURL = vi.fn(() => 'blob:archivo-nuevo');
@@ -409,7 +415,41 @@ describe('EquipoDetalleView', () => {
     expect(screen.queryByText('Fuga de aceite detectada')).toBeNull();
   });
 
-  it('muestra la cabecera, los KPIs, los datos de la unidad y los consumos', () => {
+  it('lista los suministros y repuestos asignados con su existencia, enlazados a la ficha del ítem', async () => {
+    listItemsMock.mockResolvedValue([
+      {
+        id: 'it_9',
+        sku: 'FIL-009',
+        name: 'Filtro de aire',
+        description: null,
+        unit: 'UNIT',
+        type: 'PART',
+        categoryId: null,
+        category: null,
+        partNumber: null,
+        defaultSupplier: null,
+        isCritical: false,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        stocks: [
+          { branchId: 'b1', quantity: 4, minimumQuantity: 0, branch: { id: 'b1', name: 'Casa Matriz' } },
+          { branchId: 'b2', quantity: 3, minimumQuantity: 0, branch: { id: 'b2', name: 'Faena' } },
+        ],
+        compatibilities: [{ equipmentId: 'eq_1', internalCode: 'EX-001', note: 'solo serie 4500' }],
+      },
+    ]);
+    renderFicha();
+
+    const fila = within(await screen.findByTestId('items-asignados'));
+    expect(fila.getByRole('link', { name: 'FIL-009' }).getAttribute('href')).toBe('/inventario/it_9');
+    expect(fila.getByText('7 u')).toBeTruthy();
+    expect(fila.getByText('solo serie 4500')).toBeTruthy();
+    expect(fila.getByText(/Casa Matriz/)).toBeTruthy();
+    expect(listItemsMock).toHaveBeenCalledWith({ equipmentId: 'eq_1', isActive: true });
+  });
+
+  it('muestra la cabecera, los KPIs, los datos de la unidad y los consumos', async () => {
     currentUserResult = {
       user: { id: 'u1', name: 'Admin SMI', email: 'admin@smi.local', role: 'ADMIN' },
       role: 'ADMIN',
@@ -459,10 +499,9 @@ describe('EquipoDetalleView', () => {
     expect(screen.getByText('Neumático 29.5R25')).toBeTruthy();
     expect(screen.getAllByText('−4').length).toBe(2);
 
-    // Repuestos compatibles: sin API todavía (dominio Compatibilidad) — queda
-    // como estado vacío en su lugar del layout, no se inventa data.
-    expect(screen.getByText('Repuestos compatibles')).toBeTruthy();
-    expect(screen.getByText(/Todavía no hay una API de Compatibilidad/)).toBeTruthy();
+    // Suministros y repuestos asignados: sin ítems asignados, estado vacío amable.
+    expect(screen.getByText('Suministros y repuestos asignados')).toBeTruthy();
+    expect(await screen.findByText(/no tiene suministros ni repuestos asignados/)).toBeTruthy();
 
     // Actividad reciente: adelanto de la bitácora consolidada de Núcleo
     // (`useFicha`), con link a la ficha completa (`/equipos/:id/ficha`).

@@ -176,7 +176,7 @@ export function BranchBreakdown({
         const tone = stockStatus(item, stock.branchId).tone;
         return (
           <span
-            className={`flex items-center gap-1.5 text-sm ${
+            className={`flex items-center gap-1.5 text-sm whitespace-nowrap ${
               stock.branchId === highlightBranchId
                 ? 'font-medium text-foreground'
                 : 'text-muted-foreground'

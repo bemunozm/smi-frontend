@@ -1,16 +1,20 @@
 import { axiosInstance } from '../lib/axios';
 import { toDomainError } from '../lib/api-error';
 import {
+  ConsumerListResponseSchema,
   MovementListResponseSchema,
   ItemListResponseSchema,
   KardexResponseSchema,
   type InventoryItem,
+  type ItemConsumer,
   type ItemType,
   type StockMovement,
 } from '../types/inventory';
 
 export interface ItemFilters {
   q?: string;
+  /** Solo los ítems asignados a este equipo. */
+  equipmentId?: string;
   type?: ItemType;
   categoryId?: string;
   isActive?: boolean;
@@ -49,6 +53,18 @@ async function kardex(itemId: string, branchId?: string) {
   }
 }
 
+/** «Consumido por»: equipos que han gastado el ítem (salidas imputadas). */
+async function consumers(itemId: string): Promise<ItemConsumer[]> {
+  try {
+    const response = await axiosInstance.get(
+      `/api/inventory/items/${itemId}/consumers`,
+    );
+    return ConsumerListResponseSchema.parse(response.data).data;
+  } catch (error: unknown) {
+    throw toDomainError(error, 'No se pudo obtener el consumo del ítem.');
+  }
+}
+
 export interface MovementFilters {
   branchId?: string;
   direction?: 'IN' | 'OUT';
@@ -76,4 +92,5 @@ export const InventoryAPI = {
   listMovements,
   listItems,
   kardex,
+  consumers,
 };

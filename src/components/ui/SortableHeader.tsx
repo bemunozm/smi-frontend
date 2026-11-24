@@ -9,13 +9,16 @@ type SortDirection = 'ascending' | 'descending';
  * pueden tocar, y la activa se marca en el color de acento con la flecha de su
  * dirección. Se usa como render-prop de `Table.Column` con `allowsSorting`:
  * `<Table.Column allowsSorting id="fecha">{sortableHeader('Fecha')}</Table.Column>`.
+ *
+ * `activeClassName`: el estilo de la columna activa; por defecto el acento. Las
+ * tablas con cabecera de color (la pizarra) pasan otro para que se lea sobre el fondo.
  */
-export const sortableHeader = (title: string) =>
+export const sortableHeader = (title: string, activeClassName = 'text-(--accent)') =>
   function SortableHeader({ sortDirection }: { sortDirection?: SortDirection }) {
     const Icon = sortDirection === 'ascending' ? ArrowUp : sortDirection === 'descending' ? ArrowDown : ArrowUpDown;
     return (
       <Table.SortableColumnHeader
-        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap ${sortDirection ? 'text-(--accent)' : ''}`}
+        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap ${sortDirection ? activeClassName : ''}`}
         showIndicator={false}
         sortDirection={sortDirection}
       >

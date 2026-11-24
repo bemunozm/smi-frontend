@@ -23,6 +23,9 @@ import { env } from '../config/env';
 import { useAssignEquipment, useEquipmentDetail } from '../hooks/useEquipment';
 import { useCambiarEstadoEquipo } from '../components/flota/useCambiarEstadoEquipo';
 import { useHorometroList } from '../hooks/useHorometro';
+import { useItems } from '../hooks/useInventory';
+import { BranchBreakdown, NUMBER } from '../components/inventario/shared';
+import { UNIT_SYMBOLS, totalQuantity } from '../types/inventory';
 import { useCombustibleList } from '../hooks/useCombustible';
 import { useDeleteEquipmentDocument, useEquipmentDocuments } from '../hooks/useEquipmentDocuments';
 import { useFicha } from '../hooks/useFicha';
@@ -523,26 +526,63 @@ function EstadoDeUso({ equipo, puedeAsignar }: { equipo: EquipmentDetail; puedeA
 }
 
 /**
- * Repuestos compatibles es dominio Compatibilidad (`PartCompatibility`
- * en `smi-backend/prisma/schema.prisma`): el modelo ya existe en la BD, pero
- * todavía no hay service/controller que lo exponga (`GET /api/equipment/:id`
- * no trae repuestos). Se deja la sección en su lugar del layout con un
- * estado vacío — cablear la tabla (SKU/nombre/N.° parte/existencia por
- * sucursal, ver el modelo) es follow-up coordinado con Compatibilidad, no
- * algo que este cambio deba inventar del lado del backend.
+ * Suministros y repuestos asignados a esta unidad (compatibilidad declarada a
+ * mano desde Inventario), con su existencia total y por sucursal. Cada uno
+ * enlaza a la ficha del ítem; en el taller, a la del stock del taller.
  */
-function RepuestosCompatiblesCard() {
+function ItemsAsignadosCard({ equipoId, enTaller }: { equipoId: string; enTaller: boolean }) {
+  const { data, isPending, isError } = useItems({ equipmentId: equipoId, isActive: true });
+  const baseItem = enTaller ? '/mantenimiento/stock' : '/inventario';
   return (
     <Card>
       <Card.Header>
-        <Card.Title>Repuestos compatibles</Card.Title>
-        <Card.Description>Existencia de cada repuesto, por sucursal.</Card.Description>
+        <Card.Title>Suministros y repuestos asignados</Card.Title>
+        <Card.Description>Existencia de cada ítem, total y por sucursal.</Card.Description>
       </Card.Header>
       <Card.Content className="mt-1">
-        <p className="text-sm text-(--muted)">
-          Todavía no hay una API de Compatibilidad para listar los repuestos de esta unidad — follow-up coordinado con
-          ese dominio.
-        </p>
+        {isPending ? (
+          <div className="flex justify-center py-6">
+            <Spinner color="accent" size="sm" />
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-danger">No se pudieron obtener los ítems asignados.</p>
+        ) : data.length === 0 ? (
+          <p className="text-sm text-(--muted)">
+            Esta unidad no tiene suministros ni repuestos asignados. Se asignan desde la ficha del ítem en Inventario.
+          </p>
+        ) : (
+          <ul className="flex flex-col" data-testid="items-asignados">
+            {data.map((item) => (
+              <li
+                className="flex flex-col gap-1 border-t border-border py-2.5 first:border-t-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                key={item.id}
+              >
+                <div className="flex min-w-0 flex-col">
+                  <div className="flex flex-wrap items-center gap-x-2">
+                    <Link
+                      className="font-mono text-sm font-medium text-(--accent) hover:underline"
+                      to={`${baseItem}/${item.id}`}
+                    >
+                      {item.sku}
+                    </Link>
+                    <span className="text-sm text-foreground">{item.name}</span>
+                  </div>
+                  {item.compatibilities.find((c) => c.equipmentId === equipoId)?.note ? (
+                    <span className="text-xs text-muted-foreground">
+                      {item.compatibilities.find((c) => c.equipmentId === equipoId)?.note}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-col sm:items-end">
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {NUMBER.format(totalQuantity(item))} {UNIT_SYMBOLS[item.unit]}
+                  </span>
+                  <BranchBreakdown item={item} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card.Content>
     </Card>
   );
@@ -1177,7 +1217,7 @@ export function EquipoDetalleView({
             </Card.Content>
           </Card>
 
-          <RepuestosCompatiblesCard />
+          <ItemsAsignadosCard enTaller={enTaller} equipoId={equipo.id} />
         </div>
 
         <div className="flex flex-col gap-4">

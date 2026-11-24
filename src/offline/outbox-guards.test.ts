@@ -291,4 +291,11 @@ describe('referencias a catálogos: lo que usa una creación pendiente va detrá
   ] as const)('%s declara las entidades que referencia', (endpoint, body, esperado) => {
     expect(ENDPOINTS[endpoint].parents?.({ id: 'x' }, body)).toEqual(esperado);
   });
+
+  it('los equipos de un ítem van detrás de la creación de cada equipo y del ítem', () => {
+    const def = ENDPOINTS['itemCompatibility.save'];
+    const body = { entries: [{ equipmentId: 'e1' }, { equipmentId: 'e2', note: 'x' }] };
+    expect(def.parents?.({ id: 'i1' }, body)).toEqual(['equipment:e1', 'equipment:e2']);
+    expect(def.entity?.({ id: 'i1' }, body)).toBe('item:i1');
+  });
 });

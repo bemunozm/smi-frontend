@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { FichaItemView } from './FichaItemView';
-import type { InventoryItem, StockMovement } from '../types/inventory';
+import type { InventoryItem, ItemConsumer, StockMovement } from '../types/inventory';
 
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
@@ -65,6 +65,7 @@ const ITEM: InventoryItem = {
   isActive: true,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  compatibilities: [],
   stocks: [
     { branchId: 'b1', quantity: 50, minimumQuantity: 10, branch: CASA },
     { branchId: 'b2', quantity: 2, minimumQuantity: 20, branch: FAENA },
@@ -96,6 +97,8 @@ function renderFicha(
     movements = MOVEMENTS,
     size = 'desktop' as 'phone' | 'desktop',
     contexto = 'inventario' as 'inventario' | 'taller',
+    item = ITEM,
+    consumers = [] as ItemConsumer[],
   } = {},
 ) {
   setViewport(size);
@@ -103,9 +106,10 @@ function renderFicha(
   const qc = new QueryClient();
   qc.setQueryData(['branches', { isActive: true }], BRANCHES);
   qc.setQueryData(['inventory', 'kardex', 'i1', null], {
-    item: ITEM,
+    item,
     movements,
   });
+  qc.setQueryData(['inventory', 'consumers', 'i1'], consumers);
 
   // El mismo anidamiento que `routes.tsx`: la ficha vive en Inventario y
   // también dentro del taller (`/mantenimiento/stock/:id`).
@@ -206,5 +210,56 @@ describe('FichaItemView', () => {
     expect(
       screen.getByText('Sin movimientos registrados en esta bodega.'),
     ).toBeTruthy();
+  });
+
+  describe('equipos asignados y «Consumido por»', () => {
+    const CON_EQUIPOS: InventoryItem = {
+      ...ITEM,
+      compatibilities: [
+        { equipmentId: 'e1', internalCode: 'EXC-01', note: 'solo serie 4500' },
+        { equipmentId: 'e2', internalCode: 'CAM-02', note: null },
+      ],
+    };
+
+    it('lista los equipos asignados con su nota, enlazados a la ficha del equipo', () => {
+      renderFicha({ item: CON_EQUIPOS });
+
+      const lista = within(screen.getByTestId('equipos-asignados'));
+      expect(lista.getByRole('link', { name: 'EXC-01' }).getAttribute('href')).toBe('/equipos/e1');
+      expect(lista.getByText('solo serie 4500')).toBeTruthy();
+      expect(lista.getByRole('link', { name: 'CAM-02' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Editar equipos' })).toBeTruthy();
+    });
+
+    it('sin equipos asignados lo dice con amabilidad', () => {
+      renderFicha();
+      expect(screen.getByText(/Todavía no se le asignó ningún equipo/)).toBeTruthy();
+    });
+
+    it('en el taller no ofrece editar los equipos y enlaza a la ficha del equipo del taller', () => {
+      renderFicha({ item: CON_EQUIPOS, contexto: 'taller' });
+
+      expect(screen.queryByRole('button', { name: 'Editar equipos' })).toBeNull();
+      const lista = within(screen.getByTestId('equipos-asignados'));
+      expect(lista.getByRole('link', { name: 'EXC-01' }).getAttribute('href')).toBe('/mantenimiento/equipos/e1');
+    });
+
+    it('«Consumido por» muestra equipo, cantidad con unidad, salidas y última salida', () => {
+      renderFicha({
+        consumers: [
+          { equipmentId: 'e1', internalCode: 'EXC-01', totalQuantity: 12.5, movementCount: 3, lastAt: '2026-10-01T15:00:00.000Z' },
+        ],
+      });
+
+      const tabla = within(screen.getByTestId('consumidores'));
+      expect(tabla.getByRole('link', { name: 'EXC-01' }).getAttribute('href')).toBe('/equipos/e1');
+      expect(tabla.getByText('12,5 L')).toBeTruthy();
+      expect(tabla.getByText('3')).toBeTruthy();
+    });
+
+    it('«Consumido por» vacío explica cuándo aparecerán equipos', () => {
+      renderFicha({ consumers: [] });
+      expect(screen.getByText(/Todavía ningún equipo ha consumido este ítem/)).toBeTruthy();
+    });
   });
 });

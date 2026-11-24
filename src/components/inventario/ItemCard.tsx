@@ -9,6 +9,7 @@ import {
   totalQuantity,
   type InventoryItem,
 } from '../../types/inventory';
+import { ItemEquipmentsCell } from './ItemEquipments';
 import {
   ALL_BRANCHES,
   BranchBreakdown,
@@ -76,6 +77,11 @@ export function ItemCard({
         {item.name}
         {item.category ? ` · ${item.category.name}` : ''}
         {item.partNumber ? ` · N° parte ${item.partNumber}` : ''}
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <span>Equipos</span>
+        <ItemEquipmentsCell equipments={item.compatibilities} inline />
       </div>
 
       <div className="mt-3 flex items-baseline gap-2">
