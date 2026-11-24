@@ -40,6 +40,9 @@ export interface QueuedMutationConfig<K extends EndpointKey, TVars> {
   /** `build` no tuvo nada que encolar (p. ej. el cambio se absorbió en una
    * operación que seguía en la cola). Sin esto no hay aviso. */
   onUnchanged?: (vars: TVars) => void;
+  /** Quedó en la cola (sin señal o el servidor no respondió a tiempo). Sin
+   * esto, el aviso común de «guardado en el equipo». */
+  onQueued?: (vars: TVars) => void;
   errorFallback: string;
   /** Mensaje propio para un error; sin él, el de `mensajeErrorFormulario`. */
   errorMessage?: (error: unknown) => string;
@@ -71,8 +74,10 @@ export function useQueuedMutation<K extends EndpointKey, TVars>(
     },
     onSuccess: (result, vars) => {
       if (result.status === 'sent') config.onSent?.(result.data, vars);
-      else if (result.status === 'queued') avisarGuardadoEnCola();
-      else config.onUnchanged?.(vars);
+      else if (result.status === 'queued') {
+        if (config.onQueued) config.onQueued(vars);
+        else avisarGuardadoEnCola();
+      } else config.onUnchanged?.(vars);
     },
     onError: (error) => {
       toast.danger(config.errorMessage ? config.errorMessage(error) : mensajeErrorFormulario(error, config.errorFallback));

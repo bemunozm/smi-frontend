@@ -11,6 +11,7 @@ const { sendWriteMock, uploadFileMock } = vi.hoisted(() => ({ sendWriteMock: vi.
 vi.mock('../api/WriteAPI', () => ({ sendWrite: sendWriteMock }));
 vi.mock('../api/UploadsAPI', () => ({ uploadFile: uploadFileMock }));
 
+import { toast } from '@heroui/react';
 import { useCrearInformeTemporal } from './useInformesTemporales';
 import { DomainError } from '../lib/api-error';
 import { db, type HttpWriteOp, type OutboxOp } from '../offline/db';
@@ -201,6 +202,8 @@ describe('useCrearInformeTemporal', () => {
     expect(op.status).toBe('pending');
     expect(op.files).toBeUndefined();
     expect(op.dependsOn).toBeUndefined();
+    // Aviso propio del informe en vez del común de la cola.
+    expect(toast.success).toHaveBeenCalledWith('Se enviará al recuperar señal');
   });
 
   it('no manda turno dentro de los cierres (el backend responde 400)', async () => {

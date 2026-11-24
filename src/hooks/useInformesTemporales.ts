@@ -83,7 +83,10 @@ export function useCrearInformeTemporal() {
       };
     },
     onSent: () => {
-      toast.success('Informe enviado');
+      toast.success('Informe guardado');
+    },
+    onQueued: () => {
+      toast.success('Se enviará al recuperar señal');
     },
     errorFallback: 'No se pudo guardar el informe en el equipo.',
   });
