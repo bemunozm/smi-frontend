@@ -320,9 +320,7 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   const resumenDe = (orden: OrdenTrabajo) => {
     if (orden.tipo !== 'PREVENTIVA') return null;
     const fila = filaDe(orden);
-    return fila ? (
-      <ResumenPreventiva fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} />
-    ) : null;
+    return fila ? <ResumenPreventiva fila={fila} pronostico={pronosticos?.get(fila.equipmentId)} /> : null;
   };
   /** Editar y eliminar (íconos arriba a la derecha): ADMIN y MANTENEDOR, y no
    * mientras la orden tenga una escritura sin sincronizar. */
@@ -362,10 +360,10 @@ export function OrdenesTrabajoView({ contexto = 'taller' }: { contexto?: 'taller
   );
 
   // Espejo de los `@Roles` del backend vía `lib/permissions`: el cierre de la
-  // tarea (POST de intervención) es exclusivo del MANTENEDOR.
+  // tarea es el POST `/finalizar` de la orden.
   const canCreate = can('orden.create');
   const canStart = can('orden.update');
-  const canFinish = can('intervencion.create');
+  const canFinish = can('orden.finalizar');
   const canTarea = can('orden.toggleTarea');
   const fleet: readonly EquipmentRef[] | undefined = equipment;
 

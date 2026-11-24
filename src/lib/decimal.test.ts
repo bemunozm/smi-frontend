@@ -43,16 +43,31 @@ describe('parseInteger', () => {
     ['0', 0],
     ['007', 7],
     ['  8 ', 8],
+    // Kilometraje escrito como en Chile: el punto es de miles.
+    ['264.582', 264582],
+    ['268617', 268617],
   ])('lee %j como %d', (texto, esperado) => {
     expect(parseInteger(texto)).toBe(esperado);
   });
 
-  it.each(['1.20', '12.3456', '12,5', '12.5', '1.200,5', '1,200.5', '0.200', '-3', 'abc', '', '   ', '1 200', '1..200', '1.2000'])(
-    'devuelve null para %j: ni decimales ni grupos mal formados se adivinan',
-    (texto) => {
-      expect(parseInteger(texto)).toBeNull();
-    },
-  );
+  it.each([
+    '1.20',
+    '12.3456',
+    '12,5',
+    '12.5',
+    '1.200,5',
+    '1,200.5',
+    '0.200',
+    '-3',
+    'abc',
+    '',
+    '   ',
+    '1 200',
+    '1..200',
+    '1.2000',
+  ])('devuelve null para %j: ni decimales ni grupos mal formados se adivinan', (texto) => {
+    expect(parseInteger(texto)).toBeNull();
+  });
 
   it('un valor formateado para el campo vuelve igual', () => {
     for (const valor of [0, 8, 250, 1200, 1234567]) {

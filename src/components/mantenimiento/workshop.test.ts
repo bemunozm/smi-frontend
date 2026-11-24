@@ -9,6 +9,11 @@ import {
   formatDate,
   groupWorkshopBoard,
   splitFinished,
+  avisoLecturaMantencion,
+  avisoLecturaMayor,
+  errorLecturaMantencion,
+  lecturaMantencion,
+  leerLecturaMantencion,
 } from './workshop';
 
 /** OT mínima válida; cada test pisa solo lo que le importa. */
@@ -149,9 +154,15 @@ describe('formatDate', () => {
 describe('registrableComoHecha (eliminar: «ya se hizo»)', () => {
   it('pauta con hito, pauta antigua solo con el texto y servicio de liviano', () => {
     expect(registrableComoHecha({ pautaCycle: 1, origenDetalle: null, tipo: 'PREVENTIVA' })).toBe(true);
-    expect(registrableComoHecha({ pautaCycle: null, origenDetalle: 'Pauta: 1.250 h · ciclo 2', tipo: 'PREVENTIVA' })).toBe(true);
     expect(
-      registrableComoHecha({ pautaCycle: null, origenDetalle: 'Livianos: mantención de 20.000 km', tipo: 'PREVENTIVA' }),
+      registrableComoHecha({ pautaCycle: null, origenDetalle: 'Pauta: 1.250 h · ciclo 2', tipo: 'PREVENTIVA' }),
+    ).toBe(true);
+    expect(
+      registrableComoHecha({
+        pautaCycle: null,
+        origenDetalle: 'Livianos: mantención de 20.000 km',
+        tipo: 'PREVENTIVA',
+      }),
     ).toBe(true);
   });
 
@@ -163,14 +174,95 @@ describe('registrableComoHecha (eliminar: «ya se hizo»)', () => {
 
 describe('responsableDe', () => {
   const tarea = (hechaPorNombre: string | null, hechaAt: string | null) => ({
-    id: 't', texto: '', hecha: !!hechaPorNombre, posicion: 0, notas: null, fotoUrl: null, hechaPorNombre, hechaAt,
+    id: 't',
+    texto: '',
+    hecha: !!hechaPorNombre,
+    posicion: 0,
+    notas: null,
+    fotoUrl: null,
+    hechaPorNombre,
+    hechaAt,
   });
 
   it('el asignado manda; sin asignado, quien hizo la última tarea; si no, null', () => {
-    expect(responsableDe({ asignadoA: { id: 'u1', nombre: 'Ana' }, tareas: [tarea('Pedro', '2026-11-01')] })).toBe('Ana');
+    expect(responsableDe({ asignadoA: { id: 'u1', nombre: 'Ana' }, tareas: [tarea('Pedro', '2026-11-01')] })).toBe(
+      'Ana',
+    );
     expect(
       responsableDe({ asignadoA: null, tareas: [tarea('Pedro', '2026-11-01'), tarea('Luis', '2026-11-05')] }),
     ).toBe('Luis');
     expect(responsableDe({ asignadoA: null, tareas: [tarea(null, null)] })).toBeNull();
+  });
+});
+
+/**
+ * La lectura de la mantención en km es un entero: el `.` es separador de miles
+ * («264.582» km son 264582 km). Leerlo como decimal (264,582 km) hacía que el
+ * backend rechazara el cierre por quedar bajo la mantención anterior — caso
+ * real de producción, OT «Mantención 264.582 km · TLJD77».
+ */
+describe('lectura de la mantención', () => {
+  const KM = { unidad: 'km' as const, actual: 268617 };
+  const HORAS = { unidad: 'h' as const, actual: null };
+
+  it('en km lee el punto como separador de miles', () => {
+    expect(leerLecturaMantencion('264.582', KM)).toEqual({ valor: 264582 });
+    expect(leerLecturaMantencion('268617', KM)).toEqual({ valor: 268617 });
+    expect(leerLecturaMantencion('268.617', KM)).toEqual({ valor: 268617 });
+  });
+
+  it('en km un decimal no es una lectura', () => {
+    expect(leerLecturaMantencion('264,5', KM)).toEqual({ error: expect.stringMatching(/entero/) });
+  });
+
+  it('en horas sigue leyendo decimales: «1.500» h es 1,5 y se avisa cómo se leerá', () => {
+    expect(leerLecturaMantencion('1250,5', HORAS)).toEqual({ valor: 1250.5 });
+    expect(leerLecturaMantencion('1.500', HORAS)).toEqual({ valor: 1.5 });
+    expect(avisoLecturaMantencion('1.500', 'h')).toMatch(/1500/);
+  });
+
+  it('en km no hay aviso de agrupación: no hay ambigüedad', () => {
+    expect(avisoLecturaMantencion('264.582', 'km')).toBeNull();
+  });
+
+  it('vacía es obligatoria', () => {
+    expect(leerLecturaMantencion('  ', KM)).toEqual({ error: expect.stringMatching(/Indica la lectura/) });
+  });
+
+  it('mayor que la última lectura conocida: se lee igual y solo se avisa (la caché puede estar atrasada)', () => {
+    expect(leerLecturaMantencion('268.618', KM)).toEqual({ valor: 268618 });
+    expect(avisoLecturaMayor(268618, KM)).toMatch(/mayor que la última lectura conocida del equipo \(268\.617 km\)/);
+    expect(avisoLecturaMayor(268617, KM)).toBeNull();
+    // Sin lectura conocida no hay con qué comparar.
+    expect(avisoLecturaMayor(999999, { unidad: 'km', actual: null })).toBeNull();
+  });
+
+  it('el tope y los negativos siguen siendo errores', () => {
+    expect(errorLecturaMantencion(1_000_001)).toMatch(/1\.000\.000/);
+    expect(errorLecturaMantencion(-1)).toMatch(/0 o mayor/);
+    expect(leerLecturaMantencion('1.000.001', KM)).toEqual({ error: expect.stringMatching(/1\.000\.000/) });
+  });
+
+  it('una lectura actual con decimales se prellena hacia abajo: nunca sobre la actual', () => {
+    const base = { id: 'eq-1', internalCode: 'X', brand: 'B', model: 'M' };
+    const km = lecturaMantencion('X', [{ ...base, controlUnit: 'KM', currentMileage: 264582.5 }]);
+    expect(km.inicial).toBe('264582');
+    expect(leerLecturaMantencion(km.inicial, km)).toEqual({ valor: 264582 });
+    expect(avisoLecturaMayor(264582, km)).toBeNull();
+    const horas = lecturaMantencion('X', [{ ...base, controlUnit: 'HOURS', currentHourmeter: 1250.567 }]);
+    expect(horas.inicial).toBe('1250,56');
+  });
+
+  it('el campo trae la unidad, la lectura actual y el texto inicial del equipo', () => {
+    const liviano = {
+      id: 'eq-1',
+      internalCode: 'TLJD77',
+      brand: 'Toyota',
+      model: 'Hilux',
+      controlUnit: 'KM' as const,
+      currentMileage: 268617,
+    };
+    expect(lecturaMantencion('TLJD77', [liviano])).toMatchObject({ unidad: 'km', actual: 268617, inicial: '268617' });
+    expect(lecturaMantencion('NO-EXISTE', [liviano])).toMatchObject({ unidad: 'h', actual: null, inicial: '' });
   });
 });

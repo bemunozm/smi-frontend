@@ -2,14 +2,9 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 
-const { sendWriteMock, uploadFileMock } = vi.hoisted(() => ({
-  sendWriteMock: vi.fn(),
-  uploadFileMock: vi.fn(),
-}));
+const { sendWriteMock, uploadFileMock } = vi.hoisted(() => ({ sendWriteMock: vi.fn(), uploadFileMock: vi.fn() }));
 
-vi.mock('../api/ShiftCardAPI', () => ({
-  ShiftCardAPI: { openCard: vi.fn(), closeCard: vi.fn(), listMine: vi.fn() },
-}));
+vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { openCard: vi.fn(), closeCard: vi.fn(), listMine: vi.fn() } }));
 vi.mock('../api/WriteAPI', () => ({ sendWrite: sendWriteMock }));
 vi.mock('../api/UploadsAPI', () => ({ uploadFile: uploadFileMock }));
 
@@ -123,6 +118,8 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
         'equipmentDocument.update',
         // La foto del cierre de una intervención del taller.
         'intervencion.create',
+        // La misma foto, en el cierre atómico de la orden («Finalizar tarea»).
+        'orden.finalizar',
         // La foto de respaldo de cada tarea del checklist preventivo.
         'orden.toggleTarea',
         // Las fotos de cada ítem del checklist diario (varias por ítem).
@@ -317,9 +314,9 @@ describe('encolar: archivos', () => {
   it('un archivo de más de 8 MB se rechaza y no deja nada a medias', async () => {
     const grande = new File([new Uint8Array(9 * 1024 * 1024)], 'grande.pdf', { type: 'application/pdf' });
 
-    await expect(enqueueHttpWrite('u1', { ...spec, files: [{ field: 'fileKey', file: grande }] })).rejects.toMatchObject({
-      code: 'FILE_TOO_LARGE',
-    });
+    await expect(
+      enqueueHttpWrite('u1', { ...spec, files: [{ field: 'fileKey', file: grande }] }),
+    ).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' });
     expect(await db.outbox.count()).toBe(0);
     expect(await db.blobs.count()).toBe(0);
   });
@@ -366,7 +363,11 @@ describe('cambios que ya esperan en la cola (base de una edición nueva)', () =>
     await encolar('b', 'equipment.status', { status: 'IN_WORKSHOP' });
     await encolar('c', 'equipment.update', { type: 'C' });
 
-    const pendiente = await cambiosPendientes(equipmentEntity(ID_EQUIPO), ['equipment.update', 'equipment.status'], 'u1');
+    const pendiente = await cambiosPendientes(
+      equipmentEntity(ID_EQUIPO),
+      ['equipment.update', 'equipment.status'],
+      'u1',
+    );
 
     expect(pendiente).toEqual({ type: 'C', brand: 'Marca', status: 'IN_WORKSHOP' });
   });
@@ -422,7 +423,13 @@ describe('replay de una escritura de oficina', () => {
   it('un create manda el id del cliente y la key de la foto subida en el campo de la entrada', async () => {
     uploadFileMock.mockResolvedValueOnce({ key: 'tmp/u1/foto.jpg', url: 'u' });
     sendWriteMock.mockResolvedValueOnce({ id: ID_EQUIPO });
-    await db.blobs.put({ id: 'b-1', data: new Uint8Array([1]).buffer, mime: 'image/jpeg', name: 'foto.jpg', createdAt: 1 });
+    await db.blobs.put({
+      id: 'b-1',
+      data: new Uint8Array([1]).buffer,
+      mime: 'image/jpeg',
+      name: 'foto.jpg',
+      createdAt: 1,
+    });
     await put({
       id: 'op-eq',
       endpoint: 'equipment.create',
@@ -444,7 +451,14 @@ describe('replay de una escritura de oficina', () => {
 
   it('una cadena crear → asignar se manda en ese orden y la asignación espera a la creación', async () => {
     sendWriteMock.mockResolvedValue(undefined);
-    await put({ id: 'op-crear', endpoint: 'equipment.create', params: {}, body: EQUIPO_BODY, creates: true, entityKey: equipmentEntity(ID_EQUIPO) });
+    await put({
+      id: 'op-crear',
+      endpoint: 'equipment.create',
+      params: {},
+      body: EQUIPO_BODY,
+      creates: true,
+      entityKey: equipmentEntity(ID_EQUIPO),
+    });
     await put({
       id: 'op-asignar',
       endpoint: 'equipment.assign',
@@ -468,7 +482,14 @@ describe('replay de una escritura de oficina', () => {
 
   it('si la creación necesita atención, la asignación que depende de ella no se manda', async () => {
     sendWriteMock.mockRejectedValueOnce(new DomainError('El código ya existe', { status: 409 }));
-    await put({ id: 'op-crear', endpoint: 'equipment.create', params: {}, body: EQUIPO_BODY, creates: true, entityKey: equipmentEntity(ID_EQUIPO) });
+    await put({
+      id: 'op-crear',
+      endpoint: 'equipment.create',
+      params: {},
+      body: EQUIPO_BODY,
+      creates: true,
+      entityKey: equipmentEntity(ID_EQUIPO),
+    });
     await put({
       id: 'op-asignar',
       endpoint: 'equipment.assign',
@@ -511,7 +532,12 @@ describe('replay de una escritura de oficina', () => {
 
   it('el 404 de una escritura que NO es un borrado sigue siendo un rechazo', async () => {
     sendWriteMock.mockRejectedValueOnce(new DomainError('Not Found', { status: 404 }));
-    await put({ id: 'op-estado', endpoint: 'equipment.status', params: { id: ID_EQUIPO }, body: { status: 'IN_WORKSHOP' } });
+    await put({
+      id: 'op-estado',
+      endpoint: 'equipment.status',
+      params: { id: ID_EQUIPO },
+      body: { status: 'IN_WORKSHOP' },
+    });
 
     await syncAndSettle();
 
@@ -530,7 +556,10 @@ describe('replay de una escritura de oficina', () => {
 
     await syncAndSettle();
 
-    expect(await db.outbox.get('op-edicion')).toMatchObject({ status: 'needs_attention', lastError: { code: 'STALE_UPDATE' } });
+    expect(await db.outbox.get('op-edicion')).toMatchObject({
+      status: 'needs_attention',
+      lastError: { code: 'STALE_UPDATE' },
+    });
   });
 });
 
@@ -539,21 +568,16 @@ describe('submitWrite de oficina', () => {
     sendWriteMock.mockResolvedValueOnce(undefined);
     setCurrentUser('u1');
 
-    const enviada = await submitWrite(
-      'branch.delete',
-      { params: { id: 'br-1' }, body: {} },
-      { waitMs: 3000 },
-    );
-    const encolada = await submitWrite(
-      'branch.delete',
-      { params: { id: 'br-2' }, body: {} },
-      { waitMs: 0 },
-    );
+    const enviada = await submitWrite('branch.delete', { params: { id: 'br-1' }, body: {} }, { waitMs: 3000 });
+    const encolada = await submitWrite('branch.delete', { params: { id: 'br-2' }, body: {} }, { waitMs: 0 });
 
     expect(enviada.status).toBe('sent');
     expect(enviada.opId).toEqual(expect.any(String));
     expect(encolada).toEqual({ status: 'queued', opId: expect.any(String) });
-    expect(await db.outbox.get(encolada.opId)).toMatchObject({ endpoint: 'branch.delete', label: expect.stringContaining('Eliminación') });
+    expect(await db.outbox.get(encolada.opId)).toMatchObject({
+      endpoint: 'branch.delete',
+      label: expect.stringContaining('Eliminación'),
+    });
   });
 
   it('un 409 de negocio mientras se espera sale como error y no deja la operación en la cola', async () => {
@@ -574,7 +598,10 @@ describe('submitWrite de oficina', () => {
     await expect(
       submitWrite(
         'movement.create',
-        { params: {}, body: { id: 'm-1', itemId: 'i-1', branchId: 'b-1', direction: 'OUT', reason: 'ACTIVITY', quantity: 5 } },
+        {
+          params: {},
+          body: { id: 'm-1', itemId: 'i-1', branchId: 'b-1', direction: 'OUT', reason: 'ACTIVITY', quantity: 5 },
+        },
         { waitMs: 3000 },
       ),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK', message: textoDelServidor });

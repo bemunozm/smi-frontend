@@ -4,21 +4,18 @@ import { MemoryRouter } from 'react-router-dom';
 
 import type { Intervencion, OrdenTrabajo } from '../../types/mantenimiento';
 
-let intervencionesResult: {
-  data: Intervencion[] | undefined;
-  isPending: boolean;
-  isError: boolean;
-} = { data: [], isPending: false, isError: false };
+let intervencionesResult: { data: Intervencion[] | undefined; isPending: boolean; isError: boolean } = {
+  data: [],
+  isPending: false,
+  isError: false,
+};
 
 vi.mock('../../hooks/useIntervenciones', () => ({
   useIntervenciones: () => intervencionesResult,
   useFinishTask: () => ({ mutate: vi.fn(), isPending: false }),
-  useCrearIntervencion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-vi.mock('../../hooks/useInventory', () => ({
-  useItems: () => ({ data: [], isPending: false }),
-}));
+vi.mock('../../hooks/useInventory', () => ({ useItems: () => ({ data: [], isPending: false }) }));
 
 import { ViewOperationModal } from './ViewOperationModal';
 
@@ -78,9 +75,7 @@ describe('ViewOperationModal', () => {
     expect(screen.getByText('Engrase de bujes y cambio de 6 pernos.')).toBeTruthy();
     expect(screen.getByText('3220 h')).toBeTruthy();
     // La foto del cierre, servida con URL firmada.
-    expect(screen.getByAltText('Foto del cierre').getAttribute('src')).toBe(
-      'https://signed.example/cierre.jpg',
-    );
+    expect(screen.getByAltText('Foto del cierre').getAttribute('src')).toBe('https://signed.example/cierre.jpg');
   });
 
   it('sin intervenciones muestra el vacío amable', () => {

@@ -68,6 +68,18 @@ describe('MantencionAnteriorModal', () => {
     expect(guardar().disabled).toBe(false);
   });
 
+  it('la lectura sobre el tope de 1.000.000 es un error; mayor que la última conocida, solo un aviso', async () => {
+    abrir({ lecturaObligatoria: true, equipo: { ...EQUIPO, currentHourmeter: 1200 } });
+    await elegirFecha(10);
+    escribir('titulo', 'Cambio de aceite');
+    escribir('lectura', '1000001');
+    expect(screen.getByText('La lectura no puede superar 1.000.000.')).toBeTruthy();
+    expect(guardar().disabled).toBe(true);
+    escribir('lectura', '1250');
+    expect(screen.getByText(/mayor que la última lectura conocida del equipo \(1\.200 h\)/)).toBeTruthy();
+    expect(guardar().disabled).toBe(false);
+  });
+
   it('con pauta: no guarda hasta elegir la mantención y la lectura; envía el milestone y rellena el título', async () => {
     abrir({ pauta: PAUTA, lecturaObligatoria: true });
     await elegirFecha(10);

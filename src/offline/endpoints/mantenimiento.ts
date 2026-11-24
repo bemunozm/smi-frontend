@@ -1,5 +1,6 @@
 import {
   ActividadSchema,
+  FinalizarOrdenResultSchema,
   IntervencionSchema,
   OrdenTrabajoSchema,
   TareaSchema,
@@ -9,6 +10,8 @@ import {
   type CreateIntervencionInput,
   type CreateOrdenInput,
   type CreateUmbralInput,
+  type FinalizarOrdenInput,
+  type FinalizarOrdenResult,
   type Intervencion,
   type OrdenFields,
   type OrdenTrabajo,
@@ -82,11 +85,12 @@ export interface MantenimientoEndpointMap {
     };
     result: Tarea;
   };
-  'intervencion.create': {
-    params: { ordenId: string };
-    body: WithId<CreateIntervencionInput>;
-    result: Intervencion;
-  };
+  'intervencion.create': { params: { ordenId: string }; body: WithId<CreateIntervencionInput>; result: Intervencion };
+  /** «Finalizar tarea»: intervención de cierre + COMPLETADA + estado del equipo
+   * + ancla de la mantención en UNA transacción del backend. El `id` del body
+   * es el de la intervención (idempotencia); la foto viaja como archivo y el
+   * replay la inyecta como `fotoKey`. */
+  'orden.finalizar': { params: { id: string }; body: FinalizarOrdenInput; result: FinalizarOrdenResult };
   'actividad.create': { params: NoParams; body: WithId<CreateActividadInput>; result: Actividad };
   'actividad.update': { params: { id: string }; body: Partial<UpdateActividadInput>; result: Actividad };
   'umbral.create': { params: NoParams; body: WithId<CreateUmbralInput>; result: Umbral };
@@ -105,11 +109,7 @@ export interface MantenimientoEndpointMap {
   /** Chequeo diario de un equipo, enviado entero al supervisor. Las fotos
    * de cada ítem viajan como archivos y el replay las pone en
    * `entries.i.photoKeys.j`. */
-  'dailyChecklist.submit': {
-    params: NoParams;
-    body: WithId<SubmitDailyChecklistInput>;
-    result: DailyChecklistDetail;
-  };
+  'dailyChecklist.submit': { params: NoParams; body: WithId<SubmitDailyChecklistInput>; result: DailyChecklistDetail };
   /** Corregir un chequeo rechazado y reenviarlo. Las fotos nuevas viajan
    * como archivos (`entries.i.photoKeys.j`); las conservadas, por su id. */
   'dailyChecklist.resubmit': {
@@ -118,17 +118,9 @@ export interface MantenimientoEndpointMap {
     result: DailyChecklistDetail;
   };
   /** «Asignar mantenciones» de un liviano (`PUT`, last-write-wins). */
-  'lightVehicleConfig.save': {
-    params: { equipmentId: string };
-    body: LightConfig;
-    result: LightConfigView;
-  };
+  'lightVehicleConfig.save': { params: { equipmentId: string }; body: LightConfig; result: LightConfigView };
   /** Módulo 3: el supervisor acepta (libera el equipo) o rechaza con comentario. */
-  'dailyChecklist.review': {
-    params: { id: string };
-    body: ReviewDailyChecklistInput;
-    result: DailyChecklistDetail;
-  };
+  'dailyChecklist.review': { params: { id: string }; body: ReviewDailyChecklistInput; result: DailyChecklistDetail };
 }
 
 export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
@@ -163,8 +155,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
   },
   'orden.toggleTarea': {
     method: 'PATCH',
-    path: (params) =>
-      `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
+    path: (params) => `/api/mantenimiento/ordenes/${param(params, 'ordenId')}/tareas/${param(params, 'tareaId')}`,
     failMessage: 'No se pudo actualizar la tarea.',
     parse: parseWith(TareaSchema),
     // `maintenancePlans`: completar una tarea preventiva escribe el registro
@@ -189,6 +180,25 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     creates: true,
     entity: (_params, body) => entityOf(intervencionEntity, bodyText(body, 'id')),
     parents: (params) => referencias(entityOf(ordenEntity, params.ordenId)),
+  },
+  'orden.finalizar': {
+    method: 'POST',
+    path: (params) => `/api/mantenimiento/ordenes/${param(params, 'id')}/finalizar`,
+    failMessage: 'No se pudo finalizar la operación.',
+    parse: parseWith(FinalizarOrdenResultSchema),
+    // Lo de la intervención y lo del cierre de la orden, juntos:
+    // 'inventory': descuenta stock real (salidas INTERVENTION).
+    // 'hallazgos': completar cierra el hallazgo ligado.
+    // 'equipment': la unidad queda Operativa/Inoperativa.
+    // 'maintenancePlans': una preventiva escribe el último cambio real (el ancla).
+    invalidate: ['intervenciones', 'ordenes', 'inventory', 'hallazgos', 'equipment', 'maintenancePlans'],
+    label: (params) => etiqueta('Cierre de orden de trabajo', cachedName('orden', params.id)),
+    notFoundIsDone: false,
+    // La foto del cierre viaja como archivo y el replay inyecta `fotoKey`.
+    carriesFiles: true,
+    // Actúa sobre la orden: se serializa con sus otras escrituras y, si su
+    // creación sigue en la cola, va detrás de ella.
+    entity: (params) => entityOf(ordenEntity, params.id),
   },
   'actividad.create': {
     method: 'POST',
@@ -301,8 +311,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     failMessage: 'No se pudo guardar la validación del chequeo.',
     parse: parseWith(DailyChecklistDetailSchema),
     invalidate: ['dailyChecklists'],
-    label: (_params, body) =>
-      body.decision === 'ACCEPTED' ? 'Chequeo aceptado' : 'Chequeo rechazado',
+    label: (_params, body) => (body.decision === 'ACCEPTED' ? 'Chequeo aceptado' : 'Chequeo rechazado'),
     notFoundIsDone: false,
     carriesFiles: false,
     entity: (params) => entityOf(dailyChecklistEntity, params.id),

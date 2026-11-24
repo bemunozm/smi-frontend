@@ -516,6 +516,8 @@ export function PizarraMantenciones({
             id: anterior.equipmentId,
             internalCode: anterior.internalCode,
             controlUnit: anterior.unit === 'km' ? 'KM' : 'HOURS',
+            // La lectura actual de la fila: avisa si la registrada la supera.
+            ...(anterior.unit === 'km' ? { currentMileage: anterior.counter } : { currentHourmeter: anterior.counter }),
           }}
           isOpen
           // La pizarra siempre pide la lectura; con pauta, además, qué hito fue

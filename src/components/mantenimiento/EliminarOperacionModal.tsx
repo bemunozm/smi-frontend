@@ -3,11 +3,10 @@ import { Trash2 } from 'lucide-react';
 
 import { Boton, Campo, Input, ModalTerreno } from '../terreno/ui';
 import { useEliminarOrden } from '../../hooks/useOrdenes';
-import { parseDecimal } from '../../lib/decimal';
 import type { MaintenanceBoardRow } from '../../types/maintenance-board';
 import type { OrdenTrabajo } from '../../types/mantenimiento';
 import { lectura as fmtLectura, textoPendientes } from './pizarra/pizarra';
-import { registrableComoHecha } from './workshop';
+import { avisoLecturaMayor, leerLecturaOpcional, registrableComoHecha } from './workshop';
 
 function Dato({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -44,8 +43,13 @@ export function EliminarOperacionModal({
   // el sistema solo, así que se ofrece registrarlas como hechas.
   const dePauta = registrableComoHecha(orden);
   const unidad = fila?.unit ?? 'h';
-  const lecturaNum = parseDecimal(lectura);
-  const lecturaInvalida = lectura.trim() !== '' && (lecturaNum == null || lecturaNum < 0);
+  // En km, entero con separador de miles («264.582» = 264582 km); en horas,
+  // decimal. Mayor que la última lectura conocida: se avisa, no se bloquea.
+  const campoLectura = { unidad, actual: fila?.counter ?? null };
+  const lecturaLeida = leerLecturaOpcional(lectura, campoLectura);
+  const lecturaNum = 'valor' in lecturaLeida ? lecturaLeida.valor : undefined;
+  const errorLectura = 'error' in lecturaLeida ? lecturaLeida.error : undefined;
+  const lecturaInvalida = errorLectura != null;
   const hechas = orden.tareas.filter((t) => t.hecha).length;
   const pendientes = fila && fila.source !== 'SIN_PAUTA' ? textoPendientes(fila) : null;
   const atrasada = fila?.remaining != null && fila.remaining < 0;
@@ -93,7 +97,9 @@ export function EliminarOperacionModal({
                 data-testid="eliminar-datos"
               >
                 <Dato titulo="Mantención">{orden.origenDetalle?.replace(/^(Pauta|Livianos):\s*/, '') ?? '—'}</Dato>
-                <Dato titulo="Tareas hechas">{orden.tareas.length > 0 ? `${hechas} de ${orden.tareas.length}` : '—'}</Dato>
+                <Dato titulo="Tareas hechas">
+                  {orden.tareas.length > 0 ? `${hechas} de ${orden.tareas.length}` : '—'}
+                </Dato>
                 <Dato titulo={unidad === 'km' ? 'Km actual' : 'Horómetro actual'}>
                   {fila ? (fmtLectura(fila.counter, unidad) ?? 'Sin lectura') : '—'}
                 </Dato>
@@ -110,9 +116,15 @@ export function EliminarOperacionModal({
                   label="Lectura a la que se hizo (opcional)"
                   unidad={unidad}
                   hint="Vacío = la lectura actual del equipo."
-                  error={lecturaInvalida ? 'Escribe un número válido.' : undefined}
+                  aviso={avisoLecturaMayor(lecturaNum, campoLectura)}
+                  error={errorLectura}
                 >
-                  <Input numerico value={lectura} onChange={(e) => setLectura(e.target.value)} />
+                  <Input
+                    entero={unidad === 'km'}
+                    numerico={unidad === 'h'}
+                    value={lectura}
+                    onChange={(e) => setLectura(e.target.value)}
+                  />
                 </Campo>
                 <Boton
                   ancho

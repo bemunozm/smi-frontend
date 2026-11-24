@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { ENDPOINTS } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
-import { MOVEMENT_ACTIONS, WRITE_ROLES, canCloseShiftCardFromFleet, canOpenPath, canWrite, canWriteAny } from './permissions';
+import {
+  MOVEMENT_ACTIONS,
+  WRITE_ROLES,
+  canCloseShiftCardFromFleet,
+  canOpenPath,
+  canWrite,
+  canWriteAny,
+} from './permissions';
 
 const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
 
@@ -37,6 +44,7 @@ describe('WRITE_ROLES', () => {
     ['maintenancePlan.save', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['lightVehicleConfig.save', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['intervencion.create', [ADMIN, MANTENEDOR, SECRETARIA]],
+    ['orden.finalizar', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['umbral.create', [ADMIN]],
     ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA]],
   ])('%s la hacen %j', (accion, roles) => {

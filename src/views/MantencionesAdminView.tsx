@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Card,
+  FieldError,
   Label,
   ListBox,
   Modal,
@@ -19,8 +20,13 @@ import { ArrowLeft, SquareKanban, Table2 } from 'lucide-react';
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 
 import { PizarraMantenciones } from '../components/mantenimiento/pizarra/PizarraMantenciones';
-import { errorLecturaMantencion, lecturaMantencion, type EquipmentRef } from '../components/mantenimiento/workshop';
-import { DecimalField } from '../components/DecimalField';
+import {
+  avisoLecturaMantencion,
+  avisoLecturaMayor,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from '../components/mantenimiento/workshop';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -30,7 +36,6 @@ import { useItems } from '../hooks/useInventory';
 import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL_1 } from '../lib/dashboard-format';
-import { parseDecimal } from '../lib/decimal';
 import { ESTADO_OT_LABELS, PRIORIDAD_OT_OPTIONS, estadoOTChipColor } from '../config/mantenimiento-colors';
 import type { EquipmentStatus } from '../types/equipment';
 import type { OrdenTrabajo, PrioridadOT, Tarea } from '../types/mantenimiento';
@@ -284,9 +289,11 @@ function DetalleMantencionModal({
  * administrador: a veces el mantenedor se olvida). Registra «qué se hizo» como
  * intervención SIN insumos —el stock lo descuenta el taller— y pasa la orden a
  * COMPLETADA con el estado en que queda el equipo, obligatorio igual que en
- * «Finalizar tarea» (`useFinishTask`, por la cola). Si es PREVENTIVA pide
- * además la lectura al momento de la mantención (prellenada con la actual del
- * equipo): desde ahí el backend cuenta el próximo cambio.
+ * «Finalizar tarea» (`useFinishTask`: una sola escritura atómica por la cola).
+ * Si es PREVENTIVA pide además la lectura al momento de la mantención
+ * (prellenada con la actual del equipo; si la supera, solo se avisa): desde ahí el
+ * backend cuenta el próximo cambio. En km la lectura es entera y el punto es de
+ * miles («264.582» = 264582 km); en horas, decimal.
  */
 function FinalizarMantencionModal({
   orden,
@@ -302,10 +309,22 @@ function FinalizarMantencionModal({
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
   const esPreventiva = orden.tipo === 'PREVENTIVA';
   const campoLectura = lecturaMantencion(orden.equipoId, equipos);
-  // `NaN` = vacía (la lectura actual del equipo no se conoce): hay que escribirla.
-  const [lectura, setLectura] = useState(() => parseDecimal(campoLectura.inicial) ?? Number.NaN);
+  // El texto tal cual se escribe, leído según la unidad: en km, entero con
+  // separador de miles; en horas, decimal. `''` si la lectura actual del
+  // equipo no se conoce: hay que escribirla.
+  const [lecturaTexto, setLecturaTexto] = useState(campoLectura.inicial);
   const [lecturaTocada, setLecturaTocada] = useState(false);
-  const errorLectura = esPreventiva ? errorLecturaMantencion(lectura) : null;
+  const lecturaLeida = leerLecturaMantencion(lecturaTexto, campoLectura);
+  const errorLectura = esPreventiva && 'error' in lecturaLeida ? lecturaLeida.error : null;
+  // Con texto, el error se ve siempre (si no, el botón queda apagado sin
+  // motivo a la vista); vacío, recién después de tocarlo.
+  const verErrorLectura = errorLectura != null && (lecturaTocada || lecturaTexto.trim() !== '');
+  // Avisos que no bloquean: «1.500» h se lee 1,5 y una lectura mayor que la
+  // última conocida (la lista de Flota puede estar atrasada; decide el backend).
+  const avisosLectura = [
+    avisoLecturaMantencion(lecturaTexto, campoLectura.unidad),
+    'valor' in lecturaLeida ? avisoLecturaMayor(lecturaLeida.valor, campoLectura) : null,
+  ];
   const valido = detalle.trim().length >= 3 && equipoFinal !== '' && errorLectura == null;
 
   const guardar = () => {
@@ -315,7 +334,7 @@ function FinalizarMantencionModal({
         orden,
         intervencion: { tipo: orden.tipo, detalle: detalle.trim() },
         equipmentStatus: equipoFinal,
-        ...(esPreventiva ? { lecturaMantencion: lectura } : {}),
+        ...(esPreventiva && 'valor' in lecturaLeida ? { lecturaMantencion: lecturaLeida.valor } : {}),
       },
       { onSuccess: onClose },
     );
@@ -346,19 +365,32 @@ function FinalizarMantencionModal({
               </TextField>
               {esPreventiva ? (
                 <div className="flex flex-col gap-1">
-                  <DecimalField
-                    errorMessage={lecturaTocada ? errorLectura : null}
-                    isInvalid={lecturaTocada && errorLectura != null}
-                    label={campoLectura.label}
-                    onChange={(valor) => {
-                      setLectura(valor);
+                  <TextField
+                    fullWidth
+                    isInvalid={verErrorLectura}
+                    name="lectura"
+                    onChange={(texto) => {
+                      setLecturaTexto(texto);
                       setLecturaTocada(true);
                     }}
-                    value={lectura}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Desde esta lectura se cuenta la próxima mantención.
-                  </p>
+                    value={lecturaTexto}
+                  >
+                    <Label>{campoLectura.label}</Label>
+                    <Input
+                      inputMode={campoLectura.unidad === 'km' ? 'numeric' : 'decimal'}
+                      onFocus={(event) => event.currentTarget.select()}
+                      placeholder=" "
+                    />
+                    {verErrorLectura ? <FieldError>{errorLectura}</FieldError> : null}
+                    {avisosLectura.map((aviso, i) =>
+                      aviso ? (
+                        <p className="m-0 text-xs text-warning-soft-foreground" key={i} role="status">
+                          {aviso}
+                        </p>
+                      ) : null,
+                    )}
+                  </TextField>
+                  <p className="text-xs text-muted-foreground">Desde esta lectura se cuenta la próxima mantención.</p>
                 </div>
               ) : null}
               <div className="flex flex-col gap-2">
@@ -492,7 +524,7 @@ export function MantencionesAdminView() {
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const { can, role } = usePermissions();
   const puedeEditar = can('orden.update');
-  const puedeFinalizar = puedeEditar && can('intervencion.create');
+  const puedeFinalizar = can('orden.finalizar');
   const [editando, setEditando] = useState<OrdenTrabajo | null>(null);
   const [finalizando, setFinalizando] = useState<OrdenTrabajo | null>(null);
   const estadoFiltro = params.get('estado') === 'sin-terminar' ? 'sin-terminar' : 'completadas';

@@ -22,17 +22,15 @@ import {
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useFinishTask } from '../../hooks/useIntervenciones';
 import { TIPO_OT_LABELS } from '../../config/mantenimiento-colors';
-import {
-  CreateIntervencionSchema,
-  type CreateIntervencionInput,
-  type OrdenTrabajo,
-} from '../../types/mantenimiento';
+import { CreateIntervencionSchema, type CreateIntervencionInput, type OrdenTrabajo } from '../../types/mantenimiento';
 import type { EquipmentStatus } from '../../types/equipment';
 import { parseDecimal } from '../../lib/decimal';
 import {
   equipmentLabel,
   lecturaMantencion,
+  avisoLecturaMayor,
   leerLecturaMantencion,
+  parseLecturaMantencion,
   type EquipmentRef,
 } from './workshop';
 import { useInsumosFaena } from './insumos-faena';
@@ -47,13 +45,15 @@ function sinHorometro(values: CreateIntervencionInput): CreateIntervencionInput 
 /**
  * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
  * insumos (SelectorBuscable con grupos y stock en Faena) + horómetro.
- * Registra la intervención y pasa la OT a COMPLETADA (`useFinishTask`, por la
- * cola). La bodega es SIEMPRE la de faena — no hay opción de cambiarla.
+ * Registra la intervención y pasa la OT a COMPLETADA en una sola escritura
+ * atómica (`useFinishTask`, por la cola): si algo se rechaza, no queda nada a
+ * medias. La bodega es SIEMPRE la de faena — no hay opción de cambiarla.
  *
  * En una OT PREVENTIVA el horómetro de cierre pasa a ser la lectura al momento
  * de la mantención: obligatoria, prellenada con la lectura actual del equipo,
  * y viaja también como `lecturaMantencion` (desde ahí el backend cuenta el
  * próximo cambio). Un solo campo — dos pedirían el mismo número dos veces.
+ * En km se lee como entero («264.582» = 264582 km); en horas, como decimal.
  */
 export function FinishTaskModal({
   orden,
@@ -77,6 +77,8 @@ export function FinishTaskModal({
   const [errorEquipoFinal, setErrorEquipoFinal] = useState<string | null>(null);
   const esPreventiva = orden.tipo === 'PREVENTIVA';
   const campoLectura = lecturaMantencion(orden.equipoId, equipment);
+  // Fuera de una preventiva el campo es el horómetro de cierre: siempre en horas.
+  const unidadCampo = esPreventiva ? campoLectura.unidad : 'h';
   // El texto tal cual se escribe: guardar solo el número perdía la coma a
   // mitad de escribir un decimal («1250,» se volvía «1250»).
   const [horometroTexto, setHorometroTexto] = useState('');
@@ -118,7 +120,7 @@ export function FinishTaskModal({
     // sin pisar lo que ya se haya escrito antes de cancelar.
     if (esPreventiva && horometroTexto === '' && campoLectura.inicial !== '') {
       setHorometroTexto(campoLectura.inicial);
-      setValue('horometro', parseDecimal(campoLectura.inicial) ?? undefined);
+      setValue('horometro', parseLecturaMantencion(campoLectura.inicial, unidadCampo) ?? undefined);
     }
     setAbierto(true);
   };
@@ -127,7 +129,7 @@ export function FinishTaskModal({
     let lectura: number | undefined;
     let errorLectura: string | null = null;
     if (esPreventiva) {
-      const leida = leerLecturaMantencion(horometroTexto);
+      const leida = leerLecturaMantencion(horometroTexto, campoLectura);
       if ('error' in leida) errorLectura = leida.error;
       else lectura = leida.valor;
     } else if (horometroTexto.trim() !== '' && parseDecimal(horometroTexto) == null) {
@@ -141,8 +143,7 @@ export function FinishTaskModal({
         orden,
         // En km la lectura NO va como horómetro de la intervención (columna en
         // horas): solo viaja como `lecturaMantencion`.
-        intervencion:
-          esPreventiva && campoLectura.unidad === 'km' ? sinHorometro(values) : values,
+        intervencion: esPreventiva && campoLectura.unidad === 'km' ? sinHorometro(values) : values,
         foto: foto.file,
         equipmentStatus: equipoFinal,
         ...(lectura != null ? { lecturaMantencion: lectura } : {}),
@@ -179,12 +180,8 @@ export function FinishTaskModal({
           onSubmit={(e) => void handleSubmit(onSubmit)(e)}
         >
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-[#fafbfc] px-3.5 py-3">
-            <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>
-              {TIPO_OT_LABELS[orden.tipo]}
-            </Chip>
-            <span className="tabular text-xs text-muted-foreground">
-              {equipmentLabel(orden.equipoId, equipment)}
-            </span>
+            <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>{TIPO_OT_LABELS[orden.tipo]}</Chip>
+            <span className="tabular text-xs text-muted-foreground">{equipmentLabel(orden.equipoId, equipment)}</span>
             <strong className="min-w-0 flex-1 truncate text-sm">{orden.titulo}</strong>
             <ChipEstado color="#1a3a9c">En proceso</ChipEstado>
           </div>
@@ -233,9 +230,7 @@ export function FinishTaskModal({
             </div>
 
             {fields.length === 0 ? (
-              <p className="m-0 text-sm text-muted-foreground">
-                Sin insumos registrados en esta operación.
-              </p>
+              <p className="m-0 text-sm text-muted-foreground">Sin insumos registrados en esta operación.</p>
             ) : (
               <>
                 {faenaBranch ? (
@@ -247,8 +242,8 @@ export function FinishTaskModal({
                     className="rounded-2xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm text-[var(--danger-soft-foreground)]"
                     role="alert"
                   >
-                    No hay una bodega de faena activa en Inventario — no se puede descontar stock.
-                    Crea o reactiva la bodega "Faena" antes de cerrar con insumos.
+                    No hay una bodega de faena activa en Inventario — no se puede descontar stock. Crea o reactiva la
+                    bodega "Faena" antes de cerrar con insumos.
                   </div>
                 )}
 
@@ -280,11 +275,7 @@ export function FinishTaskModal({
                         <Campo error={errors.insumos?.[index]?.cantidad?.message} label="Cantidad">
                           <Input
                             entero
-                            value={
-                              field.value === undefined || Number.isNaN(field.value)
-                                ? ''
-                                : String(field.value)
-                            }
+                            value={field.value === undefined || Number.isNaN(field.value) ? '' : String(field.value)}
                             onBlur={field.onBlur}
                             onChange={(e) => {
                               const texto = e.target.value;
@@ -313,6 +304,13 @@ export function FinishTaskModal({
               name="horometro"
               render={({ field }) => (
                 <Campo
+                  // Mayor que la última lectura conocida: se avisa, no se
+                  // bloquea (la lista de Flota puede estar atrasada).
+                  aviso={
+                    esPreventiva
+                      ? avisoLecturaMayor(parseLecturaMantencion(horometroTexto, unidadCampo), campoLectura)
+                      : undefined
+                  }
                   error={errors.horometro?.message}
                   hint={
                     esPreventiva
@@ -323,15 +321,18 @@ export function FinishTaskModal({
                   requerido={esPreventiva}
                   unidad={esPreventiva ? campoLectura.unidad : 'h'}
                 >
+                  {/* En km, entero (el punto es de miles, sin aviso); en horas,
+                      decimal con el aviso de «1.500» que da `Campo`. */}
                   <Input
-                    numerico
+                    entero={unidadCampo === 'km'}
+                    numerico={unidadCampo === 'h'}
                     value={horometroTexto}
                     onBlur={field.onBlur}
                     onChange={(e) => {
                       const texto = e.target.value;
                       setHorometroTexto(texto);
-                      // Coma o punto decimal; lo ilegible se rechaza al guardar.
-                      field.onChange(parseDecimal(texto) ?? undefined);
+                      // Lo ilegible se rechaza al guardar.
+                      field.onChange(parseLecturaMantencion(texto, unidadCampo) ?? undefined);
                     }}
                   />
                 </Campo>
@@ -360,9 +361,9 @@ export function FinishTaskModal({
           <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--success-soft)] px-3.5 py-3 text-[13px] leading-5 text-[var(--success-soft-foreground)]">
             <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Al guardar <strong>se descuenta el stock</strong> de la bodega elegida (movimientos
-              trazables en Inventario) y la operación pasa a <strong>Finalizado</strong>, en solo
-              lectura. Si un insumo no alcanza, no se guarda nada.
+              Al guardar <strong>se descuenta el stock</strong> de la bodega elegida (movimientos trazables en
+              Inventario) y la operación pasa a <strong>Finalizado</strong>, en solo lectura. Si un insumo no alcanza,
+              no se guarda nada.
             </span>
           </div>
 
