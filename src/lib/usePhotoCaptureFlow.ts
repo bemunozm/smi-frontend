@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from '@heroui/react';
 
 import { fuelReadingOcr, type FuelReadingOcrResult } from '../api/OcrAPI';
+import { copiarAMemoria } from './copiar-a-memoria';
 import { FOTO_ILEGIBLE, readCaptureDate } from './photo-reading';
 
 /** Mismo shape que `OcrAPI.ts#SIN_SUGERENCIA` (privado ahí) — "no hay
@@ -58,13 +59,6 @@ export type SugerenciaOcr = FuelReadingOcrResult & {
   /** `true` cuando `value` superó `OCR_AUTOFILL_MAX_LITROS`: no se autollenó. */
   fueraDeRango?: boolean;
 };
-
-/** Copia el contenido de la foto a un `File` en memoria, que ya no depende
- * del permiso sobre el archivo original de la galería. */
-async function copiarAMemoria(file: File): Promise<File> {
-  const bytes = await file.arrayBuffer();
-  return new File([bytes], file.name, { type: file.type, lastModified: file.lastModified });
-}
 
 export interface UsePhotoCaptureFlowResult {
   file: File | null;

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, onTestFinished, vi } from 'vitest';
+import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
@@ -54,6 +54,7 @@ vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
   PizarraMantenciones: () => <div data-testid="pizarra" />,
 }));
 
+import { mockObjectUrls } from '../test/object-url';
 import { setViewport } from '../test/viewport';
 import { MantencionesAdminView } from './MantencionesAdminView';
 
@@ -265,6 +266,7 @@ describe('MantencionesAdminView', () => {
         equipmentStatus: 'OUT_OF_SERVICE',
         // Preventiva: la lectura de la mantención, prellenada con el horómetro actual.
         lecturaMantencion: 512,
+        fotos: [],
       },
       expect.anything(),
     );
@@ -341,6 +343,63 @@ describe('MantencionesAdminView', () => {
       expect.objectContaining({ lecturaMantencion: 264582 }),
       expect.anything(),
     );
+  });
+
+  it('«Marcar como finalizada» admite varias fotos (hasta 10) y las envía con el cierre', async () => {
+    const restaurarUrls = mockObjectUrls();
+    onTestFinished(restaurarUrls);
+    ordenesHook.mockReturnValue(
+      ok([orden({ id: 'ot5', equipoId: 'e2', titulo: 'Frenos', tipo: 'CORRECTIVA', estado: 'EN_PROCESO' })]),
+    );
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot5`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    const fotos = [1, 2, 3].map((i) => new File([String(i)], `f${i}.jpg`, { type: 'image/jpeg' }));
+    const galeria = dialog.querySelector('input[type="file"][multiple]');
+    if (!galeria) throw new Error('input de galería no encontrado');
+    // Panel: botón HeroUI «Agregar fotos», sin cámara directa.
+    expect(within(dialog).getByRole('button', { name: /Agregar fotos/ })).toBeTruthy();
+    expect(dialog.querySelector('input[capture]')).toBeNull();
+    fireEvent.change(galeria, { target: { files: fotos } });
+    await waitFor(() => expect(within(dialog).getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(3));
+
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Pastillas nuevas' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+
+    expect(finalizarMock).toHaveBeenCalledTimes(1);
+    const enviadas = (finalizarMock.mock.calls[0]![0] as { fotos: File[] }).fotos;
+    expect(enviadas.map((f) => f.name)).toEqual(['f1.jpg', 'f2.jpg', 'f3.jpg']);
+  });
+
+  it('el detalle muestra todas las fotos del cierre como miniaturas', () => {
+    const fotoUrls = ['https://s/1.jpg', 'https://s/2.jpg', 'https://s/3.jpg'];
+    intervencionesHook.mockReturnValue({
+      data: [
+        {
+          id: 'int1',
+          ordenId: 'ot1',
+          tipo: 'PREVENTIVA',
+          detalle: 'Cierre de la pauta de 500 h',
+          horasHombre: 0,
+          horometro: null,
+          fotoUrl: fotoUrls[0],
+          fotoUrls,
+          soloLectura: false,
+          realizadaPor: 'Marco Díaz',
+          insumos: [],
+          fecha: '2026-10-15T14:30:00.000Z',
+        },
+      ],
+      isPending: false,
+    });
+    renderView();
+    fireEvent.click(screen.getByTestId('mantencion-fila-ot1'));
+
+    const dialog = screen.getByRole('dialog');
+    const miniaturas = within(dialog).getAllByRole('img', { name: /Foto del cierre/ });
+    expect(miniaturas.map((img) => img.getAttribute('src'))).toEqual(fotoUrls);
   });
 
   it('finalizar una CORRECTIVA no pide ni envía la lectura de la mantención', () => {
@@ -465,12 +524,32 @@ describe('orden por columna del registro', () => {
       tarea({ id: `t${i}`, hecha: i < n, hechaPorNombre: i < n ? quien : null, hechaAt: i < n ? hechaAt : null }),
     );
   const DESORDENADA: OrdenTrabajo[] = [
-    orden({ id: 'm1', equipoId: 'e1', titulo: 'Zeta', tipo: 'PREVENTIVA', tareas: hechas(1, 'Marco Díaz', '2026-10-15T14:00:00.000Z') }),
-    orden({ id: 'm2', equipoId: 'e2', titulo: 'Alfa', tipo: 'CORRECTIVA', tareas: hechas(2, 'Pedro Pérez', '2026-10-18T10:00:00.000Z', 3) }),
-    orden({ id: 'm3', equipoId: 'e3', titulo: 'Mike', tipo: 'PREVENTIVA', tareas: hechas(10, 'Ana Rojas', '2026-10-16T10:00:00.000Z') }),
+    orden({
+      id: 'm1',
+      equipoId: 'e1',
+      titulo: 'Zeta',
+      tipo: 'PREVENTIVA',
+      tareas: hechas(1, 'Marco Díaz', '2026-10-15T14:00:00.000Z'),
+    }),
+    orden({
+      id: 'm2',
+      equipoId: 'e2',
+      titulo: 'Alfa',
+      tipo: 'CORRECTIVA',
+      tareas: hechas(2, 'Pedro Pérez', '2026-10-18T10:00:00.000Z', 3),
+    }),
+    orden({
+      id: 'm3',
+      equipoId: 'e3',
+      titulo: 'Mike',
+      tipo: 'PREVENTIVA',
+      tareas: hechas(10, 'Ana Rojas', '2026-10-16T10:00:00.000Z'),
+    }),
   ];
   const ids = () =>
-    screen.getAllByTestId(/mantencion-fila-/).map((f) => f.getAttribute('data-testid')?.replace('mantencion-fila-', ''));
+    screen
+      .getAllByTestId(/mantencion-fila-/)
+      .map((f) => f.getAttribute('data-testid')?.replace('mantencion-fila-', ''));
 
   beforeEach(() => {
     setViewport(true);

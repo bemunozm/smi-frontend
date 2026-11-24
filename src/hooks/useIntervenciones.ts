@@ -26,7 +26,7 @@ export function useIntervenciones(ordenId: string | undefined) {
 /**
  * "Finalizar tarea" del taller (y «Marcar como finalizada» del panel): UNA
  * sola escritura por la cola (`orden.finalizar`) con la intervención de cierre
- * (qué se hizo + insumos + horómetro + foto), el estado en que queda el equipo
+ * (qué se hizo + insumos + horómetro + fotos), el estado en que queda el equipo
  * y, en una preventiva, la lectura de la mantención. El backend lo guarda todo
  * en una transacción: o la orden queda COMPLETADA con su cierre y su stock
  * descontado, o no cambia nada. Antes eran dos escrituras encadenadas y un
@@ -41,15 +41,17 @@ export function useFinishTask() {
     mutationFn: ({
       orden,
       intervencion,
-      foto,
+      fotos,
       equipmentStatus,
       lecturaMantencion,
     }: {
       orden: OrdenTrabajo;
       intervencion: CreateIntervencionInput;
-      /** Foto de lo realizado/ocupado: viaja como archivo del write y el
-       * replay la sube e inyecta su `fotoKey` (patrón combustible). */
-      foto?: File | null;
+      /** Fotos de lo realizado/ocupado (hasta 10): cada una viaja como
+       * archivo del write y el replay la sube e inyecta su key en
+       * `fotoKeys.<i>`, en orden. Si una no alcanza a subir, el cierre NO se
+       * manda: espera (con las ya subidas guardadas) hasta que suban todas. */
+      fotos?: readonly File[];
       /** Cómo queda la unidad (Operativo/Inoperativo) — el backend la aplica
        * en la misma transacción del cierre. */
       equipmentStatus?: EquipmentStatus;
@@ -65,7 +67,7 @@ export function useFinishTask() {
           ...(equipmentStatus ? { equipmentStatus } : {}),
           ...(lecturaMantencion != null ? { lecturaMantencion } : {}),
         },
-        ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
+        ...(fotos && fotos.length > 0 ? { files: fotos.map((file, i) => ({ field: `fotoKeys.${i}`, file })) } : {}),
       }),
     onSuccess: (resultado, { orden }) => {
       if (resultado.status === 'queued') {

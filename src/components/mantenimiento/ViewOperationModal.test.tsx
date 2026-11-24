@@ -63,6 +63,7 @@ describe('ViewOperationModal', () => {
           horasHombre: 3,
           horometro: 3220,
           fotoUrl: 'https://signed.example/cierre.jpg',
+          fotoUrls: ['https://signed.example/cierre.jpg'],
           soloLectura: true,
           insumos: [],
           fecha: '2026-10-05T11:05:00.000Z',
@@ -76,6 +77,57 @@ describe('ViewOperationModal', () => {
     expect(screen.getByText('3220 h')).toBeTruthy();
     // La foto del cierre, servida con URL firmada.
     expect(screen.getByAltText('Foto del cierre').getAttribute('src')).toBe('https://signed.example/cierre.jpg');
+  });
+
+  it('con varias fotos del cierre las muestra todas, en orden', () => {
+    const fotoUrls = ['https://signed.example/1.jpg', 'https://signed.example/2.jpg', 'https://signed.example/3.jpg'];
+    intervencionesResult = {
+      data: [
+        {
+          id: 'int-1',
+          ordenId: 'ot-3',
+          tipo: 'PREVENTIVA',
+          detalle: 'Engrase',
+          horasHombre: 0,
+          horometro: null,
+          fotoUrl: fotoUrls[0],
+          fotoUrls,
+          soloLectura: true,
+          insumos: [],
+          fecha: '2026-10-05T11:05:00.000Z',
+        },
+      ],
+      isPending: false,
+      isError: false,
+    };
+    openModal();
+    const fotos = screen.getAllByRole('img', { name: /Foto del cierre/ });
+    expect(fotos.map((img) => img.getAttribute('src'))).toEqual(fotoUrls);
+  });
+
+  it('una intervención de un backend viejo (solo fotoUrl, sin fotoUrls) sigue mostrando su foto', () => {
+    intervencionesResult = {
+      data: [
+        {
+          id: 'int-1',
+          ordenId: 'ot-3',
+          tipo: 'PREVENTIVA',
+          detalle: 'Engrase',
+          horasHombre: 0,
+          horometro: null,
+          fotoUrl: 'https://signed.example/vieja.jpg',
+          fotoUrls: [],
+          soloLectura: true,
+          insumos: [],
+          fecha: '2026-10-05T11:05:00.000Z',
+        },
+      ],
+      isPending: false,
+      isError: false,
+    };
+    openModal();
+    const fotos = screen.getAllByRole('img', { name: /Foto del cierre/ });
+    expect(fotos.map((img) => img.getAttribute('src'))).toEqual(['https://signed.example/vieja.jpg']);
   });
 
   it('sin intervenciones muestra el vacío amable', () => {

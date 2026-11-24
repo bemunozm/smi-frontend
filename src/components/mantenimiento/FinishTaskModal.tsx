@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { Check, CircleCheck, Plus, Trash2 } from 'lucide-react';
 
-import { FotoRespaldoField } from '../flota/FotoRespaldoField';
+import { FotosField } from '../terreno/FotosField';
 import {
   Automatico,
   Automaticos,
@@ -19,7 +19,6 @@ import {
   SelectorBuscable,
   Textarea,
 } from '../terreno/ui';
-import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useFinishTask } from '../../hooks/useIntervenciones';
 import { TIPO_OT_LABELS } from '../../config/mantenimiento-colors';
 import { CreateIntervencionSchema, type CreateIntervencionInput, type OrdenTrabajo } from '../../types/mantenimiento';
@@ -43,7 +42,7 @@ function sinHorometro(values: CreateIntervencionInput): CreateIntervencionInput 
 }
 
 /**
- * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + foto de respaldo +
+ * Pop-up "Finalizar tarea" — kit de Terreno: qué se hizo + fotos (hasta 10) +
  * insumos (SelectorBuscable con grupos y stock en Faena) + horómetro.
  * Registra la intervención y pasa la OT a COMPLETADA en una sola escritura
  * atómica (`useFinishTask`, por la cola): si algo se rechaza, no queda nada a
@@ -65,8 +64,11 @@ export function FinishTaskModal({
   const finishTask = useFinishTask();
   const { faenaBranch, opcionesInsumo } = useInsumosFaena();
   const [abierto, setAbierto] = useState(false);
-  // Misma captura de foto que los hallazgos de Terreno (EXIF, sin OCR).
-  const foto = usePhotoCaptureFlow(() => {}, { ocr: false });
+  // Fotos de lo realizado: opcionales, hasta 10 (mismo campo que el chequeo
+  // diario). Se copian a memoria al elegirlas (Android puede quitar el permiso
+  // sobre la galería antes de guardar) y cada una avisa si su fecha EXIF no es
+  // reciente.
+  const [fotos, setFotos] = useState<File[]>([]);
   // Cómo queda la unidad al cerrar. Parte SIN elección y es OBLIGATORIA: acá
   // se hacen operaciones para sacar piezas que dejan el equipo inoperativo, y
   // ese dato no puede quedar marcado "operativo" por un default descuidado.
@@ -144,7 +146,7 @@ export function FinishTaskModal({
         // En km la lectura NO va como horómetro de la intervención (columna en
         // horas): solo viaja como `lecturaMantencion`.
         intervencion: esPreventiva && campoLectura.unidad === 'km' ? sinHorometro(values) : values,
-        foto: foto.file,
+        fotos,
         equipmentStatus: equipoFinal,
         ...(lectura != null ? { lecturaMantencion: lectura } : {}),
       },
@@ -152,7 +154,7 @@ export function FinishTaskModal({
         onSuccess: () => {
           reset();
           setHorometroTexto('');
-          foto.handleClearPhoto();
+          setFotos([]);
           setEquipoFinal('');
           setErrorEquipoFinal(null);
           cerrar();
@@ -203,17 +205,13 @@ export function FinishTaskModal({
               )}
             />
 
-            <FotoRespaldoField
-              captureDate={foto.captureDate}
-              file={foto.file}
-              guia="Encuadra el trabajo terminado o los insumos ocupados, con luz."
-              isReadingPhoto={foto.isReadingPhoto}
-              requerida={false}
-              staleQuestion="¿Es la foto del trabajo recién terminado?"
-              subtitle="Respalda el trabajo o los insumos ocupados."
-              title="Foto de lo realizado"
-              onClear={foto.handleClearPhoto}
-              onSelect={(file) => void foto.handleSelectPhoto(file)}
+            <FotosField
+              copiarAMemoria
+              descripcion="Opcional. Respalda el trabajo terminado o los insumos ocupados, hasta 10 fotos."
+              fotos={fotos}
+              label="Fotos de lo realizado"
+              preguntaAntigua="¿Es del trabajo recién terminado?"
+              onChange={setFotos}
             />
 
             <div className="flex items-center justify-between gap-2">

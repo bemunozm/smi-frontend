@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import type { OrdenTrabajo } from '../../types/mantenimiento';
@@ -61,6 +61,7 @@ vi.mock('../../hooks/useInventory', () => ({
   }),
 }));
 
+import { mockObjectUrls } from '../../test/object-url';
 import { FinishTaskModal } from './FinishTaskModal';
 import type { EquipmentRef } from './workshop';
 
@@ -186,9 +187,70 @@ describe('FinishTaskModal', () => {
     expect(mutateMock).not.toHaveBeenCalled();
   });
 
-  it('ofrece adjuntar la foto de lo realizado', () => {
+  it('ofrece adjuntar fotos de lo realizado (opcionales)', () => {
     openModal();
-    expect(screen.getByText(/Foto de lo realizado/)).toBeTruthy();
+    expect(screen.getByText(/Fotos de lo realizado/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Agregar foto/ })).toBeTruthy();
+  });
+
+  describe('varias fotos', () => {
+    let restaurarUrls: () => void;
+    beforeEach(() => {
+      restaurarUrls = mockObjectUrls();
+    });
+    afterEach(() => restaurarUrls());
+
+    const fotosEnPantalla = () => screen.queryAllByRole('img', { name: /^Foto \d+$/ });
+
+    const foto = (n: number) => new File([String(n)], `foto-${n}.jpg`, { type: 'image/jpeg' });
+
+    /** Elegir de la galería (varias a la vez). */
+    function elegirDeGaleria(fotos: File[]) {
+      const galeria = document.querySelector('input[type="file"][multiple]');
+      if (!galeria) throw new Error('input de galería no encontrado');
+      fireEvent.change(galeria, { target: { files: fotos } });
+    }
+
+    it('se agregan de a varias, hasta 10: en la décima desaparece «Agregar otra foto»', async () => {
+      openModal();
+      // Se copian a memoria al elegirlas (asíncrono).
+      elegirDeGaleria([foto(1), foto(2), foto(3)]);
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(3));
+      expect(screen.getByRole('button', { name: /Agregar otra foto/ })).toBeTruthy();
+
+      // De más se recortan al tope: nunca entra la 11.
+      elegirDeGaleria(Array.from({ length: 8 }, (_, i) => foto(i + 4)));
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(10));
+      expect(screen.queryByRole('button', { name: /Agregar otra foto/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Elegir de la galería/ })).toBeNull();
+    });
+
+    it('cada una se quita con su botón y el cierre viaja con las que quedan, en orden', async () => {
+      const fotos = [foto(1), foto(2), foto(3)];
+      openModal(CORRECTIVA);
+      fillDetalle();
+      elegirDeGaleria(fotos);
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(3));
+      fireEvent.click(screen.getByRole('button', { name: 'Quitar foto 2' }));
+      expect(fotosEnPantalla()).toHaveLength(2);
+
+      elegirComoQueda();
+      submitForm();
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      // Viajan las copias en memoria, no las referencias de la galería.
+      const enviadas = (mutateMock.mock.calls[0][0] as { fotos: File[] }).fotos;
+      expect(enviadas.map((f) => f.name)).toEqual(['foto-1.jpg', 'foto-3.jpg']);
+      expect(enviadas[0]).not.toBe(fotos[0]);
+    });
+
+    it('sin fotos, el cierre viaja sin fotos', async () => {
+      openModal(CORRECTIVA);
+      fillDetalle();
+      elegirComoQueda();
+      submitForm();
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      expect((mutateMock.mock.calls[0][0] as { fotos?: File[] }).fotos).toEqual([]);
+    });
   });
 
   it('no pide horas hombre — el cierre es qué se hizo, foto e insumos', () => {

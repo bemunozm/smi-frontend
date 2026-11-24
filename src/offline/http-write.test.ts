@@ -127,7 +127,11 @@ describe('replay de httpWrite', () => {
   it('X-Expected viaja codificado: los valores base con texto no Latin-1 no rompen el header', async () => {
     sendWriteMock.mockResolvedValueOnce(card());
     const base = 'Falla — “hidráulico” 🚜 revisar';
-    await putHttpOp({ id: 'w-1', body: { observaciones: 'ok' }, expected: { observaciones: base, adBlueLiters: null } });
+    await putHttpOp({
+      id: 'w-1',
+      body: { observaciones: 'ok' },
+      expected: { observaciones: base, adBlueLiters: null },
+    });
 
     await syncAndSettle();
 
@@ -157,11 +161,13 @@ describe('replay de httpWrite', () => {
     expect(queryClient.getQueryData<ShiftCardResponse[]>(SHIFT_CARDS_MINE_KEY)?.[0]?.valorFinal).toBe(140);
     const keys = invalidate.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
     // Las del registro (`shiftCards`, `equipment`) y la extra que pidió la operación.
-    expect(keys).toEqual(expect.arrayContaining([
-      JSON.stringify(['shift-cards']),
-      JSON.stringify(['equipment']),
-      JSON.stringify(['horometro']),
-    ]));
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        JSON.stringify(['shift-cards']),
+        JSON.stringify(['equipment']),
+        JSON.stringify(['horometro']),
+      ]),
+    );
   });
 
   it('un cuerpo de respuesta que no calza no traba la operación: se borra igual', async () => {
@@ -175,7 +181,13 @@ describe('replay de httpWrite', () => {
 
   describe('archivos', () => {
     async function putFileOp(overrides: Partial<HttpWriteOp> = {}) {
-      await db.blobs.put({ id: 'b-1', data: new Uint8Array([1, 2, 3]).buffer, mime: 'application/pdf', name: 'doc.pdf', createdAt: 1 });
+      await db.blobs.put({
+        id: 'b-1',
+        data: new Uint8Array([1, 2, 3]).buffer,
+        mime: 'application/pdf',
+        name: 'doc.pdf',
+        createdAt: 1,
+      });
       await putHttpOp({
         id: 'w-1',
         status: 'pending_upload',
@@ -246,6 +258,112 @@ describe('replay de httpWrite', () => {
       expect((await put('w-1'))?.status).toBe('needs_attention');
     });
 
+    it('cierre con varias fotos: si una no sube, NO se manda el cierre sin ella; el reintento sube solo las que faltan', async () => {
+      for (const n of [1, 2, 3]) {
+        await db.blobs.put({
+          id: `b-${n}`,
+          data: new Uint8Array([n]).buffer,
+          mime: 'image/jpeg',
+          name: `f${n}.jpg`,
+          createdAt: 1,
+        });
+      }
+      await putHttpOp({
+        id: 'w-1',
+        status: 'pending_upload',
+        endpoint: 'orden.finalizar',
+        params: { id: 'ot-1' },
+        body: { id: 'int-1', tipo: 'CORRECTIVA', detalle: 'Cambio de pastillas' },
+        expected: undefined,
+        files: [1, 2, 3].map((n) => ({ field: `fotoKeys.${n - 1}`, blobId: `b-${n}` })),
+      });
+      // La 1 sube; la 2 se corta por falta de señal.
+      uploadFileMock
+        .mockResolvedValueOnce({ key: 'tmp/u1/f1.jpg', url: 'u' })
+        .mockRejectedValueOnce(new DomainError('Sin señal'));
+
+      await syncAndSettle();
+
+      expect(sendWriteMock).not.toHaveBeenCalled();
+      expect(await put('w-1')).toMatchObject({
+        status: 'pending_upload',
+        files: [
+          { field: 'fotoKeys.0', blobId: 'b-1', tmpKey: 'tmp/u1/f1.jpg' },
+          { field: 'fotoKeys.1', blobId: 'b-2' },
+          { field: 'fotoKeys.2', blobId: 'b-3' },
+        ],
+      });
+      expect(await db.blobs.count()).toBe(3);
+
+      uploadFileMock
+        .mockResolvedValueOnce({ key: 'tmp/u1/f2.jpg', url: 'u' })
+        .mockResolvedValueOnce({ key: 'tmp/u1/f3.jpg', url: 'u' });
+      sendWriteMock.mockResolvedValueOnce(undefined);
+      useEngineStoreForTests.setState({ lastSyncAt: null });
+      await syncAndSettle();
+
+      // La 1 no se vuelve a subir y el cierre lleva las 3, en orden.
+      expect(uploadFileMock).toHaveBeenCalledTimes(4);
+      expect(sendWriteMock).toHaveBeenCalledTimes(1);
+      expect(sendWriteMock.mock.calls[0]![0].body).toEqual({
+        id: 'int-1',
+        tipo: 'CORRECTIVA',
+        detalle: 'Cambio de pastillas',
+        fotoKeys: ['tmp/u1/f1.jpg', 'tmp/u1/f2.jpg', 'tmp/u1/f3.jpg'],
+      });
+      expect(await put('w-1')).toBeUndefined();
+      expect(await db.blobs.count()).toBe(0);
+    });
+
+    it('cierre con varias fotos y TMP_KEY_EXPIRED (no dice cuál): resube TODAS una vez y manda las keys nuevas', async () => {
+      for (const n of [1, 2, 3]) {
+        await db.blobs.put({
+          id: `b-${n}`,
+          data: new Uint8Array([n]).buffer,
+          mime: 'image/jpeg',
+          name: `f${n}.jpg`,
+          createdAt: 1,
+        });
+      }
+      // Las tres ya habían subido en un intento anterior (hace más de un día).
+      await putHttpOp({
+        id: 'w-1',
+        status: 'pending_claim',
+        endpoint: 'orden.finalizar',
+        params: { id: 'ot-1' },
+        body: { id: 'int-1', tipo: 'CORRECTIVA', detalle: 'Cambio de pastillas' },
+        expected: undefined,
+        files: [1, 2, 3].map((n) => ({
+          field: `fotoKeys.${n - 1}`,
+          blobId: `b-${n}`,
+          tmpKey: `tmp/u1/vieja-${n}.jpg`,
+        })),
+      });
+      uploadFileMock
+        .mockResolvedValueOnce({ key: 'tmp/u1/nueva-1.jpg', url: 'u' })
+        .mockResolvedValueOnce({ key: 'tmp/u1/nueva-2.jpg', url: 'u' })
+        .mockResolvedValueOnce({ key: 'tmp/u1/nueva-3.jpg', url: 'u' });
+      sendWriteMock
+        .mockRejectedValueOnce(new DomainError('expiró', { code: 'TMP_KEY_EXPIRED', status: 400 }))
+        .mockResolvedValueOnce(undefined);
+
+      await syncAndSettle();
+
+      expect(sendWriteMock.mock.calls[0]![0].body.fotoKeys).toEqual([
+        'tmp/u1/vieja-1.jpg',
+        'tmp/u1/vieja-2.jpg',
+        'tmp/u1/vieja-3.jpg',
+      ]);
+      expect(uploadFileMock).toHaveBeenCalledTimes(3);
+      expect(sendWriteMock).toHaveBeenCalledTimes(2);
+      expect(sendWriteMock.mock.calls[1]![0].body.fotoKeys).toEqual([
+        'tmp/u1/nueva-1.jpg',
+        'tmp/u1/nueva-2.jpg',
+        'tmp/u1/nueva-3.jpg',
+      ]);
+      expect(await put('w-1')).toBeUndefined();
+    });
+
     it('si falta el blob guardado, es un error de negocio (no se reintenta solo)', async () => {
       await putHttpOp({ id: 'w-1', status: 'pending_upload', files: [{ field: 'fileKey', blobId: 'no-existe' }] });
 
@@ -301,7 +419,12 @@ describe('STALE_UPDATE', () => {
   it('una edición posterior de la MISMA entidad espera mientras la anterior está en atención', async () => {
     sendWriteMock.mockRejectedValueOnce(new DomainError('stale', { code: 'STALE_UPDATE', status: 409 }));
     await putHttpOp({ id: 'w-1', entityKey: 'shift-card:card-1' });
-    await putHttpOp({ id: 'w-2', entityKey: 'shift-card:card-1', body: { fuelLiters: 5 }, expected: { fuelLiters: 4 } });
+    await putHttpOp({
+      id: 'w-2',
+      entityKey: 'shift-card:card-1',
+      body: { fuelLiters: 5 },
+      expected: { fuelLiters: 4 },
+    });
 
     await syncAndSettle();
 
@@ -332,7 +455,7 @@ describe('STALE_UPDATE', () => {
 
     await overwriteOp('w-1', 'otro');
 
-    expect((await put('w-1') as HttpWriteOp).expected).toEqual({ valorFinal: 130 });
+    expect(((await put('w-1')) as HttpWriteOp).expected).toEqual({ valorFinal: 130 });
   });
 });
 
@@ -430,13 +553,36 @@ describe('orden FIFO por seq', () => {
   it('encolar en el mismo milisegundo, o con el reloj hacia atrás, igual da seq estrictamente creciente', async () => {
     const reloj = vi.spyOn(Date, 'now');
     reloj.mockReturnValue(5_000);
-    await enqueueOpenCard('u1', { id: 'a', equipoId: 'e', operatorId: 'o', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' });
-    await enqueueExitReport('u1', { id: 'b', shiftDate: '2026-09-24', shiftType: 'DIURNO', cardIds: ['a'], requestedAt: 't' });
+    await enqueueOpenCard('u1', {
+      id: 'a',
+      equipoId: 'e',
+      operatorId: 'o',
+      valorInicial: 1,
+      shiftDate: '2026-09-24',
+      shiftType: 'DIURNO',
+      capturedAt: 't',
+    });
+    await enqueueExitReport('u1', {
+      id: 'b',
+      shiftDate: '2026-09-24',
+      shiftType: 'DIURNO',
+      cardIds: ['a'],
+      requestedAt: 't',
+    });
     reloj.mockReturnValue(1_000); // el reloj retrocede
     await enqueueCreateTrabajoExtra('u1', {
-      id: 'c', equipoId: 'e', operatorId: 'o', faena: 'Patillo', turno: 'DIURNO', horometroInicial: 1, horometroFinal: 2,
+      id: 'c',
+      equipoId: 'e',
+      operatorId: 'o',
+      faena: 'Patillo',
+      turno: 'DIURNO',
+      horometroInicial: 1,
+      horometroFinal: 2,
       detalle: [{ actividad: 'OTRO', lugar: 'VARIADO', plantas: [], horas: 1 }],
-      otraActividad: 'x', descripcion: 'abc', reportNumero: '4509', capturedAt: 't',
+      otraActividad: 'x',
+      descripcion: 'abc',
+      reportNumero: '4509',
+      capturedAt: 't',
     });
     reloj.mockRestore();
 
@@ -502,7 +648,15 @@ describe('enqueueHttpWrite', () => {
     vi.spyOn(db, 'transaction').mockRejectedValueOnce(cuota);
 
     await expect(
-      enqueueOpenCard('u1', { id: 'a', equipoId: 'e', operatorId: 'o', valorInicial: 1, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' }),
+      enqueueOpenCard('u1', {
+        id: 'a',
+        equipoId: 'e',
+        operatorId: 'o',
+        valorInicial: 1,
+        shiftDate: '2026-09-24',
+        shiftType: 'DIURNO',
+        capturedAt: 't',
+      }),
     ).rejects.toMatchObject({ code: 'STORAGE_FULL', message: expect.stringContaining('espacio') });
     expect(await db.outbox.count()).toBe(0);
   });
@@ -510,20 +664,36 @@ describe('enqueueHttpWrite', () => {
 
 describe('editar la operación encolada de una tarjeta', () => {
   const abrir = () =>
-    enqueueOpenCard('u1', { id: 'card-9', equipoId: 'e', operatorId: 'op-1', valorInicial: 100, shiftDate: '2026-09-24', shiftType: 'DIURNO', capturedAt: 't' });
+    enqueueOpenCard('u1', {
+      id: 'card-9',
+      equipoId: 'e',
+      operatorId: 'op-1',
+      valorInicial: 100,
+      shiftDate: '2026-09-24',
+      shiftType: 'DIURNO',
+      capturedAt: 't',
+    });
 
   it('patchOpenCardOp cambia operador y horómetro inicial de la apertura pendiente', async () => {
     await abrir();
 
     expect(await patchOpenCardOp('card-9', 'u1', { operatorId: 'op-2', valorInicial: 105 })).toBe('updated');
 
-    expect((await db.outbox.get('card-9') as OutboxOp & { payload: { operatorId: string; valorInicial: number; equipoId: string } }).payload)
-      .toMatchObject({ operatorId: 'op-2', valorInicial: 105, equipoId: 'e' });
+    expect(
+      (
+        (await db.outbox.get('card-9')) as OutboxOp & {
+          payload: { operatorId: string; valorInicial: number; equipoId: string };
+        }
+      ).payload,
+    ).toMatchObject({ operatorId: 'op-2', valorInicial: 105, equipoId: 'e' });
   });
 
   it('una operación rechazada (needs_attention) vuelve a pendiente al editarla', async () => {
     await abrir();
-    await db.outbox.update('card-9', { status: 'needs_attention', lastError: { message: 'x', code: 'OPERATOR_INACTIVE' } });
+    await db.outbox.update('card-9', {
+      status: 'needs_attention',
+      lastError: { message: 'x', code: 'OPERATOR_INACTIVE' },
+    });
 
     await patchOpenCardOp('card-9', 'u1', { operatorId: 'op-3' });
 
@@ -535,7 +705,9 @@ describe('editar la operación encolada de una tarjeta', () => {
     await db.outbox.update('card-9', { status: 'syncing' });
 
     expect(await patchOpenCardOp('card-9', 'u1', { valorInicial: 1 })).toBe('maybe-sent');
-    expect((await db.outbox.get('card-9') as OutboxOp & { payload: { valorInicial: number } }).payload.valorInicial).toBe(100);
+    expect(
+      ((await db.outbox.get('card-9')) as OutboxOp & { payload: { valorInicial: number } }).payload.valorInicial,
+    ).toBe(100);
   });
 
   describe('una operación que pudo haber llegado al servidor (dispatched)', () => {
@@ -568,7 +740,11 @@ describe('editar la operación encolada de una tarjeta', () => {
       for (const status of [409, 400]) {
         await db.outbox.clear();
         await abrir();
-        await db.outbox.update('card-9', { status: 'needs_attention', dispatched: true, lastError: { message: 'x', status } });
+        await db.outbox.update('card-9', {
+          status: 'needs_attention',
+          dispatched: true,
+          lastError: { message: 'x', status },
+        });
 
         expect(await patchOpenCardOp('card-9', 'u1', { valorInicial: 7 })).toBe('updated');
 
@@ -607,16 +783,34 @@ describe('editar la operación encolada de una tarjeta', () => {
 
   it('patchCloseCardOp cambia el cierre pendiente: litros, AdBlue y observaciones', async () => {
     await db.outbox.put({
-      id: 'close-9', type: 'closeCard', v: 1, userId: 'u1', status: 'pending_upload', attempts: 0, photoId: 'close-9',
-      seq: 1, createdAt: 1, updatedAt: 1, dependsOn: ['card-9'],
-      payload: { cardId: 'card-9', input: { closeClientId: 'close-9', valorFinal: 130, fuelLiters: 20, capturedAt: 't' } },
+      id: 'close-9',
+      type: 'closeCard',
+      v: 1,
+      userId: 'u1',
+      status: 'pending_upload',
+      attempts: 0,
+      photoId: 'close-9',
+      seq: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      dependsOn: ['card-9'],
+      payload: {
+        cardId: 'card-9',
+        input: { closeClientId: 'close-9', valorFinal: 130, fuelLiters: 20, capturedAt: 't' },
+      },
     });
 
-    expect(await patchCloseCardOp('close-9', 'u1', { fuelLiters: 25, adBlue: true, adBlueLiters: 12, observaciones: 'ok' })).toBe('updated');
+    expect(
+      await patchCloseCardOp('close-9', 'u1', { fuelLiters: 25, adBlue: true, adBlueLiters: 12, observaciones: 'ok' }),
+    ).toBe('updated');
 
     const op = await db.outbox.get('close-9');
     expect(op?.type === 'closeCard' && op.payload.input).toMatchObject({
-      valorFinal: 130, fuelLiters: 25, adBlue: true, adBlueLiters: 12, observaciones: 'ok',
+      valorFinal: 130,
+      fuelLiters: 25,
+      adBlue: true,
+      adBlueLiters: 12,
+      observaciones: 'ok',
     });
     expect(op?.status).toBe('pending_upload');
   });
@@ -650,7 +844,10 @@ describe('submitWrite', () => {
     sendWriteMock.mockImplementationOnce(async () => {
       const [propia] = await db.outbox.toArray();
       await putHttpOp({ id: 'hija', seq: propia!.seq + 1000, dependsOn: [propia!.id], params: { id: 'card-2' } });
-      throw new DomainError('Horómetro final 90 por debajo del inicial 100', { code: 'HOURMETER_BELOW_INITIAL', status: 400 });
+      throw new DomainError('Horómetro final 90 por debajo del inicial 100', {
+        code: 'HOURMETER_BELOW_INITIAL',
+        status: 400,
+      });
     });
     setCurrentUser('u1');
     const promesa = submitWrite('shiftCard.edit', edicion, { waitMs: 3000 });

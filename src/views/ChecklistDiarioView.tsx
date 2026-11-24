@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Camera, Check, ChevronDown, ImageUp, Minus, Pencil, Plus, Thermometer, Trash2, Wrench, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, Minus, Pencil, Plus, Thermometer, Trash2, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import {
@@ -8,16 +8,15 @@ import {
   armarEnvio,
   cuentaFotos,
   entradasDesdeDetalle,
-  esFotoGuardada,
   noEsNumero,
   numero,
   pendientesItem,
   soloNumero,
   motivosBloqueo,
   type EntradaForm,
-  type FotoForm,
 } from '../components/checklist/checklist-form';
 import { useInsumosFaena } from '../components/mantenimiento/insumos-faena';
+import { FotosField } from '../components/terreno/FotosField';
 import {
   Boton,
   Campo,
@@ -46,20 +45,11 @@ import { opcionesEquipoPorClase } from '../lib/equipos-por-clase';
 import { usePermissions } from '../hooks/usePermissions';
 import { fmtNum } from '../lib/format';
 import { fechaCorta, fromDateOnly, toDateOnly } from '../lib/turno';
-import {
-  pideFoto,
-  type ChecklistItem,
-  type DailyChecklistSummary,
-  type EntryStatus,
-} from '../types/daily-checklist';
+import { pideFoto, type ChecklistItem, type DailyChecklistSummary, type EntryStatus } from '../types/daily-checklist';
 
 const RECHAZADOS = ['REJECTED'] as const;
 
-const COLOR_ESTADO: Record<EntryStatus, string> = {
-  MAINTAINED: '#1d4ed8',
-  CHECKED: '#15803d',
-  NOT_CHECKED: '#6b7280',
-};
+const COLOR_ESTADO: Record<EntryStatus, string> = { MAINTAINED: '#1d4ed8', CHECKED: '#15803d', NOT_CHECKED: '#6b7280' };
 
 /**
  * Los tres estados con texto corto e ícono: «Se hizo mantención» partía el
@@ -172,10 +162,7 @@ export function ChecklistDiarioView() {
   const fotos = cuentaFotos(lista, entradas);
 
   const cambiar = (itemId: string, cambio: Partial<EntradaForm>) =>
-    setEntradas((prev) => ({
-      ...prev,
-      [itemId]: { ...(prev[itemId] ?? ENTRADA_VACIA), ...cambio },
-    }));
+    setEntradas((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? ENTRADA_VACIA), ...cambio } }));
 
   // Acordeón: una fila abierta a la vez. Sin tocar nada, la primera.
   const [abierto, setAbierto] = useState<string | null | undefined>(undefined);
@@ -486,7 +473,11 @@ function FilaChecklist({
           <span className="flex items-center gap-1.5 text-[15.5px] leading-tight font-semibold">
             {item.name}
             {item.requiresPhoto && (
-              <Camera aria-label="crítico, foto si hay mantención" className="h-4 w-4 shrink-0 text-[var(--danger)]" role="img" />
+              <Camera
+                aria-label="crítico, foto si hay mantención"
+                className="h-4 w-4 shrink-0 text-[var(--danger)]"
+                role="img"
+              />
             )}
             {item.requiresTemperature && (
               <Thermometer aria-label="pide temperatura" className="h-4 w-4 shrink-0 text-[#0369a1]" role="img" />
@@ -586,7 +577,12 @@ function FilaChecklist({
                     onChange={(e) => onChange({ note: e.target.value })}
                   />
                 </Campo>
-                <Fotos
+                <FotosField
+                  descripcion={
+                    pideFoto(item, entrada.status)
+                      ? 'Obligatoria: es la mantención de un ítem crítico. Puedes agregar varias.'
+                      : undefined
+                  }
                   fotos={entrada.photos}
                   requerida={pideFoto(item, entrada.status)}
                   onChange={(photos) => onChange({ photos })}
@@ -639,16 +635,7 @@ function Insumos({
             className={noEsNumero(s.cantidad) ? 'border-[var(--danger)]' : ''}
             value={s.cantidad}
             onChange={(e) =>
-              onChange(
-                supplies.map((x, j) =>
-                  j === i
-                    ? {
-                        ...x,
-                        cantidad: soloNumero(e.target.value),
-                      }
-                    : x,
-                ),
-              )
+              onChange(supplies.map((x, j) => (j === i ? { ...x, cantidad: soloNumero(e.target.value) } : x)))
             }
           />
           <button
@@ -661,102 +648,6 @@ function Insumos({
           </button>
         </div>
       ))}
-    </div>
-  );
-}
-
-/** Varias fotos por ítem, de a una y SIEMPRE con la cámara (`capture`), igual
- * que los flujos del supervisor: la foto es evidencia del momento, no un
- * archivo de la galería. */
-function Fotos({
-  fotos,
-  requerida,
-  onChange,
-}: {
-  fotos: FotoForm[];
-  requerida: boolean;
-  onChange: (f: FotoForm[]) => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const galeria = useRef<HTMLInputElement>(null);
-  // Las ya guardadas (al corregir) traen su URL; las nuevas, una local.
-  const urls = useMemo(() => fotos.map((f) => (esFotoGuardada(f) ? f.url : URL.createObjectURL(f))), [fotos]);
-  useEffect(() => () => urls.forEach((u, i) => fotos[i] instanceof File && URL.revokeObjectURL(u)), [urls, fotos]);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <Label requerido={requerida}>Fotos</Label>
-      {/* Fotos a todo el ancho: una por fila en el teléfono, dos desde `sm`. */}
-      {urls.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {urls.map((url, i) => (
-            <div key={url} className="relative overflow-hidden rounded-2xl border border-border">
-              <img alt={`Foto ${i + 1}`} className="h-44 w-full object-cover" src={url} />
-              <button
-                aria-label={`Quitar foto ${i + 1}`}
-                className="absolute top-2 right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/75"
-                type="button"
-                onClick={() => onChange(fotos.filter((_, j) => j !== i))}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {/* El mismo recuadro que «Foto del hallazgo» y «Foto del surtidor». */}
-      {fotos.length < 10 && (
-        <button
-          className="flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-(--accent)/40 bg-(--accent-soft)/60 px-4 py-8 text-center transition hover:bg-(--accent-soft)"
-          type="button"
-          onClick={() => input.current?.click()}
-        >
-          <Camera className="h-6 w-6 text-(--accent)" aria-hidden />
-          <span className="text-[15px] font-semibold text-(--accent-soft-foreground)">
-            {fotos.length === 0 ? 'Agregar foto' : 'Agregar otra foto'}
-          </span>
-          <span className="text-[13px] text-(--muted)">
-            {requerida
-              ? 'Obligatoria: es la mantención de un ítem crítico. Puedes agregar varias.'
-              : 'Opcional. Puedes agregar varias, hasta 10.'}
-          </span>
-        </button>
-      )}
-      {fotos.length < 10 && (
-        <button
-          className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 self-center rounded-xl px-3 text-sm font-semibold text-(--accent) transition hover:bg-(--accent-soft)"
-          type="button"
-          onClick={() => galeria.current?.click()}
-        >
-          <ImageUp aria-hidden className="h-4 w-4" />
-          Elegir de la galería
-        </button>
-      )}
-      <input
-        ref={input}
-        hidden
-        accept="image/*"
-        capture="environment"
-        type="file"
-        onChange={(e) => {
-          const nuevas = Array.from(e.target.files ?? []);
-          if (nuevas.length) onChange([...fotos, ...nuevas].slice(0, 10));
-          e.target.value = '';
-        }}
-      />
-      {/* Sin `capture`: la galería, para fotos ya sacadas (se pueden elegir varias). */}
-      <input
-        ref={galeria}
-        hidden
-        multiple
-        accept="image/*"
-        type="file"
-        onChange={(e) => {
-          const nuevas = Array.from(e.target.files ?? []);
-          if (nuevas.length) onChange([...fotos, ...nuevas].slice(0, 10));
-          e.target.value = '';
-        }}
-      />
     </div>
   );
 }
