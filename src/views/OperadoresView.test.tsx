@@ -230,3 +230,63 @@ describe('OperadoresView', () => {
     });
   });
 });
+
+describe('OperadoresView — orden', () => {
+  const operador = (id: string, name: string, rut: string | null, isActive: boolean, sup?: string): Operator => ({
+    id,
+    name,
+    rut,
+    isActive,
+    supervisorHabitualNombre: sup ?? null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const NOMBRES = ['Ana Díaz', 'Berta Mora', 'Carlos Paz'];
+  const filas = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((fila) => NOMBRES.find((n) => (fila.textContent ?? '').startsWith(n)) ?? '?');
+
+  beforeEach(() => {
+    mockOperators = [
+      operador('a', 'Ana Díaz', null, true, 'Zoila Vega'),
+      operador('b', 'Berta Mora', '9.999.999-9', false, 'Ana Soto'),
+      operador('c', 'Carlos Paz', '1.111.111-1', true),
+    ];
+  });
+
+  it('por defecto respeta el orden del servidor (por nombre) y la bajada lo dice', () => {
+    renderView();
+    expect(filas()).toEqual(['Ana Díaz', 'Berta Mora', 'Carlos Paz']);
+    expect(screen.getByTestId('orden-operadores').textContent).toMatch(/Ordenado por nombre/);
+  });
+
+  it('tocar «Nombre» ordena y volver a tocarlo invierte', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Nombre/ }));
+    expect(filas()).toEqual(['Ana Díaz', 'Berta Mora', 'Carlos Paz']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Nombre/ }));
+    expect(filas()).toEqual(['Carlos Paz', 'Berta Mora', 'Ana Díaz']);
+  });
+
+  it('el RUT y el supervisor dejan los vacíos al final, también al invertir', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /RUT/ }));
+    expect(filas()).toEqual(['Carlos Paz', 'Berta Mora', 'Ana Díaz']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /RUT/ }));
+    expect(filas()).toEqual(['Berta Mora', 'Carlos Paz', 'Ana Díaz']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Supervisor habitual/ }));
+    expect(filas()).toEqual(['Berta Mora', 'Ana Díaz', 'Carlos Paz']);
+  });
+
+  it('el estado pone primero a los activos; el selector de las tarjetas comparte el estado', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Estado/ }));
+    expect(filas()).toEqual(['Ana Díaz', 'Carlos Paz', 'Berta Mora']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'nombre' } });
+    expect(filas()).toEqual(['Ana Díaz', 'Berta Mora', 'Carlos Paz']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(filas()).toEqual(['Carlos Paz', 'Berta Mora', 'Ana Díaz']);
+  });
+});

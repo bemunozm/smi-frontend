@@ -42,6 +42,7 @@ vi.mock('../hooks/usePastShiftSummary', () => ({
   },
 }));
 
+import { setViewport } from '../test/viewport';
 import { ReportesDiariosAdminView } from './ReportesDiariosAdminView';
 
 const reporte = (over: Partial<ReporteDiario> & Pick<ReporteDiario, 'id'>): ReporteDiario => ({
@@ -252,5 +253,97 @@ describe('ReportesDiariosAdminView', () => {
     fireEvent.click(screen.getByTestId('reporte-fila-r1'));
     expect(RESUMEN_HOOK).toHaveBeenLastCalledWith(null);
     expect(within(screen.getByRole('dialog')).queryByText('Operadores del turno')).toBeNull();
+  });
+});
+
+describe('orden por columna', () => {
+  const secciones = (internos: [number, number], caleta: [number, number], mineras: [number, number]) => [
+    { seccion: 'INTERNOS' as const, camiones: internos[0], vueltasPorCamion: internos[1] },
+    { seccion: 'MINA_CALETA' as const, camiones: caleta[0], vueltasPorCamion: caleta[1] },
+    { seccion: 'MINERAS' as const, camiones: mineras[0], vueltasPorCamion: mineras[1] },
+  ];
+  const DESORDENADA: ReporteDiario[] = [
+    reporte({
+      id: 'r1',
+      fecha: '2026-10-16T00:00:00.000Z',
+      supervisorNombre: 'Zoila',
+      observaciones: 'Turno sin novedades',
+      produccion: secciones([3, 10], [2, 5], [0, 0]),
+    }),
+    reporte({
+      id: 'r2',
+      fecha: '2026-10-16T00:00:00.000Z',
+      turno: 'NOCTURNO',
+      supervisorNombre: 'Ana',
+      produccion: secciones([1, 4], [0, 0], [5, 2]),
+    }),
+    reporte({
+      id: 'r3',
+      fecha: '2026-10-14T00:00:00.000Z',
+      supervisorNombre: 'Berta',
+      produccion: secciones([5, 10], [0, 0], [0, 0]),
+    }),
+  ];
+  const ids = () =>
+    screen.getAllByTestId(/reporte-fila-/).map((f) => f.getAttribute('data-testid')?.replace('reporte-fila-', ''));
+
+  beforeEach(() => listHook.mockReturnValue(ok(DESORDENADA)));
+  afterEach(() => setViewport(false));
+
+  it('por defecto, fecha del turno del más reciente al más antiguo (Nocturno después del Diurno en el tiempo)', () => {
+    render(<ReportesDiariosAdminView />);
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+    expect(screen.getByText(/Ordenado por fecha, del más reciente al más antiguo/)).toBeTruthy();
+    expect(screen.getByText(/Toca el título de una columna/)).toBeTruthy();
+  });
+
+  it('tocar el título de Fecha invierte el orden: Diurno antes que Nocturno', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fecha/ }));
+    expect(ids()).toEqual(['r3', 'r1', 'r2']);
+  });
+
+  it('el turno ordena Diurno primero y desempata por fecha', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Turno/ }));
+    expect(ids()).toEqual(['r3', 'r1', 'r2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Turno/ }));
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+  });
+
+  it('ordena por supervisor, vueltas por sección (numérico, vacíos al final) y total', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Supervisor/ }));
+    expect(ids()).toEqual(['r2', 'r3', 'r1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Internos/ }));
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Mina Caleta/ }));
+    expect(ids()).toEqual(['r1', 'r3', 'r2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Total vueltas/ }));
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+  });
+
+  it('observaciones deja los reportes sin texto al final', () => {
+    render(<ReportesDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Observaciones/ }));
+    expect(ids()[0]).toBe('r1');
+    fireEvent.click(screen.getByRole('columnheader', { name: /Observaciones/ }));
+    expect(ids()[0]).toBe('r1');
+  });
+
+  it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+    setViewport(false);
+    render(<ReportesDiariosAdminView />);
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'total' } });
+    expect(ids()).toEqual(['r3', 'r1', 'r2']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids()).toEqual(['r2', 'r1', 'r3']);
+  });
+
+  it('en escritorio no aparece el selector (la tabla ya tiene los títulos)', () => {
+    setViewport(true);
+    render(<ReportesDiariosAdminView />);
+    expect(screen.queryByTestId('orden-columna')).toBeNull();
   });
 });

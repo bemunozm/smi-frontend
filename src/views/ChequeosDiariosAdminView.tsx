@@ -8,9 +8,13 @@ import { CHECKLIST_ESTADO, contadorChecklist } from '../components/checklist/che
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { Segmented } from '../components/inventario/shared';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { TABLE_LAYOUT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useChecklistDetalle, useChecklistsDelPeriodo } from '../hooks/useDailyChecklists';
 import { fmtTime } from '../lib/format';
+import { describeSort, type SortMeta } from '../lib/sort-description';
+import { sortRows, toTimestamp, type SortColumn, type TableSort } from '../lib/table-sort';
 import { fechaCorta, fromDateOnly, toDateOnly } from '../lib/turno';
 import { CHECKLIST_STATUSES, type ChecklistStatus, type DailyChecklistSummary } from '../types/daily-checklist';
 
@@ -55,6 +59,44 @@ function etiquetaPeriodo(desde: string, hasta: string, hoy: string): string {
 /** Quién validó: solo si ya se decidió (un chequeo corregido y reenviado vuelve a «por validar»). */
 function quienValido(c: DailyChecklistSummary): string {
   return c.status !== 'SUBMITTED' && c.lastReview ? c.lastReview.reviewerName : '—';
+}
+
+/** Severidad del estado: lo que pide atención primero (por validar, rechazado, aceptado). */
+const ESTADO_ORDEN: Record<ChecklistStatus, number> = { SUBMITTED: 0, REJECTED: 1, ACCEPTED: 2 };
+
+/** Desempate: el envío más antiguo primero (en ascendente). */
+const porEnvio = (a: DailyChecklistSummary, b: DailyChecklistSummary): number =>
+  (toTimestamp(a.submittedAt) ?? 0) - (toTimestamp(b.submittedAt) ?? 0);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). */
+const COLUMNAS_ORDEN: Record<string, SortColumn<DailyChecklistSummary>> = {
+  fecha: { kind: 'date', value: (c) => c.date, tiebreak: porEnvio },
+  equipo: { kind: 'text', value: (c) => c.equipment.internalCode, tiebreak: porEnvio },
+  mantenedor: { kind: 'text', value: (c) => c.mechanicName, tiebreak: porEnvio },
+  hora: { kind: 'date', value: (c) => c.submittedAt },
+  contador: { kind: 'number', value: (c) => c.counter, tiebreak: porEnvio },
+  mantencion: { kind: 'number', value: (c) => c.maintained, tiebreak: porEnvio },
+  fotos: { kind: 'number', value: (c) => c.photos, tiebreak: porEnvio },
+  valido: { kind: 'text', value: (c) => (quienValido(c) === '—' ? null : quienValido(c)), tiebreak: porEnvio },
+  estado: { kind: 'number', value: (c) => ESTADO_ORDEN[c.status], tiebreak: porEnvio },
+};
+
+/** Por defecto: el envío más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'hora', direction: 'descending' };
+
+function opcionesOrden(conFecha: boolean): SortMeta[] {
+  const opciones: SortMeta[] = [
+    ...(conFecha ? [{ id: 'fecha', label: 'Fecha', reading: 'date' as const }] : []),
+    { id: 'equipo', label: 'Equipo', reading: 'text' },
+    { id: 'mantenedor', label: 'Mantenedor', reading: 'text' },
+    { id: 'hora', label: 'Hora', reading: 'date' },
+    { id: 'contador', label: 'Horómetro / km', reading: 'number' },
+    { id: 'mantencion', label: 'Con mantención', reading: 'number' },
+    { id: 'fotos', label: 'Fotos', reading: 'number' },
+    { id: 'valido', label: 'Validó', reading: 'text' },
+    { id: 'estado', label: 'Estado', reading: ['primero por validar', 'primero aceptado'] as const },
+  ];
+  return opciones;
 }
 
 function EstadoChip({ checklist: c }: { checklist: DailyChecklistSummary }) {
@@ -115,6 +157,15 @@ export function ChequeosDiariosAdminView() {
       ),
     [chequeos, estado, texto],
   );
+
+  // El orden se aplica DESPUÉS de los filtros. Sin rango no hay columna «Fecha»: se vuelve a la hora.
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+  const conFecha = desde !== to;
+  const ordenVigente = useMemo<TableSort>(
+    () => (!conFecha && orden.column === 'fecha' ? { ...orden, column: 'hora' } : orden),
+    [conFecha, orden],
+  );
+  const ordenados = useMemo(() => sortRows(visibles, ordenVigente, COLUMNAS_ORDEN), [visibles, ordenVigente]);
 
   const irADia = (dia: string) => {
     if (!esFechaValida(dia)) return;
@@ -287,7 +338,8 @@ export function ChequeosDiariosAdminView() {
         <Card.Header>
           <Card.Title>Chequeos {periodo === 'hoy' ? 'de hoy' : periodo}</Card.Title>
           <Card.Description>
-            Del más reciente al más antiguo. Toca un chequeo para ver lo que declaró el mantenedor.
+            {describeSort(ordenVigente, opcionesOrden(conFecha))} Toca el título de una columna para cambiar el orden y un chequeo para ver
+            lo que declaró el mantenedor.
           </Card.Description>
         </Card.Header>
         <Card.Content>
@@ -332,10 +384,19 @@ export function ChequeosDiariosAdminView() {
           ) : null}
 
           {!isPending && !isError && visibles.length > 0 && esTabla ? (
-            <TablaChequeos chequeos={visibles} conFecha={desde !== to} onAbrir={setAbierto} />
+            <TablaChequeos
+              chequeos={ordenados}
+              conFecha={conFecha}
+              onAbrir={setAbierto}
+              onOrden={setOrden}
+              orden={ordenVigente}
+            />
           ) : null}
           {!isPending && !isError && visibles.length > 0 && !esTabla ? (
-            <TarjetasChequeos chequeos={visibles} conFecha={desde !== to} onAbrir={setAbierto} />
+            <>
+              <SortControl onChange={setOrden} options={opcionesOrden(conFecha)} sort={ordenVigente} />
+              <TarjetasChequeos chequeos={ordenados} conFecha={conFecha} onAbrir={setAbierto} />
+            </>
           ) : null}
         </Card.Content>
       </Card>
@@ -392,21 +453,52 @@ interface ListaProps {
   onAbrir: (id: string) => void;
 }
 
-function TablaChequeos({ chequeos, conFecha, onAbrir }: ListaProps) {
+function TablaChequeos({
+  chequeos,
+  conFecha,
+  onAbrir,
+  orden,
+  onOrden,
+}: ListaProps & { orden: TableSort; onOrden: (orden: TableSort) => void }) {
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Chequeos diarios" className="min-w-full">
+        <Table.Content
+          aria-label="Chequeos diarios"
+          className="min-w-full"
+          onSortChange={(d) => onOrden({ column: d.column, direction: d.direction })}
+          sortDescriptor={orden}
+        >
           <Table.Header>
-            {conFecha ? <Table.Column isRowHeader>Fecha</Table.Column> : null}
-            <Table.Column isRowHeader={!conFecha}>Equipo</Table.Column>
-            <Table.Column>Mantenedor</Table.Column>
-            <Table.Column>Hora</Table.Column>
-            <Table.Column className="text-right">Horómetro / km</Table.Column>
-            <Table.Column className="text-right">Con mantención</Table.Column>
-            <Table.Column className="text-right">Fotos</Table.Column>
-            <Table.Column>Validó</Table.Column>
-            <Table.Column>Estado</Table.Column>
+            {conFecha ? (
+              <Table.Column allowsSorting id="fecha" isRowHeader>
+                {sortableHeader('Fecha')}
+              </Table.Column>
+            ) : null}
+            <Table.Column allowsSorting id="equipo" isRowHeader={!conFecha}>
+              {sortableHeader('Equipo')}
+            </Table.Column>
+            <Table.Column allowsSorting id="mantenedor">
+              {sortableHeader('Mantenedor')}
+            </Table.Column>
+            <Table.Column allowsSorting id="hora">
+              {sortableHeader('Hora')}
+            </Table.Column>
+            <Table.Column allowsSorting className="text-right" id="contador">
+              {sortableHeader('Horómetro / km')}
+            </Table.Column>
+            <Table.Column allowsSorting className="text-right" id="mantencion">
+              {sortableHeader('Con mantención')}
+            </Table.Column>
+            <Table.Column allowsSorting className="text-right" id="fotos">
+              {sortableHeader('Fotos')}
+            </Table.Column>
+            <Table.Column allowsSorting id="valido">
+              {sortableHeader('Validó')}
+            </Table.Column>
+            <Table.Column allowsSorting id="estado">
+              {sortableHeader('Estado')}
+            </Table.Column>
           </Table.Header>
           <Table.Body>
             {chequeos.map((c) => (

@@ -123,11 +123,19 @@ describe('ActivityLogView', () => {
   it('un evento retroactivo muestra además el día al que corresponde, y el contador los suma', () => {
     render(<ActivityLogView />);
 
+    // En la tabla, el día al que corresponde el dato va en su propia columna.
+    const fila = screen.getByTestId('evento-fila-fuel:created:c1');
+    expect(within(fila).getByText('08/11/2026')).toBeTruthy();
+    expect(screen.getByTestId('total-retroactivos').textContent).toBe('1 retroactiva');
+    expect(within(screen.getByTestId('evento-fila-card:closed:rh1')).queryByText(/corresponde al/)).toBeNull();
+  });
+
+  it('en tarjetas, un evento retroactivo dice el día al que corresponde', () => {
+    mediaQueryHook.mockReturnValue(false);
+    render(<ActivityLogView />);
+
     const fila = screen.getByTestId('evento-fila-fuel:created:c1');
     expect(within(fila).getByText('corresponde al 08/11/2026')).toBeTruthy();
-    expect(screen.getByTestId('total-retroactivos').textContent).toBe('1 retroactiva');
-
-    // Los del mismo día no repiten la segunda fecha.
     expect(within(screen.getByTestId('evento-fila-card:closed:rh1')).queryByText(/corresponde al/)).toBeNull();
   });
 
@@ -171,6 +179,74 @@ describe('ActivityLogView', () => {
 
     expect(screen.queryByRole('grid')).toBeNull();
     expect(filas()).toHaveLength(4);
+  });
+
+  describe('orden', () => {
+    it('tocar el título invierte el orden por fecha de registro', () => {
+      render(<ActivityLogView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Registrado/ }));
+      expect(filas()).toEqual([
+        'evento-fila-log:cl2',
+        'evento-fila-log:cl1',
+        'evento-fila-card:closed:rh1',
+        'evento-fila-fuel:created:c1',
+      ]);
+    });
+
+    it('«Corresponde al» ordena por día del dato y deja los vacíos al final', () => {
+      render(<ActivityLogView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Corresponde al/ }));
+      expect(filas()).toEqual([
+        'evento-fila-fuel:created:c1',
+        'evento-fila-card:closed:rh1',
+        'evento-fila-log:cl2',
+        'evento-fila-log:cl1',
+      ]);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Corresponde al/ }));
+      expect(filas()).toEqual([
+        'evento-fila-card:closed:rh1',
+        'evento-fila-fuel:created:c1',
+        'evento-fila-log:cl1',
+        'evento-fila-log:cl2',
+      ]);
+    });
+
+    it('la acción ordena por su orden lógico (creación, cierre, edición, eliminación), no alfabético', () => {
+      render(<ActivityLogView />);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Acción/ }));
+      expect(filas()).toEqual([
+        'evento-fila-fuel:created:c1',
+        'evento-fila-card:closed:rh1',
+        'evento-fila-log:cl1',
+        'evento-fila-log:cl2',
+      ]);
+      fireEvent.click(screen.getByRole('columnheader', { name: /Acción/ }));
+      expect(filas()).toEqual([
+        'evento-fila-log:cl2',
+        'evento-fila-log:cl1',
+        'evento-fila-card:closed:rh1',
+        'evento-fila-fuel:created:c1',
+      ]);
+    });
+
+    it('el orden se aplica sobre lo ya filtrado', async () => {
+      render(<ActivityLogView />);
+      fireEvent.click(screen.getByRole('button', { name: /Usuario/ }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Ana Soto' }));
+      fireEvent.click(screen.getByRole('columnheader', { name: /Registrado/ }));
+      expect(filas()).toEqual(['evento-fila-log:cl1', 'evento-fila-card:closed:rh1']);
+    });
+
+    it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+      mediaQueryHook.mockReturnValue(false);
+      render(<ActivityLogView />);
+      fireEvent.click(screen.getByTestId('orden-direccion'));
+      expect(filas()[0]).toBe('evento-fila-log:cl2');
+      fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'usuario' } });
+      // Ascendente por usuario: Admin SMI, Ana Soto (x2, por fecha), Juan Pérez.
+      expect(filas()[0]).toBe('evento-fila-log:cl2');
+      expect(filas()[3]).toBe('evento-fila-fuel:created:c1');
+    });
   });
 
   it('estados: cargando sin filas; error con role=alert; sin eventos lo dice', () => {

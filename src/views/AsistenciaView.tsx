@@ -1,10 +1,47 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { Button, Card, Label, ListBox, Select, Spinner } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { useAsistencia } from '../hooks/useAsistencia';
+import { compareText, nextSort, sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
 import type { PersonaAsistencia } from '../types/asistencia';
+
+/** Columnas ordenables: nombre y total de días. Los días del mes no ordenan. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<PersonaAsistencia>> = {
+  nombre: { kind: 'text', value: (p) => p.nombre },
+  total: { kind: 'number', value: (p) => p.total, tiebreak: (a, b) => compareText(a.nombre, b.nombre) },
+};
+
+/**
+ * Título ordenable de la grilla (que es una tabla HTML propia, no la de
+ * HeroUI): mismas flechas que `sortableHeader` — tenues si no está activa, y
+ * la activa en el color de acento.
+ */
+function TituloOrdenable({
+  id,
+  titulo,
+  orden,
+  onOrden,
+}: {
+  id: string;
+  titulo: string;
+  orden: TableSort | null;
+  onOrden: (orden: TableSort) => void;
+}) {
+  const activa = orden !== null && String(orden.column) === id;
+  const Icono = !activa ? ArrowUpDown : orden.direction === 'ascending' ? ArrowUp : ArrowDown;
+  return (
+    <button
+      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase ${activa ? 'text-(--accent)' : ''}`}
+      onClick={() => onOrden(nextSort(orden ?? { column: '', direction: 'descending' }, id))}
+      type="button"
+    >
+      {titulo}
+      <Icono aria-hidden className={`h-3.5 w-3.5 shrink-0 ${activa ? '' : 'opacity-40'}`} />
+    </button>
+  );
+}
 
 const FILTROS = [
   { value: 'TODOS', label: 'Todos' },
@@ -60,10 +97,21 @@ export function AsistenciaView() {
     () => Array.from({ length: data?.dias ?? 0 }, (_, i) => i + 1),
     [data?.dias],
   );
-  const personas = useMemo(
-    () => (data?.personas ?? []).filter((p) => filtro === 'TODOS' || p.tipo === filtro),
-    [data?.personas, filtro],
-  );
+  // `null` = el orden por defecto (el del servidor, por grupo).
+  const [orden, setOrden] = useState<TableSort | null>(null);
+  const personas = useMemo(() => {
+    const filtradas = (data?.personas ?? []).filter((p) => filtro === 'TODOS' || p.tipo === filtro);
+    if (!orden) return filtradas;
+    // El orden vale DENTRO de cada grupo: supervisores y operadores siguen separados.
+    const grupos = [...new Set(filtradas.map((p) => p.tipo))];
+    return grupos.flatMap((tipo) =>
+      sortRows(
+        filtradas.filter((p) => p.tipo === tipo),
+        orden,
+        COLUMNAS_ORDEN,
+      ),
+    );
+  }, [data?.personas, filtro, orden]);
   const esMesActual = mes === mesActual();
   const hoy = new Date().getDate();
 
@@ -160,7 +208,11 @@ export function AsistenciaView() {
             <div>
               <Card.Title>Asistencia</Card.Title>
               <Card.Description>
-                Supervisores y operadores por separado. El Total es el dato de la liquidación.
+                Supervisores y operadores por separado. El Total es el dato de la liquidación.{' '}
+                {orden
+                  ? `Ordenado por ${orden.column === 'total' ? 'total de días' : 'nombre'} (${orden.direction === 'ascending' ? 'ascendente' : 'descendente'}) dentro de cada grupo.`
+                  : 'Ordenado como los entrega el sistema, por grupo.'}{' '}
+                Toca «Nombre» o «Total» para ordenar.
               </Card.Description>
             </div>
             <div className="w-56">
@@ -212,8 +264,17 @@ export function AsistenciaView() {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-separator" data-testid="encabezado-dias">
-                    <th className="sticky left-0 z-10 bg-card px-3 py-2 text-left text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-                      Nombre
+                    <th
+                      aria-sort={
+                        orden?.column === 'nombre'
+                          ? orden.direction === 'ascending'
+                            ? 'ascending'
+                            : 'descending'
+                          : undefined
+                      }
+                      className="sticky left-0 z-10 bg-card px-3 py-2 text-left text-[11px] font-bold tracking-wider text-muted-foreground uppercase"
+                    >
+                      <TituloOrdenable id="nombre" onOrden={setOrden} orden={orden} titulo="Nombre" />
                     </th>
                     {dias.map((dia) => (
                       <th
@@ -228,8 +289,17 @@ export function AsistenciaView() {
                         <span className="font-mono text-xs font-semibold text-foreground">{dia}</span>
                       </th>
                     ))}
-                    <th className="px-3 py-2 text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-                      Total
+                    <th
+                      aria-sort={
+                        orden?.column === 'total'
+                          ? orden.direction === 'ascending'
+                            ? 'ascending'
+                            : 'descending'
+                          : undefined
+                      }
+                      className="px-3 py-2 text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase"
+                    >
+                      <TituloOrdenable id="total" onOrden={setOrden} orden={orden} titulo="Total" />
                     </th>
                   </tr>
                 </thead>

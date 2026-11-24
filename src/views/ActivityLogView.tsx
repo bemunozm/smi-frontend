@@ -5,8 +5,11 @@ import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
 
+import { SortControl, type SortOption } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { useActivityLog } from '../hooks/useActivityLog';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
 import type { ActivityAction, ActivityEvent, ActivityKind } from '../types/activity-log';
 
 const KIND_LABEL: Record<ActivityKind, string> = {
@@ -40,6 +43,31 @@ const ACTION_CHIP: Record<ActivityAction, 'success' | 'accent' | 'warning' | 'da
 function kindLabel(kind: ActivityKind): string {
   return KIND_LABEL[kind] ?? kind;
 }
+
+/** Orden lógico de las acciones (no alfabético): creación, cierre, edición, eliminación. */
+const ACTION_ORDER: Record<ActivityAction, number> = { CREATED: 0, CLOSED: 1, UPDATED: 2, DELETED: 3 };
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). Todas ordenan: no hay columnas de acciones. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<ActivityEvent>> = {
+  registrado: { kind: 'date', value: (e) => e.occurredAt },
+  corresponde: { kind: 'date', value: (e) => e.dataDate, tiebreak: (a, b) => a.occurredAt.localeCompare(b.occurredAt) },
+  usuario: { kind: 'text', value: (e) => e.actorName, tiebreak: (a, b) => a.occurredAt.localeCompare(b.occurredAt) },
+  accion: { kind: 'number', value: (e) => ACTION_ORDER[e.action], tiebreak: (a, b) => a.occurredAt.localeCompare(b.occurredAt) },
+  modulo: { kind: 'text', value: (e) => kindLabel(e.kind), tiebreak: (a, b) => a.occurredAt.localeCompare(b.occurredAt) },
+  detalle: { kind: 'text', value: (e) => e.summary, tiebreak: (a, b) => a.occurredAt.localeCompare(b.occurredAt) },
+};
+
+const OPCIONES_ORDEN: SortOption[] = [
+  { id: 'registrado', label: 'Registrado' },
+  { id: 'corresponde', label: 'Corresponde al' },
+  { id: 'usuario', label: 'Usuario' },
+  { id: 'accion', label: 'Acción' },
+  { id: 'modulo', label: 'Módulo' },
+  { id: 'detalle', label: 'Detalle' },
+];
+
+/** Por defecto: lo más reciente primero (el orden del backend). */
+const ORDEN_INICIAL: TableSort = { column: 'registrado', direction: 'descending' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -200,6 +228,7 @@ export function ActivityLogView() {
   const [moduloFiltro, setModuloFiltro] = useState(TODOS);
   const [accionFiltro, setAccionFiltro] = useState(TODOS);
   const [detalle, setDetalle] = useState<ActivityEvent | null>(null);
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
 
   const eventos = useMemo(() => data?.events ?? [], [data?.events]);
 
@@ -218,28 +247,31 @@ export function ActivityLogView() {
       .sort((a, b) => a.label.localeCompare(b.label, 'es'));
   }, [eventos]);
 
+  // Primero los filtros y después el orden elegido.
   const lista = useMemo(
     () =>
-      eventos.filter((e) => {
-        if (usuarioFiltro !== TODOS && e.actorName !== usuarioFiltro) return false;
-        if (moduloFiltro !== TODOS && e.kind !== moduloFiltro) return false;
-        if (accionFiltro !== TODOS && e.action !== accionFiltro) return false;
-        return true;
-      }),
-    [eventos, usuarioFiltro, moduloFiltro, accionFiltro],
+      sortRows(
+        eventos.filter((e) => {
+          if (usuarioFiltro !== TODOS && e.actorName !== usuarioFiltro) return false;
+          if (moduloFiltro !== TODOS && e.kind !== moduloFiltro) return false;
+          if (accionFiltro !== TODOS && e.action !== accionFiltro) return false;
+          return true;
+        }),
+        orden,
+        COLUMNAS_ORDEN,
+      ),
+    [eventos, usuarioFiltro, moduloFiltro, accionFiltro, orden],
   );
   const retroactivos = lista.filter((e) => e.backdated).length;
 
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
-  const fechaRegistro = (e: ActivityEvent, compacta = false) => (
+  const fechaRegistro = (e: ActivityEvent) => (
     <>
       {formatFecha(e.occurredAt)}
       {e.backdated && e.dataDate ? (
-        <span className={`block text-xs text-warning-soft-foreground ${compacta ? '' : 'whitespace-nowrap'}`}>
-          corresponde al {formatDia(e.dataDate)}
-        </span>
+        <span className="block text-xs text-warning-soft-foreground">corresponde al {formatDia(e.dataDate)}</span>
       ) : null}
     </>
   );
@@ -277,8 +309,9 @@ export function ActivityLogView() {
             <div>
               <Card.Title>Actividad</Card.Title>
               <Card.Description>
-                De la más reciente a la más antigua. Abre una fila para ver su detalle; en ediciones y eliminaciones, el
-                antes y el después de cada dato.
+                Ordenado por fecha de registro, de la más reciente a la más antigua; toca el título de una columna para
+                cambiar el orden. Abre una fila para ver su detalle; en ediciones y eliminaciones, el antes y el después
+                de cada dato.
               </Card.Description>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="filtros-actividad">
@@ -376,6 +409,8 @@ export function ActivityLogView() {
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <>
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {lista.map((e) => (
                 <li key={e.id}>
@@ -386,7 +421,7 @@ export function ActivityLogView() {
                     type="button"
                   >
                     <div className="flex w-full items-start justify-between gap-2">
-                      <span className="text-sm font-semibold text-foreground">{fechaRegistro(e, true)}</span>
+                      <span className="text-sm font-semibold text-foreground">{fechaRegistro(e)}</span>
                       <Chip color={ACTION_CHIP[e.action]} size="sm" variant="soft">
                         {ACTION_LABEL[e.action]}
                       </Chip>
@@ -399,18 +434,37 @@ export function ActivityLogView() {
                 </li>
               ))}
             </ul>
+            </>
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Registro de actividad" className="min-w-full">
+                <Table.Content
+                  aria-label="Registro de actividad"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Registrado</Table.Column>
-                    <Table.Column>Usuario</Table.Column>
-                    <Table.Column>Acción</Table.Column>
-                    <Table.Column>Módulo</Table.Column>
-                    <Table.Column className="w-full">Detalle</Table.Column>
+                    <Table.Column allowsSorting id="registrado" isRowHeader>
+                      {sortableHeader('Registrado')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="corresponde">
+                      {sortableHeader('Corresponde al')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="usuario">
+                      {sortableHeader('Usuario')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="accion">
+                      {sortableHeader('Acción')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="modulo">
+                      {sortableHeader('Módulo')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="w-full" id="detalle">
+                      {sortableHeader('Detalle')}
+                    </Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {lista.map((e) => (
@@ -421,7 +475,12 @@ export function ActivityLogView() {
                         onAction={() => setDetalle(e)}
                       >
                         <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
-                          {fechaRegistro(e)}
+                          {formatFecha(e.occurredAt)}
+                        </Table.Cell>
+                        <Table.Cell
+                          className={`text-sm whitespace-nowrap ${e.backdated ? 'font-medium text-warning-soft-foreground' : 'text-muted-foreground'}`}
+                        >
+                          {e.dataDate ? formatDia(e.dataDate) : '—'}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{e.actorName ?? '—'}</Table.Cell>
                         <Table.Cell>

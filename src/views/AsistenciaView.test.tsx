@@ -132,3 +132,35 @@ describe('AsistenciaView', () => {
     expect(screen.getByText('Sin registros este mes.')).toBeTruthy();
   });
 });
+
+describe('AsistenciaView — orden', () => {
+  const ids = () => screen.getAllByTestId(/^fila-/).map((f) => f.getAttribute('data-testid'));
+
+  it('«Nombre» ordena dentro de cada grupo, sin mezclar supervisores con operadores', () => {
+    asistenciaHook.mockReturnValue(
+      ok({
+        ...DATA,
+        personas: [
+          { id: 's1', nombre: 'Zoila', tipo: 'SUPERVISOR', dias: [1], total: 1 },
+          { id: 's2', nombre: 'Ana', tipo: 'SUPERVISOR', dias: [1, 2], total: 2 },
+          { id: 'o1', nombre: 'Pedro', tipo: 'OPERADOR', dias: [], total: 0 },
+          { id: 'o2', nombre: 'Berta', tipo: 'OPERADOR', dias: [3], total: 1 },
+        ],
+      }),
+    );
+    render(<AsistenciaView />);
+    expect(ids()).toEqual(['fila-s1', 'fila-s2', 'fila-o1', 'fila-o2']);
+    fireEvent.click(screen.getByRole('button', { name: /Nombre/ }));
+    expect(ids()).toEqual(['fila-s2', 'fila-s1', 'fila-o2', 'fila-o1']);
+    fireEvent.click(screen.getByRole('button', { name: /Nombre/ }));
+    expect(ids()).toEqual(['fila-s1', 'fila-s2', 'fila-o1', 'fila-o2']);
+  });
+
+  it('«Total» ordena por días (numérico) dentro de cada grupo y desempata por nombre', () => {
+    render(<AsistenciaView />);
+    fireEvent.click(screen.getByRole('button', { name: /Total/ }));
+    expect(ids()).toEqual(['fila-s2', 'fila-s1', 'fila-o1', 'fila-o2']);
+    fireEvent.click(screen.getByRole('button', { name: /Total/ }));
+    expect(ids()).toEqual(['fila-s1', 'fila-s2', 'fila-o2', 'fila-o1']);
+  });
+});

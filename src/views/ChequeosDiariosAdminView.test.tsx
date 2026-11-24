@@ -309,3 +309,106 @@ describe('ChequeosDiariosAdminView', () => {
     expect(refetch).toHaveBeenCalled();
   });
 });
+
+describe('orden por columna', () => {
+  const DESORDENADA: DailyChecklistSummary[] = [
+    resumen({
+      id: 'a',
+      equipment: { id: 'ea', internalCode: 'CN-007' },
+      mechanicName: 'Zoila',
+      submittedAt: '2026-11-20T10:00:00.000Z',
+      counter: 100,
+      maintained: 1,
+      photos: 5,
+      status: 'SUBMITTED',
+    }),
+    resumen({
+      id: 'b',
+      equipment: { id: 'eb', internalCode: 'CA-011' },
+      mechanicName: 'Ana',
+      submittedAt: '2026-11-20T12:00:00.000Z',
+      counter: 2000,
+      maintained: 3,
+      photos: 0,
+      status: 'ACCEPTED',
+      lastReview: revision('ACCEPTED', 'Sofía Supervisora'),
+    }),
+    resumen({
+      id: 'c',
+      equipment: { id: 'ec', internalCode: 'EX-001' },
+      mechanicName: 'Mario',
+      submittedAt: '2026-11-20T11:00:00.000Z',
+      counter: 50,
+      maintained: 0,
+      photos: 2,
+      status: 'REJECTED',
+      lastReview: revision('REJECTED', 'Pedro Supervisor'),
+    }),
+  ];
+  const ids = (prefijo: 'fila' | 'tarjeta' = 'fila') =>
+    screen
+      .getAllByTestId(new RegExp(`chequeo-${prefijo}-`))
+      .map((f) => f.getAttribute('data-testid')?.replace(`chequeo-${prefijo}-`, ''));
+
+  beforeEach(() => periodoHook.mockReturnValue(ok(DESORDENADA)));
+
+  it('por defecto, el envío más reciente primero, y la bajada lo dice', () => {
+    render(<ChequeosDiariosAdminView />);
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    expect(screen.getByText(/Ordenado por hora, del más reciente al más antiguo/)).toBeTruthy();
+    expect(screen.getByText(/Toca el título de una columna/)).toBeTruthy();
+  });
+
+  it('tocar el título invierte el orden', () => {
+    render(<ChequeosDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Hora/ }));
+    expect(ids()).toEqual(['a', 'c', 'b']);
+  });
+
+  it('ordena por equipo (A-Z), horómetro (numérico), mantenedor y fotos', () => {
+    render(<ChequeosDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Equipo/ }));
+    expect(ids()).toEqual(['b', 'a', 'c']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Horómetro/ }));
+    expect(ids()).toEqual(['c', 'a', 'b']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Mantenedor/ }));
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fotos/ }));
+    expect(ids()).toEqual(['b', 'c', 'a']);
+  });
+
+  it('el estado ordena por urgencia (por validar, rechazado, aceptado), no alfabético', () => {
+    render(<ChequeosDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Estado/ }));
+    expect(ids()).toEqual(['a', 'c', 'b']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Estado/ }));
+    expect(ids()).toEqual(['b', 'c', 'a']);
+  });
+
+  it('«Validó» deja a los sin validar al final en los dos sentidos', () => {
+    render(<ChequeosDiariosAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Validó/ }));
+    expect(ids()).toEqual(['c', 'b', 'a']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Validó/ }));
+    expect(ids()).toEqual(['b', 'c', 'a']);
+  });
+
+  it('el orden se aplica sobre lo filtrado', () => {
+    render(<ChequeosDiariosAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: /^Aceptados/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Enviados/ }));
+    fireEvent.change(screen.getByPlaceholderText('Código del equipo'), { target: { value: 'c' } });
+    // «c» calza con CN-007 y CA-011 (no con EX-001); hora descendente.
+    expect(ids()).toEqual(['b', 'a']);
+  });
+
+  it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+    escritorio.value = false;
+    render(<ChequeosDiariosAdminView />);
+    expect(ids('tarjeta')).toEqual(['b', 'c', 'a']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids('tarjeta')).toEqual(['a', 'c', 'b']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'contador' } });
+    expect(ids('tarjeta')).toEqual(['c', 'a', 'b']);
+  });
+});

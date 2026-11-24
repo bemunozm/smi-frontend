@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertDialog, Button, Card, Modal, Spinner, Table } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
+import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 
 import { usePermissions } from '../hooks/usePermissions';
 import { usePastShiftSummary } from '../hooks/usePastShiftSummary';
@@ -10,6 +13,8 @@ import { canDeleteReporteDiario } from '../lib/permissions';
 import { ROLES } from '../types/roles';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL } from '../lib/dashboard-format';
+import { describeSort, type SortMeta } from '../lib/sort-description';
+import { compareText, sortRows, toTimestamp, type SortColumn, type TableSort } from '../lib/table-sort';
 import { fromDateOnly } from '../lib/turno';
 import { SECCIONES, SECCION_LABEL, TRASPASO_LABEL } from '../types/reporte-diario';
 import type { ReporteDiario } from '../types/reporte-diario';
@@ -39,6 +44,49 @@ const SECCION_COLUMNA: Record<(typeof SECCIONES)[number], string> = {
   MINA_CALETA: 'Mina Caleta',
   MINERAS: 'Mineras',
 };
+
+/** Orden real de los turnos dentro de un día: el diurno va antes que el nocturno. */
+const TURNO_ORDEN: Record<string, number> = { DIURNO: 0, NOCTURNO: 1 };
+const turnoOrden = (turno: string): number => TURNO_ORDEN[turno] ?? 9;
+
+/** Desempate cronológico: día del reporte, luego turno (Diurno antes que Nocturno), luego supervisor. */
+const porTurnoReportado = (a: ReporteDiario, b: ReporteDiario): number =>
+  (toTimestamp(diaDe(a)) ?? 0) - (toTimestamp(diaDe(b)) ?? 0) ||
+  turnoOrden(a.turno) - turnoOrden(b.turno) ||
+  compareText(a.supervisorNombre, b.supervisorNombre);
+
+/** Vueltas de una sección; sin vueltas (la celda muestra «—») = vacío, siempre al final. */
+function vueltasSeccion(reporte: ReporteDiario, seccion: (typeof SECCIONES)[number]): number | null {
+  const p = reporte.produccion.find((x) => x.seccion === seccion);
+  const vueltas = p ? p.camiones * p.vueltasPorCamion : 0;
+  return vueltas > 0 ? vueltas : null;
+}
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). */
+const COLUMNAS_ORDEN: Record<string, SortColumn<ReporteDiario>> = {
+  fecha: { kind: 'date', value: (r) => diaDe(r), tiebreak: porTurnoReportado },
+  turno: { kind: 'number', value: (r) => turnoOrden(r.turno), tiebreak: porTurnoReportado },
+  supervisor: { kind: 'text', value: (r) => r.supervisorNombre, tiebreak: porTurnoReportado },
+  INTERNOS: { kind: 'number', value: (r) => vueltasSeccion(r, 'INTERNOS'), tiebreak: porTurnoReportado },
+  MINA_CALETA: { kind: 'number', value: (r) => vueltasSeccion(r, 'MINA_CALETA'), tiebreak: porTurnoReportado },
+  MINERAS: { kind: 'number', value: (r) => vueltasSeccion(r, 'MINERAS'), tiebreak: porTurnoReportado },
+  total: { kind: 'number', value: vueltasTotales, tiebreak: porTurnoReportado },
+  observaciones: { kind: 'text', value: (r) => r.observaciones, tiebreak: porTurnoReportado },
+};
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'fecha', label: 'Fecha', reading: 'date' },
+  { id: 'turno', label: 'Turno', reading: ['diurno primero', 'nocturno primero'] },
+  { id: 'supervisor', label: 'Supervisor', reading: 'text' },
+  { id: 'INTERNOS', label: 'Internos', reading: 'number' },
+  { id: 'MINA_CALETA', label: 'Mina Caleta', reading: 'number' },
+  { id: 'MINERAS', label: 'Mineras', reading: 'number' },
+  { id: 'total', label: 'Total vueltas', reading: 'number' },
+  { id: 'observaciones', label: 'Observaciones', reading: 'text' },
+];
+
+/** Por defecto: el turno más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
 /** Celda de una sección: las vueltas y, abajo, camiones × vueltas por camión.
  * Pedido del cliente (16/11/2026): ver el desglose sin abrir el reporte. */
@@ -273,6 +321,9 @@ export function ReportesDiariosAdminView() {
   const { data, isPending, isError, error } = useReportesDiarios();
   const [dia, setDia] = useState('');
   const [supervisorFiltro, setSupervisorFiltro] = useState('TODOS');
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+  // La tabla es la misma en todos los anchos; en tablet y celular el selector ayuda a ordenar sin recorrerla.
+  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const [detalle, setDetalle] = useState<ReporteDiario | null>(null);
   /** Reporte con la confirmación de borrado abierta; null si no hay ninguna. */
   const [eliminando, setEliminando] = useState<ReporteDiario | null>(null);
@@ -313,8 +364,8 @@ export function ReportesDiariosAdminView() {
       .map((c) => ({ id: c.id, nombre: c.operatorName, equipo: c.equipo.internalCode }));
   }, [detalle, resumenTurno]);
 
-  // El backend ya entrega fecha desc, turno asc — se respeta tal cual.
-  const reportes = data ?? [];
+  // El backend entrega fecha desc, turno asc; el orden elegido se aplica después de los filtros.
+  const reportes = useMemo(() => data ?? [], [data]);
 
   const supervisores = useMemo(() => {
     const porId = new Map<string, string>();
@@ -326,12 +377,16 @@ export function ReportesDiariosAdminView() {
 
   const lista = useMemo(
     () =>
-      reportes.filter((r) => {
-        if (supervisorFiltro !== 'TODOS' && r.supervisorId !== supervisorFiltro) return false;
-        if (dia && diaDe(r) !== dia) return false;
-        return true;
-      }),
-    [reportes, supervisorFiltro, dia],
+      sortRows(
+        reportes.filter((r) => {
+          if (supervisorFiltro !== 'TODOS' && r.supervisorId !== supervisorFiltro) return false;
+          if (dia && diaDe(r) !== dia) return false;
+          return true;
+        }),
+        orden,
+        COLUMNAS_ORDEN,
+      ),
+    [reportes, supervisorFiltro, dia, orden],
   );
 
   return (
@@ -364,7 +419,9 @@ export function ReportesDiariosAdminView() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <Card.Title>Listado</Card.Title>
-              <Card.Description>Del más reciente al más antiguo.</Card.Description>
+              <Card.Description>
+                {describeSort(orden, OPCIONES_ORDEN)} Toca el título de una columna para cambiar el orden.
+              </Card.Description>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -413,23 +470,40 @@ export function ReportesDiariosAdminView() {
             </p>
           ) : null}
 
+          {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
+          ) : null}
+
           {!isPending && !isError && lista.length > 0 ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Reportes diarios" className="min-w-full">
+                <Table.Content
+                  aria-label="Reportes diarios"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Fecha</Table.Column>
-                    <Table.Column>Turno</Table.Column>
-                    <Table.Column>Supervisor</Table.Column>
+                    <Table.Column allowsSorting id="fecha" isRowHeader>
+                      {sortableHeader('Fecha')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="turno">
+                      {sortableHeader('Turno')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="supervisor">
+                      {sortableHeader('Supervisor')}
+                    </Table.Column>
                     {SECCIONES.map((seccion) => (
-                      <Table.Column className="text-right" key={seccion}>
-                        <span title={`${SECCION_LABEL[seccion]}: vueltas (camiones × vueltas por camión)`}>
-                          {SECCION_COLUMNA[seccion]}
-                        </span>
+                      <Table.Column allowsSorting className="text-right" id={seccion} key={seccion}>
+                        {sortableHeader(SECCION_COLUMNA[seccion])}
                       </Table.Column>
                     ))}
-                    <Table.Column className="text-right">Total vueltas</Table.Column>
-                    <Table.Column className="w-full">Observaciones</Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="total">
+                      {sortableHeader('Total vueltas')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="w-full" id="observaciones">
+                      {sortableHeader('Observaciones')}
+                    </Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {lista.map((r) => (

@@ -51,6 +51,11 @@ import { registrarHorometroLabel, RegistrarHorometroModal } from '../components/
 import { StatusChip } from '../components/flota/StatusChip';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
+import { EQUIPMENT_SORT_OPTIONS, equipmentSortColumns } from '../lib/equipment-sort';
+import { sortSummary } from '../lib/sort-summary';
+import { sortRows, type TableSort } from '../lib/table-sort';
 import { usePermissions } from '../hooks/usePermissions';
 import { useMaintenanceStatusByEquipment } from '../hooks/useMaintenancePlans';
 import { fmtContador, textoFaltante } from '../lib/maintenance-plan';
@@ -919,6 +924,8 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
   const [equipmentClass, setEquipmentClass] = useState<EquipmentClass | typeof TODOS>(TODOS);
   const [homeBranchId, setHomeBranchId] = useState<string>(TODOS);
   const [busqueda, setBusqueda] = useState('');
+  // `null` = el orden por defecto (por código, el del servidor).
+  const [orden, setOrden] = useState<TableSort | null>(null);
   // Un solo modal de creación, dos triggers: el botón del header (PC, `xl:`)
   // y el FAB (tablet/celular, `xl:hidden`) — ver `CreateEquipoModal`.
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -941,13 +948,6 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
     ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
   });
 
-  // "En uso" se resuelve acá (tarjeta abierta o asignación) porque el backend
-  // no lo tiene como `status` — misma regla que el chip de `AsignacionCell`.
-  const equiposVisibles = useMemo(
-    () => (status === EN_USO ? equipos?.filter((equipo) => equipo.openShift !== null || equipo.inUse) : equipos),
-    [equipos, status],
-  );
-
   // Reusa la MISMA query que ya usa el formulario de creación/edición
   // (`CamposEquipo` → `useBranches({ isActive: true })`): alimenta tanto el
   // filtro "Sucursal" como la resolución de nombre en tabla/tarjetas, sin
@@ -960,6 +960,18 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
     () => new Map((sucursalesActivas ?? []).map((sucursal) => [sucursal.id, sucursal.name])),
     [sucursalesActivas],
   );
+
+  // "En uso" se resuelve acá (tarjeta abierta o asignación) porque el backend
+  // no lo tiene como `status` — misma regla que el chip de `AsignacionCell`.
+  // El orden elegido se aplica DESPUÉS de los filtros; sin elegir, rige el del servidor.
+  const equiposVisibles = useMemo(() => {
+    const filtrados = status === EN_USO ? equipos?.filter((equipo) => equipo.openShift !== null || equipo.inUse) : equipos;
+    if (!filtrados || !orden) return filtrados;
+    const columnas = equipmentSortColumns((equipo) =>
+      equipo.homeBranchId ? (sucursalPorId.get(equipo.homeBranchId) ?? null) : null,
+    );
+    return sortRows(filtrados, orden, columnas);
+  }, [equipos, status, orden, sucursalPorId]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1106,6 +1118,12 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
         </Select>
       </div>
 
+      {!isPending && !isError && (equiposVisibles ?? []).length > 0 ? (
+        <p className="-mt-1 text-xs text-muted-foreground" data-testid="orden-equipos">
+          {sortSummary(orden, EQUIPMENT_SORT_OPTIONS, 'por código')}
+        </p>
+      ) : null}
+
       {isPending ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
@@ -1135,15 +1153,32 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
           <div className="hidden xl:block">
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Equipos" className="min-w-[1120px]">
+                <Table.Content
+                  aria-label="Equipos"
+                  className="min-w-[1120px]"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden ?? undefined}
+                >
                   <Table.Header>
                     <Table.Column>Foto</Table.Column>
-                    <Table.Column isRowHeader>Equipo</Table.Column>
-                    <Table.Column>Sucursal</Table.Column>
-                    <Table.Column className="text-right">Horómetro / KM</Table.Column>
-                    <Table.Column>Combustible</Table.Column>
-                    <Table.Column>En uso por</Table.Column>
-                    <Table.Column>Estado</Table.Column>
+                    <Table.Column allowsSorting id="equipo" isRowHeader>
+                      {sortableHeader('Equipo')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="sucursal">
+                      {sortableHeader('Sucursal')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="uso">
+                      {sortableHeader('Horómetro / KM')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="combustible">
+                      {sortableHeader('Combustible')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="asignado">
+                      {sortableHeader('En uso por')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="estado">
+                      {sortableHeader('Estado')}
+                    </Table.Column>
                     {enTaller ? null : <Table.Column>Acciones</Table.Column>}
                   </Table.Header>
                   <Table.Body>
@@ -1227,19 +1262,26 @@ export function EquiposView({ contexto = 'flota' }: { contexto?: 'flota' | 'tall
              Tocar la tarjeta abre la hoja de acciones (`EquipoCardMobile`),
              no navega directo a la ficha — ahí viven editar/eliminar/cambiar
              estado, que antes solo existían en el kebab de PC. */}
-          <div className="flex flex-col gap-3 xl:hidden">
-            {(equiposVisibles ?? []).map((equipo) => (
-              <EquipoCardMobile
-                detalleBase={detalleBase}
-                equipo={equipo}
-                key={equipo.id}
-                marca={pendientes.marcaDe('equipment', equipo.id)}
-                onVerUso={equipo.openShift ? () => setUsoDetalle(equipo) : undefined}
-                proxima={proximaPorEquipo?.get(equipo.id)}
-                soloLectura={enTaller}
-                sucursalPorId={sucursalPorId}
-              />
-            ))}
+          <div className="xl:hidden">
+            <SortControl
+              onChange={setOrden}
+              options={EQUIPMENT_SORT_OPTIONS}
+              sort={orden ?? { column: 'equipo', direction: 'ascending' }}
+            />
+            <div className="flex flex-col gap-3">
+              {(equiposVisibles ?? []).map((equipo) => (
+                <EquipoCardMobile
+                  detalleBase={detalleBase}
+                  equipo={equipo}
+                  key={equipo.id}
+                  marca={pendientes.marcaDe('equipment', equipo.id)}
+                  onVerUso={equipo.openShift ? () => setUsoDetalle(equipo) : undefined}
+                  proxima={proximaPorEquipo?.get(equipo.id)}
+                  soloLectura={enTaller}
+                  sucursalPorId={sucursalPorId}
+                />
+              ))}
+            </div>
           </div>
         </>
       ) : null}

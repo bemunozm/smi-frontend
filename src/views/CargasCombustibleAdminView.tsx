@@ -13,6 +13,8 @@ import {
   Table,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
@@ -29,6 +31,8 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
 import { canDeleteCombustible, canEditCombustible } from '../lib/permissions';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
+import { describeSort, type SortMeta } from '../lib/sort-description';
+import { sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
 import type { RegistroCombustible } from '../types/combustible';
 import type { EquipmentClass } from '../types/equipment';
 import { pesadosPrimero } from '../lib/equipos-por-clase';
@@ -36,6 +40,25 @@ import { pesadosPrimero } from '../lib/equipos-por-clase';
 const TIPO_LABEL: Record<string, string> = { PETROLEO: 'Petróleo', BENCINA: 'Bencina' };
 
 const ORIGEN_LABEL: Record<string, string> = { TARJETA: 'Tarjeta de turno', MANUAL: 'Manual' };
+
+/** Desempate: la carga más antigua primero (en ascendente). */
+const porFecha = (a: RegistroCombustible, b: RegistroCombustible): number => a.fecha.localeCompare(b.fecha);
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'fecha', label: 'Fecha', reading: 'date' },
+  { id: 'equipo', label: 'Equipo', reading: 'text' },
+  { id: 'clase', label: 'Clase', reading: 'text' },
+  { id: 'combustible', label: 'Combustible', reading: 'text' },
+  { id: 'lectura', label: 'Lectura', reading: 'number' },
+  { id: 'realizo', label: 'Realizó', reading: 'text' },
+  { id: 'origen', label: 'Origen', reading: 'text' },
+  { id: 'foto', label: 'Foto', reading: ['sin foto primero', 'con foto primero'] },
+  { id: 'adblue', label: 'AdBlue', reading: 'number' },
+  { id: 'litros', label: 'Litros', reading: 'number' },
+];
+
+/** Por defecto: la carga más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
 function tipoDe(carga: RegistroCombustible): string {
   return TIPO_LABEL[carga.tipo] ?? carga.tipo;
@@ -310,9 +333,31 @@ export function CargasCombustibleAdminView() {
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+
+  const columnasOrden: Record<string, SortColumn<RegistroCombustible>> = {
+    fecha: { kind: 'date', value: (c) => c.fecha },
+    equipo: { kind: 'text', value: (c) => c.equipo?.internalCode, tiebreak: porFecha },
+    clase: {
+      kind: 'text',
+      value: (c) => {
+        const clase = claseDe(c);
+        return clase ? equipmentClassLabel(clase) : null;
+      },
+      tiebreak: porFecha,
+    },
+    combustible: { kind: 'text', value: (c) => tipoDe(c), tiebreak: porFecha },
+    lectura: { kind: 'number', value: (c) => c.lectura, tiebreak: porFecha },
+    realizo: { kind: 'text', value: (c) => c.realizadoPor, tiebreak: porFecha },
+    origen: { kind: 'text', value: (c) => (origenDe(c) === '—' ? null : origenDe(c)), tiebreak: porFecha },
+    foto: { kind: 'number', value: (c) => (c.fotoUrl ? 1 : 0), tiebreak: porFecha },
+    adblue: { kind: 'number', value: (c) => c.adBlueLitros, tiebreak: porFecha },
+    litros: { kind: 'number', value: (c) => c.litros, tiebreak: porFecha },
+  };
+
   const lista = useMemo(
-    () =>
-      cargas.filter((c) => {
+    () => {
+      const filtradas = cargas.filter((c) => {
         if (equipoFiltro !== TODOS && c.equipoId !== equipoFiltro) return false;
         if (claseFiltro !== TODOS && claseDe(c) !== claseFiltro) return false;
         if (supervisorFiltro !== TODOS && c.realizadoPor !== supervisorFiltro) return false;
@@ -321,9 +366,12 @@ export function CargasCombustibleAdminView() {
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
         return true;
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `claseDe` deriva de `clasePorEquipo`
-    [cargas, equipoFiltro, claseFiltro, supervisorFiltro, adBlueFiltro, desde, hasta, clasePorEquipo],
+      });
+      // El orden se aplica después de los filtros.
+      return sortRows(filtradas, orden, columnasOrden);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `claseDe`/`columnasOrden` derivan de `clasePorEquipo`
+    [cargas, equipoFiltro, claseFiltro, supervisorFiltro, adBlueFiltro, desde, hasta, clasePorEquipo, orden],
   );
 
   const totalLitros = lista.reduce((acc, c) => acc + c.litros, 0);
@@ -363,7 +411,8 @@ export function CargasCombustibleAdminView() {
             <div>
               <Card.Title>Listado</Card.Title>
               <Card.Description>
-                De la más reciente a la más antigua. El total de arriba sigue al filtro.
+                {describeSort(orden, OPCIONES_ORDEN)} Toca el título de una columna para cambiar el orden. El total de
+                arriba sigue al filtro.
               </Card.Description>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="filtros-cargas">
@@ -470,6 +519,8 @@ export function CargasCombustibleAdminView() {
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <>
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {lista.map((c) => {
                 const clase = claseDe(c);
@@ -534,23 +585,49 @@ export function CargasCombustibleAdminView() {
                 );
               })}
             </ul>
+            </>
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Cargas de combustible" className="min-w-full">
+                <Table.Content
+                  aria-label="Cargas de combustible"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Fecha</Table.Column>
-                    <Table.Column>Equipo</Table.Column>
-                    <Table.Column>Clase</Table.Column>
-                    <Table.Column>Combustible</Table.Column>
-                    <Table.Column>Lectura</Table.Column>
-                    <Table.Column>Realizó</Table.Column>
-                    <Table.Column className="w-full">Origen</Table.Column>
-                    <Table.Column>Foto</Table.Column>
-                    <Table.Column className="text-right">AdBlue</Table.Column>
-                    <Table.Column className="text-right">Litros</Table.Column>
+                    <Table.Column allowsSorting id="fecha" isRowHeader>
+                      {sortableHeader('Fecha')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="equipo">
+                      {sortableHeader('Equipo')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="clase">
+                      {sortableHeader('Clase')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="combustible">
+                      {sortableHeader('Combustible')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="lectura">
+                      {sortableHeader('Lectura')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="realizo">
+                      {sortableHeader('Realizó')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="w-full" id="origen">
+                      {sortableHeader('Origen')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="foto">
+                      {sortableHeader('Foto')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="adblue">
+                      {sortableHeader('AdBlue')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="text-right" id="litros">
+                      {sortableHeader('Litros')}
+                    </Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {lista.map((c) => {

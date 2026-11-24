@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { ChevronRight, Pencil, PlusCircle, PowerOff, Power, Search, Trash2 } from 'lucide-react';
@@ -21,6 +21,11 @@ import {
   TextField,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
+import { compareText, sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
+import type { SortMeta } from '../lib/sort-description';
+import { sortSummary } from '../lib/sort-summary';
 
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { usePendingWrites, type MarcaPendiente as Marca } from '../hooks/usePendingWrites';
@@ -49,6 +54,24 @@ import {
 const DEFAULT_FORM_VALUES: OperatorFormValues = { name: '', rut: '', isActive: true, supervisorHabitualId: '' };
 
 const SIN_SUPERVISOR = 'ninguno';
+
+const byName = (a: Operator, b: Operator): number => compareText(a.name, b.name);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`); «Acciones» no ordena. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<Operator>> = {
+  nombre: { kind: 'text', value: (o) => o.name },
+  rut: { kind: 'text', value: (o) => o.rut, tiebreak: byName },
+  supervisor: { kind: 'text', value: (o) => o.supervisorHabitualNombre, tiebreak: byName },
+  // Activos antes que inactivos.
+  estado: { kind: 'number', value: (o) => (o.isActive ? 0 : 1), tiebreak: byName },
+};
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'nombre', label: 'Nombre', reading: 'text' },
+  { id: 'rut', label: 'RUT', reading: 'text' },
+  { id: 'supervisor', label: 'Supervisor habitual', reading: 'text' },
+  { id: 'estado', label: 'Estado', reading: ['activos primero', 'inactivos primero'] },
+];
 
 /**
  * «Supervisor habitual»: con quién sale habitualmente el operador. En los
@@ -572,7 +595,13 @@ export function OperadoresView() {
     ...(showInactive ? {} : { isActive: true }),
     ...(q.trim() ? { q: q.trim() } : {}),
   };
-  const { data: operators, isPending, isError, error } = useOperators(filtros);
+  const { data: operatorsData, isPending, isError, error } = useOperators(filtros);
+  // `null` = el orden por defecto (por nombre, el del servidor). El orden va después de los filtros.
+  const [orden, setOrden] = useState<TableSort | null>(null);
+  const operators = useMemo(
+    () => (operatorsData && orden ? sortRows(operatorsData, orden, COLUMNAS_ORDEN) : operatorsData),
+    [operatorsData, orden],
+  );
   const pendientes = usePendingWrites(RECURSOS_DE_OPERADORES);
 
   return (
@@ -613,6 +642,12 @@ export function OperadoresView() {
         </Switch>
       </div>
 
+      {operators && operators.length > 0 ? (
+        <p className="-mt-1 text-xs text-muted-foreground" data-testid="orden-operadores">
+          {sortSummary(orden, OPCIONES_ORDEN, 'por nombre')}
+        </p>
+      ) : null}
+
       {isPending ? (
         <div className="flex justify-center py-16">
           <Spinner color="accent" size="lg" />
@@ -637,12 +672,25 @@ export function OperadoresView() {
           <div className="hidden xl:block">
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Operadores" className="min-w-160">
+                <Table.Content
+                  aria-label="Operadores"
+                  className="min-w-160"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden ?? undefined}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Nombre</Table.Column>
-                    <Table.Column>RUT</Table.Column>
-                    <Table.Column>Supervisor habitual</Table.Column>
-                    <Table.Column>Estado</Table.Column>
+                    <Table.Column allowsSorting id="nombre" isRowHeader>
+                      {sortableHeader('Nombre')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="rut">
+                      {sortableHeader('RUT')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="supervisor">
+                      {sortableHeader('Supervisor habitual')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="estado">
+                      {sortableHeader('Estado')}
+                    </Table.Column>
                     <Table.Column>Acciones</Table.Column>
                   </Table.Header>
                   <Table.Body>
@@ -674,10 +722,17 @@ export function OperadoresView() {
             </Table>
           </div>
 
-          <div className="flex flex-col gap-3 xl:hidden">
-            {operators.map((operator) => (
-              <OperatorCardMobile key={operator.id} marca={pendientes.marcaDe('operator', operator.id)} operator={operator} />
-            ))}
+          <div className="xl:hidden">
+            <SortControl
+              onChange={setOrden}
+              options={OPCIONES_ORDEN}
+              sort={orden ?? { column: 'nombre', direction: 'ascending' }}
+            />
+            <div className="flex flex-col gap-3">
+              {operators.map((operator) => (
+                <OperatorCardMobile key={operator.id} marca={pendientes.marcaDe('operator', operator.id)} operator={operator} />
+              ))}
+            </div>
           </div>
         </>
       ) : null}
