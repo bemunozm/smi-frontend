@@ -88,8 +88,8 @@ export interface MantenimientoEndpointMap {
   'intervencion.create': { params: { ordenId: string }; body: WithId<CreateIntervencionInput>; result: Intervencion };
   /** «Finalizar tarea»: intervención de cierre + COMPLETADA + estado del equipo
    * + ancla de la mantención en UNA transacción del backend. El `id` del body
-   * es el de la intervención (idempotencia); la foto viaja como archivo y el
-   * replay la inyecta como `fotoKey`. */
+   * es el de la intervención (idempotencia); las fotos (hasta 10) viajan como
+   * archivos y el replay las inyecta en `fotoKeys.<i>`. */
   'orden.finalizar': { params: { id: string }; body: FinalizarOrdenInput; result: FinalizarOrdenResult };
   'actividad.create': { params: NoParams; body: WithId<CreateActividadInput>; result: Actividad };
   'actividad.update': { params: { id: string }; body: Partial<UpdateActividadInput>; result: Actividad };
@@ -175,7 +175,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     invalidate: ['intervenciones', 'ordenes', 'inventory'],
     label: (params) => etiqueta('Intervención', cachedName('orden', params.ordenId)),
     notFoundIsDone: false,
-    // La foto del cierre viaja como archivo y el replay inyecta `fotoKey`.
+    // Las fotos del cierre viajan como archivos y el replay inyecta `fotoKeys`.
     carriesFiles: true,
     creates: true,
     entity: (_params, body) => entityOf(intervencionEntity, bodyText(body, 'id')),
@@ -194,7 +194,7 @@ export const MANTENIMIENTO_ENDPOINTS = defineDomain<MantenimientoEndpointMap>({
     invalidate: ['intervenciones', 'ordenes', 'inventory', 'hallazgos', 'equipment', 'maintenancePlans'],
     label: (params) => etiqueta('Cierre de orden de trabajo', cachedName('orden', params.id)),
     notFoundIsDone: false,
-    // La foto del cierre viaja como archivo y el replay inyecta `fotoKey`.
+    // Las fotos del cierre viajan como archivos y el replay inyecta `fotoKeys`.
     carriesFiles: true,
     // Actúa sobre la orden: se serializa con sus otras escrituras y, si su
     // creación sigue en la cola, va detrás de ella.

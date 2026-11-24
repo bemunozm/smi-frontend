@@ -1,7 +1,7 @@
 import { avisoDeAgrupacion, formatDecimalInput, parseDecimal, parseInteger } from '../../lib/decimal';
 import { fmtNum } from '../../lib/format';
 import type { ControlUnit } from '../../types/equipment';
-import { PRIORIDAD_OT, type OrdenTrabajo, type PrioridadOT } from '../../types/mantenimiento';
+import { PRIORIDAD_OT, type Intervencion, type OrdenTrabajo, type PrioridadOT } from '../../types/mantenimiento';
 
 /**
  * Helpers puros del tablero del taller (diseño "Mantenedor Taller").
@@ -278,4 +278,14 @@ export function registrableComoHecha(orden: Pick<OrdenTrabajo, 'pautaCycle' | 'o
     /^Pauta: [\d.]+ (?:h|km) · ciclo \d+/.test(detalle) ||
     (orden.tipo === 'PREVENTIVA' && detalle.startsWith('Livianos: '))
   );
+}
+
+/**
+ * Las fotos de una intervención, en orden. `fotoUrls` es la lista completa;
+ * si viene vacía o falta (backend viejo, o una respuesta guardada en el caché
+ * antes del cambio) se cae a `fotoUrl`, la única foto que existía antes.
+ */
+export function fotosIntervencion(intervencion: Pick<Intervencion, 'fotoUrl'> & { fotoUrls?: string[] }): string[] {
+  if (intervencion.fotoUrls && intervencion.fotoUrls.length > 0) return intervencion.fotoUrls;
+  return intervencion.fotoUrl ? [intervencion.fotoUrl] : [];
 }

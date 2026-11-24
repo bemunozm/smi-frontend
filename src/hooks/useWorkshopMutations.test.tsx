@@ -104,22 +104,26 @@ describe('useFinishTask', () => {
     });
   });
 
-  it('la foto del cierre viaja como archivo del write (el replay inyecta fotoKey)', async () => {
+  it('con 3 fotos, el write lleva 3 archivos en fotoKeys.0..2 (el replay sube cada una e inyecta su key)', async () => {
     submitWriteMock.mockResolvedValueOnce(enviado(RESULTADO));
-    const foto = new File(['x'], 'cierre.jpg', { type: 'image/jpeg' });
+    const fotos = ['a', 'b', 'c'].map((n) => new File([n], `cierre-${n}.jpg`, { type: 'image/jpeg' }));
 
     const { result } = renderHook(() => useFinishTask(), { wrapper });
-    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, foto });
+    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, fotos });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect((submitWriteMock.mock.calls[0][1] as { files?: unknown }).files).toEqual([{ field: 'fotoKey', file: foto }]);
+    expect((submitWriteMock.mock.calls[0][1] as { files?: unknown }).files).toEqual([
+      { field: 'fotoKeys.0', file: fotos[0] },
+      { field: 'fotoKeys.1', file: fotos[1] },
+      { field: 'fotoKeys.2', file: fotos[2] },
+    ]);
   });
 
-  it('sin foto, el write no lleva archivos', async () => {
+  it.each([undefined, []])('sin fotos (%j), el write no lleva archivos', async (fotos) => {
     submitWriteMock.mockResolvedValueOnce(enviado(RESULTADO));
 
     const { result } = renderHook(() => useFinishTask(), { wrapper });
-    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, foto: null });
+    result.current.mutate({ orden: ORDEN, intervencion: INTERVENCION_INPUT, fotos });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect((submitWriteMock.mock.calls[0][1] as { files?: unknown }).files).toBeUndefined();

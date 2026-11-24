@@ -9,13 +9,10 @@ import { Boton, Chip, ChipEstado, Filas, ModalTerreno } from '../terreno/ui';
 import { TIPO_OT_LABELS } from '../../config/mantenimiento-colors';
 import type { OrdenTrabajo } from '../../types/mantenimiento';
 import { UNIT_SYMBOLS } from '../../types/inventory';
-import { equipmentLabel, formatDate, type EquipmentRef } from './workshop';
+import { equipmentLabel, formatDate, fotosIntervencion, type EquipmentRef } from './workshop';
 
 /** Mismos hex que los estados de hallazgo en Terreno (`HallazgosView`). */
-const ESTADO_HEX: Record<string, string> = {
-  COMPLETADA: '#156237',
-  CANCELADA: '#971414',
-};
+const ESTADO_HEX: Record<string, string> = { COMPLETADA: '#156237', CANCELADA: '#971414' };
 
 /**
  * Contenido del pop-up. Componente aparte para que `useIntervenciones` se
@@ -33,13 +30,12 @@ function OperationDetail({
   const { data: items } = useItems();
   // La lista viene ordenada `fecha desc` → la primera es la de cierre.
   const cierre = intervenciones?.[0] ?? null;
+  const fotos = cierre ? fotosIntervencion(cierre) : [];
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>
-          {TIPO_OT_LABELS[orden.tipo]}
-        </Chip>
+        <Chip tono={orden.tipo === 'PREVENTIVA' ? 'info' : 'neutral'}>{TIPO_OT_LABELS[orden.tipo]}</Chip>
         <ChipEstado color={ESTADO_HEX[orden.estado] ?? '#1a3a9c'}>
           {orden.estado === 'CANCELADA' ? 'Cancelada' : 'Finalizada'}
         </ChipEstado>
@@ -68,22 +64,24 @@ function OperationDetail({
               ['Equipo', equipmentLabel(orden.equipoId, equipment)],
               ['Operación', orden.titulo],
               ['¿Qué se hizo?', cierre.detalle],
-              [
-                'Horómetro de cierre',
-                cierre.horometro !== null ? `${cierre.horometro} h` : '—',
-              ],
+              ['Horómetro de cierre', cierre.horometro !== null ? `${cierre.horometro} h` : '—'],
               ['Registrada', formatDate(cierre.fecha)],
             ]}
           />
 
-          {cierre.fotoUrl ? (
-            <a href={cierre.fotoUrl} rel="noreferrer" target="_blank">
-              <img
-                alt="Foto del cierre"
-                className="max-h-48 w-fit rounded-2xl border border-border object-cover"
-                src={cierre.fotoUrl}
-              />
-            </a>
+          {/* Galería de las fotos del cierre: cada una abre en grande. */}
+          {fotos.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {fotos.map((url, i) => (
+                <a key={url} href={url} rel="noreferrer" target="_blank">
+                  <img
+                    alt={fotos.length > 1 ? `Foto del cierre ${i + 1}` : 'Foto del cierre'}
+                    className="h-32 w-full rounded-2xl border border-border object-cover"
+                    src={url}
+                  />
+                </a>
+              ))}
+            </div>
           ) : null}
 
           {cierre.insumos.length > 0 ? (
@@ -114,17 +112,14 @@ function OperationDetail({
       ) : (
         <div className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border py-8 text-center">
           <p className="m-0 text-sm font-semibold">Sin bitácora registrada</p>
-          <p className="m-0 text-sm text-muted-foreground">
-            Esta operación se cerró sin una intervención asociada.
-          </p>
+          <p className="m-0 text-sm text-muted-foreground">Esta operación se cerró sin una intervención asociada.</p>
         </div>
       )}
 
       <div className="flex items-start gap-2.5 rounded-2xl bg-[#fafbfc] px-3.5 py-3 text-[13px] leading-5 text-muted-foreground">
         <Package className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Stock descontado al finalizar — cada insumo quedó como salida trazable ligada a esta OT
-          en Inventario.
+          Stock descontado al finalizar — cada insumo quedó como salida trazable ligada a esta OT en Inventario.
         </span>
       </div>
     </>

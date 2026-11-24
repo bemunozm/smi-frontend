@@ -7,6 +7,7 @@ import {
   buildWorkshopStats,
   equipmentLabel,
   formatDate,
+  fotosIntervencion,
   groupWorkshopBoard,
   splitFinished,
   avisoLecturaMantencion,
@@ -264,5 +265,20 @@ describe('lectura de la mantención', () => {
     };
     expect(lecturaMantencion('TLJD77', [liviano])).toMatchObject({ unidad: 'km', actual: 268617, inicial: '268617' });
     expect(lecturaMantencion('NO-EXISTE', [liviano])).toMatchObject({ unidad: 'h', actual: null, inicial: '' });
+  });
+});
+
+describe('fotosIntervencion', () => {
+  it('usa la lista completa de fotos, en orden', () => {
+    expect(fotosIntervencion({ fotoUrl: 'a', fotoUrls: ['a', 'b', 'c'] })).toEqual(['a', 'b', 'c']);
+  });
+
+  it('sin `fotoUrls` (backend o caché viejos) cae a la única `fotoUrl`', () => {
+    expect(fotosIntervencion({ fotoUrl: 'a' })).toEqual(['a']);
+    expect(fotosIntervencion({ fotoUrl: 'a', fotoUrls: [] })).toEqual(['a']);
+  });
+
+  it('sin fotos, lista vacía', () => {
+    expect(fotosIntervencion({ fotoUrl: null, fotoUrls: [] })).toEqual([]);
   });
 });

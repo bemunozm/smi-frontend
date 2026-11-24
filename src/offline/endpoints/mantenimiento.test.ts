@@ -72,5 +72,11 @@ describe('orden.finalizar', () => {
     };
     expect(def.parse({ orden, intervencion })).toMatchObject({ orden: { estado: 'COMPLETADA' }, intervencion });
     expect(def.parse({ orden })).toBeNull();
+    // Un backend que aún no manda `fotoUrls` (desplegado antes): la lista queda vacía.
+    expect(def.parse({ orden, intervencion })?.intervencion.fotoUrls).toEqual([]);
+    const fotoUrls = ['https://s/1.jpg', 'https://s/2.jpg'];
+    expect(
+      def.parse({ orden, intervencion: { ...intervencion, fotoUrl: fotoUrls[0], fotoUrls } })?.intervencion,
+    ).toMatchObject({ fotoUrl: fotoUrls[0], fotoUrls });
   });
 });

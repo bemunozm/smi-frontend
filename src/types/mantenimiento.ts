@@ -195,8 +195,12 @@ export const IntervencionSchema = z.object({
   detalle: z.string(),
   horasHombre: z.number(),
   horometro: z.number().nullable(),
-  /** URL firmada de la foto del cierre (el backend nunca expone la key). */
+  /** URL firmada de la PRIMERA foto del cierre (el backend nunca expone la
+   * key) — se mantiene por compatibilidad; la galería usa `fotoUrls`. */
   fotoUrl: z.string().nullable(),
+  /** Todas las fotos del cierre (hasta 10), firmadas y en orden. `[]` si el
+   * backend todavía no manda el campo. */
+  fotoUrls: z.array(z.string()).default([]),
   soloLectura: z.boolean(),
   /** Nombre de quien la realizó — null en filas viejas o cuenta borrada;
    * opcional para tolerar un backend que aún no manda el campo. */
@@ -251,6 +255,9 @@ export type FinalizarOrdenInput = CreateIntervencionInput & {
   equipmentStatus?: EquipmentStatus;
   /** Solo OT PREVENTIVA: la lectura al momento de la mantención. */
   lecturaMantencion?: number;
+  /** Las fotos del cierre (hasta 10), ya subidas: las pone el replay de la
+   * cola (`fotoKeys.<i>`), nunca el formulario. */
+  fotoKeys?: string[];
 };
 
 /** Respuesta de `/finalizar`: la orden ya COMPLETADA y su intervención de cierre. */

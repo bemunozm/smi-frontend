@@ -25,10 +25,12 @@ import { PizarraMantenciones } from '../components/mantenimiento/pizarra/Pizarra
 import {
   avisoLecturaMantencion,
   avisoLecturaMayor,
+  fotosIntervencion,
   lecturaMantencion,
   leerLecturaMantencion,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
+import { FotosField } from '../components/terreno/FotosField';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -161,6 +163,24 @@ function TareaRealizada({ tarea }: { tarea: Tarea }) {
   );
 }
 
+/** Las fotos del cierre como miniaturas; cada una abre en grande. */
+function FotosCierre({ urls }: { urls: string[] }) {
+  if (urls.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {urls.map((url, i) => (
+        <a key={url} href={url} rel="noreferrer" target="_blank">
+          <img
+            alt={`Foto del cierre ${i + 1}`}
+            className="h-16 w-16 rounded-lg border border-border object-cover"
+            src={url}
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Detalle de UNA mantención: los datos de la orden, las tareas realizadas (qué
  * se hizo, quién, cuándo, foto) y las intervenciones del cierre con los
@@ -272,16 +292,7 @@ function DetalleMantencionModal({
                               ))}
                             </ul>
                           ) : null}
-                          {intervencion.fotoUrl ? (
-                            <a
-                              className="mt-1 inline-block text-xs text-(--accent) hover:underline"
-                              href={intervencion.fotoUrl}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              Ver foto del cierre
-                            </a>
-                          ) : null}
+                          <FotosCierre urls={fotosIntervencion(intervencion)} />
                         </div>
                       ))}
                     </div>
@@ -329,6 +340,8 @@ function FinalizarMantencionModal({
   const finalizar = useFinishTask();
   const [detalle, setDetalle] = useState('');
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
+  // Opcionales, hasta 10 — el mismo campo que «Finalizar tarea» del taller.
+  const [fotos, setFotos] = useState<File[]>([]);
   const esPreventiva = orden.tipo === 'PREVENTIVA';
   const campoLectura = lecturaMantencion(orden.equipoId, equipos);
   // El texto tal cual se escribe, leído según la unidad: en km, entero con
@@ -357,6 +370,7 @@ function FinalizarMantencionModal({
         intervencion: { tipo: orden.tipo, detalle: detalle.trim() },
         equipmentStatus: equipoFinal,
         ...(esPreventiva && 'valor' in lecturaLeida ? { lecturaMantencion: lecturaLeida.valor } : {}),
+        fotos,
       },
       { onSuccess: onClose },
     );
@@ -431,6 +445,12 @@ function FinalizarMantencionModal({
                   ))}
                 </div>
               </div>
+              <FotosField
+                descripcion="Opcional. Respalda el trabajo terminado, hasta 10 fotos."
+                fotos={fotos}
+                label="Fotos de lo realizado"
+                onChange={setFotos}
+              />
               <p className="text-xs text-muted-foreground">
                 Los insumos no se cargan acá: si se usaron repuestos, los descuenta el taller desde su stock.
               </p>
@@ -790,57 +810,59 @@ export function MantencionesAdminView() {
 
             {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
               <>
-              <SortControl onChange={setSort} options={OPCIONES_ORDEN} sort={sort} />
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {lista.map((orden) => (
-                  <li
-                    className="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 hover:bg-default"
-                    data-testid={`mantencion-fila-${orden.id}`}
-                    key={orden.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setFiltro('id', orden.id, '')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setFiltro('id', orden.id, '');
-                      }
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="text-sm text-muted-foreground">
-                        {formatFecha(fechaDeMantencion(orden))} ·{' '}
-                        <span className="font-mono whitespace-nowrap text-foreground">{codigoDe(orden.equipoId)}</span>
-                      </span>
-                      <Chip color={TIPO_COLOR[orden.tipo] ?? 'default'} size="sm" variant="soft">
-                        {TIPO_LABEL[orden.tipo] ?? orden.tipo}
-                      </Chip>
-                    </div>
-                    <p className="m-0 text-[15px] font-semibold break-words text-foreground">{orden.titulo}</p>
-                    {orden.estado !== 'COMPLETADA' ? (
-                      <Chip className="w-fit" color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
-                        {ESTADO_OT_LABELS[orden.estado]}
-                      </Chip>
-                    ) : null}
-                    <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
-                      <div className="flex min-w-0 flex-col">
-                        <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                          Mantenedor
-                        </dt>
-                        <dd className="m-0 break-words text-foreground">{mantenedoresDe(orden).join(', ') || '—'}</dd>
+                <SortControl onChange={setSort} options={OPCIONES_ORDEN} sort={sort} />
+                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                  {lista.map((orden) => (
+                    <li
+                      className="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 hover:bg-default"
+                      data-testid={`mantencion-fila-${orden.id}`}
+                      key={orden.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setFiltro('id', orden.id, '')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setFiltro('id', orden.id, '');
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">
+                          {formatFecha(fechaDeMantencion(orden))} ·{' '}
+                          <span className="font-mono whitespace-nowrap text-foreground">
+                            {codigoDe(orden.equipoId)}
+                          </span>
+                        </span>
+                        <Chip color={TIPO_COLOR[orden.tipo] ?? 'default'} size="sm" variant="soft">
+                          {TIPO_LABEL[orden.tipo] ?? orden.tipo}
+                        </Chip>
                       </div>
-                      <div className="flex flex-col">
-                        <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                          Tareas
-                        </dt>
-                        <dd className="m-0 font-mono font-semibold text-foreground">
-                          {orden.tareas.filter((t) => t.hecha).length}/{orden.tareas.length}
-                        </dd>
-                      </div>
-                    </dl>
-                  </li>
-                ))}
-              </ul>
+                      <p className="m-0 text-[15px] font-semibold break-words text-foreground">{orden.titulo}</p>
+                      {orden.estado !== 'COMPLETADA' ? (
+                        <Chip className="w-fit" color={estadoOTChipColor(orden.estado)} size="sm" variant="soft">
+                          {ESTADO_OT_LABELS[orden.estado]}
+                        </Chip>
+                      ) : null}
+                      <dl className="m-0 grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary px-3 py-2.5 text-sm">
+                        <div className="flex min-w-0 flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Mantenedor
+                          </dt>
+                          <dd className="m-0 break-words text-foreground">{mantenedoresDe(orden).join(', ') || '—'}</dd>
+                        </div>
+                        <div className="flex flex-col">
+                          <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Tareas
+                          </dt>
+                          <dd className="m-0 font-mono font-semibold text-foreground">
+                            {orden.tareas.filter((t) => t.hecha).length}/{orden.tareas.length}
+                          </dd>
+                        </div>
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
               </>
             ) : null}
 
