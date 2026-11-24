@@ -6,9 +6,19 @@ import { MemoryRouter } from 'react-router-dom';
 
 import type { Equipment } from '../../types/equipment';
 import type { CompatibilityEntry } from '../../types/inventory';
-import { EquipmentPicker, ItemEquipmentsCell } from './ItemEquipments';
+import type { InventoryItem } from '../../types/inventory';
+import { EditEquipmentsModal, EquipmentPicker, ItemEquipmentsCell } from './ItemEquipments';
 
-afterEach(cleanup);
+const saveMock = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+vi.mock('../../hooks/useInventory', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../hooks/useInventory')>()),
+  useSaveItemEquipments: () => saveMock,
+}));
+
+afterEach(() => {
+  cleanup();
+  saveMock.mutate.mockClear();
+});
 
 const equipo = (id: string, internalCode: string, licensePlate: string | null = null) =>
   ({ id, internalCode, licensePlate, type: 'Excavadora', brand: 'CAT', model: '320' }) as unknown as Equipment;
@@ -125,5 +135,53 @@ describe('EquipmentPicker', () => {
 
     expect(onValue).toHaveBeenLastCalledWith([{ equipmentId: 'e3' }]);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('EditEquipmentsModal', () => {
+  const ITEM = { id: 'i1', sku: 'SUM-0010', name: 'Aceite 80-90', compatibilities: [{ equipmentId: 'e1', internalCode: 'EXC-01', note: 'usa este aceite' }] } as unknown as InventoryItem;
+
+  function renderModal(onOpenChange = vi.fn()) {
+    const qc = new QueryClient();
+    qc.setQueryData(['equipment'], EQUIPOS);
+    render(
+      <QueryClientProvider client={qc}>
+        <EditEquipmentsModal isOpen item={ITEM} onOpenChange={onOpenChange} />
+      </QueryClientProvider>,
+    );
+    return onOpenChange;
+  }
+
+  it('sin cambios, Guardar está deshabilitado y Cancelar cierra sin preguntar', () => {
+    const onOpenChange = renderModal();
+    expect(screen.getByRole('button', { name: 'Guardar' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('quitar con la X avisa que hay cambios sin guardar; cerrar pide confirmar y no descarta solo', () => {
+    const onOpenChange = renderModal();
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar EXC-01' }));
+    expect(screen.getByRole('status').textContent).toContain('cambios sin guardar');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog', { name: 'Cambios sin guardar' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir editando' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar cambios' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(saveMock.mutate).not.toHaveBeenCalled();
+  });
+
+  it('Guardar envía la lista sin el equipo quitado', () => {
+    renderModal();
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar EXC-01' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(saveMock.mutate).toHaveBeenCalledWith({ item: ITEM, entries: [] }, expect.anything());
   });
 });
