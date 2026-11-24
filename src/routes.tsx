@@ -20,6 +20,8 @@ import { LoginView } from './views/LoginView';
 import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { PrevencionLayout } from './layout/PrevencionLayout';
+import { TemporalLayout } from './layout/TemporalLayout';
+import { SupervisorTemporalView } from './views/SupervisorTemporalView';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
 import { HistorialOperacionesView } from './views/HistorialOperacionesView';
 import { MiCamionetaView } from './views/MiCamionetaView';
@@ -257,6 +259,17 @@ export const router = createBrowserRouter([
               {
                 element: <PrevencionLayout />,
                 children: [{ path: '/camioneta', element: <MiCamionetaView conFicha={false} /> }],
+              },
+            ],
+          },
+          // Supervisor temporal — shell propio con una sola pantalla: abre
+          // equipos y los cierra juntos en un reporte.
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR_TEMPORAL]} />,
+            children: [
+              {
+                element: <TemporalLayout />,
+                children: [{ path: '/temporal', element: <SupervisorTemporalView /> }],
               },
             ],
           },

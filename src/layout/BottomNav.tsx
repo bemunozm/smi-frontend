@@ -64,6 +64,8 @@ const PRIMARY_BY_ROLE: Record<Role, readonly PrimaryItem[]> = {
   [ROLES.SECRETARIA]: [INICIO, HALLAZGOS, TRABAJOS_EXTRA, REPORTES_DIARIOS],
   // Vive en su shell (`/camioneta`); acá solo llega a Notificaciones o Perfil.
   [ROLES.PREVENCIONISTA]: [],
+  // Vive en su shell (`/temporal`); acá solo llega a Notificaciones o Perfil.
+  [ROLES.SUPERVISOR_TEMPORAL]: [],
 };
 
 /** Destinos que viven fuera del menú: se muestran sin pasar por `allowed`. */

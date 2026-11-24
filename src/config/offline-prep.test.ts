@@ -51,6 +51,15 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     expect([...prepKeysFor(ROLES.PREVENCIONISTA)].sort()).toEqual(['equipment', 'notificaciones', 'shiftCards']);
   });
 
+  it('SUPERVISOR_TEMPORAL precarga equipos, operadores, tarjetas y notificaciones', () => {
+    expect([...prepKeysFor(ROLES.SUPERVISOR_TEMPORAL)].sort()).toEqual([
+      'equipment',
+      'notificaciones',
+      'operators',
+      'shiftCards',
+    ]);
+  });
+
   it('ADMIN ve todo: precarga todas las listas', () => {
     expect(prepKeysFor(ROLES.ADMIN)).toEqual([...PREP_KEYS]);
   });

@@ -26,6 +26,13 @@ describe('routes', () => {
     expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.PREVENCIONISTA]);
   });
 
+  it('`/temporal` es solo del SUPERVISOR_TEMPORAL; `/terreno/registro` no lo admite', () => {
+    const temporal = findGuardOf(router.routes as unknown as Rt[], '/temporal');
+    expect(temporal?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    const terreno = findGuardOf(router.routes as unknown as Rt[], '/terreno/registro');
+    expect(terreno?.element?.props?.allowedRoles).not.toContain(ROLES.SUPERVISOR_TEMPORAL);
+  });
+
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
     for (const path of [
       '/hallazgos',
