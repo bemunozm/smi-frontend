@@ -113,6 +113,16 @@ describe('InformesTemporalesAdminView', () => {
     expect(eliminarMock).toHaveBeenCalledWith('i1', expect.anything());
   });
 
+  it('el modal de corrección respeta los largos del backend (200/200/1000)', () => {
+    render(<InformesTemporalesAdminView />);
+    fireEvent.click(screen.getByTestId('informe-fila-i1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Corregir' }));
+    expect(screen.getByDisplayValue('Carga de material').getAttribute('maxlength')).toBe('200');
+    expect(screen.getByDisplayValue('Sin novedades').getAttribute('maxlength')).toBe('1000');
+    const inputs = screen.getAllByRole('textbox') as HTMLInputElement[];
+    expect(inputs.filter((i) => i.getAttribute('maxlength') === '200')).toHaveLength(2);
+  });
+
   it('SECRETARIA puede corregir pero no ve «Eliminar»', () => {
     rol.value = 'SECRETARIA';
     render(<InformesTemporalesAdminView />);

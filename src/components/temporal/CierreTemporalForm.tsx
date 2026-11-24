@@ -9,6 +9,8 @@ import { Boton, Campo, Hint, Input, Label, Segmentado, Textarea } from '../terre
 import { useCrearInformeTemporal } from '../../hooks/useInformesTemporales';
 import { DomainError } from '../../lib/api-error';
 import {
+  MAX_ACTIVIDAD_INFORME,
+  MAX_OBSERVACIONES_INFORME,
   armarInformeTemporal,
   validarInformeTemporal,
   type InformeTemporalForm,
@@ -198,10 +200,10 @@ export function CierreTemporalForm({
       </div>
 
       <Campo label="Actividad realizada 1" requerido error={visibles.actividad1}>
-        <Input value={datos.actividad1} maxLength={200} onChange={(e) => cambiar('actividad1', e.target.value)} />
+        <Input value={datos.actividad1} maxLength={MAX_ACTIVIDAD_INFORME} onChange={(e) => cambiar('actividad1', e.target.value)} />
       </Campo>
       <Campo label="Actividad realizada 2" error={visibles.actividad2}>
-        <Input value={datos.actividad2} maxLength={200} onChange={(e) => cambiar('actividad2', e.target.value)} />
+        <Input value={datos.actividad2} maxLength={MAX_ACTIVIDAD_INFORME} onChange={(e) => cambiar('actividad2', e.target.value)} />
       </Campo>
 
       <PersonalActividad
@@ -220,7 +222,7 @@ export function CierreTemporalForm({
       <Campo label="Observaciones">
         <Textarea
           rows={3}
-          maxLength={1000}
+          maxLength={MAX_OBSERVACIONES_INFORME}
           value={datos.observaciones}
           onChange={(e) => cambiar('observaciones', e.target.value)}
         />

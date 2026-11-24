@@ -15,6 +15,10 @@ import type { CierreTemporalInput, CreateInformeTemporalInput, PersonalInforme }
 /** Tope de personas por actividad: las 10 líneas del papel (lo valida también el backend). */
 export const MAX_PERSONAL_POR_ACTIVIDAD = 10;
 
+/** Largos máximos del informe: los del DTO del backend (create y update). */
+export const MAX_ACTIVIDAD_INFORME = 200;
+export const MAX_OBSERVACIONES_INFORME = 1000;
+
 /** Tipo, marca y modelo: lo que identifica al equipo junto a su código. */
 export const nombreEquipo = (e: Pick<Equipment, 'type' | 'brand' | 'model'>) =>
   [e.type, e.brand, e.model].filter(Boolean).join(' ');

@@ -7,7 +7,11 @@ import { DateField } from '../terreno/DateField';
 import { Campo, Input, Label, Segmentado, Textarea } from '../terreno/ui';
 import { useActualizarInformeTemporal } from '../../hooks/useInformesTemporales';
 import type { InformeTemporal, PersonalInforme, UpdateInformeTemporalInput } from '../../types/informe-temporal';
-import { MAX_PERSONAL_POR_ACTIVIDAD } from '../../lib/informe-temporal';
+import {
+  MAX_ACTIVIDAD_INFORME,
+  MAX_OBSERVACIONES_INFORME,
+  MAX_PERSONAL_POR_ACTIVIDAD,
+} from '../../lib/informe-temporal';
 import { toDateOnly, type Turno } from '../../lib/turno';
 
 const SI_NO = [
@@ -142,15 +146,27 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
                 />
               </div>
               <Campo label="Actividad realizada 1" requerido error={visibles.actividad1}>
-                <Input value={actividad1} maxLength={300} onChange={(e) => setActividad1(e.target.value)} />
+                <Input
+                  value={actividad1}
+                  maxLength={MAX_ACTIVIDAD_INFORME}
+                  onChange={(e) => setActividad1(e.target.value)}
+                />
               </Campo>
               <PersonalActividad actividad={1} lineas={personal1} onChange={setPersonal1} />
               <Campo label="Actividad realizada 2">
-                <Input value={actividad2} maxLength={300} onChange={(e) => setActividad2(e.target.value)} />
+                <Input
+                  value={actividad2}
+                  maxLength={MAX_ACTIVIDAD_INFORME}
+                  onChange={(e) => setActividad2(e.target.value)}
+                />
               </Campo>
               <PersonalActividad actividad={2} lineas={personal2} onChange={setPersonal2} error={visibles.personal2} />
               <Campo label="Observaciones">
-                <Textarea value={observaciones} maxLength={2000} onChange={(e) => setObservaciones(e.target.value)} />
+                <Textarea
+                  value={observaciones}
+                  maxLength={MAX_OBSERVACIONES_INFORME}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                />
               </Campo>
               <Campo label="Supervisor responsable 1" requerido error={visibles.supervisor1}>
                 <Input value={supervisor1} maxLength={120} onChange={(e) => setSupervisor1(e.target.value)} />
