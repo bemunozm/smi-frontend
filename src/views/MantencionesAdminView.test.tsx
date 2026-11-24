@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, onTestFinished, vi } from 'vitest';
+import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 
 import type { OrdenTrabajo } from '../types/mantenimiento';
@@ -54,6 +54,7 @@ vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
   PizarraMantenciones: () => <div data-testid="pizarra" />,
 }));
 
+import { mockObjectUrls } from '../test/object-url';
 import { setViewport } from '../test/viewport';
 import { MantencionesAdminView } from './MantencionesAdminView';
 
@@ -344,10 +345,9 @@ describe('MantencionesAdminView', () => {
     );
   });
 
-  it('«Marcar como finalizada» admite varias fotos (hasta 10) y las envía con el cierre', () => {
-    let n = 0;
-    URL.createObjectURL = vi.fn(() => `blob:foto-${++n}`);
-    URL.revokeObjectURL = vi.fn();
+  it('«Marcar como finalizada» admite varias fotos (hasta 10) y las envía con el cierre', async () => {
+    const restaurarUrls = mockObjectUrls();
+    onTestFinished(restaurarUrls);
     ordenesHook.mockReturnValue(
       ok([orden({ id: 'ot5', equipoId: 'e2', titulo: 'Frenos', tipo: 'CORRECTIVA', estado: 'EN_PROCESO' })]),
     );
@@ -358,15 +358,19 @@ describe('MantencionesAdminView', () => {
     const fotos = [1, 2, 3].map((i) => new File([String(i)], `f${i}.jpg`, { type: 'image/jpeg' }));
     const galeria = dialog.querySelector('input[type="file"][multiple]');
     if (!galeria) throw new Error('input de galería no encontrado');
+    // Panel: botón HeroUI «Agregar fotos», sin cámara directa.
+    expect(within(dialog).getByRole('button', { name: /Agregar fotos/ })).toBeTruthy();
+    expect(dialog.querySelector('input[capture]')).toBeNull();
     fireEvent.change(galeria, { target: { files: fotos } });
-    expect(within(dialog).getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(3);
+    await waitFor(() => expect(within(dialog).getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(3));
 
     fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Pastillas nuevas' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
 
     expect(finalizarMock).toHaveBeenCalledTimes(1);
-    expect(finalizarMock.mock.calls[0]![0]).toMatchObject({ fotos });
+    const enviadas = (finalizarMock.mock.calls[0]![0] as { fotos: File[] }).fotos;
+    expect(enviadas.map((f) => f.name)).toEqual(['f1.jpg', 'f2.jpg', 'f3.jpg']);
   });
 
   it('el detalle muestra todas las fotos del cierre como miniaturas', () => {

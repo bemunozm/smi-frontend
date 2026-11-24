@@ -446,9 +446,11 @@ function FinalizarMantencionModal({
                 </div>
               </div>
               <FotosField
+                copiarAMemoria
                 descripcion="Opcional. Respalda el trabajo terminado, hasta 10 fotos."
                 fotos={fotos}
                 label="Fotos de lo realizado"
+                variante="panel"
                 onChange={setFotos}
               />
               <p className="text-xs text-muted-foreground">

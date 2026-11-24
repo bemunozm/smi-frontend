@@ -61,6 +61,7 @@ vi.mock('../../hooks/useInventory', () => ({
   }),
 }));
 
+import { mockObjectUrls } from '../../test/object-url';
 import { FinishTaskModal } from './FinishTaskModal';
 import type { EquipmentRef } from './workshop';
 
@@ -193,12 +194,13 @@ describe('FinishTaskModal', () => {
   });
 
   describe('varias fotos', () => {
-    let urls = 0;
+    let restaurarUrls: () => void;
     beforeEach(() => {
-      urls = 0;
-      URL.createObjectURL = vi.fn(() => `blob:foto-${++urls}`);
-      URL.revokeObjectURL = vi.fn();
+      restaurarUrls = mockObjectUrls();
     });
+    afterEach(() => restaurarUrls());
+
+    const fotosEnPantalla = () => screen.queryAllByRole('img', { name: /^Foto \d+$/ });
 
     const foto = (n: number) => new File([String(n)], `foto-${n}.jpg`, { type: 'image/jpeg' });
 
@@ -209,15 +211,16 @@ describe('FinishTaskModal', () => {
       fireEvent.change(galeria, { target: { files: fotos } });
     }
 
-    it('se agregan de a varias, hasta 10: en la décima desaparece «Agregar otra foto»', () => {
+    it('se agregan de a varias, hasta 10: en la décima desaparece «Agregar otra foto»', async () => {
       openModal();
+      // Se copian a memoria al elegirlas (asíncrono).
       elegirDeGaleria([foto(1), foto(2), foto(3)]);
-      expect(screen.getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(3);
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(3));
       expect(screen.getByRole('button', { name: /Agregar otra foto/ })).toBeTruthy();
 
       // De más se recortan al tope: nunca entra la 11.
       elegirDeGaleria(Array.from({ length: 8 }, (_, i) => foto(i + 4)));
-      expect(screen.getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(10);
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(10));
       expect(screen.queryByRole('button', { name: /Agregar otra foto/ })).toBeNull();
       expect(screen.queryByRole('button', { name: /Elegir de la galería/ })).toBeNull();
     });
@@ -227,13 +230,17 @@ describe('FinishTaskModal', () => {
       openModal(CORRECTIVA);
       fillDetalle();
       elegirDeGaleria(fotos);
+      await waitFor(() => expect(fotosEnPantalla()).toHaveLength(3));
       fireEvent.click(screen.getByRole('button', { name: 'Quitar foto 2' }));
-      expect(screen.getAllByRole('img', { name: /^Foto \d+$/ })).toHaveLength(2);
+      expect(fotosEnPantalla()).toHaveLength(2);
 
       elegirComoQueda();
       submitForm();
       await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-      expect((mutateMock.mock.calls[0][0] as { fotos?: File[] }).fotos).toEqual([fotos[0], fotos[2]]);
+      // Viajan las copias en memoria, no las referencias de la galería.
+      const enviadas = (mutateMock.mock.calls[0][0] as { fotos: File[] }).fotos;
+      expect(enviadas.map((f) => f.name)).toEqual(['foto-1.jpg', 'foto-3.jpg']);
+      expect(enviadas[0]).not.toBe(fotos[0]);
     });
 
     it('sin fotos, el cierre viaja sin fotos', async () => {

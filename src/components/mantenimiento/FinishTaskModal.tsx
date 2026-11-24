@@ -65,7 +65,9 @@ export function FinishTaskModal({
   const { faenaBranch, opcionesInsumo } = useInsumosFaena();
   const [abierto, setAbierto] = useState(false);
   // Fotos de lo realizado: opcionales, hasta 10 (mismo campo que el chequeo
-  // diario). Cada una avisa si su fecha EXIF no es reciente.
+  // diario). Se copian a memoria al elegirlas (Android puede quitar el permiso
+  // sobre la galería antes de guardar) y cada una avisa si su fecha EXIF no es
+  // reciente.
   const [fotos, setFotos] = useState<File[]>([]);
   // Cómo queda la unidad al cerrar. Parte SIN elección y es OBLIGATORIA: acá
   // se hacen operaciones para sacar piezas que dejan el equipo inoperativo, y
@@ -204,6 +206,7 @@ export function FinishTaskModal({
             />
 
             <FotosField
+              copiarAMemoria
               descripcion="Opcional. Respalda el trabajo terminado o los insumos ocupados, hasta 10 fotos."
               fotos={fotos}
               label="Fotos de lo realizado"
