@@ -1,6 +1,7 @@
 import { adBlueIncompleto, validarAdBlue } from './adblue';
 import { parseDecimal } from './decimal';
 import { validarLitros } from './litros';
+import { generateUuid } from './uuid';
 import type { Turno } from './turno';
 import type { OutboxOp } from '../offline/db';
 import type { Equipment } from '../types/equipment';
@@ -60,6 +61,10 @@ export interface FilaCierreForm {
   adBlue: boolean;
   adBlueLitros: string;
 }
+
+/** Una línea nueva del formulario de personal con su `id` estable (solo para la
+ * `key` de React; no viaja al backend). */
+export const nuevaLinea = <T extends object>(linea: T): T & { id: string } => ({ id: generateUuid(), ...linea });
 
 /** Una línea de personal: del catálogo de operadores (`operatorId`) o escrita a mano. */
 export interface PersonaForm {

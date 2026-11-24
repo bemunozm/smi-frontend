@@ -11,6 +11,7 @@ import {
   MAX_ACTIVIDAD_INFORME,
   MAX_OBSERVACIONES_INFORME,
   MAX_PERSONAL_POR_ACTIVIDAD,
+  nuevaLinea,
 } from '../../lib/informe-temporal';
 import { toDateOnly, type Turno } from '../../lib/turno';
 
@@ -22,7 +23,7 @@ const SI_NO = [
 const lineasDe = (informe: InformeTemporal, actividad: 1 | 2): LineaPersonal[] =>
   informe.personal
     .filter((p) => p.actividad === actividad)
-    .map((p) => ({ modo: p.operatorId ? 'catalogo' : 'texto', operatorId: p.operatorId, nombre: p.nombre }));
+    .map((p) => nuevaLinea({ modo: p.operatorId ? 'catalogo' : 'texto', operatorId: p.operatorId, nombre: p.nombre }));
 
 const personalDe = (l1: LineaPersonal[], l2: LineaPersonal[]): PersonalInforme[] => [
   ...l1

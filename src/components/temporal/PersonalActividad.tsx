@@ -2,10 +2,13 @@ import { PenLine, Trash2, UserPlus } from 'lucide-react';
 
 import { OperatorPicker } from '../operators/OperatorPicker';
 import { Campo, Input, Label } from '../terreno/ui';
-import { MAX_PERSONAL_POR_ACTIVIDAD, type PersonaForm } from '../../lib/informe-temporal';
+import { MAX_PERSONAL_POR_ACTIVIDAD, nuevaLinea, type PersonaForm } from '../../lib/informe-temporal';
 
 /** Una línea del personal: del catálogo (`OperatorPicker`) o escrita a mano (personal de apoyo). */
 export interface LineaPersonal extends PersonaForm {
+  /** Solo para la `key` de React: quitar una línea del medio no corre lo
+   * escrito (ni el operador elegido) a la línea de abajo. No viaja al backend. */
+  id: string;
   modo: 'catalogo' | 'texto';
 }
 
@@ -28,7 +31,8 @@ export function PersonalActividad({
   const lleno = lineas.length >= MAX_PERSONAL_POR_ACTIVIDAD;
   const cambiar = (i: number, cambio: Partial<LineaPersonal>) =>
     onChange(lineas.map((l, j) => (j === i ? { ...l, ...cambio } : l)));
-  const agregar = (modo: LineaPersonal['modo']) => onChange([...lineas, { modo, operatorId: null, nombre: '' }]);
+  const agregar = (modo: LineaPersonal['modo']) =>
+    onChange([...lineas, nuevaLinea({ modo, operatorId: null, nombre: '' })]);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -36,7 +40,7 @@ export function PersonalActividad({
         Personal de actividad {actividad} · {lineas.length}/{MAX_PERSONAL_POR_ACTIVIDAD}
       </Label>
       {lineas.map((linea, i) => (
-        <div key={i} className="flex items-end gap-2">
+        <div key={linea.id} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             {linea.modo === 'catalogo' ? (
               <OperatorPicker
