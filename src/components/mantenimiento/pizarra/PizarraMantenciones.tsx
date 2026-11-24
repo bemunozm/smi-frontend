@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Spinner, Table, ToggleButton, ToggleButtonGroup, Tooltip } from '@heroui/react';
-import { CalendarDays, CircleAlert, ClipboardList, Clock, History, SquareKanban, TriangleAlert } from 'lucide-react';
+import { CalendarDays, CircleAlert, ClipboardList, Clock, TriangleAlert } from 'lucide-react';
 
 import { useMaintenanceBoard, useMaintenanceForecastByEquipment } from '../../../hooks/useMaintenancePlans';
 import { DESKTOP_QUERY, useMediaQuery } from '../../../hooks/useMediaQuery';
@@ -162,14 +162,7 @@ function Equipo({ fila, sinEstado = false }: { fila: MaintenanceBoardRow; sinEst
  * la misma regla que dispara las órdenes preventivas: la pizarra no puede
  * mostrar un próximo cambio distinto al del aviso.
  */
-export function PizarraMantenciones({
-  onVerRegistro,
-  onVerTablero,
-}: {
-  onVerRegistro: () => void;
-  /** Lleva al tablero del mantenedor (`?vista=tablero`); sin él no hay atajo. */
-  onVerTablero?: () => void;
-}) {
+export function PizarraMantenciones() {
   const { data, isPending, isError, error } = useMaintenanceBoard();
   const { data: pronosticos } = useMaintenanceForecastByEquipment();
   const [params, setParams] = useSearchParams();
@@ -239,6 +232,7 @@ export function PizarraMantenciones({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* El cambio entre pizarra, registro y tablero vive en `MantencionesAdminView` (selector fijo arriba). */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ToggleButtonGroup
           aria-label="Panel de equipos"
@@ -250,20 +244,6 @@ export function PizarraMantenciones({
           <ToggleButton id="pesados">Equipos pesados</ToggleButton>
           <ToggleButton id="livianos">Equipos livianos</ToggleButton>
         </ToggleButtonGroup>
-        {/* Los dos accesos juntos y con su propio wrap: en el teléfono bajan en bloque bajo el selector de panel. */}
-        <div className="flex flex-wrap gap-2">
-          <Button onPress={onVerRegistro} size="sm" variant="secondary">
-            <History className="size-4" />
-            Ver registro de mantención
-          </Button>
-          {/* El tablero es del ADMIN, igual que el botón de vista del registro: la SECRETARIA no lo ve. */}
-          {esAdmin && onVerTablero ? (
-            <Button onPress={onVerTablero} size="sm" variant="secondary">
-              <SquareKanban className="size-4" />
-              Vista tablero mantenedor
-            </Button>
-          ) : null}
-        </div>
       </div>
 
       <Card>
