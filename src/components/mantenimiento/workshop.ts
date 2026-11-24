@@ -124,11 +124,12 @@ export interface LecturaMantencion {
   label: string;
   unidad: 'h' | 'km';
   /** La lectura actual del equipo como texto del campo (coma decimal, sin
-   * miles; en km, entera); `''` si no se conoce — el campo queda vacío y hay
-   * que escribirla. */
+   * miles; en km, entera), redondeada HACIA ABAJO para no quedar nunca sobre
+   * la actual; `''` si no se conoce — el campo queda vacío y hay que escribirla. */
   inicial: string;
-  /** La lectura actual del equipo, si se conoce: la de la mantención no puede
-   * superarla (el backend también lo rechaza). */
+  /** La última lectura conocida del equipo (de la lista de Flota en caché):
+   * una lectura de mantención mayor se avisa, no se bloquea — el backend la
+   * compara contra el valor fresco. */
   actual: number | null;
 }
 
@@ -148,7 +149,8 @@ export function lecturaMantencion(equipoId: string, equipment: readonly Equipmen
   return {
     label: esKm ? 'Kilometraje al momento de la mantención (km)' : 'Horómetro al momento de la mantención (h)',
     unidad: esKm ? 'km' : 'h',
-    inicial: formatDecimalInput(actual, esKm ? 0 : 2),
+    // Hacia abajo: 264582,5 km redondeado (264583) quedaría sobre la actual.
+    inicial: formatDecimalInput(actual == null ? null : esKm ? Math.floor(actual) : Math.floor(actual * 100) / 100, 2),
     actual,
   };
 }
@@ -174,17 +176,24 @@ export function avisoLecturaMantencion(texto: string, unidad: LecturaMantencion[
 
 /**
  * Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es
- * obligatoria); `null` si vale. Con la lectura actual del equipo conocida, la
- * de la mantención no puede superarla.
+ * obligatoria); `null` si vale.
  */
-export function errorLecturaMantencion(valor: number | null | undefined, campo?: CampoLectura): string | null {
+export function errorLecturaMantencion(valor: number | null | undefined): string | null {
   if (valor == null || Number.isNaN(valor)) return 'Indica la lectura al momento de la mantención.';
   if (valor < 0) return 'Escribe una lectura válida (0 o mayor).';
   if (valor > LECTURA_MAXIMA) return 'La lectura no puede superar 1.000.000.';
-  if (campo?.actual != null && valor > campo.actual) {
-    return `La lectura no puede ser mayor que la lectura actual del equipo (${fmtNum(campo.actual)} ${campo.unidad}).`;
-  }
   return null;
+}
+
+/**
+ * Aviso (no bloquea) para una lectura de mantención mayor que la última
+ * conocida del equipo. La lista de Flota puede estar atrasada (sin señal, otra
+ * tablet registró una lectura después): bloquear impediría un cierre que el
+ * backend, que compara contra el valor fresco, aceptaría. `null` si no aplica.
+ */
+export function avisoLecturaMayor(valor: number | null | undefined, campo: CampoLectura): string | null {
+  if (valor == null || Number.isNaN(valor) || campo.actual == null || valor <= campo.actual) return null;
+  return `Es mayor que la última lectura conocida del equipo (${fmtNum(campo.actual)} ${campo.unidad}); revisa que esté bien.`;
 }
 
 /** Por qué un texto no es una lectura en esa unidad (en km, que no es entera). */
@@ -199,7 +208,7 @@ export function leerLecturaMantencion(texto: string, campo: CampoLectura): { val
   if (texto.trim() === '') return { error: 'Indica la lectura al momento de la mantención.' };
   const valor = parseLecturaMantencion(texto, campo.unidad);
   if (valor == null) return { error: errorDeTexto(campo.unidad) };
-  const error = errorLecturaMantencion(valor, campo);
+  const error = errorLecturaMantencion(valor);
   return error ? { error } : { valor };
 }
 

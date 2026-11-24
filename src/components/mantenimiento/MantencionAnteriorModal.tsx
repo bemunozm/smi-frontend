@@ -21,7 +21,7 @@ import { fmtNum } from '../../lib/format';
 import type { ControlUnit } from '../../types/equipment';
 import type { TipoOT } from '../../types/mantenimiento';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
-import { avisoLecturaMantencion, parseLecturaMantencion } from './workshop';
+import { avisoLecturaMantencion, avisoLecturaMayor, leerLecturaOpcional } from './workshop';
 
 const TIPO_OPTIONS = [
   { value: 'PREVENTIVA', label: 'Preventiva' },
@@ -53,7 +53,15 @@ export function MantencionAnteriorModal({
   pauta,
   lecturaObligatoria = false,
 }: {
-  equipo: { id: string; internalCode: string; controlUnit: ControlUnit };
+  /** Las lecturas actuales (opcionales) solo sirven para avisar si la de la
+   * mantención es mayor que la última conocida; no bloquean. */
+  equipo: {
+    id: string;
+    internalCode: string;
+    controlUnit: ControlUnit;
+    currentHourmeter?: number | null;
+    currentMileage?: number | null;
+  };
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   /** Desde la pizarra: los hitos de la pauta del equipo. Con ella se elige
@@ -81,18 +89,16 @@ export function MantencionAnteriorModal({
   const lecturaLabel = esKm ? 'Kilometraje en la mantención (km)' : 'Horómetro en la mantención (h)';
   const unidad = esKm ? 'km' : 'h';
   // En km, entero con separador de miles («84.306» = 84306 km); en horas,
-  // coma o punto decimal (con aviso si «1.500» parece de miles).
-  const lecturaNumero = lectura.trim() === '' ? undefined : (parseLecturaMantencion(lectura, unidad) ?? Number.NaN);
+  // coma o punto decimal. Errores: decimales en km, negativa o sobre el tope
+  // de 1.000.000. Avisos (no bloquean): «1.500» h se lee 1,5 y una lectura
+  // mayor que la última conocida del equipo.
+  const campoLectura = { unidad, actual: (esKm ? equipo.currentMileage : equipo.currentHourmeter) ?? null } as const;
+  const lecturaLeida = leerLecturaOpcional(lectura, campoLectura);
+  const lecturaNumero = 'valor' in lecturaLeida ? lecturaLeida.valor : undefined;
+  const errorLectura = 'error' in lecturaLeida ? lecturaLeida.error : null;
   const lecturaRequerida = lecturaObligatoria || pauta != null;
-  const lecturaValida =
-    lecturaNumero === undefined ? !lecturaRequerida : Number.isFinite(lecturaNumero) && lecturaNumero >= 0;
-  const errorLectura =
-    lecturaNumero !== undefined && !lecturaValida
-      ? esKm
-        ? 'Escribe los km como número entero, sin decimales.'
-        : 'Escribe una lectura válida (0 o mayor).'
-      : null;
-  const avisoLectura = avisoLecturaMantencion(lectura, unidad);
+  const lecturaValida = errorLectura == null && (lecturaNumero !== undefined || !lecturaRequerida);
+  const avisosLectura = [avisoLecturaMantencion(lectura, unidad), avisoLecturaMayor(lecturaNumero, campoLectura)];
   // Servicio inicial (si la pauta lo tiene) y cada hito, en la unidad del equipo.
   const opcionesHito = [
     ...(pauta?.initialMilestone != null
@@ -285,11 +291,13 @@ export function MantencionAnteriorModal({
                   <Label>{lecturaLabel}</Label>
                   <Input inputMode={esKm ? 'numeric' : 'decimal'} placeholder={esKm ? '84306' : '1250'} />
                   {errorLectura ? <FieldError>{errorLectura}</FieldError> : null}
-                  {avisoLectura ? (
-                    <p className="m-0 text-xs text-warning-soft-foreground" role="status">
-                      {avisoLectura}
-                    </p>
-                  ) : null}
+                  {avisosLectura.map((aviso, i) =>
+                    aviso ? (
+                      <p className="m-0 text-xs text-warning-soft-foreground" key={i} role="status">
+                        {aviso}
+                      </p>
+                    ) : null,
+                  )}
                 </TextField>
               </div>
 

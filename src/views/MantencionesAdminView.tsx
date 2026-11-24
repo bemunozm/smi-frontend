@@ -1,6 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button, Card, Label, ListBox, Modal, Select, Spinner, Table, TextArea, TextField, Input } from '@heroui/react';
+import {
+  Button,
+  Card,
+  FieldError,
+  Label,
+  ListBox,
+  Modal,
+  Select,
+  Spinner,
+  Table,
+  TextArea,
+  TextField,
+  Input,
+} from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
 import { ArrowLeft, SquareKanban, Table2 } from 'lucide-react';
 
@@ -8,13 +21,12 @@ import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 
 import { PizarraMantenciones } from '../components/mantenimiento/pizarra/PizarraMantenciones';
 import {
-  errorLecturaMantencion,
+  avisoLecturaMantencion,
+  avisoLecturaMayor,
   lecturaMantencion,
-  parseLecturaMantencion,
+  leerLecturaMantencion,
   type EquipmentRef,
 } from '../components/mantenimiento/workshop';
-import { DecimalField } from '../components/DecimalField';
-import { IntegerField } from '../components/IntegerField';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
@@ -279,7 +291,7 @@ function DetalleMantencionModal({
  * COMPLETADA con el estado en que queda el equipo, obligatorio igual que en
  * «Finalizar tarea» (`useFinishTask`: una sola escritura atómica por la cola).
  * Si es PREVENTIVA pide además la lectura al momento de la mantención
- * (prellenada con la actual del equipo, que no puede superar): desde ahí el
+ * (prellenada con la actual del equipo; si la supera, solo se avisa): desde ahí el
  * backend cuenta el próximo cambio. En km la lectura es entera y el punto es de
  * miles («264.582» = 264582 km); en horas, decimal.
  */
@@ -297,14 +309,22 @@ function FinalizarMantencionModal({
   const [equipoFinal, setEquipoFinal] = useState<EquipmentStatus | ''>('');
   const esPreventiva = orden.tipo === 'PREVENTIVA';
   const campoLectura = lecturaMantencion(orden.equipoId, equipos);
-  // `NaN` = vacía (la lectura actual del equipo no se conoce): hay que escribirla.
-  const [lectura, setLectura] = useState(
-    () => parseLecturaMantencion(campoLectura.inicial, campoLectura.unidad) ?? Number.NaN,
-  );
+  // El texto tal cual se escribe, leído según la unidad: en km, entero con
+  // separador de miles; en horas, decimal. `''` si la lectura actual del
+  // equipo no se conoce: hay que escribirla.
+  const [lecturaTexto, setLecturaTexto] = useState(campoLectura.inicial);
   const [lecturaTocada, setLecturaTocada] = useState(false);
-  const errorLectura = esPreventiva ? errorLecturaMantencion(lectura, campoLectura) : null;
-  // En km, entero con separador de miles; en horas, decimal (avisa «1.500»).
-  const CampoLecturaField = campoLectura.unidad === 'km' ? IntegerField : DecimalField;
+  const lecturaLeida = leerLecturaMantencion(lecturaTexto, campoLectura);
+  const errorLectura = esPreventiva && 'error' in lecturaLeida ? lecturaLeida.error : null;
+  // Con texto, el error se ve siempre (si no, el botón queda apagado sin
+  // motivo a la vista); vacío, recién después de tocarlo.
+  const verErrorLectura = errorLectura != null && (lecturaTocada || lecturaTexto.trim() !== '');
+  // Avisos que no bloquean: «1.500» h se lee 1,5 y una lectura mayor que la
+  // última conocida (la lista de Flota puede estar atrasada; decide el backend).
+  const avisosLectura = [
+    avisoLecturaMantencion(lecturaTexto, campoLectura.unidad),
+    'valor' in lecturaLeida ? avisoLecturaMayor(lecturaLeida.valor, campoLectura) : null,
+  ];
   const valido = detalle.trim().length >= 3 && equipoFinal !== '' && errorLectura == null;
 
   const guardar = () => {
@@ -314,7 +334,7 @@ function FinalizarMantencionModal({
         orden,
         intervencion: { tipo: orden.tipo, detalle: detalle.trim() },
         equipmentStatus: equipoFinal,
-        ...(esPreventiva ? { lecturaMantencion: lectura } : {}),
+        ...(esPreventiva && 'valor' in lecturaLeida ? { lecturaMantencion: lecturaLeida.valor } : {}),
       },
       { onSuccess: onClose },
     );
@@ -345,16 +365,31 @@ function FinalizarMantencionModal({
               </TextField>
               {esPreventiva ? (
                 <div className="flex flex-col gap-1">
-                  <CampoLecturaField
-                    errorMessage={lecturaTocada ? errorLectura : null}
-                    isInvalid={lecturaTocada && errorLectura != null}
-                    label={campoLectura.label}
-                    onChange={(valor) => {
-                      setLectura(valor);
+                  <TextField
+                    fullWidth
+                    isInvalid={verErrorLectura}
+                    name="lectura"
+                    onChange={(texto) => {
+                      setLecturaTexto(texto);
                       setLecturaTocada(true);
                     }}
-                    value={lectura}
-                  />
+                    value={lecturaTexto}
+                  >
+                    <Label>{campoLectura.label}</Label>
+                    <Input
+                      inputMode={campoLectura.unidad === 'km' ? 'numeric' : 'decimal'}
+                      onFocus={(event) => event.currentTarget.select()}
+                      placeholder=" "
+                    />
+                    {verErrorLectura ? <FieldError>{errorLectura}</FieldError> : null}
+                    {avisosLectura.map((aviso, i) =>
+                      aviso ? (
+                        <p className="m-0 text-xs text-warning-soft-foreground" key={i} role="status">
+                          {aviso}
+                        </p>
+                      ) : null,
+                    )}
+                  </TextField>
                   <p className="text-xs text-muted-foreground">Desde esta lectura se cuenta la próxima mantención.</p>
                 </div>
               ) : null}

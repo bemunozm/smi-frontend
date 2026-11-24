@@ -28,6 +28,7 @@ import { parseDecimal } from '../../lib/decimal';
 import {
   equipmentLabel,
   lecturaMantencion,
+  avisoLecturaMayor,
   leerLecturaMantencion,
   parseLecturaMantencion,
   type EquipmentRef,
@@ -303,6 +304,13 @@ export function FinishTaskModal({
               name="horometro"
               render={({ field }) => (
                 <Campo
+                  // Mayor que la última lectura conocida: se avisa, no se
+                  // bloquea (la lista de Flota puede estar atrasada).
+                  aviso={
+                    esPreventiva
+                      ? avisoLecturaMayor(parseLecturaMantencion(horometroTexto, unidadCampo), campoLectura)
+                      : undefined
+                  }
                   error={errors.horometro?.message}
                   hint={
                     esPreventiva

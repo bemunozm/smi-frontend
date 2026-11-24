@@ -377,17 +377,31 @@ describe('FinishTaskModal', () => {
       expect((mutateMock.mock.calls[0][0] as { lecturaMantencion?: number }).lecturaMantencion).toBe(264582);
     });
 
-    it('no deja cerrar con una lectura mayor que la actual del equipo', async () => {
+    it('una lectura mayor que la última conocida solo se avisa: la caché puede estar atrasada y decide el backend', async () => {
       openModal(ORDEN, [{ ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 268617 }]);
       fillDetalle();
       fireEvent.change(screen.getByLabelText(/Kilometraje al momento de la mantención/), {
         target: { value: '268.700' },
       });
+      expect(screen.getByText(/mayor que la última lectura conocida del equipo \(268\.617 km\)/)).toBeTruthy();
       elegirComoQueda();
       submitForm();
 
-      await waitFor(() => expect(screen.getByText(/no puede ser mayor que la lectura actual del equipo/)).toBeTruthy());
-      expect(mutateMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      expect((mutateMock.mock.calls[0][0] as { lecturaMantencion?: number }).lecturaMantencion).toBe(268700);
+    });
+
+    it('una lectura actual con decimales se prellena hacia abajo y cierra sin errores', async () => {
+      openModal(ORDEN, [{ ...EQUIPMENT[0]!, controlUnit: 'KM', currentHourmeter: null, currentMileage: 264582.5 }]);
+      expect((screen.getByLabelText(/Kilometraje al momento de la mantención/) as HTMLInputElement).value).toBe(
+        '264582',
+      );
+      fillDetalle();
+      elegirComoQueda();
+      submitForm();
+
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      expect((mutateMock.mock.calls[0][0] as { lecturaMantencion?: number }).lecturaMantencion).toBe(264582);
     });
 
     it('una correctiva no la pide ni la envía', async () => {

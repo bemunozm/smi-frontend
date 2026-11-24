@@ -19,7 +19,14 @@ import {
 import { usePhotoCaptureFlow } from '../../lib/usePhotoCaptureFlow';
 import { useCompletarTarea } from '../../hooks/useOrdenes';
 import type { OrdenTrabajo, Tarea } from '../../types/mantenimiento';
-import { equipmentLabel, formatDate, lecturaMantencion, leerLecturaMantencion, type EquipmentRef } from './workshop';
+import {
+  avisoLecturaMayor,
+  equipmentLabel,
+  formatDate,
+  lecturaMantencion,
+  leerLecturaMantencion,
+  type EquipmentRef,
+} from './workshop';
 import { useInsumosFaena } from './insumos-faena';
 
 const ESTADO_HEX: Record<string, string> = {
@@ -187,6 +194,7 @@ function TareaForm({
 
       {pideLectura ? (
         <Campo
+          aviso={'valor' in lecturaLeida ? avisoLecturaMayor(lecturaLeida.valor, campoLectura) : undefined}
           error={lectura.trim() !== '' && 'error' in lecturaLeida ? lecturaLeida.error : undefined}
           hint="Con esta tarea se completa la mantención: desde esta lectura se cuenta el próximo cambio."
           label={campoLectura.label}

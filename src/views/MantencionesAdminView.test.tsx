@@ -35,6 +35,7 @@ vi.mock('../hooks/useEquipment', () => ({
       { id: 'e1', internalCode: 'SEM 02', controlUnit: 'HOURS', currentHourmeter: 512, currentMileage: null },
       { id: 'e2', internalCode: 'WA470', controlUnit: 'HOURS', currentHourmeter: null, currentMileage: null },
       { id: 'e3', internalCode: 'TLJD77', controlUnit: 'KM', currentHourmeter: null, currentMileage: 268617 },
+      { id: 'e4', internalCode: 'TLJD78', controlUnit: 'KM', currentHourmeter: null, currentMileage: 264582.5 },
     ],
   }),
 }));
@@ -314,16 +315,40 @@ describe('MantencionesAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de aceite' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
 
-    // Mayor que la lectura actual: no se puede finalizar.
+    // Mayor que la última lectura conocida: solo se avisa (la caché puede estar atrasada).
     fireEvent.change(lectura, { target: { value: '268.700' } });
-    expect(within(dialog).getByText(/no puede ser mayor que la lectura actual del equipo/)).toBeTruthy();
+    expect(within(dialog).getByText(/mayor que la última lectura conocida del equipo/)).toBeTruthy();
     const finalizar = within(dialog).getByRole('button', { name: 'Finalizar mantención' });
+    expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(false);
+
+    // Un decimal en km no es una lectura: el motivo se ve, no «Indica la lectura».
+    fireEvent.change(lectura, { target: { value: '264,5' } });
+    expect(within(dialog).getByText('Escribe los km como número entero, sin decimales.')).toBeTruthy();
     expect(finalizar.hasAttribute('disabled') || finalizar.getAttribute('aria-disabled') === 'true').toBe(true);
 
     fireEvent.change(lectura, { target: { value: '264.582' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
     expect(finalizarMock).toHaveBeenCalledWith(
       expect.objectContaining({ lecturaMantencion: 264582, equipmentStatus: 'OPERATIONAL' }),
+      expect.anything(),
+    );
+  });
+
+  it('una lectura actual con decimales se prellena hacia abajo: el botón no queda apagado sin motivo', () => {
+    ordenesHook.mockReturnValue(
+      ok([orden({ id: 'ot7', equipoId: 'e4', titulo: 'Mantención 264.582 km', estado: 'EN_PROCESO' })]),
+    );
+    renderView(`${REGISTRO}&estado=sin-terminar&id=ot7`);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Marcar como finalizada' }));
+
+    const dialog = screen.getByRole('dialog');
+    const lectura = within(dialog).getByLabelText('Kilometraje al momento de la mantención (km)') as HTMLInputElement;
+    expect(lectura.value).toBe('264582');
+    fireEvent.change(within(dialog).getByLabelText('Qué se hizo'), { target: { value: 'Cambio de aceite' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Operativo' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Finalizar mantención' }));
+    expect(finalizarMock).toHaveBeenCalledWith(
+      expect.objectContaining({ lecturaMantencion: 264582 }),
       expect.anything(),
     );
   });

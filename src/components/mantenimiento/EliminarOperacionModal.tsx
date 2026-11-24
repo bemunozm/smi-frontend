@@ -6,7 +6,7 @@ import { useEliminarOrden } from '../../hooks/useOrdenes';
 import type { MaintenanceBoardRow } from '../../types/maintenance-board';
 import type { OrdenTrabajo } from '../../types/mantenimiento';
 import { lectura as fmtLectura, textoPendientes } from './pizarra/pizarra';
-import { leerLecturaOpcional, registrableComoHecha } from './workshop';
+import { avisoLecturaMayor, leerLecturaOpcional, registrableComoHecha } from './workshop';
 
 function Dato({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -44,8 +44,9 @@ export function EliminarOperacionModal({
   const dePauta = registrableComoHecha(orden);
   const unidad = fila?.unit ?? 'h';
   // En km, entero con separador de miles («264.582» = 264582 km); en horas,
-  // decimal. No puede superar la lectura actual del equipo, si se conoce.
-  const lecturaLeida = leerLecturaOpcional(lectura, { unidad, actual: fila?.counter ?? null });
+  // decimal. Mayor que la última lectura conocida: se avisa, no se bloquea.
+  const campoLectura = { unidad, actual: fila?.counter ?? null };
+  const lecturaLeida = leerLecturaOpcional(lectura, campoLectura);
   const lecturaNum = 'valor' in lecturaLeida ? lecturaLeida.valor : undefined;
   const errorLectura = 'error' in lecturaLeida ? lecturaLeida.error : undefined;
   const lecturaInvalida = errorLectura != null;
@@ -115,6 +116,7 @@ export function EliminarOperacionModal({
                   label="Lectura a la que se hizo (opcional)"
                   unidad={unidad}
                   hint="Vacío = la lectura actual del equipo."
+                  aviso={avisoLecturaMayor(lecturaNum, campoLectura)}
                   error={errorLectura}
                 >
                   <Input

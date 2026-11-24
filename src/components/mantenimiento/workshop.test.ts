@@ -10,6 +10,7 @@ import {
   groupWorkshopBoard,
   splitFinished,
   avisoLecturaMantencion,
+  avisoLecturaMayor,
   errorLecturaMantencion,
   lecturaMantencion,
   leerLecturaMantencion,
@@ -228,14 +229,28 @@ describe('lectura de la mantención', () => {
     expect(leerLecturaMantencion('  ', KM)).toEqual({ error: expect.stringMatching(/Indica la lectura/) });
   });
 
-  it('no puede superar la lectura actual del equipo, si se conoce', () => {
-    expect(leerLecturaMantencion('268.618', KM)).toEqual({
-      error: expect.stringMatching(/no puede ser mayor que la lectura actual del equipo/),
-    });
-    expect(errorLecturaMantencion(268618, KM)).toMatch(/268\.617 km/);
-    expect(errorLecturaMantencion(268617, KM)).toBeNull();
-    // Sin lectura actual conocida no se inventa un tope.
-    expect(errorLecturaMantencion(999999, { unidad: 'km', actual: null })).toBeNull();
+  it('mayor que la última lectura conocida: se lee igual y solo se avisa (la caché puede estar atrasada)', () => {
+    expect(leerLecturaMantencion('268.618', KM)).toEqual({ valor: 268618 });
+    expect(avisoLecturaMayor(268618, KM)).toMatch(/mayor que la última lectura conocida del equipo \(268\.617 km\)/);
+    expect(avisoLecturaMayor(268617, KM)).toBeNull();
+    // Sin lectura conocida no hay con qué comparar.
+    expect(avisoLecturaMayor(999999, { unidad: 'km', actual: null })).toBeNull();
+  });
+
+  it('el tope y los negativos siguen siendo errores', () => {
+    expect(errorLecturaMantencion(1_000_001)).toMatch(/1\.000\.000/);
+    expect(errorLecturaMantencion(-1)).toMatch(/0 o mayor/);
+    expect(leerLecturaMantencion('1.000.001', KM)).toEqual({ error: expect.stringMatching(/1\.000\.000/) });
+  });
+
+  it('una lectura actual con decimales se prellena hacia abajo: nunca sobre la actual', () => {
+    const base = { id: 'eq-1', internalCode: 'X', brand: 'B', model: 'M' };
+    const km = lecturaMantencion('X', [{ ...base, controlUnit: 'KM', currentMileage: 264582.5 }]);
+    expect(km.inicial).toBe('264582');
+    expect(leerLecturaMantencion(km.inicial, km)).toEqual({ valor: 264582 });
+    expect(avisoLecturaMayor(264582, km)).toBeNull();
+    const horas = lecturaMantencion('X', [{ ...base, controlUnit: 'HOURS', currentHourmeter: 1250.567 }]);
+    expect(horas.inicial).toBe('1250,56');
   });
 
   it('el campo trae la unidad, la lectura actual y el texto inicial del equipo', () => {
