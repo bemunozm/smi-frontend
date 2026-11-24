@@ -72,7 +72,8 @@ export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
     failMessage: 'No se pudo guardar el cambio de la tarjeta.',
     parse: parseWith(ShiftCardResponseSchema),
     apply: applyCardToCache,
-    invalidate: ['shiftCards', 'equipment'],
+    // `informesTemporales`: la corrección de una tarjeta temporal se ve en su informe.
+    invalidate: ['shiftCards', 'equipment', 'informesTemporales'],
     label: (params) => etiqueta('Edición de tarjeta', cachedEquipoCode('shift-card', params.id)),
     notFoundIsDone: false,
     carriesFiles: false,

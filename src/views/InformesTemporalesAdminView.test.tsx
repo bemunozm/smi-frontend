@@ -9,6 +9,24 @@ const { listaHook, eliminarMock, excelMock } = vi.hoisted(() => ({
   excelMock: vi.fn(),
 }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' } }));
+const { edicionTarjeta, toastDanger } = vi.hoisted(() => ({
+  edicionTarjeta: { mutate: vi.fn(), config: null as null | { endpoint: string; build: (v: unknown) => unknown } },
+  toastDanger: vi.fn(),
+}));
+
+vi.mock('@heroui/react', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@heroui/react')>();
+  return { ...real, toast: Object.assign(real.toast, { danger: toastDanger }) };
+});
+
+// La corrección de una tarjeta (`CorregirTarjetaTemporalModal`) escribe por la cola.
+vi.mock('../hooks/useQueuedMutation', () => ({
+  useQueuedMutation: (config: { endpoint: string; build: (v: unknown) => unknown }) => {
+    edicionTarjeta.config = config;
+    return { mutate: edicionTarjeta.mutate, isPending: false };
+  },
+}));
+vi.mock('../hooks/useCurrentUser', () => ({ useCurrentUser: () => ({ user: { id: 'u1' } }) }));
 
 vi.mock('../hooks/useInformesTemporales', () => ({
   useInformesTemporales: (desde: string, hasta: string) => listaHook(desde, hasta),
@@ -130,6 +148,51 @@ describe('InformesTemporalesAdminView', () => {
     const dialogo = screen.getByRole('dialog');
     expect(within(dialogo).getByRole('button', { name: 'Corregir' })).toBeTruthy();
     expect(within(dialogo).queryByRole('button', { name: 'Eliminar' })).toBeNull();
+  });
+
+  it.each(['ADMIN', 'SECRETARIA'] as const)('%s corrige lecturas y litros de una tarjeta', async (r) => {
+    rol.value = r;
+    render(<InformesTemporalesAdminView />);
+    fireEvent.click(screen.getByTestId('informe-fila-i1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Corregir lecturas de EX-1' }));
+
+    const modal = screen.getByRole('dialog');
+    expect(within(modal).getByText('Corregir EX-1')).toBeTruthy();
+    fireEvent.change(within(modal).getByLabelText(/Lectura final/), { target: { value: '110' } });
+    fireEvent.click(within(modal).getByRole('button', { name: 'Guardar corrección' }));
+
+    expect(edicionTarjeta.mutate).toHaveBeenCalledWith(
+      { id: 'c1', nuevo: { valorInicial: 100, valorFinal: 110, fuelLiters: 40 } },
+      expect.anything(),
+    );
+    // Solo viaja lo que cambió, con su precondición, al PATCH de esa tarjeta.
+    expect(edicionTarjeta.config?.endpoint).toBe('shiftCard.edit');
+    const [vars] = edicionTarjeta.mutate.mock.calls[0] as [unknown];
+    expect(await edicionTarjeta.config?.build(vars)).toEqual({
+      params: { id: 'c1' },
+      body: { valorFinal: 110 },
+      expected: { valorFinal: 108 },
+    });
+  });
+
+  it('la lectura final menor que la inicial no se guarda', () => {
+    render(<InformesTemporalesAdminView />);
+    fireEvent.click(screen.getByTestId('informe-fila-i1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Corregir lecturas de EX-1' }));
+    const modal = screen.getByRole('dialog');
+    fireEvent.change(within(modal).getByLabelText(/Lectura final/), { target: { value: '90' } });
+    fireEvent.click(within(modal).getByRole('button', { name: 'Guardar corrección' }));
+    expect(within(modal).getByText(/no puede ser menor que la inicial/)).toBeTruthy();
+    expect(edicionTarjeta.mutate).not.toHaveBeenCalled();
+  });
+
+  it('si el Excel no se puede armar, avisa con un toast de error', async () => {
+    excelMock.mockRejectedValue(new Error('sin red'));
+    render(<InformesTemporalesAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+    await vi.waitFor(() =>
+      expect(toastDanger).toHaveBeenCalledWith(expect.stringMatching(/No se pudo generar el Excel/)),
+    );
   });
 
   it('«Exportar Excel» arma la planilla con los informes del rango', async () => {

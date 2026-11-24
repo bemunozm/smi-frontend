@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { AlertDialog, Button, Card, Modal, RangeCalendar, Spinner, Table } from '@heroui/react';
+import { AlertDialog, Button, Card, Modal, RangeCalendar, Spinner, Table, toast } from '@heroui/react';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
 
 import { RecordPhoto } from '../components/RecordPhoto';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
+import { CorregirTarjetaTemporalModal } from '../components/temporal/CorregirTarjetaTemporalModal';
 import { EditarInformeTemporalModal } from '../components/temporal/EditarInformeTemporalModal';
 import { Chip } from '../components/ui/Chip';
 import { turnoLabel } from '../config/flota-colors';
@@ -51,16 +52,19 @@ function Dato({ label, value }: { label: string; value: string }) {
 const SiNo = (v: boolean) => (v ? 'Sí' : 'No');
 
 /** Detalle completo del informe: datos, personal por actividad, tarjetas con su
- * foto del surtidor. «Corregir» (ADMIN y SECRETARIA) y «Eliminar» (ADMIN). */
+ * foto del surtidor. «Corregir» (ADMIN y SECRETARIA) y «Eliminar» (ADMIN); cada
+ * tarjeta cerrada trae su propio «Corregir» para las lecturas y los litros. */
 function DetalleInformeModal({
   informe,
   onClose,
   onCorregir,
+  onCorregirTarjeta,
   onEliminar,
 }: {
   informe: InformeTemporal | null;
   onClose: () => void;
   onCorregir?: () => void;
+  onCorregirTarjeta?: (tarjetaId: string) => void;
   onEliminar?: () => void;
 }) {
   const personalDe = (actividad: 1 | 2) =>
@@ -120,7 +124,19 @@ function DetalleInformeModal({
                         <span className="text-sm font-semibold text-foreground">
                           <span className="font-mono">{t.equipo.internalCode}</span> · {t.equipo.name}
                         </span>
-                        <span className="text-sm text-muted-foreground">{t.operador}</span>
+                        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                          {t.operador}
+                          {onCorregirTarjeta && t.valorFinal != null ? (
+                            <Button
+                              aria-label={`Corregir lecturas de ${t.equipo.internalCode}`}
+                              onPress={() => onCorregirTarjeta(t.id)}
+                              size="sm"
+                              variant="secondary"
+                            >
+                              Corregir
+                            </Button>
+                          ) : null}
+                        </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                         <span>Inicial: {NUM_CL_1.format(t.valorInicial)}</span>
@@ -161,8 +177,8 @@ function DetalleInformeModal({
  * «Report supervisor temporal» (ADMIN y SECRETARIA): los informes que envían los
  * supervisores temporales al cerrar sus equipos, por rango de fechas. El detalle
  * trae todo el informe con las fotos de cada tarjeta; ADMIN y SECRETARIA lo
- * corrigen (datos del informe, no las lecturas) y solo ADMIN lo elimina, con
- * confirmación. «Exportar Excel» baja el rango filtrado, una fila por tarjeta.
+ * corrigen (los datos del informe y, tarjeta por tarjeta, sus lecturas y
+ * litros) y solo ADMIN lo elimina, con confirmación. «Exportar Excel» baja el rango filtrado, una fila por tarjeta.
  */
 export function InformesTemporalesAdminView() {
   const [range, setRange] = useState<{ start: DateValue; end: DateValue } | null>(null);
@@ -174,9 +190,14 @@ export function InformesTemporalesAdminView() {
 
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [corrigiendoId, setCorrigiendoId] = useState<string | null>(null);
+  // Tarjeta en corrección y el informe al que se vuelve al cerrarla.
+  const [corrigiendoTarjeta, setCorrigiendoTarjeta] = useState<{ informeId: string; tarjetaId: string } | null>(null);
   const [eliminando, setEliminando] = useState<InformeTemporal | null>(null);
   const permisos = usePermissions();
   const puedeCorregir = permisos.can('informeTemporal.update');
+  // Lecturas y litros de cada tarjeta: `PATCH /shift-cards/:id`, que la
+  // SECRETARIA solo puede sobre tarjetas temporales (todas las de un informe).
+  const puedeCorregirTarjetas = permisos.can('shiftCard.edit');
   const puedeEliminar = canDeleteInformeTemporal(permisos.role);
   const eliminar = useEliminarInformeTemporal();
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
@@ -188,16 +209,25 @@ export function InformesTemporalesAdminView() {
   // El detalle y la corrección se leen de la lista: tras corregir, se refresca sola.
   const detalle = informes.find((i) => i.id === detalleId) ?? null;
   const corrigiendo = informes.find((i) => i.id === corrigiendoId) ?? null;
+  const tarjetaEnCorreccion =
+    informes
+      .find((i) => i.id === corrigiendoTarjeta?.informeId)
+      ?.tarjetas.find((t) => t.id === corrigiendoTarjeta?.tarjetaId) ?? null;
 
   const exportarExcel = async () => {
-    const buffer = await construirExcelInformesTemporales(informes);
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const enlace = document.createElement('a');
-    enlace.href = url;
-    enlace.download = `Report_supervisor_temporal_${desde}_a_${hasta}.xlsx`;
-    enlace.click();
-    URL.revokeObjectURL(url);
+    try {
+      const buffer = await construirExcelInformesTemporales(informes);
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = `Report_supervisor_temporal_${desde}_a_${hasta}.xlsx`;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Típico: sin señal no baja el módulo del Excel (import dinámico).
+      toast.danger('No se pudo generar el Excel. Revisa la conexión e inténtalo de nuevo.');
+    }
   };
 
   return (
@@ -366,6 +396,14 @@ export function InformesTemporalesAdminView() {
               }
             : undefined
         }
+        onCorregirTarjeta={
+          puedeCorregirTarjetas && detalleId
+            ? (tarjetaId) => {
+                setCorrigiendoTarjeta({ informeId: detalleId, tarjetaId });
+                setDetalleId(null);
+              }
+            : undefined
+        }
         onEliminar={
           puedeEliminar
             ? () => {
@@ -377,6 +415,17 @@ export function InformesTemporalesAdminView() {
       />
 
       {corrigiendo ? <EditarInformeTemporalModal informe={corrigiendo} onClose={() => setCorrigiendoId(null)} /> : null}
+
+      {tarjetaEnCorreccion && corrigiendoTarjeta ? (
+        <CorregirTarjetaTemporalModal
+          tarjeta={tarjetaEnCorreccion}
+          onClose={() => {
+            // Vuelve al detalle del informe, ya con la lista refrescada.
+            setDetalleId(corrigiendoTarjeta.informeId);
+            setCorrigiendoTarjeta(null);
+          }}
+        />
+      ) : null}
 
       <AlertDialog.Backdrop
         isOpen={eliminando !== null}

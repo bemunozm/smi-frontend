@@ -60,7 +60,8 @@ function PreguntaSiNo({
 /**
  * Corrige los DATOS del informe (fecha, turno, actividades, personal,
  * supervisores, observaciones y las dos declaraciones). Las lecturas de cada
- * tarjeta no se editan acá: se corrigen en la tarjeta. Solo se envía lo que
+ * tarjeta no se editan acá: tienen su propio «Corregir» en el detalle del
+ * informe (`CorregirTarjetaTemporalModal`). Solo se envía lo que
  * cambió; `actividad2`, `observaciones` y `supervisorResponsable2` en `''` los
  * quitan.
  */
@@ -181,8 +182,8 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
                 onChange={setInfoSubidaApp}
               />
               <p className="text-xs text-muted-foreground">
-                Hasta {MAX_PERSONAL_POR_ACTIVIDAD} personas por actividad. Las lecturas y cargas de cada equipo se
-                corrigen en su tarjeta.
+                Hasta {MAX_PERSONAL_POR_ACTIVIDAD} personas por actividad. Las lecturas y litros de cada equipo se
+                corrigen con «Corregir» en su tarjeta, en el detalle del informe.
               </p>
             </div>
           </Modal.Body>

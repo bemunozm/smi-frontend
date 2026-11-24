@@ -83,7 +83,10 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'operator.update': [ADMIN, SUPERVISOR],
   'operator.delete': [ADMIN],
   // Terreno
-  'shiftCard.edit': [ADMIN, SUPERVISOR],
+  // SECRETARIA solo corrige lecturas/litros de las tarjetas del supervisor
+  // temporal (detalle del informe): el backend le rechaza cualquier otra, y
+  // las pantallas de tarjetas normales la dejan fuera (`canEditShiftCard`).
+  'shiftCard.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   // SECRETARIA completa y corrige lo que un supervisor olvidó (pedido del
   // cliente, 03/11).
   'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA],
@@ -116,6 +119,12 @@ export function canWriteAny(role: Role | null | undefined, actions: readonly End
  */
 export function canCloseShiftCardFromFleet(role: Role | null | undefined): boolean {
   return role === ADMIN;
+}
+
+/** Corregir una tarjeta de turno normal (no temporal): ADMIN y su supervisor.
+ * La SECRETARIA tiene `shiftCard.edit` solo para las tarjetas temporales. */
+export function canEditShiftCard(role: Role | null | undefined): boolean {
+  return canWrite(role, 'shiftCard.edit') && role !== SECRETARIA;
 }
 
 /** Eliminar un hallazgo: `DELETE /api/hallazgos/:id` es solo ADMIN. */
