@@ -5,7 +5,7 @@ import { ChevronDown, Plus, X } from 'lucide-react';
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from 'react-aria-components';
 
 import { useEquipment } from '../../hooks/useEquipment';
-import { toCompatibilityEntries, useSaveItemEquipments } from '../../hooks/useInventory';
+import { sameEquipments, toCompatibilityEntries, useSaveItemEquipments } from '../../hooks/useInventory';
 import type { Equipment } from '../../types/equipment';
 import type { CompatibilityEntry, InventoryItem, ItemEquipment } from '../../types/inventory';
 import { Chip } from '../ui/Chip';
@@ -107,36 +107,74 @@ export function EditEquipmentsModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const save = useSaveItemEquipments();
-  const [entries, setEntries] = useState<CompatibilityEntry[]>(() => toCompatibilityEntries(item));
+  const [inicial] = useState<CompatibilityEntry[]>(() => toCompatibilityEntries(item));
+  const [entries, setEntries] = useState<CompatibilityEntry[]>(inicial);
+  // Cerrar con cambios sin guardar pide confirmación (pedido del cliente, 24/11/2026): quitar con la X y
+  // cerrar la ventana descartaba el cambio sin avisar.
+  const [confirmarDescarte, setConfirmarDescarte] = useState(false);
+  const hayCambios = !sameEquipments(entries, inicial);
+
+  const cambiarApertura = (abierto: boolean): void => {
+    if (!abierto && hayCambios && !save.isPending) {
+      setConfirmarDescarte(true);
+      return;
+    }
+    onOpenChange(abierto);
+  };
 
   return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+    <Modal.Backdrop isOpen={isOpen} onOpenChange={cambiarApertura}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-lg">
-          {({ close }) => (
-            <>
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-                  Equipos de {item.sku}
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <EquipmentPicker onChange={setEntries} value={entries} />
-              </Modal.Body>
-              <Modal.Footer>
-                <Button onPress={close} variant="secondary">
-                  Cancelar
-                </Button>
-                <Button
-                  isPending={save.isPending}
-                  onPress={() => save.mutate({ item, entries }, { onSuccess: close })}
-                >
-                  {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Guardar')}
-                </Button>
-              </Modal.Footer>
-            </>
-          )}
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
+              Equipos de {item.sku}
+            </Modal.Heading>
+          </Modal.Header>
+          <Modal.Body className="flex flex-col gap-3">
+            <EquipmentPicker
+              onChange={(next) => {
+                setEntries(next);
+                setConfirmarDescarte(false);
+              }}
+              value={entries}
+            />
+            {hayCambios && !confirmarDescarte ? (
+              <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground" role="status">
+                Tienes cambios sin guardar. Se aplican al apretar «Guardar».
+              </p>
+            ) : null}
+            {confirmarDescarte ? (
+              <div
+                className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning-soft px-3 py-3 text-sm text-warning-soft-foreground"
+                role="alertdialog"
+                aria-label="Cambios sin guardar"
+              >
+                <p className="m-0 font-medium">¿Descartar los cambios? Los equipos quedarán como estaban.</p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button onPress={() => setConfirmarDescarte(false)} size="sm" variant="secondary">
+                    Seguir editando
+                  </Button>
+                  <Button onPress={() => onOpenChange(false)} size="sm" variant="danger">
+                    Descartar cambios
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onPress={() => cambiarApertura(false)} variant="secondary">
+              Cancelar
+            </Button>
+            <Button
+              isDisabled={!hayCambios}
+              isPending={save.isPending}
+              onPress={() => save.mutate({ item, entries }, { onSuccess: () => onOpenChange(false) })}
+            >
+              {({ isPending }) => (isPending ? <Spinner color="current" size="sm" /> : 'Guardar')}
+            </Button>
+          </Modal.Footer>
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
