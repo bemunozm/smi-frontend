@@ -77,6 +77,24 @@ export const ItemStockSchema = z.object({
 });
 export type ItemStock = z.infer<typeof ItemStockSchema>;
 
+/** Equipo asignado a mano a un ítem (compatibilidad declarada), con su nota. */
+export const ItemEquipmentSchema = z.object({
+  equipmentId: z.string(),
+  internalCode: z.string(),
+  note: z.string().nullable(),
+});
+export type ItemEquipment = z.infer<typeof ItemEquipmentSchema>;
+
+/** Qué equipo ha consumido el ítem, según las salidas imputadas a él. */
+export const ItemConsumerSchema = z.object({
+  equipmentId: z.string(),
+  internalCode: z.string(),
+  totalQuantity: z.number(),
+  movementCount: z.number(),
+  lastAt: z.string().datetime(),
+});
+export type ItemConsumer = z.infer<typeof ItemConsumerSchema>;
+
 export const InventoryItemSchema = z.object({
   id: z.string(),
   sku: z.string(),
@@ -98,6 +116,8 @@ export const InventoryItemSchema = z.object({
   updatedAt: z.string().datetime(),
   /** Una fila por bodega donde el ítem tiene ficha de saldo. */
   stocks: z.array(ItemStockSchema),
+  /** Equipos asignados (por código). `default([])`: respuestas guardadas antes de que existieran. */
+  compatibilities: z.array(ItemEquipmentSchema).default([]),
 });
 export type InventoryItem = z.infer<typeof InventoryItemSchema>;
 
@@ -153,6 +173,21 @@ export const KardexResponseSchema = z.object({
   }),
   message: z.string(),
 });
+
+export const ConsumerListResponseSchema = z.object({
+  data: z.array(ItemConsumerSchema),
+  message: z.string(),
+});
+
+/** Un equipo del set que se guarda con `PUT /items/:id/compatibilities`. */
+export type CompatibilityEntry = {
+  equipmentId: string;
+  note?: string;
+};
+
+export type SaveCompatibilitiesInput = {
+  entries: CompatibilityEntry[];
+};
 
 export const MovementListResponseSchema = z.object({
   data: z.array(StockMovementSchema),

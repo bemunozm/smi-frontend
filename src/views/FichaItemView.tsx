@@ -8,6 +8,10 @@ import {
   ItemActionsModal,
   type ItemAction,
 } from '../components/inventario/ItemActionsModal';
+import {
+  EditEquipmentsModal,
+  EquipmentLink,
+} from '../components/inventario/ItemEquipments';
 import { EditItemModal } from '../components/inventario/ItemFormModal';
 import {
   ALL_BRANCHES,
@@ -22,7 +26,7 @@ import {
 import { useBranches } from '../hooks/useBranches';
 import { usePermissions } from '../hooks/usePermissions';
 import { MOVEMENT_ACTIONS } from '../lib/permissions';
-import { useKardex } from '../hooks/useInventory';
+import { useItemConsumers, useKardex } from '../hooks/useInventory';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { RECURSOS_DE_FICHA_ITEM } from '../lib/pending-resources';
 import { useUiStore } from '../store/ui';
@@ -35,6 +39,7 @@ import {
   totalEnContenido,
   totalQuantity,
   type InventoryItem,
+  type ItemConsumer,
   type ItemStock,
   type StockMovement,
 } from '../types/inventory';
@@ -352,6 +357,126 @@ function MovementHistory({
   );
 }
 
+// --- Equipos asignados y «Consumido por» ------------------------------------
+
+/** Los equipos asignados a mano al ítem, cada uno con su nota y enlazado a su ficha. */
+function AssignedEquipments({ item, inWorkshop }: { item: InventoryItem; inWorkshop: boolean }) {
+  if (item.compatibilities.length === 0) {
+    return (
+      <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground sm:px-5">
+        Todavía no se le asignó ningún equipo a este ítem.
+      </p>
+    );
+  }
+  return (
+    <ul className="border-t border-border" data-testid="equipos-asignados">
+      {item.compatibilities.map((c) => (
+        <li
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-border px-4 py-2.5 last:border-b-0 sm:px-5"
+          key={c.equipmentId}
+        >
+          <EquipmentLink equipmentId={c.equipmentId} inWorkshop={inWorkshop} internalCode={c.internalCode} />
+          {c.note ? <span className="text-sm text-muted-foreground">{c.note}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Qué equipos han gastado el ítem, según las salidas imputadas a cada uno. */
+function ConsumersList({
+  item,
+  consumers,
+  inWorkshop,
+}: {
+  item: InventoryItem;
+  consumers: ItemConsumer[];
+  inWorkshop: boolean;
+}) {
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const symbol = UNIT_SYMBOLS[item.unit];
+
+  if (consumers.length === 0) {
+    return (
+      <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground sm:px-5">
+        Todavía ningún equipo ha consumido este ítem. Aparecerán acá cuando una salida de stock se impute a un equipo.
+      </p>
+    );
+  }
+
+  if (!isDesktop) {
+    return (
+      <div data-testid="consumidores">
+        {consumers.map((c) => (
+          <div className="flex flex-col gap-1 border-t border-border px-4 py-3" key={c.equipmentId}>
+            <div className="flex items-center justify-between gap-2">
+              <EquipmentLink equipmentId={c.equipmentId} inWorkshop={inWorkshop} internalCode={c.internalCode} />
+              <span className="font-mono text-sm font-bold text-foreground">
+                {NUMBER.format(c.totalQuantity)} {symbol}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {c.movementCount} {c.movementCount === 1 ? 'salida' : 'salidas'} · última{' '}
+              {DATE_DAY.format(new Date(c.lastAt))}
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Table variant="secondary">
+      <Table.ScrollContainer>
+        <Table.Content aria-label="Consumido por" className="min-w-160" data-testid="consumidores">
+          <Table.Header>
+            <Table.Column isRowHeader>Equipo</Table.Column>
+            <Table.Column>Cantidad consumida</Table.Column>
+            <Table.Column>Salidas</Table.Column>
+            <Table.Column>Última salida</Table.Column>
+          </Table.Header>
+          <Table.Body>
+            {consumers.map((c) => (
+              <Table.Row key={c.equipmentId}>
+                <Table.Cell>
+                  <EquipmentLink equipmentId={c.equipmentId} inWorkshop={inWorkshop} internalCode={c.internalCode} />
+                </Table.Cell>
+                <Table.Cell className="font-mono text-sm font-semibold text-foreground">
+                  {NUMBER.format(c.totalQuantity)} {symbol}
+                </Table.Cell>
+                <Table.Cell className="font-mono text-sm text-muted-foreground">{c.movementCount}</Table.Cell>
+                <Table.Cell className="text-sm text-muted-foreground">{DATE_DAY.format(new Date(c.lastAt))}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
+  );
+}
+
+function ConsumersCard({ item, inWorkshop }: { item: InventoryItem; inWorkshop: boolean }) {
+  const { data, isPending, isError } = useItemConsumers(item.id);
+  return (
+    <Card
+      subtitle="Equipos que han gastado este ítem, según las salidas de stock imputadas a cada uno. Se calcula solo."
+      title="Consumido por"
+    >
+      {isPending ? (
+        <div className="flex justify-center border-t border-border py-6">
+          <Spinner color="accent" size="sm" />
+        </div>
+      ) : isError ? (
+        <p className="border-t border-border px-4 py-6 text-sm text-danger sm:px-5">
+          No se pudo obtener el consumo del ítem.
+        </p>
+      ) : (
+        <ConsumersList consumers={data} inWorkshop={inWorkshop} item={item} />
+      )}
+    </Card>
+  );
+}
+
 // --- Vista -----------------------------------------------------------------
 
 /**
@@ -385,6 +510,7 @@ export function FichaItemView({
   const [branchFilter, setBranchFilter] = useState<string>(TODAS);
   const [action, setAction] = useState<ItemAction | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingEquipments, setIsEditingEquipments] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
   const { data, isPending, isError, error } = useKardex(
@@ -488,6 +614,22 @@ export function FichaItemView({
 
       <Card
         action={
+          contexto === 'inventario' && can('itemCompatibility.save') ? (
+            <Button onPress={() => setIsEditingEquipments(true)} variant="secondary">
+              Editar equipos
+            </Button>
+          ) : undefined
+        }
+        subtitle="Los equipos a los que corresponde este ítem, declarados a mano."
+        title="Equipos asignados"
+      >
+        <AssignedEquipments inWorkshop={contexto === 'taller'} item={item} />
+      </Card>
+
+      <ConsumersCard inWorkshop={contexto === 'taller'} item={item} />
+
+      <Card
+        action={
           <Select
             className="w-full sm:w-52"
             onChange={(value) => {
@@ -539,6 +681,10 @@ export function FichaItemView({
           }}
           onOpenChange={(open) => !open && setAction(null)}
         />
+      ) : null}
+
+      {isEditingEquipments ? (
+        <EditEquipmentsModal isOpen item={item} onOpenChange={setIsEditingEquipments} />
       ) : null}
 
       {isEditing ? (

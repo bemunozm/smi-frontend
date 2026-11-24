@@ -90,6 +90,7 @@ describe('EditItemModal sin estado', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       stocks: [],
+      compatibilities: [],
     } as unknown as InventoryItem;
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(

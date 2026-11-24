@@ -21,6 +21,7 @@ import { escriturasPendientes } from '../offline/outbox';
 import {
   UNIT_SYMBOLS,
   type AdjustStockInput,
+  type CompatibilityEntry,
   type CreateItemInput,
   type CreateMovementInput,
   type ItemFields,
@@ -34,6 +35,27 @@ export function useItems(filters: ItemFilters = {}) {
     queryKey: [...INVENTORY_KEY, 'items', filters],
     queryFn: () => InventoryAPI.listItems(filters),
   });
+}
+
+/** «Consumido por»: equipos que han gastado el ítem (salidas imputadas a un equipo). */
+export function useItemConsumers(itemId: string | null) {
+  return useQuery({
+    queryKey: [...INVENTORY_KEY, 'consumers', itemId],
+    queryFn: () => InventoryAPI.consumers(itemId ?? ''),
+    enabled: !!itemId,
+  });
+}
+
+/** ¿Es el mismo set de equipos (con las mismas notas)? Sin importar el orden. */
+export function sameEquipments(a: readonly CompatibilityEntry[], b: readonly CompatibilityEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  const notes = new Map(a.map((entry) => [entry.equipmentId, (entry.note ?? '').trim()]));
+  return b.every((entry) => notes.get(entry.equipmentId) === (entry.note ?? '').trim());
+}
+
+/** Los equipos de un ítem como entradas del PUT (la nota vacía se omite). */
+export function toCompatibilityEntries(item: Pick<InventoryItem, 'compatibilities'>): CompatibilityEntry[] {
+  return item.compatibilities.map((c) => ({ equipmentId: c.equipmentId, ...(c.note ? { note: c.note } : {}) }));
 }
 
 /**
@@ -76,6 +98,8 @@ export interface CreateItemWithMinimumsVars {
   input: CreateItemInput;
   /** Lo escrito en cada bodega (`branchId` → texto del campo); vacío o 0 = sin mínimo. */
   minimums: Record<string, string>;
+  /** Equipos asignados desde el alta; se guardan detrás de ella (el `id` lo genera el cliente). */
+  equipments?: CompatibilityEntry[];
 }
 
 /**
@@ -88,31 +112,37 @@ export interface CreateItemWithMinimumsVars {
  */
 export function useCreateItemWithMinimums() {
   return useMutation<
-    { sku?: string; guardadoEnCola: boolean; fallos: unknown[] },
+    { sku?: string; guardadoEnCola: boolean; fallos: unknown[]; conEquipos: boolean },
     Error,
     CreateItemWithMinimumsVars
   >({
-    mutationFn: async ({ input, minimums }) => {
+    mutationFn: async ({ input, minimums, equipments = [] }) => {
       const id = generateUuid();
       const alta = await writeQueued('item.create', { params: {}, body: { ...input, id } });
+      const asignacion =
+        equipments.length > 0
+          ? [writeQueued('itemCompatibility.save', { params: { id }, body: { entries: equipments } })]
+          : [];
       const minimos = Object.entries(minimums).flatMap(([branchId, texto]) => {
         const valor = parseDecimal(texto);
         return valor != null && valor > 0 ? [{ branchId, minimumQuantity: valor }] : [];
       });
-      const resultados = await Promise.allSettled(
-        minimos.map((minimo) => writeQueued('item.setMinimum', { params: {}, body: { itemId: id, ...minimo } })),
-      );
+      const resultados = await Promise.allSettled([
+        ...asignacion,
+        ...minimos.map((minimo) => writeQueued('item.setMinimum', { params: {}, body: { itemId: id, ...minimo } })),
+      ]);
       const fallos = resultados.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []));
       const estados = [alta, ...resultados.map((r) => (r.status === 'fulfilled' ? r.value : null))];
       return {
         sku: alta.status === 'sent' ? alta.data?.sku : undefined,
         guardadoEnCola: estados.some((e) => e?.status === 'queued'),
         fallos,
+        conEquipos: equipments.length > 0,
       };
     },
-    onSuccess: ({ sku, guardadoEnCola, fallos }, { input }) => {
+    onSuccess: ({ sku, guardadoEnCola, fallos, conEquipos }, { input }) => {
       if (fallos.length > 0) {
-        toast.warning('Ítem creado, pero no se guardó el stock mínimo', {
+        toast.warning(`Ítem creado, pero no se guardó el stock mínimo${conEquipos ? ' o los equipos' : ''}`, {
           description: mensajeErrorFormulario(fallos[0], 'No se pudo guardar el mínimo.'),
         });
       } else if (guardadoEnCola) {
@@ -179,12 +209,15 @@ export function useUpdateItem() {
 export interface SaveItemWithMinimumsVars extends UpdateItemVars {
   /** Lo escrito en cada bodega (`branchId` → texto del campo). */
   minimums: Record<string, string>;
+  /** El set de equipos que queda; omitido = no se toca. Solo se manda si cambió. */
+  equipments?: CompatibilityEntry[];
 }
 
 interface SaveItemResult {
   huboCambios: boolean;
   guardadoEnCola: boolean;
   fallos: unknown[];
+  conEquipos: boolean;
 }
 
 /**
@@ -197,31 +230,36 @@ interface SaveItemResult {
  */
 export function useSaveItemWithMinimums() {
   return useMutation<SaveItemResult, Error, SaveItemWithMinimumsVars>({
-    mutationFn: async ({ item, input, minimums }) => {
+    mutationFn: async ({ item, input, minimums, equipments }) => {
       const edicion = await edicionDeItem({ item, input });
       const ficha = edicion ? await writeQueued('item.update', edicion) : null;
+      const cambioEquipos = equipments !== undefined && !sameEquipments(equipments, toCompatibilityEntries(item));
 
       const cambiados = Object.entries(minimums).flatMap(([branchId, texto]) => {
         const nuevo = parseDecimal(texto);
         const actual = item.stocks.find((stock) => stock.branchId === branchId)?.minimumQuantity ?? 0;
         return nuevo != null && nuevo >= 0 && nuevo !== actual ? [{ branchId, minimumQuantity: nuevo }] : [];
       });
-      const resultados = await Promise.allSettled(
-        cambiados.map((minimo) =>
+      const resultados = await Promise.allSettled([
+        ...(cambioEquipos
+          ? [writeQueued('itemCompatibility.save', { params: { id: item.id }, body: { entries: equipments } })]
+          : []),
+        ...cambiados.map((minimo) =>
           writeQueued('item.setMinimum', { params: {}, body: { itemId: item.id, ...minimo } }),
         ),
-      );
+      ]);
       const fallos = resultados.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []));
       const estados = [ficha, ...resultados.map((r) => (r.status === 'fulfilled' ? r.value : null))];
       return {
-        huboCambios: ficha != null || cambiados.length > 0,
+        huboCambios: ficha != null || cambiados.length > 0 || cambioEquipos,
         guardadoEnCola: estados.some((e) => e?.status === 'queued'),
         fallos,
+        conEquipos: cambioEquipos,
       };
     },
-    onSuccess: ({ huboCambios, guardadoEnCola, fallos }, { item }) => {
+    onSuccess: ({ huboCambios, guardadoEnCola, fallos, conEquipos }, { item }) => {
       if (fallos.length > 0) {
-        toast.warning('Ítem actualizado, pero no se guardó el stock mínimo', {
+        toast.warning(`Ítem actualizado, pero no se guardó el stock mínimo${conEquipos ? ' o los equipos' : ''}`, {
           description: mensajeErrorFormulario(fallos[0], 'No se pudo actualizar el mínimo.'),
         });
       } else if (guardadoEnCola) {
@@ -233,6 +271,23 @@ export function useSaveItemWithMinimums() {
     onError: (error) => {
       toast.danger(mensajeErrorFormulario(error, 'No se pudo actualizar el ítem.'));
     },
+  });
+}
+
+export interface SaveItemEquipmentsVars {
+  item: InventoryItem;
+  entries: CompatibilityEntry[];
+}
+
+/** Asignar o quitar equipos desde la ficha (reemplaza el set completo, idempotente). */
+export function useSaveItemEquipments() {
+  return useQueuedMutation<'itemCompatibility.save', SaveItemEquipmentsVars>({
+    endpoint: 'itemCompatibility.save',
+    build: ({ item, entries }) => ({ params: { id: item.id }, body: { entries } }),
+    onSent: (_data, { item }) => {
+      toast.success('Equipos actualizados', { description: item.name });
+    },
+    errorFallback: 'No se pudieron guardar los equipos del ítem.',
   });
 }
 

@@ -1,5 +1,8 @@
+import { z } from 'zod';
+
 import { ItemCategorySchema, type ItemCategory } from '../../types/category';
 import {
+  ItemEquipmentSchema,
   AdjustResultSchema,
   TransferResultSchema,
   InventoryItemSchema,
@@ -9,7 +12,9 @@ import {
   type CreateItemInput,
   type CreateMovementInput,
   type InventoryItem,
+  type ItemEquipment,
   type ItemFields,
+  type SaveCompatibilitiesInput,
   type StockMovement,
   type TransferResult,
 } from '../../types/inventory';
@@ -49,6 +54,12 @@ export interface InventarioEndpointMap {
   /** Baja lógica o reactivación del ítem (ADMIN y SECRETARIA). */
   'item.setActive': { params: { id: string }; body: { isActive: boolean }; result: InventoryItem };
   'item.delete': { params: { id: string }; body: NoParams; result: true };
+  /** Reemplaza el set de equipos asignados al ítem (`PUT`, idempotente). */
+  'itemCompatibility.save': {
+    params: { id: string };
+    body: SaveCompatibilitiesInput;
+    result: ItemEquipment[];
+  };
   /** El `id` es el del movimiento que genera el conteo, no el del ítem. */
   'item.adjust': { params: { id: string }; body: WithId<AdjustStockInput>; result: AdjustResult };
   /** Fija el umbral de una bodega (`PUT`, last-write-wins). */
@@ -119,6 +130,20 @@ export const INVENTARIO_ENDPOINTS = defineDomain<InventarioEndpointMap>({
     notFoundIsDone: true,
     carriesFiles: false,
     entity: (params) => entityOf(itemEntity, params.id),
+  },
+  'itemCompatibility.save': {
+    method: 'PUT',
+    path: (params) => `/api/inventory/items/${param(params, 'id')}/compatibilities`,
+    failMessage: 'No se pudieron guardar los equipos del ítem.',
+    parse: parseWith(z.array(ItemEquipmentSchema)),
+    invalidate: ['inventory'],
+    label: (params) => etiqueta('Equipos del ítem', cachedName('item', params.id)),
+    notFoundIsDone: false,
+    carriesFiles: false,
+    // Misma entidad que el ítem: si su alta sigue en la cola, esto va detrás.
+    entity: (params) => entityOf(itemEntity, params.id),
+    parents: (_params, body) =>
+      body.entries.flatMap((entry) => referencias(entityOf(equipmentEntity, entry.equipmentId))),
   },
   'item.adjust': {
     method: 'POST',

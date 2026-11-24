@@ -85,6 +85,7 @@ function item(
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     stocks: [],
+    compatibilities: [],
     ...over,
   };
 }
@@ -124,16 +125,6 @@ const SOLO_FAENA = item({
 /** No hay en ninguna parte. */
 const SIN_STOCK = item({ id: 'i5', sku: 'BAT-001', name: 'Batería 12V' });
 
-const CATEGORIES = [
-  {
-    id: 'cat1',
-    name: 'Filtros',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    _count: { items: 1 },
-  },
-];
-
 function renderView(
   items: InventoryItem[],
   {
@@ -147,10 +138,9 @@ function renderView(
 
   const qc = new QueryClient();
   qc.setQueryData(['branches', { isActive: true }], BRANCHES);
-  // La pantalla pide las categorías de la pestaña activa.
-  qc.setQueryData(['inventory', 'categories', { type: 'SUPPLY' }], CATEGORIES);
+  qc.setQueryData(['equipment'], []);
   qc.setQueryData(
-    ['inventory', 'items', { type: 'SUPPLY', isActive: true }],
+    ['inventory', 'items', { isActive: true }],
     items,
   );
 
@@ -170,8 +160,8 @@ function openActions(sku: string): void {
 describe('InventarioView', () => {
   it('renderiza sin reventar', () => {
     expect(() => renderView([OK])).not.toThrow();
-    expect(screen.getByText('Suministros')).toBeTruthy();
-    expect(screen.getByText('Repuestos')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Suministros' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Repuestos' })).toBeTruthy();
   });
 
   describe('inventario general', () => {
@@ -225,15 +215,125 @@ describe('InventarioView', () => {
     });
   });
 
-  it('al cambiar de pestaña limpia la categoría elegida', () => {
-    // Una categoría de repuestos no existe en suministros: dejarla puesta
-    // mostraría cero resultados sin explicar por qué.
-    renderView([OK], { size: 'desktop' });
+  describe('sin pestañas: tipo, categorías y equipos a la vista', () => {
+    const ACEITE = { id: 'cat-ace', name: 'Aceite' };
+    const FILTRO = { id: 'cat-fil', name: 'Filtro' };
+    const eq = (equipmentId: string, internalCode: string) => ({ equipmentId, internalCode, note: null });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Repuestos' }));
+    const ACE = item({
+      id: 'a1',
+      sku: 'ACE-100',
+      name: 'Aceite hidráulico',
+      type: 'SUPPLY',
+      categoryId: ACEITE.id,
+      category: ACEITE,
+      stocks: [{ branchId: 'b1', quantity: 40, minimumQuantity: 10, branch: CASA }],
+      compatibilities: [eq('e1', 'EXC-01')],
+    });
+    const FIL = item({
+      id: 'f1',
+      sku: 'FIL-100',
+      name: 'Filtro de aire',
+      type: 'PART',
+      categoryId: FILTRO.id,
+      category: FILTRO,
+      stocks: [{ branchId: 'b1', quantity: 5, minimumQuantity: 2, branch: CASA }],
+      compatibilities: [eq('e1', 'EXC-01'), eq('e2', 'CAM-02'), eq('e3', 'CAR-03')],
+    });
+    const SUELTO = item({
+      id: 's1',
+      sku: 'SUE-100',
+      name: 'Cinta',
+      type: 'SUPPLY',
+      stocks: [{ branchId: 'b1', quantity: 9, minimumQuantity: 0, branch: CASA }],
+    });
 
-    // El selector vuelve a «Todas» — si no, el listado quedaría vacío.
-    expect(screen.getAllByText('Todas').length).toBeGreaterThan(0);
+    const tablaInventario = () => within(screen.getByLabelText('Inventario'));
+    const skusEnOrden = () =>
+      tablaInventario()
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => (row.textContent ?? '').slice(0, 7));
+
+    it('muestra todos los ítems juntos, con un filtro compacto de tipo y sin las pestañas de antes', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'desktop' });
+
+      expect(tablaInventario().getByText('ACE-100')).toBeTruthy();
+      expect(tablaInventario().getByText('FIL-100')).toBeTruthy();
+      expect(screen.getByRole('tablist', { name: 'Filtro de tipo' })).toBeTruthy();
+      expect(screen.queryByRole('tablist', { name: 'Tipo de ítem' })).toBeNull();
+    });
+
+    it('las categorías son pastillas con su conteo y filtran con un toque', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'desktop' });
+
+      const grupo = within(screen.getByRole('group', { name: 'Filtro de categoría' }));
+      expect(grupo.getByRole('button', { name: /Todas\s*3/ })).toBeTruthy();
+      expect(grupo.getByRole('button', { name: /Aceite\s*1/ })).toBeTruthy();
+      expect(grupo.getByRole('button', { name: /Sin categoría\s*1/ })).toBeTruthy();
+
+      fireEvent.click(grupo.getByRole('button', { name: /Filtro\s*1/ }));
+
+      expect(tablaInventario().getByText('FIL-100')).toBeTruthy();
+      expect(tablaInventario().queryByText('ACE-100')).toBeNull();
+      expect(grupo.getByRole('button', { name: /Filtro\s*1/ }).getAttribute('aria-pressed')).toBe('true');
+
+      fireEvent.click(grupo.getByRole('button', { name: /Todas/ }));
+      expect(tablaInventario().getByText('ACE-100')).toBeTruthy();
+    });
+
+    it('el filtro de tipo deja solo repuestos y recalcula las pastillas', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'desktop' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Repuestos' }));
+
+      expect(tablaInventario().getByText('FIL-100')).toBeTruthy();
+      expect(tablaInventario().queryByText('ACE-100')).toBeNull();
+      const grupo = within(screen.getByRole('group', { name: 'Filtro de categoría' }));
+      expect(grupo.queryByRole('button', { name: /Aceite/ })).toBeNull();
+    });
+
+    it('columna Equipos: un equipo = su código; varios = «Varios · N» con el detalle; ninguno = «—»', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'desktop' });
+
+      expect(tablaInventario().getByText('EXC-01')).toBeTruthy();
+      expect(tablaInventario().getByRole('button', { name: 'Ver los 3 equipos: EXC-01, CAM-02, CAR-03' })).toBeTruthy();
+      expect(tablaInventario().getAllByText('—').length).toBeGreaterThan(0);
+    });
+
+    it('ordena por Equipos: un solo equipo, luego «Varios» y los vacíos siempre al final', () => {
+      renderView([SUELTO, FIL, ACE], { size: 'desktop' });
+
+      fireEvent.click(tablaInventario().getByText('Equipos'));
+      expect(skusEnOrden()).toEqual(['ACE-100', 'FIL-100', 'SUE-100']);
+
+      fireEvent.click(tablaInventario().getByText('Equipos'));
+      expect(skusEnOrden()).toEqual(['FIL-100', 'ACE-100', 'SUE-100']);
+    });
+
+    it('ordena por Existencia como número y por SKU', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'desktop' });
+
+      fireEvent.click(tablaInventario().getByText('Existencia · total'));
+      expect(skusEnOrden()).toEqual(['FIL-100', 'SUE-100', 'ACE-100']);
+
+      fireEvent.click(tablaInventario().getByText('SKU'));
+      expect(skusEnOrden()).toEqual(['ACE-100', 'FIL-100', 'SUE-100']);
+    });
+
+    it('en el celular ofrece «Ordenar por» con las mismas columnas', () => {
+      renderView([ACE, FIL, SUELTO], { size: 'phone' });
+
+      const selector = screen.getByTestId('orden-columna');
+      expect(within(selector).getByText('Equipos')).toBeTruthy();
+      expect(within(selector).getByText('Tipo')).toBeTruthy();
+      fireEvent.change(selector, { target: { value: 'existencia' } });
+      fireEvent.click(screen.getByTestId('orden-direccion'));
+      const etiquetas = screen
+        .getAllByRole('button', { name: /^Acciones de / })
+        .map((boton) => boton.getAttribute('aria-label'));
+      expect(etiquetas).toEqual(['Acciones de ACE-100', 'Acciones de SUE-100', 'Acciones de FIL-100']);
+    });
   });
 
   describe('filtro desde la URL', () => {

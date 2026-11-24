@@ -28,6 +28,7 @@ describe('WRITE_ROLES', () => {
     ['item.update', [ADMIN, SECRETARIA]],
     ['item.delete', [ADMIN]],
     ['item.setActive', [ADMIN, SECRETARIA]],
+    ['itemCompatibility.save', [ADMIN, SECRETARIA]],
     ['equipmentDocument.create', [ADMIN, SECRETARIA]],
     ['equipmentDocument.update', [ADMIN, SECRETARIA]],
     ['equipmentDocument.delete', [ADMIN, SECRETARIA]],

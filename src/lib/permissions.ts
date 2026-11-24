@@ -39,6 +39,8 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'item.update': [ADMIN, SECRETARIA],
   // Dar de baja o reactivar un ítem (PATCH /items/:id/active): ADMIN y SECRETARIA.
   'item.setActive': [ADMIN, SECRETARIA],
+  // Asignar o quitar los equipos de un ítem (PUT /items/:id/compatibilities).
+  'itemCompatibility.save': [ADMIN, SECRETARIA],
   'item.delete': [ADMIN],
   'item.adjust': [ADMIN],
   'item.setMinimum': [ADMIN, MANTENEDOR],

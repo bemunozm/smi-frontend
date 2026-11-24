@@ -40,8 +40,10 @@ import { useCrearIntervencion } from './useIntervenciones';
 import {
   useAdjustStock,
   useCreateItem,
+  useCreateItemWithMinimums,
   useCreateMovement,
   useDeleteItem,
+  useSaveItemEquipments,
   useSaveItemWithMinimums,
   useTransferStock,
   useUpdateItem,
@@ -221,6 +223,7 @@ describe('Inventario', () => {
     defaultSupplier: null,
     isCritical: false,
     isActive: true,
+    compatibilities: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     stocks: [{ branchId: 'br_1', quantity: 10, minimumQuantity: 4, branch: { id: 'br_1', name: 'Centro' } }],
@@ -494,6 +497,46 @@ describe('Inventario', () => {
       expect(toast.danger).toHaveBeenCalledWith('Nombre duplicado');
     });
 
+    it('manda los equipos solo si cambiaron, y detrás de la ficha', async () => {
+      submitWriteMock.mockResolvedValueOnce(enviado({ name: 'Aceite 15W40' }));
+      submitWriteMock.mockResolvedValueOnce(enviado([]));
+
+      await correr(useSaveItemWithMinimums, {
+        item: ITEM_CON_STOCK,
+        input: cambioDeNombre,
+        minimums: { br_1: '4', br_2: '0' },
+        equipments: [{ equipmentId: 'eq_1', note: 'solo serie 4500' }],
+      });
+
+      const escrituras = submitWriteMock.mock.calls.map(([endpoint, input]) => ({ endpoint, input }));
+      expect(escrituras).toMatchObject([
+        { endpoint: 'item.update' },
+        {
+          endpoint: 'itemCompatibility.save',
+          input: {
+            params: { id: ITEM_CON_STOCK.id },
+            body: { entries: [{ equipmentId: 'eq_1', note: 'solo serie 4500' }] },
+          },
+        },
+      ]);
+    });
+
+    it('con los mismos equipos de antes no escribe nada de equipos', async () => {
+      const conEquipos = {
+        ...ITEM_CON_STOCK,
+        compatibilities: [{ equipmentId: 'eq_1', internalCode: 'EXC-01', note: 'x' }],
+      } as unknown as InventoryItem;
+
+      await correr(useSaveItemWithMinimums, {
+        item: conEquipos,
+        input: sinCambios,
+        minimums: { br_1: '4', br_2: '0' },
+        equipments: [{ equipmentId: 'eq_1', note: 'x' }],
+      });
+
+      expect(submitWriteMock).not.toHaveBeenCalled();
+    });
+
     it('si falla un mínimo, la ficha ya quedó guardada: el aviso lo dice con el motivo', async () => {
       submitWriteMock.mockResolvedValueOnce(enviado({ name: 'Aceite 15W40' }));
       submitWriteMock.mockRejectedValueOnce(new DomainError('La bodega no existe', { status: 404 }));
@@ -516,6 +559,42 @@ describe('Inventario', () => {
       expect(submitWriteMock).not.toHaveBeenCalled();
       expect(toast.success).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('Equipos del ítem', () => {
+  it('guardarlos desde la ficha encola el PUT con el set completo', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado([]));
+    const item = { id: 'it_1', name: 'Filtro de aceite', compatibilities: [] } as unknown as InventoryItem;
+
+    await correr(useSaveItemEquipments, { item, entries: [{ equipmentId: 'eq_1' }, { equipmentId: 'eq_2', note: 'n' }] });
+
+    expect(submitWriteMock).toHaveBeenCalledWith(
+      'itemCompatibility.save',
+      expect.objectContaining({
+        params: { id: 'it_1' },
+        body: { entries: [{ equipmentId: 'eq_1' }, { equipmentId: 'eq_2', note: 'n' }] },
+      }),
+      expect.anything(),
+    );
+    expect(toast.success).toHaveBeenCalledWith('Equipos actualizados', { description: 'Filtro de aceite' });
+  });
+
+  it('al crear un ítem, los equipos se guardan detrás del alta con el id que genera el cliente', async () => {
+    submitWriteMock.mockResolvedValueOnce(enviado({ sku: 'REP-0001' }));
+    submitWriteMock.mockResolvedValueOnce(enviado([]));
+
+    await correr(useCreateItemWithMinimums, {
+      input: { name: 'Filtro', unit: 'UNIT', type: 'PART' },
+      minimums: {},
+      equipments: [{ equipmentId: 'eq_1' }],
+    });
+
+    const [alta, asignacion] = submitWriteMock.mock.calls;
+    expect(alta?.[0]).toBe('item.create');
+    const idDelAlta = (alta?.[1] as { body: { id: string } } | undefined)?.body.id;
+    expect(asignacion?.[0]).toBe('itemCompatibility.save');
+    expect(asignacion?.[1]).toMatchObject({ params: { id: idDelAlta }, body: { entries: [{ equipmentId: 'eq_1' }] } });
   });
 });
 

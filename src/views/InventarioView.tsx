@@ -45,11 +45,21 @@ import {
   stockStatus,
   type RowMenuOption,
 } from '../components/inventario/shared';
+import { ItemEquipmentsCell } from '../components/inventario/ItemEquipments';
+import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { CEBRA_COLUMNAS, cabeceraDe, fondoColumna } from '../components/ui/tabla-pizarra';
 import { useBranches } from '../hooks/useBranches';
-import { useCategories } from '../hooks/useCategories';
+import { useEquipment } from '../hooks/useEquipment';
 import { usePermissions } from '../hooks/usePermissions';
+import {
+  defaultInventoryOrder,
+  inventorySortColumns,
+  inventorySortOptions,
+} from '../lib/inventory-sort';
 import { MOVEMENT_ACTIONS } from '../lib/permissions';
+import { sortRows, type TableSort } from '../lib/table-sort';
 import { MarcaPendiente } from '../components/sync/MarcaPendiente';
 import { PendientesStrip } from '../components/sync/PendientesStrip';
 import { useItems } from '../hooks/useInventory';
@@ -59,6 +69,7 @@ import { RECURSOS_DE_INVENTARIO } from '../lib/pending-resources';
 import { useUiStore } from '../store/ui';
 import type { Branch } from '../types/branch';
 import {
+  ITEM_TYPE_LABELS,
   UNIT_SYMBOLS,
   quantityAt,
   stockAt,
@@ -69,6 +80,12 @@ import {
 
 /** Centinela del filtro de categoría: "todas" no es un id. */
 const ALL_CATEGORIES = '__all__';
+/** Pastilla «Sin categoría»: los ítems que no tienen una. */
+const NO_CATEGORY = '__none__';
+/** Centinela del filtro de equipo. */
+const ALL_EQUIPMENTS = '__all__';
+
+type TypeFilter = 'todos' | ItemType;
 
 /**
  * Hasta cuántas sucursales caben como control segmentado antes de volver al
@@ -156,7 +173,7 @@ function ItemRow({
     <Table.Row className={CEBRA_COLUMNAS}>
       <Table.Cell {...col('sku')}>
         <Link
-          className="font-mono text-sm font-medium text-(--accent) hover:underline"
+          className="font-mono text-sm font-medium whitespace-nowrap text-(--accent) hover:underline"
           to={`/inventario/${item.id}`}
         >
           {item.sku}
@@ -177,8 +194,16 @@ function ItemRow({
           ) : null}
         </div>
       </Table.Cell>
+      <Table.Cell {...col('tipo')}>
+        <Chip color={item.type === 'PART' ? 'accent' : 'default'} size="sm" variant="soft">
+          {ITEM_TYPE_LABELS[item.type]}
+        </Chip>
+      </Table.Cell>
       <Table.Cell className="text-sm text-muted-foreground" {...col('categoria')}>
         {item.category?.name ?? 'Sin categoría'}
+      </Table.Cell>
+      <Table.Cell {...col('equipos')}>
+        <ItemEquipmentsCell equipments={item.compatibilities} />
       </Table.Cell>
       <Table.Cell
         className={`font-mono text-sm ${
@@ -236,8 +261,22 @@ function EmptyState() {
   );
 }
 
+/** Título ordenable sobre la cabecera de color: la columna activa va subrayada (el acento no se lee sobre el azul). */
+const cabeceraOrdenable = (titulo: string) => sortableHeader(titulo, 'underline underline-offset-4');
+
 /** Columnas de la tabla en orden; «Mínimo» solo con una sucursal elegida. */
-const COLUMNAS = ['sku', 'nombre', 'categoria', 'existencia', 'sucursal', 'minimo', 'estado', 'acciones'] as const;
+const COLUMNAS = [
+  'sku',
+  'nombre',
+  'tipo',
+  'categoria',
+  'equipos',
+  'existencia',
+  'sucursal',
+  'minimo',
+  'estado',
+  'acciones',
+] as const;
 
 const columnasDe = (isAll: boolean): readonly (typeof COLUMNAS)[number][] =>
   isAll ? COLUMNAS.filter((c) => c !== 'minimo') : COLUMNAS;
@@ -245,11 +284,16 @@ const columnasDe = (isAll: boolean): readonly (typeof COLUMNAS)[number][] =>
 function ItemsList({
   items,
   branchId,
+  orden,
+  onOrdenChange,
   onOpen,
   onEdit,
 }: {
   items: InventoryItem[];
   branchId: string;
+  /** `null` = el orden por defecto (críticos primero, luego por nombre). */
+  orden: TableSort | null;
+  onOrdenChange: (orden: TableSort) => void;
   onOpen: (item: InventoryItem, view: ItemAction) => void;
   onEdit: (item: InventoryItem) => void;
 }) {
@@ -262,16 +306,23 @@ function ItemsList({
   // Tarjetas en teléfono Y en tablet; la tabla aparece recién en pantallas anchas (ver TABLE_LAYOUT_QUERY).
   if (!isDesktop) {
     return (
-      <div className="flex flex-col gap-2.5">
-        {items.map((item) => (
-          <ItemCard
-            branchId={branchId}
-            item={item}
-            key={item.id}
-            marca={pendientes.marcaDe('item', item.id)}
-            onOpen={() => onOpen(item, 'actions')}
-          />
-        ))}
+      <div>
+        <SortControl
+          onChange={onOrdenChange}
+          options={inventorySortOptions(branchId)}
+          sort={orden ?? { column: 'nombre', direction: 'ascending' }}
+        />
+        <div className="flex flex-col gap-2.5">
+          {items.map((item) => (
+            <ItemCard
+              branchId={branchId}
+              item={item}
+              key={item.id}
+              marca={pendientes.marcaDe('item', item.id)}
+              onOpen={() => onOpen(item, 'actions')}
+            />
+          ))}
+        </div>
       </div>
     );
   }
@@ -285,21 +336,42 @@ function ItemsList({
       <Card.Content>
     <Table variant="secondary">
       <Table.ScrollContainer>
-        <Table.Content aria-label="Inventario" className="min-w-240">
+        <Table.Content
+          aria-label="Inventario"
+          className="min-w-280"
+          onSortChange={(d) => onOrdenChange({ column: d.column, direction: d.direction })}
+          sortDescriptor={orden ?? undefined}
+        >
           <Table.Header>
-            <Table.Column className={cab('sku')} isRowHeader>
-              SKU
+            <Table.Column allowsSorting className={cab('sku')} id="sku" isRowHeader>
+              {cabeceraOrdenable('SKU')}
             </Table.Column>
-            <Table.Column className={cab('nombre')}>Nombre</Table.Column>
-            <Table.Column className={cab('categoria')}>Categoría</Table.Column>
-            <Table.Column className={cab('existencia')}>
-              {isAll ? 'Existencia · total' : 'Existencia acá'}
+            <Table.Column allowsSorting className={cab('nombre')} id="nombre">
+              {cabeceraOrdenable('Nombre')}
             </Table.Column>
-            <Table.Column className={cab('sucursal')}>Sucursal</Table.Column>
+            <Table.Column allowsSorting className={cab('tipo')} id="tipo">
+              {cabeceraOrdenable('Tipo')}
+            </Table.Column>
+            <Table.Column allowsSorting className={cab('categoria')} id="categoria">
+              {cabeceraOrdenable('Categoría')}
+            </Table.Column>
+            <Table.Column allowsSorting className={cab('equipos')} id="equipos">
+              {cabeceraOrdenable('Equipos')}
+            </Table.Column>
+            <Table.Column allowsSorting className={cab('existencia')} id="existencia">
+              {cabeceraOrdenable(isAll ? 'Existencia · total' : 'Existencia acá')}
+            </Table.Column>
+            <Table.Column allowsSorting className={cab('sucursal')} id="sucursal">
+              {cabeceraOrdenable('Sucursal')}
+            </Table.Column>
             {isAll ? null : (
-              <Table.Column className={cab('minimo')}>Mínimo</Table.Column>
+              <Table.Column allowsSorting className={cab('minimo')} id="minimo">
+                {cabeceraOrdenable('Mínimo')}
+              </Table.Column>
             )}
-            <Table.Column className={cab('estado')}>Estado</Table.Column>
+            <Table.Column allowsSorting className={cab('estado')} id="estado">
+              {cabeceraOrdenable('Estado')}
+            </Table.Column>
             <Table.Column className={cab('acciones')}>Acciones</Table.Column>
           </Table.Header>
           <Table.Body>
@@ -408,6 +480,35 @@ function PickItemModal({
 
 // --- Vista -----------------------------------------------------------------
 
+/** Pastilla de categoría con su conteo: se elige con un toque, sin abrir un select. */
+function CategoryPill({
+  label,
+  count,
+  isSelected,
+  onPress,
+}: {
+  label: string;
+  count: number;
+  isSelected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={isSelected}
+      className={`inline-flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+        isSelected
+          ? 'border-transparent bg-(--accent) text-(--accent-foreground)'
+          : 'border-border bg-card text-foreground hover:bg-[var(--surface-secondary)]'
+      }`}
+      onClick={onPress}
+      type="button"
+    >
+      {label}
+      <span className={`font-mono text-xs ${isSelected ? 'opacity-80' : 'text-muted-foreground'}`}>{count}</span>
+    </button>
+  );
+}
+
 export function InventarioView() {
   const { can, canAny } = usePermissions();
   const puedeDarDeBaja = can('item.setActive');
@@ -415,9 +516,12 @@ export function InventarioView() {
   const selectedBranchId = useUiStore((state) => state.selectedBranchId);
   const setSelectedBranchId = useUiStore((state) => state.setSelectedBranchId);
 
-  const [tab, setTab] = useState<ItemType>('SUPPLY');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('todos');
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState(ALL_CATEGORIES);
+  const [equipmentId, setEquipmentId] = useState(ALL_EQUIPMENTS);
+  // `null` = el orden por defecto de la lista (críticos primero, luego por nombre).
+  const [orden, setOrden] = useState<TableSort | null>(null);
   // `?filtro=bajo-minimo` (link del KPI del dashboard) parte en «Requieren
   // atención»; se lee una sola vez al montar.
   const [searchParams] = useSearchParams();
@@ -432,9 +536,7 @@ export function InventarioView() {
   const [verDadosDeBaja, setVerDadosDeBaja] = useState(false);
 
   const { data: branches } = useBranches({ isActive: true });
-  // Las categorías siguen a la pestaña: ofrecer «Neumáticos y llantas»
-  // mirando suministros lleva a un listado vacío y a creer que se perdió stock.
-  const { data: categories } = useCategories({ type: tab });
+  const { data: equipments } = useEquipment();
 
   /**
    * El inventario **general** es lo que se ve primero: con dos faenas, la
@@ -443,30 +545,70 @@ export function InventarioView() {
    */
   const branchId = selectedBranchId ?? ALL_BRANCHES;
 
+  // Sin pestañas: llegan TODOS los ítems y el tipo y la categoría se filtran acá,
+  // para que las pastillas de categoría puedan mostrar su conteo sin otra consulta.
   const { data, isPending, isError, error } = useItems({
-    type: tab,
     // Quien puede dar de baja ve también los dados de baja si lo pide (para reactivarlos).
     ...(verDadosDeBaja && puedeDarDeBaja ? {} : { isActive: true }),
     ...(search.trim() ? { q: search.trim() } : {}),
-    ...(categoryId === ALL_CATEGORIES ? {} : { categoryId }),
+    ...(equipmentId === ALL_EQUIPMENTS ? {} : { equipmentId }),
   });
 
-  const all = useMemo(() => data ?? [], [data]);
+  const allItems = useMemo(() => data ?? [], [data]);
+  // Lo que el tipo deja a la vista: sobre eso se cuentan estado y categorías.
+  const all = useMemo(
+    () => (typeFilter === 'todos' ? allItems : allItems.filter((item) => item.type === typeFilter)),
+    [allItems, typeFilter],
+  );
 
   const alertCount = useMemo(
     () => all.filter((item) => stockStatus(item, branchId).tone !== 'ok').length,
     [all, branchId],
   );
 
-  // Los críticos van arriba (pedido del cliente): son los que no pueden faltar.
-  // Orden estable: dentro de cada grupo se mantiene el orden del servidor.
+  const scoped = useMemo(
+    () => (stockFilter === 'atencion' ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok') : all),
+    [all, stockFilter, branchId],
+  );
+
+  // Las pastillas salen de los ítems a la vista (con su conteo): solo aparecen
+  // categorías que tienen algo, y el número coincide con lo que se vería al tocarlas.
+  const categoryPills = useMemo(() => {
+    const counts = new Map<string, { id: string; name: string; count: number }>();
+    let uncategorized = 0;
+    for (const item of scoped) {
+      if (!item.category) {
+        uncategorized += 1;
+        continue;
+      }
+      const current = counts.get(item.category.id);
+      if (current) current.count += 1;
+      else counts.set(item.category.id, { id: item.category.id, name: item.category.name, count: 1 });
+    }
+    const pills = [...counts.values()].sort((a, b) => a.name.localeCompare(b.name, 'es-CL'));
+    return uncategorized > 0 ? [...pills, { id: NO_CATEGORY, name: 'Sin categoría', count: uncategorized }] : pills;
+  }, [scoped]);
+
+  // Si la categoría elegida ya no tiene ítems (cambió otro filtro), se vuelve a «Todas».
+  const activeCategory = categoryPills.some((pill) => pill.id === categoryId) ? categoryId : ALL_CATEGORIES;
+
   const items = useMemo(() => {
     const filtrados =
-      stockFilter === 'atencion'
-        ? all.filter((item) => stockStatus(item, branchId).tone !== 'ok')
-        : all;
-    return [...filtrados].sort((a, b) => Number(b.isCritical) - Number(a.isCritical));
-  }, [all, stockFilter, branchId]);
+      activeCategory === ALL_CATEGORIES
+        ? scoped
+        : scoped.filter((item) => (activeCategory === NO_CATEGORY ? !item.category : item.category?.id === activeCategory));
+    // Sin orden elegido: los críticos arriba (pedido del cliente), son los que no
+    // pueden faltar; dentro de cada grupo se mantiene el orden del servidor.
+    return orden
+      ? sortRows(filtrados, orden, inventorySortColumns(branchId))
+      : defaultInventoryOrder(filtrados);
+  }, [scoped, activeCategory, orden, branchId]);
+
+  const equipmentOptions = useMemo(
+    () =>
+      [...(equipments ?? [])].sort((a, b) => a.internalCode.localeCompare(b.internalCode, 'es-CL', { numeric: true })),
+    [equipments],
+  );
 
   const branchOptions = [
     { id: ALL_BRANCHES, label: 'Todas' },
@@ -526,22 +668,7 @@ export function InventarioView() {
 
       <PendientesStrip recursos={RECURSOS_DE_INVENTARIO} />
 
-      <Segmented
-        label="Tipo de ítem"
-        onChange={(next) => {
-          setTab(next);
-          // La categoría elegida puede no existir en la otra pestaña; dejarla
-          // puesta mostraría cero resultados sin explicar por qué.
-          setCategoryId(ALL_CATEGORIES);
-        }}
-        options={[
-          { id: 'SUPPLY', label: 'Suministros' },
-          { id: 'PART', label: 'Repuestos' },
-        ]}
-        value={tab}
-      />
-
-      {/* Los cuatro filtros con el mismo esquema (label afuera + control de
+      {/* Los filtros con el mismo esquema (label afuera + control de
           48px) para que en escritorio queden en una sola fila nivelada; el
           switch de dados de baja va aparte, debajo, porque no es un filtro
           del mismo tipo y desarmaba la grilla. */}
@@ -559,28 +686,29 @@ export function InventarioView() {
         <Select
           className="label-outside"
           onChange={(value) => {
-            if (value) setCategoryId(String(value));
+            if (value) setEquipmentId(String(value));
           }}
-          value={categoryId}
+          value={equipmentId}
         >
-          <Label>Categoría</Label>
+          <Label>Equipo</Label>
           <Select.Trigger>
             <Select.Value />
             <Select.Indicator />
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              <ListBox.Item id={ALL_CATEGORIES} textValue="Todas">
-                Todas
+              <ListBox.Item id={ALL_EQUIPMENTS} textValue="Todos">
+                Todos
                 <ListBox.ItemIndicator />
               </ListBox.Item>
-              {(categories ?? []).map((category) => (
+              {equipmentOptions.map((equipment) => (
                 <ListBox.Item
-                  id={category.id}
-                  key={category.id}
-                  textValue={category.name}
+                  id={equipment.id}
+                  key={equipment.id}
+                  textValue={`${equipment.internalCode} ${equipment.licensePlate ?? ''}`}
                 >
-                  {category.name}
+                  {equipment.internalCode}
+                  {equipment.licensePlate ? ` · ${equipment.licensePlate}` : ''}
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
               ))}
@@ -643,6 +771,48 @@ export function InventarioView() {
         </div>
       </div>
 
+      {/* Segunda fila: el tipo (compacto) y las categorías a la vista, sin abrir un
+          desplegable. En celular las pastillas corren en horizontal. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="flex flex-col gap-1">
+          <span className="label">Tipo</span>
+          <Segmented<TypeFilter>
+            label="Filtro de tipo"
+            onChange={setTypeFilter}
+            options={[
+              { id: 'todos', label: 'Todos' },
+              { id: 'SUPPLY', label: 'Suministros' },
+              { id: 'PART', label: 'Repuestos' },
+            ]}
+            value={typeFilter}
+          />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="label">Categoría</span>
+          <div
+            aria-label="Filtro de categoría"
+            className="-mx-1 flex min-h-12 items-center gap-2 overflow-x-auto px-1 pb-1 lg:flex-wrap lg:overflow-visible lg:pb-0"
+            role="group"
+          >
+            <CategoryPill
+              count={scoped.length}
+              isSelected={activeCategory === ALL_CATEGORIES}
+              label="Todas"
+              onPress={() => setCategoryId(ALL_CATEGORIES)}
+            />
+            {categoryPills.map((pill) => (
+              <CategoryPill
+                count={pill.count}
+                isSelected={activeCategory === pill.id}
+                key={pill.id}
+                label={pill.name}
+                onPress={() => setCategoryId(pill.id)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
       {puedeDarDeBaja ? (
         <Switch isSelected={verDadosDeBaja} onChange={setVerDadosDeBaja}>
           <Switch.Content>
@@ -671,6 +841,8 @@ export function InventarioView() {
           branchId={branchId}
           items={items}
           onEdit={openEdit}
+          onOrdenChange={setOrden}
+          orden={orden}
           onOpen={(item, view) => setTarget({ item, view })}
         />
       )}
@@ -717,7 +889,7 @@ export function InventarioView() {
             branchId === ALL_BRANCHES ? (branches?.[0]?.name ?? '') : branchLabel
           }
           branches={branches ?? []}
-          defaultType={tab}
+          defaultType={typeFilter === 'todos' ? 'SUPPLY' : typeFilter}
           isOpen
           onOpenChange={setIsCreating}
         />

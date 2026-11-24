@@ -16,7 +16,12 @@ import {
 } from '@heroui/react';
 
 import { useCategories, useCreateCategory } from '../../hooks/useCategories';
-import { useCreateItemWithMinimums, useSaveItemWithMinimums } from '../../hooks/useInventory';
+import {
+  toCompatibilityEntries,
+  useCreateItemWithMinimums,
+  useSaveItemWithMinimums,
+} from '../../hooks/useInventory';
+import { usePermissions } from '../../hooks/usePermissions';
 import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
 import type { Branch } from '../../types/branch';
 import type { ItemCategory } from '../../types/category';
@@ -34,6 +39,7 @@ import {
   contenidoDe,
   resumenExistencia,
   stockAt,
+  type CompatibilityEntry,
   toCreateItemPayload,
   toItemEditValues,
   toUpdateItemPayload,
@@ -43,7 +49,27 @@ import {
   type ItemFormValues,
   type ItemType,
 } from '../../types/inventory';
+import { EquipmentPicker } from './ItemEquipments';
 import { SectionLabel } from './shared';
+
+/** Sección «Equipos» del formulario: a qué máquinas corresponde el ítem. */
+function EquipmentsSection({
+  value,
+  onChange,
+}: {
+  value: CompatibilityEntry[];
+  onChange: (next: CompatibilityEntry[]) => void;
+}) {
+  return (
+    <>
+      <SectionLabel>Equipos (opcional)</SectionLabel>
+      <EquipmentPicker onChange={onChange} value={value} />
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Los equipos a los que corresponde este ítem. Se ven en la lista y en la ficha de cada equipo.
+      </p>
+    </>
+  );
+}
 
 /** Ejemplo del contenido según en qué se cuenta el suministro. */
 const EJEMPLO_CONTENIDO: Partial<Record<UnitOfMeasure, string>> = {
@@ -499,6 +525,10 @@ export function NewItemModal({
   // El mínimo por bodega se fija al crear, igual que en la edición: antes había
   // que crear el ítem y volver a abrirlo para ponerle el umbral. Vacío = sin mínimo.
   const [minimums, setMinimums] = useState<Record<string, string>>({});
+  // Equipos asignados desde el alta: solo quien puede asignarlos (ADMIN y SECRETARIA).
+  const { can } = usePermissions();
+  const puedeAsignar = can('itemCompatibility.save');
+  const [equipments, setEquipments] = useState<CompatibilityEntry[]>([]);
   const { data: categories } = useCategories();
   const {
     control,
@@ -536,11 +566,16 @@ export function NewItemModal({
           {({ close }) => {
             const onSubmit = (values: ItemFormValues): void => {
               createItem.mutate(
-                { input: toCreateItemPayload(values, branchId), minimums },
+                {
+                  input: toCreateItemPayload(values, branchId),
+                  minimums,
+                  ...(puedeAsignar ? { equipments } : {}),
+                },
                 {
                   onSuccess: () => {
                     reset({ ...EMPTY_ITEM, type: defaultType });
                     setMinimums({});
+                    setEquipments([]);
                     close();
                   },
                 },
@@ -598,6 +633,8 @@ export function NewItemModal({
                         </TextField>
                       )}
                     />
+
+                    {puedeAsignar ? <EquipmentsSection onChange={setEquipments} value={equipments} /> : null}
 
                     {branches.length > 0 ? (
                       <>
@@ -687,6 +724,9 @@ export function EditItemModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const saveItem = useSaveItemWithMinimums();
+  const { can } = usePermissions();
+  const puedeAsignar = can('itemCompatibility.save');
+  const [equipments, setEquipments] = useState<CompatibilityEntry[]>(() => toCompatibilityEntries(item));
   const { data: categories } = useCategories();
   const {
     control,
@@ -723,7 +763,12 @@ export function EditItemModal({
           {({ close }) => {
             const onSubmit = (values: ItemEditFormValues): void => {
               saveItem.mutate(
-                { item, input: toUpdateItemPayload(values), minimums },
+                {
+                  item,
+                  input: toUpdateItemPayload(values),
+                  minimums,
+                  ...(puedeAsignar ? { equipments } : {}),
+                },
                 { onSuccess: close },
               );
             };
@@ -765,6 +810,8 @@ export function EditItemModal({
                         </TextField>
                       )}
                     />
+
+                    {puedeAsignar ? <EquipmentsSection onChange={setEquipments} value={equipments} /> : null}
 
                     <SectionLabel>Stock mínimo por sucursal</SectionLabel>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
