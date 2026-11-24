@@ -6,9 +6,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@heroui/react', () => ({ toast: { danger: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock('./useCurrentUser', () => ({ useCurrentUser: () => ({ user: { id: 'u1' } }) }));
+// El replay nunca habla con un servidor real: el sender y la subida son dobles.
+const { sendWriteMock, uploadFileMock } = vi.hoisted(() => ({ sendWriteMock: vi.fn(), uploadFileMock: vi.fn() }));
+vi.mock('../api/WriteAPI', () => ({ sendWrite: sendWriteMock }));
+vi.mock('../api/UploadsAPI', () => ({ uploadFile: uploadFileMock }));
 
 import { useCrearInformeTemporal } from './useInformesTemporales';
+import { DomainError } from '../lib/api-error';
 import { db, type HttpWriteOp, type OutboxOp } from '../offline/db';
+import { resetReplayEngineForTests, setCurrentUser } from '../offline/replay';
 import { ENDPOINTS } from '../offline/endpoints';
 import { InformeTemporalSchema, type CreateInformeTemporalInput } from '../types/informe-temporal';
 
@@ -112,12 +118,22 @@ async function opsDelInforme(): Promise<HttpWriteOp[]> {
   return ops.filter((op): op is HttpWriteOp => op.type === 'httpWrite' && op.endpoint === 'informeTemporal.create');
 }
 
+/** `navigator.onLine` del test: sin red `submitWrite` devuelve `queued` sin esperar. */
+let enLinea = false;
+
 beforeEach(async () => {
+  enLinea = false;
+  vi.spyOn(navigator, 'onLine', 'get').mockImplementation(() => enLinea);
   await db.outbox.clear();
   await db.blobs.clear();
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  setCurrentUser(null);
+  resetReplayEngineForTests();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
 
 describe('InformeTemporalSchema', () => {
   it('parsea el informe tal como lo devuelve el backend', () => {
@@ -199,5 +215,26 @@ describe('useCrearInformeTemporal', () => {
       expect(cierre).not.toHaveProperty('shiftDate');
       expect(cierre).not.toHaveProperty('shiftType');
     }
+  });
+
+  it('con señal espera al servidor: un 409 rechaza la mutación con el DomainError y su code', async () => {
+    enLinea = true;
+    setCurrentUser('u1');
+    sendWriteMock.mockRejectedValueOnce(
+      new DomainError('Las tarjetas del informe no coinciden con las abiertas.', {
+        code: 'INFORME_TARJETAS_DESCUADRADAS',
+        status: 409,
+      }),
+    );
+
+    const { result } = renderHook(useCrearInformeTemporal, { wrapper });
+    result.current.mutate({ informe: informe() });
+    await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
+
+    expect(sendWriteMock).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeInstanceOf(DomainError);
+    expect(result.current.error).toMatchObject({ code: 'INFORME_TARJETAS_DESCUADRADAS', status: 409 });
+    // El rechazo de negocio no queda esperando en la hoja de sincronización.
+    expect(await opsDelInforme()).toHaveLength(0);
   });
 });
