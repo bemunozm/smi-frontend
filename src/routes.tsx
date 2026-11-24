@@ -37,6 +37,7 @@ import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
+import { InformesTemporalesAdminView } from './views/InformesTemporalesAdminView';
 import { CargasCombustibleAdminView } from './views/CargasCombustibleAdminView';
 import { AsistenciaView } from './views/AsistenciaView';
 import { ActivityLogView } from './views/ActivityLogView';
@@ -160,6 +161,8 @@ export const router = createBrowserRouter([
                   // Trabajos extraordinarios (filtros, alta y corrección);
                   // Terreno conserva /terreno/trabajos-extra.
                   { path: '/trabajos-extra', element: <TrabajosExtraAdminView /> },
+                  // Informes de los supervisores temporales (corregir/eliminar).
+                  { path: '/informes-temporales', element: <InformesTemporalesAdminView /> },
                   // Todas las cargas de combustible (cierres de tarjeta +
                   // manuales), con filtros y alta manual.
                   { path: '/cargas-combustible', element: <CargasCombustibleAdminView /> },

@@ -146,6 +146,12 @@ export function canDeleteTrabajoExtra(role: Role | null | undefined): boolean {
   return role === ADMIN;
 }
 
+/** Eliminar un informe del supervisor temporal: `DELETE /api/informes-temporales/:id`
+ * es solo ADMIN (lo que declara `WRITE_ROLES['informeTemporal.delete']`). */
+export function canDeleteInformeTemporal(role: Role | null | undefined): boolean {
+  return canWrite(role, 'informeTemporal.delete');
+}
+
 /** Eliminar un reporte de producción diaria: `DELETE /api/reporte-diario/:id`
  * es solo ADMIN — mismo criterio que los trabajos extra. */
 export function canDeleteReporteDiario(role: Role | null | undefined): boolean {
@@ -177,6 +183,7 @@ const RUTAS_SECRETARIA = [
   '/reportes-diarios',
   '/hallazgos',
   '/trabajos-extra',
+  '/informes-temporales',
   '/cargas-combustible',
   '/mantenciones',
   '/asistencia',
