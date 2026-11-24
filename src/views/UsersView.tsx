@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -17,11 +17,16 @@ import {
   TextField,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useCreateUser, useDeleteUser, useUpdateUser, useUsers } from '../hooks/useUsers';
 import { ROLE_OPTIONS, roleChipColor } from '../config/role-colors';
+import { compareText, sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
+import type { SortMeta } from '../lib/sort-description';
+import { sortSummary } from '../lib/sort-summary';
 import { ROLES } from '../types/roles';
 import {
   CreateUserFormSchema,
@@ -31,6 +36,27 @@ import {
   type UpdateUserInput,
   type User,
 } from '../types/user';
+
+/** Orden lógico de los roles (el de `ROLES`: administrador primero), no alfabético. */
+const ROLE_ORDER: string[] = Object.values(ROLES);
+
+const byName = (a: User, b: User): number => compareText(a.name, b.name);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`); «Acciones» no ordena. */
+const COLUMNAS_ORDEN: Record<string, SortColumn<User>> = {
+  nombre: { kind: 'text', value: (u) => u.name },
+  email: { kind: 'text', value: (u) => u.email, tiebreak: byName },
+  rol: { kind: 'number', value: (u) => ROLE_ORDER.indexOf(u.role), tiebreak: byName },
+  // Verificado antes que sin verificar.
+  verificado: { kind: 'number', value: (u) => (u.emailVerified ? 0 : 1), tiebreak: byName },
+};
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'nombre', label: 'Nombre', reading: 'text' },
+  { id: 'email', label: 'Email', reading: 'text' },
+  { id: 'rol', label: 'Rol', reading: ['de administrador a prevencionista', 'de prevencionista a administrador'] },
+  { id: 'verificado', label: 'Email verificado', reading: ['verificados primero', 'sin verificar primero'] },
+];
 
 function PencilIcon() {
   return (
@@ -561,7 +587,13 @@ function UserCardActions({ user, isSelf }: { user: User; isSelf: boolean }) {
  */
 export function UsersView() {
   const { user: currentUser } = useCurrentUser();
-  const { data: users, isPending, isError, error } = useUsers();
+  const { data: usersData, isPending, isError, error } = useUsers();
+  // `null` = el orden por defecto (el del servidor: por fecha de alta).
+  const [orden, setOrden] = useState<TableSort | null>(null);
+  const users = useMemo(
+    () => (usersData && orden ? sortRows(usersData, orden, COLUMNAS_ORDEN) : usersData),
+    [usersData, orden],
+  );
   // La tabla solo en escritorio: en tablet y celular, tarjetas que caben en el ancho.
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
 
@@ -576,6 +608,11 @@ export function UsersView() {
             Usuarios
           </h1>
           <p className="text-sm text-muted-foreground">Crea, edita y elimina las cuentas del sistema.</p>
+          {users && users.length > 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="orden-usuarios">
+              {sortSummary(orden, OPCIONES_ORDEN, 'por fecha de alta')}
+            </p>
+          ) : null}
         </div>
         <CreateUserModal />
       </div>
@@ -603,6 +640,12 @@ export function UsersView() {
       ) : null}
 
       {!isPending && !isError && users && users.length > 0 && !esEscritorio ? (
+        <div>
+        <SortControl
+          onChange={setOrden}
+          options={OPCIONES_ORDEN}
+          sort={orden ?? { column: 'nombre', direction: 'ascending' }}
+        />
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {users.map((user) => (
             <li className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4" key={user.id}>
@@ -622,6 +665,7 @@ export function UsersView() {
             </li>
           ))}
         </ul>
+        </div>
       ) : null}
 
       {!isPending && !isError && users && users.length > 0 && esEscritorio ? (
@@ -631,12 +675,25 @@ export function UsersView() {
         // como "doble card" contra el resto de la página.
         <Table variant="secondary">
           <Table.ScrollContainer>
-            <Table.Content aria-label="Usuarios" className="min-w-180">
+            <Table.Content
+              aria-label="Usuarios"
+              className="min-w-180"
+              onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+              sortDescriptor={orden ?? undefined}
+            >
               <Table.Header>
-                <Table.Column isRowHeader>Nombre</Table.Column>
-                <Table.Column>Email</Table.Column>
-                <Table.Column>Rol</Table.Column>
-                <Table.Column>Email verificado</Table.Column>
+                <Table.Column allowsSorting id="nombre" isRowHeader>
+                  {sortableHeader('Nombre')}
+                </Table.Column>
+                <Table.Column allowsSorting id="email">
+                  {sortableHeader('Email')}
+                </Table.Column>
+                <Table.Column allowsSorting id="rol">
+                  {sortableHeader('Rol')}
+                </Table.Column>
+                <Table.Column allowsSorting id="verificado">
+                  {sortableHeader('Email verificado')}
+                </Table.Column>
                 <Table.Column>Acciones</Table.Column>
               </Table.Header>
               <Table.Body>

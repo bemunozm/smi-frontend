@@ -55,6 +55,7 @@ vi.mock('../hooks/useEquipment', () => ({
 
 import { assetUrl } from '../api/UploadsAPI';
 import { toDateTimeLocal } from '../lib/format';
+import { setViewport } from '../test/viewport';
 import { CargasCombustibleAdminView } from './CargasCombustibleAdminView';
 
 /** Fechas construidas en hora LOCAL (TZ-safe): el filtro compara días locales. */
@@ -607,5 +608,82 @@ describe('edición de una carga (solo ADMIN)', () => {
     const [vars] = editarMock.mock.calls[0]!;
     expect(vars.carga.id).toBe('c1');
     expect(vars.cambios).toEqual({ litros: 164.5 });
+  });
+});
+
+describe('orden por columna', () => {
+  const DESORDENADA: RegistroCombustible[] = [
+    carga({ id: 'x1', litros: 100, fecha: local(2026, 11, 3, 12, 0), lectura: 1500, realizadoPor: 'Zoila', adBlueLitros: 30 }),
+    carga({
+      id: 'x2',
+      equipoId: 'e9',
+      equipo: { internalCode: 'CM-01', type: 'Camioneta', equipmentClass: 'LIGHT', controlUnit: 'KM' },
+      litros: 9,
+      fecha: local(2026, 11, 5, 12, 0),
+      lectura: 45000,
+      realizadoPor: 'Berta',
+      origen: 'MANUAL',
+      fotoUrl: 'https://minio.local/signed/surtidor.jpg',
+    }),
+    carga({ id: 'x3', litros: 80, fecha: local(2026, 11, 1, 12, 0), lectura: null, realizadoPor: null, adBlueLitros: 5 }),
+  ];
+  const ids = () =>
+    screen.getAllByTestId(/carga-fila-/).map((f) => f.getAttribute('data-testid')?.replace('carga-fila-', ''));
+
+  beforeEach(() => {
+    setViewport(true);
+    listHook.mockReturnValue(ok(DESORDENADA));
+  });
+  afterEach(() => setViewport(false));
+
+  it('por defecto, la más reciente primero, y la bajada lo dice', () => {
+    render(<CargasCombustibleAdminView />);
+    expect(ids()).toEqual(['x2', 'x1', 'x3']);
+    expect(screen.getByText(/Ordenado por fecha, del más reciente al más antiguo/)).toBeTruthy();
+    expect(screen.getByText(/Toca el título de una columna/)).toBeTruthy();
+  });
+
+  it('tocar el título de Fecha invierte el orden', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fecha/ }));
+    expect(ids()).toEqual(['x3', 'x1', 'x2']);
+  });
+
+  it('litros ordena numéricamente (9 antes que 80 y 100)', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Litros/ }));
+    expect(ids()).toEqual(['x2', 'x3', 'x1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Litros/ }));
+    expect(ids()).toEqual(['x1', 'x3', 'x2']);
+  });
+
+  it('lectura y AdBlue dejan los vacíos al final en los dos sentidos', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Lectura/ }));
+    expect(ids()).toEqual(['x1', 'x2', 'x3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Lectura/ }));
+    expect(ids()).toEqual(['x2', 'x1', 'x3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /AdBlue/ }));
+    expect(ids()).toEqual(['x3', 'x1', 'x2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /AdBlue/ }));
+    expect(ids()).toEqual(['x1', 'x3', 'x2']);
+  });
+
+  it('ordena por quién realizó la carga y por equipo', () => {
+    render(<CargasCombustibleAdminView />);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Realizó/ }));
+    expect(ids()).toEqual(['x2', 'x1', 'x3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Equipo/ }));
+    expect(ids()).toEqual(['x2', 'x3', 'x1']);
+  });
+
+  it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+    setViewport(false);
+    render(<CargasCombustibleAdminView />);
+    expect(ids()).toEqual(['x2', 'x1', 'x3']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'litros' } });
+    expect(ids()).toEqual(['x1', 'x3', 'x2']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids()).toEqual(['x2', 'x3', 'x1']);
   });
 });

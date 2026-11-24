@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertDialog, Button, Card, Input, Label, Modal, Spinner, TextField } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl, type SortOption } from '../components/ui/SortControl';
+import { compareText, sortRows, type SortColumn, type TableSort } from '../lib/table-sort';
 
 import {
   useActualizarEmpresaExterna,
@@ -14,6 +16,21 @@ import type { EmpresaExternaAdmin } from '../types/reporte-diario';
 function limpiar(nombre: string): string {
   return nombre.trim().replace(/\s+/g, ' ');
 }
+
+const byName = (a: EmpresaExternaAdmin, b: EmpresaExternaAdmin): number => compareText(a.nombre, b.nombre);
+
+/** Esta vista es una lista (sin títulos de columna): el orden se elige con «Ordenar por». */
+const COLUMNAS_ORDEN: Record<string, SortColumn<EmpresaExternaAdmin>> = {
+  nombre: { kind: 'text', value: (e) => e.nombre },
+  reportes: { kind: 'number', value: (e) => e.reportes, tiebreak: byName },
+};
+
+const OPCIONES_ORDEN: SortOption[] = [
+  { id: 'nombre', label: 'Nombre' },
+  { id: 'reportes', label: 'Reportes en que sale' },
+];
+
+const ORDEN_INICIAL: TableSort = { column: 'nombre', direction: 'ascending' };
 
 function usosTexto(reportes: number): string {
   if (reportes === 0) return 'Sin reportes todavía';
@@ -39,9 +56,16 @@ export function EmpresasExternasView() {
   const [nombreEdicion, setNombreEdicion] = useState('');
   const [quitando, setQuitando] = useState<EmpresaExternaAdmin | null>(null);
 
-  const empresas = data ?? [];
-  const activas = empresas.filter((e) => e.activa);
-  const inactivas = empresas.filter((e) => !e.activa);
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+  // Primero la separación activas/desactivadas y después el orden elegido.
+  const activas = useMemo(
+    () => sortRows((data ?? []).filter((e) => e.activa), orden, COLUMNAS_ORDEN),
+    [data, orden],
+  );
+  const inactivas = useMemo(
+    () => sortRows((data ?? []).filter((e) => !e.activa), orden, COLUMNAS_ORDEN),
+    [data, orden],
+  );
 
   const agregar = () => {
     const nombre = limpiar(nueva);
@@ -96,7 +120,11 @@ export function EmpresasExternasView() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <Card.Title>Empresas activas</Card.Title>
-              <Card.Description>Las que ve el supervisor al cargar el reporte del turno.</Card.Description>
+              <Card.Description>
+                Las que ve el supervisor al cargar el reporte del turno. Ordenadas por{' '}
+                {orden.column === 'reportes' ? 'cantidad de reportes' : 'nombre'}
+                {orden.direction === 'ascending' ? ' (ascendente)' : ' (descendente)'}; cámbialo con «Ordenar por».
+              </Card.Description>
             </div>
             <Chip color="accent" data-testid="total-activas" size="md" variant="soft">
               {activas.length} {activas.length === 1 ? 'empresa' : 'empresas'}
@@ -116,6 +144,9 @@ export function EmpresasExternasView() {
           ) : null}
           {!isPending && !isError && activas.length === 0 ? (
             <p className="py-2 text-sm text-muted-foreground">No hay empresas activas. Agrega la primera arriba.</p>
+          ) : null}
+          {!isPending && !isError && data && data.length > 1 ? (
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
           ) : null}
           <ul className="m-0 flex list-none flex-col p-0">
             {activas.map((empresa) => (

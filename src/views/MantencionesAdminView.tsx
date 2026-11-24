@@ -13,9 +13,11 @@ import {
   TextArea,
   TextField,
   Input,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
-import { ArrowLeft, SquareKanban, Table2 } from 'lucide-react';
+import { LayoutGrid, SquareKanban, Table2 } from 'lucide-react';
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
 
@@ -35,7 +37,11 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useItems } from '../hooks/useInventory';
 import { useActualizarOrden, useOrdenes } from '../hooks/useOrdenes';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 import { NUM_CL_1 } from '../lib/dashboard-format';
+import { describeSort, type SortMeta } from '../lib/sort-description';
+import { sortRows, toTimestamp, type SortColumn, type TableSort } from '../lib/table-sort';
 import { ESTADO_OT_LABELS, PRIORIDAD_OT_OPTIONS, estadoOTChipColor } from '../config/mantenimiento-colors';
 import type { EquipmentStatus } from '../types/equipment';
 import type { OrdenTrabajo, PrioridadOT, Tarea } from '../types/mantenimiento';
@@ -95,6 +101,22 @@ function mantenedoresDe(orden: OrdenTrabajo): string[] {
   }
   return nombres;
 }
+
+/** Desempate: la mantención más antigua primero (en ascendente). */
+const porFechaMantencion = (a: OrdenTrabajo, b: OrdenTrabajo): number =>
+  (toTimestamp(fechaDeMantencion(a)) ?? 0) - (toTimestamp(fechaDeMantencion(b)) ?? 0);
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'fecha', label: 'Fecha', reading: 'date' },
+  { id: 'equipo', label: 'Equipo', reading: 'text' },
+  { id: 'mantencion', label: 'Mantención', reading: 'text' },
+  { id: 'tipo', label: 'Tipo', reading: 'text' },
+  { id: 'mantenedor', label: 'Mantenedor', reading: 'text' },
+  { id: 'tareas', label: 'Tareas', reading: ['con menos tareas hechas primero', 'con más tareas hechas primero'] },
+];
+
+/** Por defecto: la mantención más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
 function Dato({ label, value }: { label: string; value: string }) {
   return (
@@ -535,6 +557,7 @@ export function MantencionesAdminView() {
   // Sin `vista` manda la pizarra. Cualquier `vista` (también un `?vista=tablero`
   // compartido a la SECRETARIA) lleva al registro, como antes de la pizarra.
   const vistaPizarra = !params.get('vista');
+  const vistaActual = vistaPizarra ? 'pizarra' : vistaTablero ? 'tablero' : 'registro';
 
   // `equipoId` de la OT es soft-ref: puede traer el id del equipo o su código.
   const codigoDe = (equipoRef: string) =>
@@ -572,17 +595,36 @@ export function MantencionesAdminView() {
     setParams(siguientes, { replace: clave !== 'vista' });
   };
 
+  const [sort, setSort] = useState<TableSort>(ORDEN_INICIAL);
+
+  const columnasOrden: Record<string, SortColumn<OrdenTrabajo>> = {
+    fecha: { kind: 'date', value: fechaDeMantencion },
+    equipo: { kind: 'text', value: (o) => codigoDe(o.equipoId), tiebreak: porFechaMantencion },
+    mantencion: { kind: 'text', value: (o) => o.titulo, tiebreak: porFechaMantencion },
+    tipo: { kind: 'text', value: (o) => TIPO_LABEL[o.tipo] ?? o.tipo, tiebreak: porFechaMantencion },
+    mantenedor: { kind: 'text', value: (o) => mantenedoresDe(o).join(', '), tiebreak: porFechaMantencion },
+    tareas: {
+      kind: 'number',
+      value: (o) => o.tareas.filter((t) => t.hecha).length,
+      tiebreak: (a, b) => a.tareas.length - b.tareas.length || porFechaMantencion(a, b),
+    },
+  };
+
   const lista = useMemo(
-    () =>
-      mantenciones.filter((orden) => {
+    () => {
+      const filtradas = mantenciones.filter((orden) => {
         if (tipoFiltro !== 'TODOS' && orden.tipo !== tipoFiltro) return false;
         if (mantenedorFiltro !== 'TODOS' && !mantenedoresDe(orden).includes(mantenedorFiltro)) return false;
         const dia = diaLocal(fechaDeMantencion(orden));
         if (desde && dia < desde) return false;
         if (hasta && dia > hasta) return false;
         return true;
-      }),
-    [mantenciones, tipoFiltro, mantenedorFiltro, desde, hasta],
+      });
+      // El orden se aplica después de los filtros.
+      return sortRows(filtradas, sort, columnasOrden);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `columnasOrden` deriva de `equipos` (vía `codigoDe`)
+    [mantenciones, tipoFiltro, mantenedorFiltro, desde, hasta, sort, equipos],
   );
 
   // Se busca en todas: el aviso de una orden puede llegar con el filtro de la otra pestaña.
@@ -606,39 +648,45 @@ export function MantencionesAdminView() {
                   : 'Las órdenes que el taller dejó abiertas. Si se terminaron y nadie las cerró, ábrelas y márcalas como finalizadas.'}
           </p>
         </div>
-        {vistaPizarra ? null : (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onPress={() => setFiltro('vista', '', '')} size="sm" variant="tertiary">
-              <ArrowLeft className="size-4" />
-              Volver a la pizarra
-            </Button>
-            {esAdmin ? (
-              // Sin `vista` se vuelve a la pizarra: del tablero se regresa al registro.
-              <Button
-                onPress={() => setFiltro('vista', vistaTablero ? 'registro' : 'tablero', '')}
-                size="sm"
-                variant="secondary"
-              >
-                {vistaTablero ? <Table2 className="size-4" /> : <SquareKanban className="size-4" />}
-                {vistaTablero ? 'Vista registro' : 'Vista tablero'}
-              </Button>
-            ) : null}
-            {!vistaTablero ? (
-              <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-                {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
-              </Chip>
-            ) : null}
-          </div>
-        )}
+        {!vistaPizarra && !vistaTablero ? (
+          <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
+            {lista.length.toLocaleString('es-CL')} {lista.length === 1 ? 'mantención' : 'mantenciones'}
+          </Chip>
+        ) : null}
       </div>
 
+      {/* Las vistas, siempre a la vista (pedido del cliente, 24/11/2026): se salta directo a cualquiera sin
+          pasar por las otras. El tablero del mantenedor es solo del ADMIN. Cambiar de vista agrega una entrada al
+          historial (ver `setFiltro`), así que «atrás» vuelve a la anterior. */}
+      <ToggleButtonGroup
+        aria-label="Vista de mantenciones"
+        className="w-fit flex-wrap"
+        disallowEmptySelection
+        selectedKeys={new Set([vistaActual])}
+        selectionMode="single"
+        onSelectionChange={(keys) => {
+          const siguiente = Array.from(keys)[0];
+          setFiltro('vista', siguiente === 'pizarra' ? '' : String(siguiente), '');
+        }}
+      >
+        <ToggleButton id="pizarra">
+          <LayoutGrid className="size-4" />
+          Pizarra
+        </ToggleButton>
+        <ToggleButton id="registro">
+          <Table2 className="size-4" />
+          Registro de mantención
+        </ToggleButton>
+        {esAdmin ? (
+          <ToggleButton id="tablero">
+            <SquareKanban className="size-4" />
+            Tablero del mantenedor
+          </ToggleButton>
+        ) : null}
+      </ToggleButtonGroup>
+
       {vistaPizarra ? (
-        <PizarraMantenciones
-          onVerRegistro={() => setFiltro('vista', 'registro', '')}
-          // Directo al tablero desde la pizarra (solo ADMIN); `vista` agrega entrada al historial, así que «atrás»
-          // vuelve a la pizarra.
-          onVerTablero={esAdmin ? () => setFiltro('vista', 'tablero', '') : undefined}
-        />
+        <PizarraMantenciones />
       ) : vistaTablero ? (
         <OrdenesTrabajoView contexto="panel" />
       ) : (
@@ -647,7 +695,10 @@ export function MantencionesAdminView() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <Card.Title>Registro</Card.Title>
-                <Card.Description>De la más reciente a la más antigua. El total sigue al filtro.</Card.Description>
+                <Card.Description>
+                  {describeSort(sort, OPCIONES_ORDEN)} Toca el título de una columna para cambiar el orden. El total
+                  sigue al filtro.
+                </Card.Description>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -738,6 +789,8 @@ export function MantencionesAdminView() {
             ) : null}
 
             {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+              <>
+              <SortControl onChange={setSort} options={OPCIONES_ORDEN} sort={sort} />
               <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {lista.map((orden) => (
                   <li
@@ -788,19 +841,37 @@ export function MantencionesAdminView() {
                   </li>
                 ))}
               </ul>
+              </>
             ) : null}
 
             {!isPending && !isError && lista.length > 0 && esEscritorio ? (
               <Table variant="secondary">
                 <Table.ScrollContainer>
-                  <Table.Content aria-label="Mantenciones realizadas" className="min-w-full">
+                  <Table.Content
+                    aria-label="Mantenciones realizadas"
+                    className="min-w-full"
+                    onSortChange={(d) => setSort({ column: d.column, direction: d.direction })}
+                    sortDescriptor={sort}
+                  >
                     <Table.Header>
-                      <Table.Column isRowHeader>Fecha</Table.Column>
-                      <Table.Column>Equipo</Table.Column>
-                      <Table.Column className="w-full">Mantención</Table.Column>
-                      <Table.Column>Tipo</Table.Column>
-                      <Table.Column>Mantenedor</Table.Column>
-                      <Table.Column className="text-right">Tareas</Table.Column>
+                      <Table.Column allowsSorting id="fecha" isRowHeader>
+                        {sortableHeader('Fecha')}
+                      </Table.Column>
+                      <Table.Column allowsSorting id="equipo">
+                        {sortableHeader('Equipo')}
+                      </Table.Column>
+                      <Table.Column allowsSorting className="w-full" id="mantencion">
+                        {sortableHeader('Mantención')}
+                      </Table.Column>
+                      <Table.Column allowsSorting id="tipo">
+                        {sortableHeader('Tipo')}
+                      </Table.Column>
+                      <Table.Column allowsSorting id="mantenedor">
+                        {sortableHeader('Mantenedor')}
+                      </Table.Column>
+                      <Table.Column allowsSorting className="text-right" id="tareas">
+                        {sortableHeader('Tareas')}
+                      </Table.Column>
                     </Table.Header>
                     <Table.Body>
                       {lista.map((orden) => (

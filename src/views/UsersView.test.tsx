@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { UsersView } from './UsersView';
+import { setViewport } from '../test/viewport';
 
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
@@ -127,5 +128,81 @@ describe('UsersView — crear usuario, rol sin default', () => {
         role: 'MANTENEDOR',
       }),
     );
+  });
+});
+
+describe('UsersView — orden', () => {
+  const usuario = (id: string, name: string, role: string, emailVerified: boolean) => ({
+    id,
+    name,
+    email: `${name.toLowerCase().replace(/ /g, '.')}@smi.local`,
+    emailVerified,
+    image: null,
+    role,
+    banned: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const USUARIOS = [
+    usuario('u3', 'Zoila Vega', 'MANTENEDOR', true),
+    usuario('u1', 'Ana Soto', 'ADMIN', false),
+    usuario('u2', 'Mario Paz', 'SUPERVISOR', true),
+  ];
+  const NOMBRES = ['Zoila Vega', 'Ana Soto', 'Mario Paz'];
+  // Filas de la tabla (la lista de tarjetas no es `row`).
+  const nombres = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((fila) => NOMBRES.find((n) => (fila.textContent ?? '').startsWith(n)) ?? '?');
+
+  const tarjetas = () =>
+    screen
+      .getAllByRole('listitem')
+      .map((li) => NOMBRES.find((n) => (li.textContent ?? '').startsWith(n)) ?? '?');
+
+  // La tabla solo existe en escritorio; en celular, tarjetas.
+  beforeEach(() => setViewport(true));
+  afterEach(() => setViewport(false));
+
+  it('por defecto respeta el orden del servidor y la bajada lo dice', async () => {
+    listMock.mockResolvedValue(USUARIOS);
+    renderView();
+    await screen.findAllByText('Zoila Vega');
+    expect(nombres()).toEqual(['Zoila Vega', 'Ana Soto', 'Mario Paz']);
+    expect(screen.getByTestId('orden-usuarios').textContent).toMatch(/Ordenado por fecha de alta/);
+  });
+
+  it('tocar el título ordena y volver a tocarlo invierte', async () => {
+    listMock.mockResolvedValue(USUARIOS);
+    renderView();
+    await screen.findAllByText('Zoila Vega');
+    fireEvent.click(screen.getByRole('columnheader', { name: /Nombre/ }));
+    expect(nombres()).toEqual(['Ana Soto', 'Mario Paz', 'Zoila Vega']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Nombre/ }));
+    expect(nombres()).toEqual(['Zoila Vega', 'Mario Paz', 'Ana Soto']);
+  });
+
+  it('el rol ordena por su orden lógico (administrador, supervisor, mantenedor), no alfabético', async () => {
+    listMock.mockResolvedValue(USUARIOS);
+    renderView();
+    await screen.findAllByText('Zoila Vega');
+    fireEvent.click(screen.getByRole('columnheader', { name: /Rol/ }));
+    expect(nombres()).toEqual(['Ana Soto', 'Mario Paz', 'Zoila Vega']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Rol/ }));
+    expect(nombres()).toEqual(['Zoila Vega', 'Mario Paz', 'Ana Soto']);
+  });
+
+  it('en celular, el selector «Ordenar por» ordena las tarjetas', async () => {
+    setViewport(false);
+    listMock.mockResolvedValue(USUARIOS);
+    renderView();
+    await screen.findAllByText('Zoila Vega');
+    expect(tarjetas()).toEqual(['Zoila Vega', 'Ana Soto', 'Mario Paz']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'verificado' } });
+    // Verificados primero (por nombre), luego los sin verificar.
+    expect(tarjetas()).toEqual(['Mario Paz', 'Zoila Vega', 'Ana Soto']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(tarjetas()[0]).toBe('Ana Soto');
   });
 });

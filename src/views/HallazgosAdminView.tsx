@@ -15,6 +15,8 @@ import {
   TextField,
 } from '@heroui/react';
 import { Chip } from '../components/ui/Chip';
+import { SortControl } from '../components/ui/SortControl';
+import { sortableHeader } from '../components/ui/SortableHeader';
 
 import { useEquipment } from '../hooks/useEquipment';
 import { OpcionesEquipoPorClase } from '../components/flota/OpcionesEquipoPorClase';
@@ -22,6 +24,8 @@ import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
 import { fechaRegistroIso, toDateTimeLocal } from '../lib/format';
 import { canDeleteHallazgo } from '../lib/permissions';
+import { describeSort, type SortMeta } from '../lib/sort-description';
+import { sortRows, toTimestamp, type SortColumn, type TableSort } from '../lib/table-sort';
 import { useActualizarHallazgo, useCrearHallazgo, useEliminarHallazgo, useHallazgosList } from '../hooks/useHallazgos';
 import {
   criticidadChipColor,
@@ -52,6 +56,37 @@ const PRIORIDAD_LABEL: Record<string, string> = {
   ALTA: 'Alta',
   CRITICA: 'Crítica',
 };
+
+/** Gravedad de la prioridad (0 = la más leve) y avance del estado en su flujo. */
+const PRIORIDAD_ORDEN: Record<string, number> = { BAJA: 0, MEDIA: 1, ALTA: 2, CRITICA: 3 };
+const ESTADO_ORDEN: Record<string, number> = { ABIERTO: 0, EN_PROCESO: 1, CERRADO: 2 };
+
+/** Desempate: el hallazgo más antiguo primero (en ascendente). */
+const porFecha = (a: Hallazgo, b: Hallazgo): number => (toTimestamp(a.fecha) ?? 0) - (toTimestamp(b.fecha) ?? 0);
+
+/** Columnas ordenables (el `id` es el de `Table.Column`). */
+const COLUMNAS_ORDEN: Record<string, SortColumn<Hallazgo>> = {
+  fecha: { kind: 'date', value: (h) => h.fecha },
+  donde: { kind: 'text', value: (h) => dondeHallazgo(h), tiebreak: porFecha },
+  descripcion: { kind: 'text', value: (h) => h.descripcion, tiebreak: porFecha },
+  prioridad: { kind: 'number', value: (h) => PRIORIDAD_ORDEN[h.prioridad] ?? null, tiebreak: porFecha },
+  estado: { kind: 'number', value: (h) => ESTADO_ORDEN[h.estado] ?? null, tiebreak: porFecha },
+  registradoPor: { kind: 'text', value: (h) => h.registradoPor, tiebreak: porFecha },
+  foto: { kind: 'number', value: (h) => (h.fotoUrl ? 1 : 0), tiebreak: porFecha },
+};
+
+const OPCIONES_ORDEN: SortMeta[] = [
+  { id: 'fecha', label: 'Fecha', reading: 'date' },
+  { id: 'donde', label: 'Equipo o zona', reading: 'text' },
+  { id: 'descripcion', label: 'Descripción', reading: 'text' },
+  { id: 'prioridad', label: 'Prioridad', reading: ['de la más leve a la crítica', 'de la crítica a la más leve'] },
+  { id: 'estado', label: 'Estado', reading: ['abierto, en proceso y cerrado', 'cerrado, en proceso y abierto'] },
+  { id: 'registradoPor', label: 'Registrado por', reading: 'text' },
+  { id: 'foto', label: 'Foto', reading: ['sin foto primero', 'con foto primero'] },
+];
+
+/** Por defecto: el hallazgo más reciente primero. */
+const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
@@ -541,9 +576,11 @@ export function HallazgosAdminView() {
   const [eliminando, setEliminando] = useState<Hallazgo | null>(null);
   const [creando, setCreando] = useState(false);
 
+  const [orden, setOrden] = useState<TableSort>(ORDEN_INICIAL);
+
   const lista = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
-    return (hallazgos ?? []).filter((h) => {
+    const filtrados = (hallazgos ?? []).filter((h) => {
       if (estadoFiltro === PENDIENTES) {
         if (!ESTADOS_PENDIENTES.includes(h.estado)) return false;
       } else if (estadoFiltro !== 'TODOS' && h.estado !== estadoFiltro) return false;
@@ -553,7 +590,9 @@ export function HallazgosAdminView() {
         dondeHallazgo(h).toLowerCase().includes(texto)
       );
     });
-  }, [hallazgos, busqueda, estadoFiltro]);
+    // El orden se aplica después de los filtros.
+    return sortRows(filtrados, orden, COLUMNAS_ORDEN);
+  }, [hallazgos, busqueda, estadoFiltro, orden]);
 
   const porId = useMemo(() => new Map((hallazgos ?? []).map((h) => [h.id, h])), [hallazgos]);
   const cuenta = (estado: string) => (hallazgos ?? []).filter((h) => h.estado === estado).length;
@@ -603,7 +642,9 @@ export function HallazgosAdminView() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <Card.Title>Listado</Card.Title>
-              <Card.Description>Del más reciente al más antiguo.</Card.Description>
+              <Card.Description>
+                {describeSort(orden, OPCIONES_ORDEN)} Toca el título de una columna para cambiar el orden.
+              </Card.Description>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <TextField aria-label="Buscar" name="busqueda" onChange={setBusqueda} value={busqueda}>
@@ -648,6 +689,8 @@ export function HallazgosAdminView() {
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && !esEscritorio ? (
+            <>
+            <SortControl onChange={setOrden} options={OPCIONES_ORDEN} sort={orden} />
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {lista.map((h) => (
                 <li key={h.id}>
@@ -691,20 +734,40 @@ export function HallazgosAdminView() {
                 </li>
               ))}
             </ul>
+            </>
           ) : null}
 
           {!isPending && !isError && lista.length > 0 && esEscritorio ? (
             <Table variant="secondary">
               <Table.ScrollContainer>
-                <Table.Content aria-label="Hallazgos" className="min-w-full">
+                <Table.Content
+                  aria-label="Hallazgos"
+                  className="min-w-full"
+                  onSortChange={(d) => setOrden({ column: d.column, direction: d.direction })}
+                  sortDescriptor={orden}
+                >
                   <Table.Header>
-                    <Table.Column isRowHeader>Fecha</Table.Column>
-                    <Table.Column>Equipo o zona</Table.Column>
-                    <Table.Column className="w-full">Descripción</Table.Column>
-                    <Table.Column>Prioridad</Table.Column>
-                    <Table.Column>Estado</Table.Column>
-                    <Table.Column>Registrado por</Table.Column>
-                    <Table.Column>Foto</Table.Column>
+                    <Table.Column allowsSorting id="fecha" isRowHeader>
+                      {sortableHeader('Fecha')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="donde">
+                      {sortableHeader('Equipo o zona')}
+                    </Table.Column>
+                    <Table.Column allowsSorting className="w-full" id="descripcion">
+                      {sortableHeader('Descripción')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="prioridad">
+                      {sortableHeader('Prioridad')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="estado">
+                      {sortableHeader('Estado')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="registradoPor">
+                      {sortableHeader('Registrado por')}
+                    </Table.Column>
+                    <Table.Column allowsSorting id="foto">
+                      {sortableHeader('Foto')}
+                    </Table.Column>
                   </Table.Header>
                   <Table.Body>
                     {lista.map((h) => (

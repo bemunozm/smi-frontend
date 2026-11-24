@@ -58,3 +58,32 @@ describe('EmpresasExternasView', () => {
     expect(actualizarMock).toHaveBeenCalledWith({ id: 'e3', activa: true });
   });
 });
+
+describe('EmpresasExternasView — orden', () => {
+  // Solo las activas: la desactivada (e3) va en su propia tarjeta.
+  const activas = () =>
+    screen
+      .getAllByTestId(/^empresa-/)
+      .map((f) => f.getAttribute('data-testid'))
+      .filter((id) => id !== 'empresa-e3');
+
+  it('por defecto, por nombre de la A a la Z, y la bajada lo dice', () => {
+    render(<EmpresasExternasView />);
+    expect(activas()).toEqual(['empresa-e1', 'empresa-e2']);
+    expect(screen.getByText(/Ordenadas por nombre \(ascendente\)/)).toBeTruthy();
+  });
+
+  it('el botón de dirección invierte el orden', () => {
+    render(<EmpresasExternasView />);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(activas()).toEqual(['empresa-e2', 'empresa-e1']);
+  });
+
+  it('ordena por cantidad de reportes (numérico)', () => {
+    render(<EmpresasExternasView />);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'reportes' } });
+    expect(activas()).toEqual(['empresa-e2', 'empresa-e1']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(activas()).toEqual(['empresa-e1', 'empresa-e2']);
+  });
+});

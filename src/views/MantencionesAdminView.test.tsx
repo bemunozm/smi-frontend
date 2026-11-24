@@ -49,22 +49,12 @@ vi.mock('./OrdenesTrabajoView', () => ({
 }));
 
 // La pizarra tiene sus propios tests (`PizarraMantenciones.test.tsx`); acá
-// solo importa que sea la vista por defecto y que sus botones lleven al registro y al tablero.
+// solo importa que sea la vista por defecto.
 vi.mock('../components/mantenimiento/pizarra/PizarraMantenciones', () => ({
-  PizarraMantenciones: ({ onVerRegistro, onVerTablero }: { onVerRegistro: () => void; onVerTablero?: () => void }) => (
-    <div data-testid="pizarra">
-      <button onClick={onVerRegistro} type="button">
-        Ver registro de mantención
-      </button>
-      {onVerTablero ? (
-        <button onClick={onVerTablero} type="button">
-          Vista tablero mantenedor
-        </button>
-      ) : null}
-    </div>
-  ),
+  PizarraMantenciones: () => <div data-testid="pizarra" />,
 }));
 
+import { setViewport } from '../test/viewport';
 import { MantencionesAdminView } from './MantencionesAdminView';
 
 const tarea = (over: Record<string, unknown>) => ({
@@ -153,18 +143,18 @@ function renderView(entrada = REGISTRO) {
 }
 
 describe('MantencionesAdminView', () => {
-  it('por defecto muestra la pizarra, y «Ver registro de mantención» lleva al registro y vuelve', () => {
+  it('por defecto muestra la pizarra, y el selector de vistas lleva al registro y vuelve a la pizarra', () => {
     renderView('/mantenciones');
 
     expect(screen.getByTestId('pizarra')).toBeTruthy();
     expect(screen.queryByText('Registro')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Registro de mantención' }));
     expect(screen.queryByTestId('pizarra')).toBeNull();
     expect(screen.getByText('Registro')).toBeTruthy();
     expect(screen.getAllByTestId(/mantencion-fila-/)).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Volver a la pizarra' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Pizarra' }));
     expect(screen.getByTestId('pizarra')).toBeTruthy();
     expect(screen.queryByText('Registro')).toBeNull();
   });
@@ -389,18 +379,18 @@ describe('MantencionesAdminView', () => {
     );
   });
 
-  it('el ADMIN alterna al tablero del taller con el botón de vista, y puede volver al registro', () => {
+  it('el ADMIN salta directo al tablero del taller y de ahí al registro, sin pasar por la pizarra', () => {
     renderView();
 
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Tablero del mantenedor' }));
 
     // El tablero se monta tal como lo ve el mantenedor (contexto del panel),
     // y la tabla Registro se retira.
     expect(screen.getByTestId('tablero-taller').getAttribute('data-contexto')).toBe('panel');
     expect(screen.queryByText('Registro')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Vista registro' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Registro de mantención' }));
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
     expect(screen.getByText('Registro')).toBeTruthy();
   });
@@ -412,20 +402,20 @@ describe('MantencionesAdminView', () => {
         <Atras />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Ver registro de mantención' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Registro de mantención' }));
     expect(screen.getByText('Registro')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'atras' }));
     expect(screen.queryByText('Registro')).toBeNull();
   });
 
-  it('desde la pizarra, «Vista tablero mantenedor» abre el tablero y «atrás» vuelve a la pizarra', () => {
+  it('desde la pizarra, «Tablero del mantenedor» abre el tablero y «atrás» vuelve a la pizarra', () => {
     render(
       <MemoryRouter initialEntries={['/mantenciones']}>
         <MantencionesAdminView />
         <Atras />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Vista tablero mantenedor' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Tablero del mantenedor' }));
     expect(screen.queryByTestId('pizarra')).toBeNull();
     expect(screen.getByTestId('tablero-taller')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'atras' }));
@@ -433,12 +423,12 @@ describe('MantencionesAdminView', () => {
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
   });
 
-  it('a la SECRETARIA la pizarra no le ofrece el atajo al tablero', () => {
+  it('a la SECRETARIA el selector no le ofrece el tablero', () => {
     rol.value = 'SECRETARIA';
     renderView('/mantenciones');
 
     expect(screen.getByTestId('pizarra')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Vista tablero mantenedor' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Tablero del mantenedor' })).toBeNull();
   });
 
   it('?vista=tablero abre directo en el tablero (la vista queda en la URL)', () => {
@@ -448,11 +438,11 @@ describe('MantencionesAdminView', () => {
     expect(screen.queryByText('Registro')).toBeNull();
   });
 
-  it('SECRETARIA no ve el botón de vista y ?vista=tablero no le cambia la pantalla', () => {
+  it('SECRETARIA no ve el tablero en el selector y ?vista=tablero no le cambia la pantalla', () => {
     rol.value = 'SECRETARIA';
     renderView('/mantenciones?vista=tablero');
 
-    expect(screen.queryByRole('button', { name: 'Vista tablero' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Tablero del mantenedor' })).toBeNull();
     expect(screen.queryByTestId('tablero-taller')).toBeNull();
     expect(screen.getByText('Registro')).toBeTruthy();
   });
@@ -466,5 +456,75 @@ describe('MantencionesAdminView', () => {
     });
     renderView();
     expect(screen.getByText('Falló Mantención')).toBeTruthy();
+  });
+});
+
+describe('orden por columna del registro', () => {
+  const hechas = (n: number, quien: string, hechaAt: string, total = n) =>
+    Array.from({ length: total }, (_, i) =>
+      tarea({ id: `t${i}`, hecha: i < n, hechaPorNombre: i < n ? quien : null, hechaAt: i < n ? hechaAt : null }),
+    );
+  const DESORDENADA: OrdenTrabajo[] = [
+    orden({ id: 'm1', equipoId: 'e1', titulo: 'Zeta', tipo: 'PREVENTIVA', tareas: hechas(1, 'Marco Díaz', '2026-10-15T14:00:00.000Z') }),
+    orden({ id: 'm2', equipoId: 'e2', titulo: 'Alfa', tipo: 'CORRECTIVA', tareas: hechas(2, 'Pedro Pérez', '2026-10-18T10:00:00.000Z', 3) }),
+    orden({ id: 'm3', equipoId: 'e3', titulo: 'Mike', tipo: 'PREVENTIVA', tareas: hechas(10, 'Ana Rojas', '2026-10-16T10:00:00.000Z') }),
+  ];
+  const ids = () =>
+    screen.getAllByTestId(/mantencion-fila-/).map((f) => f.getAttribute('data-testid')?.replace('mantencion-fila-', ''));
+
+  beforeEach(() => {
+    setViewport(true);
+    ordenesHook.mockReturnValue(ok(DESORDENADA));
+  });
+  afterEach(() => setViewport(false));
+
+  it('por defecto, la más reciente primero, y la bajada lo dice', () => {
+    renderView();
+    expect(ids()).toEqual(['m2', 'm3', 'm1']);
+    expect(screen.getByText(/Ordenado por fecha, del más reciente al más antiguo/)).toBeTruthy();
+    expect(screen.getByText(/Toca el título de una columna/)).toBeTruthy();
+  });
+
+  it('tocar el título de Fecha invierte el orden', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fecha/ }));
+    expect(ids()).toEqual(['m1', 'm3', 'm2']);
+  });
+
+  it('ordena por equipo, mantención, tipo y mantenedor', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Equipo/ }));
+    expect(ids()).toEqual(['m1', 'm3', 'm2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /^Mantención/ }));
+    expect(ids()).toEqual(['m2', 'm3', 'm1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Tipo/ }));
+    expect(ids()).toEqual(['m2', 'm1', 'm3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Mantenedor/ }));
+    expect(ids()).toEqual(['m3', 'm1', 'm2']);
+  });
+
+  it('las tareas ordenan por cantidad hecha (numérico, 2 antes que 10)', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Tareas/ }));
+    expect(ids()).toEqual(['m1', 'm2', 'm3']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Tareas/ }));
+    expect(ids()).toEqual(['m3', 'm2', 'm1']);
+  });
+
+  it('el orden se aplica después del filtro por tipo', () => {
+    renderView(`${REGISTRO}&tipo=PREVENTIVA`);
+    expect(ids()).toEqual(['m3', 'm1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fecha/ }));
+    expect(ids()).toEqual(['m1', 'm3']);
+  });
+
+  it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+    setViewport(false);
+    renderView();
+    expect(ids()).toEqual(['m2', 'm3', 'm1']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'tareas' } });
+    expect(ids()).toEqual(['m3', 'm2', 'm1']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids()).toEqual(['m1', 'm2', 'm3']);
   });
 });

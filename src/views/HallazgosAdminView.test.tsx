@@ -35,6 +35,7 @@ vi.mock('../hooks/useEquipment', () => ({
   useEquipment: () => ({ data: [{ id: 'e1', internalCode: 'PE-004' }, { id: 'e2', internalCode: 'EX-001' }] }),
 }));
 
+import { setViewport } from '../test/viewport';
 import { HallazgosAdminView } from './HallazgosAdminView';
 
 /** El detalle vive en `?id=` (destino del aviso del admin) → necesita Router. */
@@ -298,5 +299,112 @@ describe('HallazgosAdminView', () => {
     });
     const registrar = within(dialog).getByRole('button', { name: 'Registrar hallazgo' });
     expect(registrar.hasAttribute('disabled') || registrar.getAttribute('aria-disabled') === 'true').toBe(true);
+  });
+});
+
+describe('orden por columna', () => {
+  const DESORDENADA: Hallazgo[] = [
+    hallazgo({
+      id: 'h1',
+      fecha: '2026-10-10T10:00:00.000Z',
+      descripcion: 'Zeta',
+      prioridad: 'BAJA',
+      estado: 'CERRADO',
+      registradoPor: 'Ana',
+      fotoUrl: 'https://signed/h1.jpg',
+    }),
+    hallazgo({
+      id: 'h2',
+      equipoId: 'e2',
+      equipo: { internalCode: 'EX-001' },
+      fecha: '2026-10-12T10:00:00.000Z',
+      descripcion: 'Alfa',
+      prioridad: 'CRITICA',
+      estado: 'ABIERTO',
+      registradoPor: null,
+    }),
+    hallazgo({
+      id: 'h3',
+      equipo: { internalCode: 'CA-011' },
+      fecha: '2026-10-11T10:00:00.000Z',
+      descripcion: 'Mike',
+      prioridad: 'ALTA',
+      estado: 'EN_PROCESO',
+      registradoPor: 'Berta',
+    }),
+  ];
+  const ids = () =>
+    screen.getAllByTestId(/hallazgo-fila-/).map((f) => f.getAttribute('data-testid')?.replace('hallazgo-fila-', ''));
+  const verTodos = () => fireEvent.change(screen.getByLabelText(/estado/i), { target: { value: 'TODOS' } });
+
+  beforeEach(() => {
+    setViewport(true);
+    listHook.mockReturnValue(ok(DESORDENADA));
+  });
+  afterEach(() => setViewport(false));
+
+  it('por defecto, el más reciente primero (sobre el filtro «Abiertos y en proceso»)', () => {
+    renderView();
+    expect(ids()).toEqual(['h2', 'h3']);
+    expect(screen.getByText(/Ordenado por fecha, del más reciente al más antiguo/)).toBeTruthy();
+    expect(screen.getByText(/Toca el título de una columna/)).toBeTruthy();
+  });
+
+  it('tocar el título de Fecha invierte el orden', () => {
+    renderView();
+    verTodos();
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Fecha/ }));
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+  });
+
+  it('la prioridad ordena por severidad (baja a crítica), no alfabético', () => {
+    renderView();
+    verTodos();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Prioridad/ }));
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Prioridad/ }));
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
+  });
+
+  it('el estado ordena por su flujo (abierto, en proceso, cerrado)', () => {
+    renderView();
+    verTodos();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Estado/ }));
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Estado/ }));
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+  });
+
+  it('ordena por descripción y «Registrado por» dejando los vacíos al final', () => {
+    renderView();
+    verTodos();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Descripción/ }));
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Registrado por/ }));
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+    fireEvent.click(screen.getByRole('columnheader', { name: /Registrado por/ }));
+    expect(ids()).toEqual(['h3', 'h1', 'h2']);
+  });
+
+  it('ordena por equipo o zona', () => {
+    renderView();
+    verTodos();
+    fireEvent.click(screen.getByRole('columnheader', { name: /Equipo o zona/ }));
+    expect(ids()).toEqual(['h3', 'h2', 'h1']);
+  });
+
+  it('en celular hay selector «Ordenar por» y botón de dirección sobre el mismo estado', () => {
+    setViewport(false);
+    renderView();
+    verTodos();
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+    fireEvent.change(screen.getByTestId('orden-columna'), { target: { value: 'prioridad' } });
+    // Prioridad ascendente: baja, alta, crítica.
+    expect(ids()).toEqual(['h1', 'h3', 'h2']);
+    fireEvent.click(screen.getByTestId('orden-direccion'));
+    expect(ids()).toEqual(['h2', 'h3', 'h1']);
   });
 });
