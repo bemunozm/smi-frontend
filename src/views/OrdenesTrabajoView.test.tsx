@@ -191,10 +191,10 @@ const HALLAZGOS = [
 
 // Permisos como los resuelve `lib/permissions` para cada rol (espejo del
 // backend): el MANTENEDOR también crea órdenes (inicia operaciones desde los
-// hallazgos de su bandeja); el POST de intervenciones sigue siendo solo suyo.
-const CAN_MANTENEDOR = new Set(['orden.create', 'orden.update', 'orden.toggleTarea', 'intervencion.create']);
-const CAN_ADMIN = new Set(['orden.create', 'orden.update', 'orden.toggleTarea', 'intervencion.create']);
-// Un rol hipotético sin el POST de intervenciones (hoy ninguno con acceso a la
+// hallazgos de su bandeja) y cierra la tarea con el POST `/finalizar`.
+const CAN_MANTENEDOR = new Set(['orden.create', 'orden.update', 'orden.toggleTarea', 'orden.finalizar']);
+const CAN_ADMIN = new Set(['orden.create', 'orden.update', 'orden.toggleTarea', 'orden.finalizar']);
+// Un rol hipotético sin el cierre `orden.finalizar` (hoy ninguno con acceso a la
 // ruta, pero el gating debe seguir espejando `WRITE_ROLES`).
 const CAN_SOLO_LECTOR = new Set(['orden.update']);
 let allowed: ReadonlySet<string> = CAN_MANTENEDOR;
@@ -235,9 +235,7 @@ vi.mock('../hooks/useOrdenes', () => ({
   useActualizarOrden: () => ({ mutate: actualizarMock, isPending: false }),
 }));
 const actualizarMock = vi.hoisted(() => vi.fn());
-vi.mock('../hooks/useUsers', () => ({
-  useUsers: () => ({ data: [{ id: 'u-ped', name: 'Pedro Soto' }] }),
-}));
+vi.mock('../hooks/useUsers', () => ({ useUsers: () => ({ data: [{ id: 'u-ped', name: 'Pedro Soto' }] }) }));
 const eliminarMock = vi.hoisted(() => vi.fn());
 
 // La pizarra (horómetro actual, pendientes) y el pronóstico (fecha estimada)
@@ -307,7 +305,6 @@ vi.mock('../hooks/useInventory', () => ({ useItems: () => ({ data: [], isPending
 vi.mock('../hooks/useIntervenciones', () => ({
   useIntervenciones: () => ({ data: [], isPending: false, isError: false }),
   useFinishTask: () => ({ mutate: vi.fn(), isPending: false }),
-  useCrearIntervencion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { OrdenesTrabajoView } from './OrdenesTrabajoView';
@@ -350,7 +347,6 @@ function renderView() {
 }
 
 describe('OrdenesTrabajoView (tablero del taller)', () => {
-
   it('las finalizadas de hace más de 7 días salen de la columna; «Historial» lleva a la tabla completa', () => {
     ordenesExtra = [
       orden({
@@ -565,7 +561,7 @@ describe('OrdenesTrabajoView (tablero del taller)', () => {
     expect(screen.getByRole('button', { name: /Finalizar tarea/ })).toBeTruthy();
   });
 
-  it('un rol sin intervencion.create no ve "Finalizar tarea"', () => {
+  it('un rol sin orden.finalizar no ve "Finalizar tarea"', () => {
     allowed = CAN_SOLO_LECTOR;
     renderView();
 

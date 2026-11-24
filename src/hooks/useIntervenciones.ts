@@ -8,7 +8,7 @@ import { INTERVENCIONES_KEY } from '../lib/query-keys';
 import { generateUuid } from '../lib/uuid';
 import type { EquipmentStatus } from '../types/equipment';
 import type { CreateIntervencionInput, OrdenTrabajo } from '../types/mantenimiento';
-import { useQueuedCreate, writeQueued } from './useQueuedMutation';
+import { writeQueued } from './useQueuedMutation';
 
 function intervencionesQueryKey(ordenId: string | undefined) {
   return [...INTERVENCIONES_KEY, ordenId] as const;
@@ -24,33 +24,21 @@ export function useIntervenciones(ordenId: string | undefined) {
 }
 
 /**
- * Registrar intervención por la cola. El replay refresca la bitácora de la OT y
- * la lista de órdenes: una intervención puede afectar el estado/horómetro de la
- * OT en el backend.
- */
-export function useCrearIntervencion() {
-  return useQueuedCreate<'intervencion.create', { ordenId: string; input: CreateIntervencionInput }>({
-    endpoint: 'intervencion.create',
-    build: ({ ordenId, input }, id) => ({ params: { ordenId }, body: { ...input, id } }),
-    onSent: () => {
-      toast.success('Intervención registrada');
-    },
-    errorFallback: 'No se pudo registrar la intervención.',
-  });
-}
-
-/**
- * "Finalizar tarea" del taller: encola la intervención de cierre (qué se hizo
- * + insumos + horómetro) y recién después el paso de la OT a COMPLETADA. El
- * orden importa: una orden completada sin su bitácora de cierre dejaría el
- * registro cojo, así que si la intervención falla la OT queda EN_PROCESO y se
- * puede reintentar. La cola conserva ese orden también sin señal, y la
+ * "Finalizar tarea" del taller (y «Marcar como finalizada» del panel): UNA
+ * sola escritura por la cola (`orden.finalizar`) con la intervención de cierre
+ * (qué se hizo + insumos + horómetro + foto), el estado en que queda el equipo
+ * y, en una preventiva, la lectura de la mantención. El backend lo guarda todo
+ * en una transacción: o la orden queda COMPLETADA con su cierre y su stock
+ * descontado, o no cambia nada. Antes eran dos escrituras encadenadas y un
+ * rechazo de la segunda dejaba la intervención guardada (stock descontado,
+ * «Cierre» en la bitácora) con la orden todavía EN_PROCESO. El `id` de la
+ * intervención lo genera el cliente: un reenvío de la cola no la duplica. La
  * invalidación la hace el replay (`invalidate` del registro
  * `offline/endpoints/mantenimiento`).
  */
 export function useFinishTask() {
   return useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       orden,
       intervencion,
       foto,
@@ -62,34 +50,25 @@ export function useFinishTask() {
       /** Foto de lo realizado/ocupado: viaja como archivo del write y el
        * replay la sube e inyecta su `fotoKey` (patrón combustible). */
       foto?: File | null;
-      /** Cómo queda la unidad (Operativo/Inoperativo) — va en el MISMO PATCH
-       * del cierre y el backend la aplica en esa transacción. */
+      /** Cómo queda la unidad (Operativo/Inoperativo) — el backend la aplica
+       * en la misma transacción del cierre. */
       equipmentStatus?: EquipmentStatus;
-      /** Solo OT PREVENTIVA: la lectura al momento de la mantención. Va en el
-       * PATCH a COMPLETADA porque el backend solo la acepta en ese cruce. */
+      /** Solo OT PREVENTIVA: la lectura al momento de la mantención (desde ahí
+       * se cuenta el próximo cambio). */
       lecturaMantencion?: number;
-    }) => {
-      const registered = await writeQueued('intervencion.create', {
-        params: { ordenId: orden.id },
-        body: { ...intervencion, id: generateUuid() },
-        ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
-      });
-      const completed = await writeQueued('orden.update', {
+    }) =>
+      writeQueued('orden.finalizar', {
         params: { id: orden.id },
         body: {
-          estado: 'COMPLETADA',
+          ...intervencion,
+          id: generateUuid(),
           ...(equipmentStatus ? { equipmentStatus } : {}),
           ...(lecturaMantencion != null ? { lecturaMantencion } : {}),
         },
-        // Si la intervención queda rechazada en la hoja de sync (p. ej. 409
-        // por stock insuficiente), el PATCH queda retenido detrás de ella y
-        // un descarte lo arrastra — nunca una orden COMPLETADA sin su cierre.
-        dependsOn: [registered.opId],
-      });
-      return { registered, completed };
-    },
-    onSuccess: ({ registered, completed }, { orden }) => {
-      if (registered.status === 'queued' || completed.status === 'queued') {
+        ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}),
+      }),
+    onSuccess: (resultado, { orden }) => {
+      if (resultado.status === 'queued') {
         avisarGuardadoEnCola();
         return;
       }

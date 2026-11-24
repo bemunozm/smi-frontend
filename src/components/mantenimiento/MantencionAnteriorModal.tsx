@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { Button, Calendar, Input, Label, ListBox, Modal, Select, Spinner, TextArea, TextField } from '@heroui/react';
+import {
+  Button,
+  Calendar,
+  FieldError,
+  Input,
+  Label,
+  ListBox,
+  Modal,
+  Select,
+  Spinner,
+  TextArea,
+  TextField,
+} from '@heroui/react';
 import { Dialog, DialogTrigger, Popover } from 'react-aria-components';
 import type { DateValue } from 'react-aria-components/Calendar';
 import { CalendarDays } from 'lucide-react';
@@ -9,6 +21,7 @@ import { fmtNum } from '../../lib/format';
 import type { ControlUnit } from '../../types/equipment';
 import type { TipoOT } from '../../types/mantenimiento';
 import { RESPONSIVE_SHEET_DIALOG_CLASS } from '../flota/modal-styles';
+import { avisoLecturaMantencion, parseLecturaMantencion } from './workshop';
 
 const TIPO_OPTIONS = [
   { value: 'PREVENTIVA', label: 'Preventiva' },
@@ -66,12 +79,20 @@ export function MantencionAnteriorModal({
   // kilómetros, un pesado por horas de motor.
   const esKm = equipo.controlUnit === 'KM';
   const lecturaLabel = esKm ? 'Kilometraje en la mantención (km)' : 'Horómetro en la mantención (h)';
-  // Coma o punto decimal, como los demás campos numéricos de texto del admin.
-  const lecturaNumero = lectura.trim() === '' ? undefined : Number(lectura.replace(',', '.'));
+  const unidad = esKm ? 'km' : 'h';
+  // En km, entero con separador de miles («84.306» = 84306 km); en horas,
+  // coma o punto decimal (con aviso si «1.500» parece de miles).
+  const lecturaNumero = lectura.trim() === '' ? undefined : (parseLecturaMantencion(lectura, unidad) ?? Number.NaN);
   const lecturaRequerida = lecturaObligatoria || pauta != null;
   const lecturaValida =
     lecturaNumero === undefined ? !lecturaRequerida : Number.isFinite(lecturaNumero) && lecturaNumero >= 0;
-  const unidad = esKm ? 'km' : 'h';
+  const errorLectura =
+    lecturaNumero !== undefined && !lecturaValida
+      ? esKm
+        ? 'Escribe los km como número entero, sin decimales.'
+        : 'Escribe una lectura válida (0 o mayor).'
+      : null;
+  const avisoLectura = avisoLecturaMantencion(lectura, unidad);
   // Servicio inicial (si la pauta lo tiene) y cada hito, en la unidad del equipo.
   const opcionesHito = [
     ...(pauta?.initialMilestone != null
@@ -254,9 +275,21 @@ export function MantencionAnteriorModal({
                   <Input placeholder="Mecánico o taller que la realizó" />
                 </TextField>
 
-                <TextField fullWidth name="lectura" onChange={setLectura} value={lectura}>
+                <TextField
+                  fullWidth
+                  isInvalid={errorLectura != null}
+                  name="lectura"
+                  onChange={setLectura}
+                  value={lectura}
+                >
                   <Label>{lecturaLabel}</Label>
-                  <Input inputMode="decimal" placeholder={esKm ? '84306' : '1250'} />
+                  <Input inputMode={esKm ? 'numeric' : 'decimal'} placeholder={esKm ? '84306' : '1250'} />
+                  {errorLectura ? <FieldError>{errorLectura}</FieldError> : null}
+                  {avisoLectura ? (
+                    <p className="m-0 text-xs text-warning-soft-foreground" role="status">
+                      {avisoLectura}
+                    </p>
+                  ) : null}
                 </TextField>
               </div>
 

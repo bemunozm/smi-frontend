@@ -1,4 +1,5 @@
-import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
+import { avisoDeAgrupacion, formatDecimalInput, parseDecimal, parseInteger } from '../../lib/decimal';
+import { fmtNum } from '../../lib/format';
 import type { ControlUnit } from '../../types/equipment';
 import { PRIORIDAD_OT, type OrdenTrabajo, type PrioridadOT } from '../../types/mantenimiento';
 
@@ -14,29 +15,17 @@ export interface WorkshopBoard {
   finished: OrdenTrabajo[];
 }
 
-const PRIORITY_RANK: Record<PrioridadOT, number> = {
-  CRITICA: 0,
-  ALTA: 1,
-  MEDIA: 2,
-  BAJA: 3,
-};
+const PRIORITY_RANK: Record<PrioridadOT, number> = { CRITICA: 0, ALTA: 1, MEDIA: 2, BAJA: 3 };
 
 function byDateDesc(field: 'createdAt' | 'updatedAt') {
-  return (a: OrdenTrabajo, b: OrdenTrabajo) =>
-    new Date(b[field]).getTime() - new Date(a[field]).getTime();
+  return (a: OrdenTrabajo, b: OrdenTrabajo) => new Date(b[field]).getTime() - new Date(a[field]).getTime();
 }
 
 export function groupWorkshopBoard(ordenes: readonly OrdenTrabajo[]): WorkshopBoard {
   const backlog = ordenes
     .filter((o) => o.estado === 'PENDIENTE' || o.estado === 'ASIGNADA')
-    .sort(
-      (a, b) =>
-        PRIORITY_RANK[a.prioridad] - PRIORITY_RANK[b.prioridad] ||
-        byDateDesc('createdAt')(a, b),
-    );
-  const inProgress = ordenes
-    .filter((o) => o.estado === 'EN_PROCESO')
-    .sort(byDateDesc('updatedAt'));
+    .sort((a, b) => PRIORITY_RANK[a.prioridad] - PRIORITY_RANK[b.prioridad] || byDateDesc('createdAt')(a, b));
+  const inProgress = ordenes.filter((o) => o.estado === 'EN_PROCESO').sort(byDateDesc('updatedAt'));
   const finished = ordenes
     .filter((o) => o.estado === 'COMPLETADA' || o.estado === 'CANCELADA')
     .sort(byDateDesc('updatedAt'));
@@ -91,17 +80,12 @@ function isSameLocalDay(iso: string, reference: Date): boolean {
   );
 }
 
-export function buildWorkshopStats(
-  ordenes: readonly OrdenTrabajo[],
-  now: Date = new Date(),
-): WorkshopStats {
+export function buildWorkshopStats(ordenes: readonly OrdenTrabajo[], now: Date = new Date()): WorkshopStats {
   const board = groupWorkshopBoard(ordenes);
   return {
     backlog: board.backlog.length,
     inProgress: board.inProgress.length,
-    finishedToday: ordenes.filter(
-      (o) => o.estado === 'COMPLETADA' && isSameLocalDay(o.updatedAt, now),
-    ).length,
+    finishedToday: ordenes.filter((o) => o.estado === 'COMPLETADA' && isSameLocalDay(o.updatedAt, now)).length,
     total: ordenes.length,
   };
 }
@@ -140,9 +124,16 @@ export interface LecturaMantencion {
   label: string;
   unidad: 'h' | 'km';
   /** La lectura actual del equipo como texto del campo (coma decimal, sin
-   * miles); `''` si no se conoce — el campo queda vacío y hay que escribirla. */
+   * miles; en km, entera); `''` si no se conoce — el campo queda vacío y hay
+   * que escribirla. */
   inicial: string;
+  /** La lectura actual del equipo, si se conoce: la de la mantención no puede
+   * superarla (el backend también lo rechaza). */
+  actual: number | null;
 }
+
+/** Lo que necesita la lectura para leerse y validarse: su unidad y, si se conoce, la actual. */
+export type CampoLectura = Pick<LecturaMantencion, 'unidad' | 'actual'>;
 
 /**
  * Lo que necesita el campo «lectura al momento de la mantención» al cerrar una
@@ -150,53 +141,85 @@ export interface LecturaMantencion {
  * unidad la decide el equipo (liviano por km, pesado por horas); si la OT no
  * resuelve en Flota se asume horómetro, que es el caso de la pauta.
  */
-export function lecturaMantencion(
-  equipoId: string,
-  equipment: readonly EquipmentRef[] | undefined,
-): LecturaMantencion {
+export function lecturaMantencion(equipoId: string, equipment: readonly EquipmentRef[] | undefined): LecturaMantencion {
   const equipo = findEquipment(equipoId, equipment);
   const esKm = equipo?.controlUnit === 'KM';
-  const actual = esKm ? equipo?.currentMileage : equipo?.currentHourmeter;
+  const actual = (esKm ? equipo?.currentMileage : equipo?.currentHourmeter) ?? null;
   return {
-    label: esKm
-      ? 'Kilometraje al momento de la mantención (km)'
-      : 'Horómetro al momento de la mantención (h)',
+    label: esKm ? 'Kilometraje al momento de la mantención (km)' : 'Horómetro al momento de la mantención (h)',
     unidad: esKm ? 'km' : 'h',
-    inicial: formatDecimalInput(actual),
+    inicial: formatDecimalInput(actual, esKm ? 0 : 2),
+    actual,
   };
 }
 
 /**
- * Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es
- * obligatoria); `null` si vale.
+ * El texto de una lectura de mantención como número, según su unidad. En km
+ * es un entero y el `.` o la `,` son el separador de miles: «264.582» km son
+ * 264582 km — leído como decimal (264,582 km) el backend rechazaba el cierre
+ * por quedar bajo la mantención anterior. En horas sigue siendo un decimal
+ * (`parseDecimal`); el aviso de agrupación dice cómo se leerá «1.500».
  */
-export function errorLecturaMantencion(valor: number | null | undefined): string | null {
+export function parseLecturaMantencion(texto: string, unidad: LecturaMantencion['unidad']): number | null {
+  return unidad === 'km' ? parseInteger(texto) : parseDecimal(texto);
+}
+
+/**
+ * Aviso (no bloquea) para una lectura en horas con aspecto de miles («1.500»
+ * se lee 1,5 h). En km no hay ambigüedad: `null`.
+ */
+export function avisoLecturaMantencion(texto: string, unidad: LecturaMantencion['unidad']): string | null {
+  return unidad === 'h' ? avisoDeAgrupacion(texto) : null;
+}
+
+/**
+ * Por qué una lectura de mantención ya leída no vale (`NaN`/vacía: falta, es
+ * obligatoria); `null` si vale. Con la lectura actual del equipo conocida, la
+ * de la mantención no puede superarla.
+ */
+export function errorLecturaMantencion(valor: number | null | undefined, campo?: CampoLectura): string | null {
   if (valor == null || Number.isNaN(valor)) return 'Indica la lectura al momento de la mantención.';
   if (valor < 0) return 'Escribe una lectura válida (0 o mayor).';
   if (valor > LECTURA_MAXIMA) return 'La lectura no puede superar 1.000.000.';
+  if (campo?.actual != null && valor > campo.actual) {
+    return `La lectura no puede ser mayor que la lectura actual del equipo (${fmtNum(campo.actual)} ${campo.unidad}).`;
+  }
   return null;
 }
 
+/** Por qué un texto no es una lectura en esa unidad (en km, que no es entera). */
+function errorDeTexto(unidad: LecturaMantencion['unidad']): string {
+  return unidad === 'km'
+    ? 'Escribe los km como número entero, sin decimales.'
+    : 'Escribe una lectura válida (0 o mayor).';
+}
+
 /** El texto del campo como número, o el motivo por el que no vale (es obligatorio). */
-export function leerLecturaMantencion(texto: string): { valor: number } | { error: string } {
+export function leerLecturaMantencion(texto: string, campo: CampoLectura): { valor: number } | { error: string } {
   if (texto.trim() === '') return { error: 'Indica la lectura al momento de la mantención.' };
-  const valor = parseDecimal(texto);
-  if (valor == null) return { error: 'Escribe una lectura válida (0 o mayor).' };
-  const error = errorLecturaMantencion(valor);
+  const valor = parseLecturaMantencion(texto, campo.unidad);
+  if (valor == null) return { error: errorDeTexto(campo.unidad) };
+  const error = errorLecturaMantencion(valor, campo);
   return error ? { error } : { valor };
+}
+
+/**
+ * Igual que `leerLecturaMantencion`, para un campo OPCIONAL (vacío = el
+ * backend usa la lectura actual del equipo): `{ valor: undefined }` si está vacío.
+ */
+export function leerLecturaOpcional(
+  texto: string,
+  campo: CampoLectura,
+): { valor: number | undefined } | { error: string } {
+  return texto.trim() === '' ? { valor: undefined } : leerLecturaMantencion(texto, campo);
 }
 
 /**
  * "EX-014 · CAT 320". `equipoId` en la OT es texto libre (puede ser código
  * interno o id de Flota); sin match se muestra crudo, nunca rompe.
  */
-export function equipmentLabel(
-  equipoId: string,
-  equipment: readonly EquipmentRef[] | undefined,
-): string {
-  const match = equipment?.find(
-    (eq) => eq.internalCode === equipoId || eq.id === equipoId,
-  );
+export function equipmentLabel(equipoId: string, equipment: readonly EquipmentRef[] | undefined): string {
+  const match = equipment?.find((eq) => eq.internalCode === equipoId || eq.id === equipoId);
   return match ? `${match.internalCode} · ${match.brand} ${match.model}` : equipoId;
 }
 
@@ -215,12 +238,7 @@ export function formatDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? iso
-    : date.toLocaleString('es-CL', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+    : date.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -244,10 +262,11 @@ export function responsableDe(orden: Pick<OrdenTrabajo, 'asignadoA' | 'tareas'>)
  * o el servicio de un liviano («Livianos: mantención de 20.000 km»). Son las
  * que el sistema crea solo y volvería a crear si se borran sin registrar.
  */
-export function registrableComoHecha(
-  orden: Pick<OrdenTrabajo, 'pautaCycle' | 'origenDetalle' | 'tipo'>,
-): boolean {
+export function registrableComoHecha(orden: Pick<OrdenTrabajo, 'pautaCycle' | 'origenDetalle' | 'tipo'>): boolean {
   if (orden.pautaCycle != null) return true;
   const detalle = orden.origenDetalle ?? '';
-  return /^Pauta: [\d.]+ (?:h|km) · ciclo \d+/.test(detalle) || (orden.tipo === 'PREVENTIVA' && detalle.startsWith('Livianos: '));
+  return (
+    /^Pauta: [\d.]+ (?:h|km) · ciclo \d+/.test(detalle) ||
+    (orden.tipo === 'PREVENTIVA' && detalle.startsWith('Livianos: '))
+  );
 }

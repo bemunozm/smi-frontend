@@ -59,6 +59,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   // SECRETARIA: solo el «qué se hizo» al cerrar, sin insumos (el backend se
   // los rechaza; el stock lo descuenta el taller).
   'intervencion.create': [ADMIN, MANTENEDOR, SECRETARIA],
+  // «Finalizar tarea» en una sola escritura: los mismos que registran la
+  // intervención de cierre (SECRETARIA, sin insumos).
+  'orden.finalizar': [ADMIN, MANTENEDOR, SECRETARIA],
   'actividad.create': [ADMIN, SUPERVISOR],
   'actividad.update': [ADMIN, SUPERVISOR, MANTENEDOR],
   'umbral.create': [ADMIN],
