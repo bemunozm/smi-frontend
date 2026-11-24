@@ -1,7 +1,7 @@
 import type { EndpointKey } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA, SUPERVISOR_TEMPORAL } = ROLES;
 
 /**
  * Quién puede hacer cada escritura: espejo de los `@Roles` del backend
@@ -90,6 +90,11 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'trabajoExtra.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.create': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  // El informe lo envía solo el supervisor temporal (cierra SUS tarjetas);
+  // lo corrige oficina y lo elimina el administrador.
+  'informeTemporal.create': [SUPERVISOR_TEMPORAL],
+  'informeTemporal.update': [ADMIN, SECRETARIA],
+  'informeTemporal.delete': [ADMIN],
 };
 
 /** `true` si `role` puede hacer la escritura `action`. Sin rol (sesión sin

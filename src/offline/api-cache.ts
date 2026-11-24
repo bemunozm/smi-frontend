@@ -13,6 +13,7 @@ const API_PATH_BY_QUERY_KEY: Readonly<Record<QueryKeyName, string>> = {
   hallazgos: '/api/hallazgos',
   trabajosExtra: '/api/trabajos-extra',
   reporteDiario: '/api/reporte-diario',
+  informesTemporales: '/api/informes-temporales',
   horometro: '/api/horometro',
   equipment: '/api/equipment',
   equipmentDocuments: '/api/equipment',
