@@ -1,22 +1,47 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
 import { SupervisorTemporalView } from './SupervisorTemporalView';
+import { DomainError } from '../lib/api-error';
 import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
 
-const { equipmentListMock, listMineMock, opsMock } = vi.hoisted(() => ({
-  equipmentListMock: vi.fn(),
-  listMineMock: vi.fn(),
-  opsMock: { current: [] as unknown[] },
-}));
+// La cola es EN VIVO (como `useOutboxOps` sobre Dexie): un cambio re-renderiza la vista.
+const { equipmentListMock, listMineMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  const opsMock = {
+    current: [] as unknown[],
+    set(next: unknown[]) {
+      opsMock.current = next;
+      listeners.forEach((l) => l());
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
+  return { equipmentListMock: vi.fn(), listMineMock: vi.fn(), mutateAsyncMock: vi.fn(), opsMock };
+});
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
 vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock } }));
 vi.mock('../offline/outbox', () => ({ enqueueOpenCard: vi.fn(), enqueueCloseCard: vi.fn() }));
-vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => opsMock.current }));
+vi.mock('../offline/useOutboxOps', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useOutboxOps: () =>
+      useSyncExternalStore(
+        (l) => opsMock.subscribe(l),
+        () => opsMock.current,
+      ),
+  };
+});
+vi.mock('../hooks/useInformesTemporales', () => ({
+  useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
+}));
+vi.mock('../api/OcrAPI', () => ({ fuelReadingOcr: vi.fn() }));
 vi.mock('../hooks/useOperators', () => ({ useOperators: () => ({ data: [], isPending: false }) }));
 vi.mock('../hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
@@ -83,8 +108,38 @@ const botonCerrar = () => screen.getByRole('button', { name: /Cerrar y generar i
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  listMineMock.mockReset();
   opsMock.current = [];
 });
+
+/** Como `submitWrite`: encola el informe ANTES de esperar al servidor; el 409 lo
+ * descarta de la cola y rechaza. */
+function enviarCon409(mensaje: string) {
+  mutateAsyncMock.mockImplementationOnce(async ({ informe }: { informe: { id: string; cierres: unknown[] } }) => {
+    const op = {
+      id: 'op_inf',
+      type: 'httpWrite',
+      endpoint: 'informeTemporal.create',
+      status: 'pending',
+      params: {},
+      body: informe,
+    };
+    opsMock.set([...opsMock.current, op]);
+    await new Promise((r) => setTimeout(r, 30));
+    opsMock.set(opsMock.current.filter((o) => o !== op));
+    throw new DomainError(mensaje, { code: 'INFORME_TARJETAS_DESCUADRADAS', status: 409 });
+  });
+}
+
+async function abrirYLlenar() {
+  // Con la tarjeta ya cargada, el botón está habilitado.
+  await screen.findByText('CA-003');
+  fireEvent.click(await screen.findByRole('button', { name: /Cerrar y generar informe/ }));
+  const fila = await screen.findByRole('group', { name: /CA-003/ });
+  fireEvent.change(within(fila).getByLabelText(/Horómetro final/), { target: { value: '1210' } });
+  fireEvent.change(screen.getByLabelText(/Actividad realizada 1/), { target: { value: 'Limpieza de cancha' } });
+  fireEvent.click(screen.getByRole('button', { name: /Enviar informe/ }));
+}
 
 describe('SupervisorTemporalView', () => {
   it('deshabilita «Cerrar y generar informe» sin tarjetas abiertas', async () => {
@@ -123,5 +178,40 @@ describe('SupervisorTemporalView', () => {
     expect(await screen.findByText(/pendiente de envío/)).toBeTruthy();
     expect(screen.queryByText('CA-003')).toBeNull();
     expect(botonCerrar().hasAttribute('disabled')).toBe(true);
+  });
+
+  it('el formulario no se oculta con su propio envío: un 409 deja los datos, el mensaje y los mismos ids', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValue([tarjeta()]);
+    renderView();
+    enviarCon409('Falta CA-009 en el informe.');
+    await abrirYLlenar();
+
+    expect(await screen.findByText('Falta CA-009 en el informe.')).toBeTruthy();
+    expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('Limpieza de cancha');
+    const fila = screen.getByRole('group', { name: /CA-003/ });
+    expect((within(fila).getByLabelText(/Horómetro final/) as HTMLInputElement).value).toBe('1210');
+
+    mutateAsyncMock.mockResolvedValueOnce({ status: 'queued', opId: 'op2' });
+    fireEvent.click(screen.getByRole('button', { name: /Enviar informe/ }));
+    await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(2));
+    const [primero, segundo] = mutateAsyncMock.mock.calls.map((c) => c[0].informe);
+    expect(segundo.id).toBe(primero.id);
+    expect(segundo.cierres[0].closeClientId).toBe(primero.cierres[0].closeClientId);
+    // En la cola: la hoja se cierra.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Enviar informe/ })).toBeNull());
+  });
+
+  it('si tras el 409 no quedan tarjetas abiertas, el mensaje sigue a la vista', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValueOnce([tarjeta()]).mockResolvedValue([]);
+    renderView();
+    enviarCon409('Las tarjetas ya se cerraron.');
+    await abrirYLlenar();
+
+    expect(await screen.findByText('Las tarjetas ya se cerraron.')).toBeTruthy();
+    expect(await screen.findByText(/No te quedan equipos abiertos/)).toBeTruthy();
+    expect(screen.getByText('Las tarjetas ya se cerraron.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Enviar informe/ }).hasAttribute('disabled')).toBe(true);
   });
 });

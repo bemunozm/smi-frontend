@@ -18,6 +18,8 @@ vi.mock('@heroui/react', async (original) => ({
   toast: { danger: vi.fn(), success: vi.fn() },
 }));
 
+const INFORME_ID = '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+
 const TARJETAS: TarjetaTemporal[] = [
   { id: 'c1', equipoId: 'e1', codigo: 'CA-003', nombre: 'Cargador SEM 656F', liviano: false, inicial: 1200 },
   { id: 'c2', equipoId: 'e2', codigo: 'CM-001', nombre: 'Camioneta Toyota Hilux', liviano: true, inicial: 45120 },
@@ -28,7 +30,12 @@ function renderForm(onEnviado = vi.fn()) {
   const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
   render(
     <QueryClientProvider client={queryClient}>
-      <CierreTemporalForm tarjetas={TARJETAS} supervisorNombre="Pedro Soto" onEnviado={onEnviado} />
+      <CierreTemporalForm
+        informeId={INFORME_ID}
+        tarjetas={TARJETAS}
+        supervisorNombre="Pedro Soto"
+        onEnviado={onEnviado}
+      />
     </QueryClientProvider>,
   );
   return { onEnviado, invalidate };
@@ -88,7 +95,7 @@ describe('CierreTemporalForm', () => {
       infoSubidaApp: false,
       personal: [{ actividad: 1, operatorId: null, nombre: 'Juan Pérez' }],
     });
-    expect(informe.id).toMatch(/[0-9a-f-]{36}/);
+    expect(informe.id).toBe(INFORME_ID);
     expect(informe.cierres).toHaveLength(2);
     expect(informe.cierres[0]).toMatchObject({ cardId: 'c1', valorFinal: 1210, fuelLiters: 0 });
     expect(informe.cierres[1]).toMatchObject({ cardId: 'c2', valorFinal: 45200, fuelLiters: 0 });

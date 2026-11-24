@@ -201,12 +201,17 @@ export function armarInformeTemporal(
  * Tarjetas que ya van en un informe que sigue en la cola (sin señal, o
  * esperando una acción en la sincronización). Hasta que el servidor lo
  * confirme siguen abiertas en `mine`: la pantalla las saca de «Equipos
- * abiertos» para que no se cierren dos veces.
+ * abiertos» para que no se cierren dos veces. `excluirInformeId`: el informe
+ * del formulario abierto, que no se oculta a sí mismo.
  */
-export function cardIdsEnInformePendiente(ops: readonly OutboxOp[]): Set<string> {
+export function cardIdsEnInformePendiente(ops: readonly OutboxOp[], excluirInformeId?: string): Set<string> {
   const ids = new Set<string>();
   for (const op of ops) {
     if (op.type !== 'httpWrite' || op.endpoint !== 'informeTemporal.create') continue;
+    // El informe del formulario abierto: mientras espera al servidor su
+    // operación ya está en la cola, pero sus tarjetas no deben desaparecer
+    // del formulario (un 409 lo descarta y el formulario sigue).
+    if (excluirInformeId !== undefined && op.body.id === excluirInformeId) continue;
     const cierres = op.body.cierres;
     if (!Array.isArray(cierres)) continue;
     for (const cierre of cierres) {

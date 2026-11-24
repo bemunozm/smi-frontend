@@ -14,6 +14,7 @@ import { useShiftProjection } from '../hooks/useShiftProjection';
 import { cardIdsEnInformePendiente, fmtLectura, nombreEquipo, type TarjetaTemporal } from '../lib/informe-temporal';
 import { plural } from '../lib/format';
 import { contextoTurno } from '../lib/turno';
+import { generateUuid } from '../lib/uuid';
 import { useOutboxOps } from '../offline/useOutboxOps';
 
 /** «24-11 09:44». */
@@ -120,7 +121,14 @@ export function SupervisorTemporalView() {
     userId,
   });
 
-  const enInforme = useMemo(() => cardIdsEnInformePendiente(ops), [ops]);
+  // El formulario abierto es una «sesión» con su `informeId`, generado al abrirlo.
+  // Mientras espera al servidor su operación ya está en la cola: no se oculta a
+  // sí mismo (si no, el formulario se desmontaría a mitad del envío).
+  const [sesionCierre, setSesionCierre] = useState<{ informeId: string } | null>(null);
+  const enInforme = useMemo(
+    () => cardIdsEnInformePendiente(ops, sesionCierre?.informeId),
+    [ops, sesionCierre?.informeId],
+  );
   const abiertas: TarjetaTemporal[] = proyeccion.tarjetas
     .filter((t) => t.estado === 'curso' && !enInforme.has(t.id))
     .map((t) => {
@@ -139,8 +147,10 @@ export function SupervisorTemporalView() {
   const disponibles = [...proyeccion.disponibles, ...proyeccion.disponiblesLivianos];
 
   const [abriendo, setAbriendo] = useState(false);
-  const [cerrando, setCerrando] = useState(false);
-  const mostrarCierre = cerrando && abiertas.length > 0;
+  // Abierto, el formulario no se desmonta aunque la lista cambie (p. ej. un 409
+  // que refresca las tarjetas y deja cero): así su error sigue a la vista.
+  const mostrarCierre = sesionCierre != null;
+  const cerrarFormulario = () => setSesionCierre(null);
 
   const eliminar = useDeleteShiftCard();
   const motivoSinEliminar = (t: TarjetaTemporal): string | null => {
@@ -150,7 +160,12 @@ export function SupervisorTemporalView() {
   };
 
   const formularioCierre = mostrarCierre && (
-    <CierreTemporalForm tarjetas={abiertas} supervisorNombre={nombre} onEnviado={() => setCerrando(false)} />
+    <CierreTemporalForm
+      informeId={sesionCierre.informeId}
+      tarjetas={abiertas}
+      supervisorNombre={nombre}
+      onEnviado={cerrarFormulario}
+    />
   );
   const bajadaCierre = 'Cierra todos tus equipos abiertos y registra el informe de la jornada.';
 
@@ -210,7 +225,11 @@ export function SupervisorTemporalView() {
               señal.
             </span>
           )}
-          <Boton ancho disabled={abiertas.length === 0} onClick={() => setCerrando(true)}>
+          <Boton
+            ancho
+            disabled={abiertas.length === 0}
+            onClick={() => setSesionCierre((s) => s ?? { informeId: generateUuid() })}
+          >
             <FileText className="size-[19px]" aria-hidden /> Cerrar y generar informe
           </Boton>
         </div>
@@ -222,7 +241,7 @@ export function SupervisorTemporalView() {
             titulo="Informe de actividad"
             bajada={bajadaCierre}
             extra={
-              <Boton variante="contorno" className="!min-h-11" onClick={() => setCerrando(false)}>
+              <Boton variante="contorno" className="!min-h-11" onClick={cerrarFormulario}>
                 Cancelar
               </Boton>
             }
@@ -235,7 +254,7 @@ export function SupervisorTemporalView() {
           eyebrow="Cerrar y generar informe"
           titulo="Informe de actividad"
           bajada={bajadaCierre}
-          onCerrar={() => setCerrando(false)}
+          onCerrar={cerrarFormulario}
         >
           {formularioCierre}
         </Hoja>

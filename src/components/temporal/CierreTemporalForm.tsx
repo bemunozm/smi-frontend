@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowRight } from 'lucide-react';
 import { CierreTarjetaFila, type FilaCierreEstado } from './CierreTarjetaFila';
 import { PersonalActividad, type LineaPersonal } from './PersonalActividad';
 import { DateField } from '../terreno/DateField';
-import { Boton, Campo, Input, Label, Segmentado, Textarea } from '../terreno/ui';
+import { Boton, Campo, Hint, Input, Label, Segmentado, Textarea } from '../terreno/ui';
 import { useCrearInformeTemporal } from '../../hooks/useInformesTemporales';
 import { DomainError } from '../../lib/api-error';
 import {
@@ -68,16 +68,20 @@ function PreguntaSiNo({
  * en papel de SIMA, digitalizado. Cierra TODAS sus tarjetas abiertas (una fila
  * por tarjeta) y registra la jornada en un solo envío (`useCrearInformeTemporal`).
  *
- * Idempotencia: el `id` del informe y el `closeClientId` de cada tarjeta se
- * generan UNA vez, al abrir el formulario, y se repiten en cada reintento tras
+ * Idempotencia: el `id` del informe (`informeId`, de quien abre) y el
+ * `closeClientId` de cada tarjeta se generan UNA vez, al abrir el formulario, y se repiten en cada reintento tras
  * un error. Se regeneran recién en el próximo formulario (este se desmonta al
  * enviar). Con señal, un 409 del servidor se muestra arriba del formulario.
  */
 export function CierreTemporalForm({
+  informeId,
   tarjetas,
   supervisorNombre,
   onEnviado,
 }: {
+  /** Generado UNA vez por quien abre el formulario (la pantalla lo necesita para
+   * no ocultar las tarjetas de este informe mientras espera al servidor). */
+  informeId: string;
   tarjetas: TarjetaTemporal[];
   supervisorNombre: string;
   /** El informe se guardó (enviado o en la cola): quien lo abrió cierra la hoja. */
@@ -86,7 +90,6 @@ export function CierreTemporalForm({
   const crear = useCrearInformeTemporal();
   const queryClient = useQueryClient();
 
-  const [informeId] = useState(generateUuid);
   const closeIds = useRef<Map<string, string> | null>(null);
   if (closeIds.current == null) closeIds.current = new Map(tarjetas.map((t) => [t.id, generateUuid()]));
   const closeClientIdDe = (cardId: string) => {
@@ -143,7 +146,7 @@ export function CierreTemporalForm({
 
   const enviar = async () => {
     setIntentado(true);
-    if (Object.keys(errores).length > 0 || crear.isPending || leyendoFoto) return;
+    if (Object.keys(errores).length > 0 || crear.isPending || leyendoFoto || tarjetas.length === 0) return;
     setErrorServidor(null);
     const { informe, fotos } = armarInformeTemporal(form, { id: informeId, closeClientIdDe, ahora: new Date() });
     try {
@@ -174,6 +177,7 @@ export function CierreTemporalForm({
 
       <div className="flex flex-col gap-2.5">
         <Label>Equipos utilizados · {tarjetas.length}</Label>
+        {tarjetas.length === 0 && <Hint>No te quedan equipos abiertos para cerrar.</Hint>}
         {tarjetas.map((t, i) => (
           <CierreTarjetaFila key={t.id} tarjeta={t} fila={filas[i]!} errores={visibles} onCambio={cambiarFila} />
         ))}
@@ -239,7 +243,7 @@ export function CierreTemporalForm({
         onChange={(v) => cambiar('infoSubidaApp', v)}
       />
 
-      <Boton ancho onClick={() => void enviar()} disabled={crear.isPending || leyendoFoto}>
+      <Boton ancho onClick={() => void enviar()} disabled={crear.isPending || leyendoFoto || tarjetas.length === 0}>
         {crear.isPending ? 'Enviando informe…' : 'Enviar informe'} <ArrowRight className="size-[19px]" />
       </Boton>
       {intentado && Object.keys(errores).length > 0 && (

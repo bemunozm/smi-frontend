@@ -163,4 +163,12 @@ describe('cardIdsEnInformePendiente', () => {
     ] as unknown as OutboxOp[];
     expect([...cardIdsEnInformePendiente(ops)]).toEqual(['c1', 'c2']);
   });
+
+  it('no cuenta el informe del formulario abierto (excluirInformeId)', () => {
+    const ops = [
+      { type: 'httpWrite', endpoint: 'informeTemporal.create', body: { id: 'abierto', cierres: [{ cardId: 'c1' }] } },
+      { type: 'httpWrite', endpoint: 'informeTemporal.create', body: { id: 'otro', cierres: [{ cardId: 'c2' }] } },
+    ] as unknown as OutboxOp[];
+    expect([...cardIdsEnInformePendiente(ops, 'abierto')]).toEqual(['c2']);
+  });
 });
