@@ -45,6 +45,8 @@ describe('construirExcelInformesTemporales', () => {
         id: 'i1',
         numero: 7,
         actividad2: 'Despeje',
+        supervisorResponsable2: 'Pedro Soto',
+        infoSubidaApp: false,
         observaciones: 'Sin novedades',
         personal: [
           { actividad: 1, operatorId: 'op1', nombre: 'Luis' },
@@ -52,7 +54,7 @@ describe('construirExcelInformesTemporales', () => {
           { actividad: 2, operatorId: null, nombre: 'Rosa' },
         ],
         tarjetas: [
-          tarjeta('a', 'EX-1', 100, 108.5, 40),
+          { ...tarjeta('a', 'EX-1', 100, 108.5, 40), adBlueLiters: 3.5 },
           tarjeta('b', 'CG-2', 200, 203, null),
           tarjeta('c', 'SEM-3', 50, 51, 12),
         ],
@@ -82,6 +84,11 @@ describe('construirExcelInformesTemporales', () => {
       'Personal act. 1',
       'Personal act. 2',
       'Observaciones',
+      'Supervisor responsable 1',
+      'Supervisor responsable 2',
+      '¿Fotos enviadas?',
+      '¿Info subida a la app?',
+      'AdBlue (L)',
     ]);
     expect(ws.rowCount).toBe(5);
 
@@ -101,9 +108,16 @@ describe('construirExcelInformesTemporales', () => {
       'Luis, Pedro',
       'Rosa',
       'Sin novedades',
+      'Ana',
+      'Pedro Soto',
+      'Sí',
+      'No',
+      3.5,
     ]);
     expect(fila(3)[6]).toBe('CG-2');
     expect(fila(3)[10]).toBeUndefined();
+    // Sin AdBlue la celda queda vacía, no en 0.
+    expect(fila(3)[18]).toBeUndefined();
     expect(fila(5)[2]).toBe('Nocturno');
     expect(fila(5)[0]).toBe(8);
   });
