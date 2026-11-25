@@ -88,8 +88,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   // las pantallas de tarjetas normales la dejan fuera (`canEditShiftCard`).
   'shiftCard.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   // SECRETARIA completa y corrige lo que un supervisor olvidó (pedido del
-  // cliente, 03/11).
-  'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  // cliente, 03/11). El supervisor temporal registra y corrige hallazgos
+  // desde su shell, como el supervisor (no los elimina).
+  'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA, SUPERVISOR_TEMPORAL],
   'trabajoExtra.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.create': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.edit': [ADMIN, SUPERVISOR, SECRETARIA],

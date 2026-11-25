@@ -19,6 +19,7 @@ export const PREP_KEYS = [
   'reporteDiario',
   'horometro',
   'combustible',
+  'informesTemporales',
 ] as const;
 export type PrepKey = (typeof PREP_KEYS)[number];
 
@@ -42,6 +43,10 @@ const PREP_BY_ROUTE: Readonly<Record<string, readonly PrepKey[]>> = {
   '/camioneta': ['equipment', 'shiftCards'],
   // Supervisor temporal: sus equipos, operadores para las tarjetas y sus tarjetas.
   '/temporal': ['equipment', 'operators', 'shiftCards'],
+  // Sus hallazgos: la lista y los equipos que ofrece el formulario.
+  '/temporal/hallazgos': ['hallazgos', 'equipment'],
+  // «Mis reportes»: los informes que envió.
+  '/temporal/reportes': ['informesTemporales'],
   // `dailyChecklists`: el supervisor valida los chequeos (M3). `reporteDiario`:
   // los reportes de la semana y los catálogos (plantas, empresas externas) que
   // ofrece el formulario.
@@ -74,7 +79,7 @@ const RUTAS_POR_ROL: Readonly<Record<Role, readonly string[]>> = {
   // línea, como las del administrador: no tienen lista que precargar.
   [ROLES.SECRETARIA]: ['/', '/notificaciones'],
   [ROLES.PREVENCIONISTA]: ['/camioneta', '/notificaciones'],
-  [ROLES.SUPERVISOR_TEMPORAL]: ['/temporal', '/notificaciones'],
+  [ROLES.SUPERVISOR_TEMPORAL]: ['/temporal', '/temporal/hallazgos', '/temporal/reportes', '/notificaciones'],
 };
 
 /** Sin rol reconocido (la barra de Terreno antes de resolver la sesión) se prepara

@@ -22,6 +22,17 @@ export const InformesTemporalesAPI = {
     }
   },
 
+  /** «Mis reportes»: los informes que envió el supervisor de la sesión, del más
+   * nuevo al más viejo (los últimos 100). */
+  async mios(): Promise<InformeTemporal[]> {
+    try {
+      const res = await api.get('/api/informes-temporales/mine');
+      return InformesTemporalesResponseSchema.parse(res.data).data;
+    } catch (error) {
+      throw toDomainError(error, 'No se pudieron cargar tus reportes.');
+    }
+  },
+
   async obtener(id: string): Promise<InformeTemporal> {
     try {
       const res = await api.get(`/api/informes-temporales/${encodeURIComponent(id)}`);

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ROLES, type Role } from '../types/roles';
@@ -38,14 +38,16 @@ function setViewport(size: 'phone' | 'desktop'): void {
   })) as unknown as typeof window.matchMedia;
 }
 
-function renderLayout(size: 'phone' | 'desktop') {
+function renderLayout(size: 'phone' | 'desktop', ruta = '/temporal') {
   mockRole = ROLES.SUPERVISOR_TEMPORAL;
   setViewport(size);
   return render(
-    <MemoryRouter initialEntries={['/temporal']}>
+    <MemoryRouter initialEntries={[ruta]}>
       <Routes>
         <Route element={<TemporalLayout />}>
           <Route path="/temporal" element={<p>contenido</p>} />
+          <Route path="/temporal/hallazgos" element={<p>hallazgos</p>} />
+          <Route path="/temporal/reportes" element={<p>reportes</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -64,11 +66,29 @@ describe('TemporalLayout', () => {
     expect(screen.getByText('contenido')).toBeTruthy();
   });
 
-  it('con una sola pantalla no hay barra de navegación, ni en celular ni en escritorio', () => {
+  it('tres pestañas en orden: Mis equipos, Hallazgos y Mis reportes (barra inferior en celular)', () => {
     renderLayout('phone');
-    expect(screen.queryByRole('navigation', { name: 'Secciones de Supervisión temporal' })).toBeNull();
-    cleanup();
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
+    const enlaces = within(nav).getAllByRole('link');
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Equipos', 'Hallazgos', 'Reportes']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual(['/temporal', '/temporal/hallazgos', '/temporal/reportes']);
+  });
+
+  it('en escritorio las pestañas van en el header con su nombre largo', () => {
     renderLayout('desktop');
-    expect(screen.queryByRole('navigation', { name: 'Secciones de Supervisión temporal' })).toBeNull();
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Mis equipos',
+      'Hallazgos',
+      'Mis reportes',
+    ]);
+  });
+
+  it('en «Mis reportes» solo esa pestaña queda activa, no «Mis equipos»', () => {
+    renderLayout('phone', '/temporal/reportes');
+    expect(screen.getByText('reportes')).toBeTruthy();
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
+    expect(within(nav).getByRole('link', { name: 'Reportes' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Equipos' }).getAttribute('aria-current')).toBeNull();
   });
 });

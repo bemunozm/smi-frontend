@@ -27,6 +27,9 @@ export interface ShellTab {
   label: string;
   corto: string;
   icon: LucideIcon;
+  /** Activa solo con la ruta exacta: para una pestaña cuya ruta es prefijo de
+   * otra (`/temporal` y `/temporal/reportes`). */
+  end?: boolean;
   /** Cuántas cosas esperan en esa sección (p. ej. checklists por validar). */
   badge?: number;
 }
@@ -243,6 +246,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                     <NavLink
                       key={t.to}
                       to={t.to}
+                      end={t.end}
                       className={({ isActive }) =>
                         `flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${
                           isActive ? 'bg-white/15 text-white' : 'text-white/[.66] hover:bg-white/10 hover:text-white'
@@ -301,6 +305,7 @@ export function TerrenoShell({ subtitulo, etiquetaNav, tabs }: TerrenoShellProps
                   <NavLink
                     key={t.to}
                     to={t.to}
+                    end={t.end}
                     className={({ isActive }) =>
                       `flex min-h-16 flex-col items-center gap-1 px-0.5 pt-2.5 pb-3 text-xs font-semibold transition ${
                         isActive ? 'text-primary' : 'text-muted-foreground'

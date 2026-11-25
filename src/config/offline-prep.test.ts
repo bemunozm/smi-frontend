@@ -51,17 +51,25 @@ describe('prepKeysFor — qué se precarga por rol', () => {
     expect([...prepKeysFor(ROLES.PREVENCIONISTA)].sort()).toEqual(['equipment', 'notificaciones', 'shiftCards']);
   });
 
-  it('SUPERVISOR_TEMPORAL precarga equipos, operadores, tarjetas y notificaciones', () => {
+  it('SUPERVISOR_TEMPORAL precarga equipos, operadores, tarjetas, hallazgos, sus reportes y notificaciones', () => {
     expect([...prepKeysFor(ROLES.SUPERVISOR_TEMPORAL)].sort()).toEqual([
       'equipment',
+      'hallazgos',
+      'informesTemporales',
       'notificaciones',
       'operators',
       'shiftCards',
     ]);
   });
 
-  it('ADMIN ve todo: precarga todas las listas', () => {
-    expect(prepKeysFor(ROLES.ADMIN)).toEqual([...PREP_KEYS]);
+  it('«Mis reportes» es solo del supervisor temporal: nadie más precarga sus informes', () => {
+    for (const role of [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.MANTENEDOR, ROLES.SECRETARIA, ROLES.PREVENCIONISTA]) {
+      expect(prepKeysFor(role), role).not.toContain('informesTemporales');
+    }
+  });
+
+  it('ADMIN precarga todas las listas menos «Mis reportes» del supervisor temporal', () => {
+    expect(prepKeysFor(ROLES.ADMIN)).toEqual(PREP_KEYS.filter((key) => key !== 'informesTemporales'));
   });
 
   it('todos los roles con menú precargan las notificaciones; los movimientos acompañan a Inventario', () => {

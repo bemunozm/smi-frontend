@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import { InformesTemporalesAPI } from '../api/InformesTemporalesAPI';
-import { INFORMES_TEMPORALES_KEY } from '../lib/query-keys';
+import { INFORMES_TEMPORALES_KEY, INFORMES_TEMPORALES_MINE_KEY } from '../lib/query-keys';
 import type {
   CierreTemporalInput,
   CreateInformeTemporalInput,
@@ -17,6 +17,11 @@ export function useInformesTemporales(desde: string, hasta: string) {
     queryKey: [...INFORMES_TEMPORALES_KEY, 'list', desde, hasta],
     queryFn: () => InformesTemporalesAPI.listar(desde, hasta),
   });
+}
+
+/** «Mis reportes» del supervisor temporal (los suyos, del más nuevo al más viejo). */
+export function useMisInformesTemporales() {
+  return useQuery({ queryKey: INFORMES_TEMPORALES_MINE_KEY, queryFn: InformesTemporalesAPI.mios });
 }
 
 /** Detalle de un informe; `null` = ninguno abierto (no consulta). */

@@ -12,7 +12,7 @@ import {
   canWriteAny,
 } from './permissions';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA, SUPERVISOR_TEMPORAL } = ROLES;
 
 describe('WRITE_ROLES', () => {
   it('cubre exactamente las escrituras del registro: ninguna queda sin decidir ni sobra una', () => {
@@ -50,6 +50,8 @@ describe('WRITE_ROLES', () => {
     ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA]],
     // SECRETARIA: solo tarjetas temporales (el backend le rechaza las demás).
     ['shiftCard.edit', [ADMIN, SUPERVISOR, SECRETARIA]],
+    // El supervisor temporal registra y corrige hallazgos desde su shell.
+    ['hallazgo.edit', [ADMIN, SUPERVISOR, SECRETARIA, SUPERVISOR_TEMPORAL]],
   ])('%s la hacen %j', (accion, roles) => {
     expect([...WRITE_ROLES[accion]].sort()).toEqual([...roles].sort());
   });
