@@ -26,8 +26,6 @@ const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | '
   observaciones: null,
   supervisorResponsable1: 'Ana',
   supervisorResponsable2: null,
-  fotosEnviadas: true,
-  infoSubidaApp: true,
   supervisorId: 's1',
   supervisorNombre: 'Ana Soto',
   inicio: '2026-11-20T10:00:00.000Z',
@@ -46,7 +44,6 @@ describe('construirExcelInformesTemporales', () => {
         numero: 7,
         actividad2: 'Despeje',
         supervisorResponsable2: 'Pedro Soto',
-        infoSubidaApp: false,
         observaciones: 'Sin novedades',
         personal: [
           { actividad: 1, operatorId: 'op1', nombre: 'Luis' },
@@ -86,8 +83,6 @@ describe('construirExcelInformesTemporales', () => {
       'Observaciones',
       'Supervisor responsable 1',
       'Supervisor responsable 2',
-      '¿Fotos enviadas?',
-      '¿Info subida a la app?',
       'AdBlue (L)',
     ]);
     expect(ws.rowCount).toBe(5);
@@ -110,14 +105,12 @@ describe('construirExcelInformesTemporales', () => {
       'Sin novedades',
       'Ana',
       'Pedro Soto',
-      'Sí',
-      'No',
       3.5,
     ]);
     expect(fila(3)[6]).toBe('CG-2');
     expect(fila(3)[10]).toBeUndefined();
     // Sin AdBlue la celda queda vacía, no en 0.
-    expect(fila(3)[18]).toBeUndefined();
+    expect(fila(3)[16]).toBeUndefined();
     expect(fila(5)[2]).toBe('Nocturno');
     expect(fila(5)[0]).toBe(8);
   });

@@ -43,8 +43,6 @@ export type CreateInformeTemporalInput = {
   observaciones?: string;
   supervisorResponsable1: string;
   supervisorResponsable2?: string;
-  fotosEnviadas: boolean;
-  infoSubidaApp: boolean;
   cierres: CierreTemporalInput[];
 };
 
@@ -87,8 +85,6 @@ export const InformeTemporalSchema = z.object({
   observaciones: z.string().nullable(),
   supervisorResponsable1: z.string(),
   supervisorResponsable2: z.string().nullable(),
-  fotosEnviadas: z.boolean(),
-  infoSubidaApp: z.boolean(),
   supervisorId: z.string(),
   supervisorNombre: z.string(),
   /** ISO: apertura de la primera tarjeta y momento del envío. */

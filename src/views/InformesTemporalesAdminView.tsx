@@ -49,8 +49,6 @@ function Dato({ label, value }: { label: string; value: string }) {
   );
 }
 
-const SiNo = (v: boolean) => (v ? 'Sí' : 'No');
-
 /** Detalle completo del informe: datos, personal por actividad, tarjetas con su
  * foto del surtidor. «Corregir» (ADMIN y SECRETARIA) y «Eliminar» (ADMIN); cada
  * tarjeta cerrada trae su propio «Corregir» para las lecturas y los litros. */
@@ -103,8 +101,6 @@ function DetalleInformeModal({
                   <Dato label="Personal act. 1" value={personalDe(1)} />
                   <Dato label="Actividad 2" value={informe.actividad2 ?? '—'} />
                   <Dato label="Personal act. 2" value={personalDe(2)} />
-                  <Dato label="Fotos enviadas" value={SiNo(informe.fotosEnviadas)} />
-                  <Dato label="Info subida a la app" value={SiNo(informe.infoSubidaApp)} />
                   <Dato label="Inicio" value={hora(informe.inicio)} />
                   <Dato label="Envío" value={hora(informe.fin)} />
                 </div>

@@ -15,11 +15,6 @@ import {
 } from '../../lib/informe-temporal';
 import { toDateOnly, type Turno } from '../../lib/turno';
 
-const SI_NO = [
-  { valor: 'no' as const, label: 'No' },
-  { valor: 'si' as const, label: 'Sí' },
-];
-
 const lineasDe = (informe: InformeTemporal, actividad: 1 | 2): LineaPersonal[] =>
   informe.personal
     .filter((p) => p.actividad === actividad)
@@ -36,33 +31,11 @@ const personalDe = (l1: LineaPersonal[], l2: LineaPersonal[]): PersonalInforme[]
 
 const clave = (p: PersonalInforme[]) => JSON.stringify(p.map((x) => [x.actividad, x.operatorId ?? null, x.nombre]));
 
-function PreguntaSiNo({
-  pregunta,
-  valor,
-  onChange,
-}: {
-  pregunta: string;
-  valor: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{pregunta}</Label>
-      <Segmentado
-        etiqueta={pregunta}
-        valor={valor ? 'si' : 'no'}
-        onChange={(v) => onChange(v === 'si')}
-        opciones={SI_NO}
-      />
-    </div>
-  );
-}
-
 /**
  * Corrige los DATOS del informe (fecha, turno, actividades, personal,
- * supervisores, observaciones y las dos declaraciones). Las lecturas de cada
- * tarjeta no se editan acá: tienen su propio «Corregir» en el detalle del
- * informe (`CorregirTarjetaTemporalModal`). Solo se envía lo que
+ * supervisores y observaciones). Las lecturas de cada tarjeta no se editan
+ * acá: tienen su propio «Corregir» en el detalle del informe
+ * (`CorregirTarjetaTemporalModal`). Solo se envía lo que
  * cambió; `actividad2`, `observaciones` y `supervisorResponsable2` en `''` los
  * quitan.
  */
@@ -77,8 +50,6 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
   const [observaciones, setObservaciones] = useState(informe.observaciones ?? '');
   const [supervisor1, setSupervisor1] = useState(informe.supervisorResponsable1);
   const [supervisor2, setSupervisor2] = useState(informe.supervisorResponsable2 ?? '');
-  const [fotosEnviadas, setFotosEnviadas] = useState(informe.fotosEnviadas);
-  const [infoSubidaApp, setInfoSubidaApp] = useState(informe.infoSubidaApp);
   const [intentado, setIntentado] = useState(false);
 
   const errores: Record<string, string> = {};
@@ -102,8 +73,6 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
   if (supervisor1.trim() !== informe.supervisorResponsable1) cambios.supervisorResponsable1 = supervisor1.trim();
   if (supervisor2.trim() !== (informe.supervisorResponsable2 ?? ''))
     cambios.supervisorResponsable2 = supervisor2.trim();
-  if (fotosEnviadas !== informe.fotosEnviadas) cambios.fotosEnviadas = fotosEnviadas;
-  if (infoSubidaApp !== informe.infoSubidaApp) cambios.infoSubidaApp = infoSubidaApp;
 
   const guardar = () => {
     setIntentado(true);
@@ -176,12 +145,6 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
               <Campo label="Supervisor responsable 2">
                 <Input value={supervisor2} maxLength={120} onChange={(e) => setSupervisor2(e.target.value)} />
               </Campo>
-              <PreguntaSiNo pregunta="¿Se enviaron las fotos?" valor={fotosEnviadas} onChange={setFotosEnviadas} />
-              <PreguntaSiNo
-                pregunta="¿Se subió la información a la app?"
-                valor={infoSubidaApp}
-                onChange={setInfoSubidaApp}
-              />
               <p className="text-xs text-muted-foreground">
                 Hasta {MAX_PERSONAL_POR_ACTIVIDAD} personas por actividad. Las lecturas y litros de cada equipo se
                 corrigen con «Corregir» en su tarjeta, en el detalle del informe.

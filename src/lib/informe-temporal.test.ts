@@ -35,8 +35,6 @@ function form(overrides: Partial<InformeTemporalForm> = {}): InformeTemporalForm
     observaciones: '',
     supervisor1: 'Pedro Soto',
     supervisor2: '',
-    fotosEnviadas: false,
-    infoSubidaApp: false,
     cierres: [fila()],
     ...overrides,
   };
@@ -122,8 +120,6 @@ describe('armarInformeTemporal', () => {
         { actividad: 2, operatorId: null, nombre: 'Ana' },
       ],
       supervisorResponsable1: 'Pedro Soto',
-      fotosEnviadas: false,
-      infoSubidaApp: false,
     });
     expect(informe.observaciones).toBeUndefined();
     expect(informe.supervisorResponsable2).toBeUndefined();

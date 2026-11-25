@@ -83,8 +83,6 @@ export interface InformeTemporalForm {
   observaciones: string;
   supervisor1: string;
   supervisor2: string;
-  fotosEnviadas: boolean;
-  infoSubidaApp: boolean;
   cierres: FilaCierreForm[];
 }
 
@@ -192,8 +190,6 @@ export function armarInformeTemporal(
     actividad1: form.actividad1.trim(),
     personal,
     supervisorResponsable1: form.supervisor1.trim(),
-    fotosEnviadas: form.fotosEnviadas,
-    infoSubidaApp: form.infoSubidaApp,
     cierres,
   };
   const actividad2 = opcional(form.actividad2);

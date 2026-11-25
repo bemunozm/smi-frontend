@@ -38,33 +38,6 @@ const filaVacia = (t: TarjetaTemporal): FilaCierreEstado => ({
   adBlueLitros: '',
 });
 
-const SI_NO = [
-  { valor: 'no' as const, label: 'No' },
-  { valor: 'si' as const, label: 'Sí' },
-];
-
-function PreguntaSiNo({
-  pregunta,
-  valor,
-  onChange,
-}: {
-  pregunta: string;
-  valor: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{pregunta}</Label>
-      <Segmentado
-        etiqueta={pregunta}
-        valor={valor ? 'si' : 'no'}
-        onChange={(v) => onChange(v === 'si')}
-        opciones={SI_NO}
-      />
-    </div>
-  );
-}
-
 /**
  * «Cerrar y generar informe» del supervisor temporal: el informe de actividad
  * en papel de SIMA, digitalizado. Cierra TODAS sus tarjetas abiertas (una fila
@@ -112,8 +85,6 @@ export function CierreTemporalForm({
       observaciones: '',
       supervisor1: supervisorNombre,
       supervisor2: '',
-      fotosEnviadas: false,
-      infoSubidaApp: false,
     };
   });
   const cambiar = <K extends keyof DatosInforme>(campo: K, valor: DatosInforme[K]) =>
@@ -233,17 +204,6 @@ export function CierreTemporalForm({
       <Campo label="Supervisor responsable 2">
         <Input value={datos.supervisor2} maxLength={120} onChange={(e) => cambiar('supervisor2', e.target.value)} />
       </Campo>
-
-      <PreguntaSiNo
-        pregunta="¿Se enviaron fotos de lo realizado?"
-        valor={datos.fotosEnviadas}
-        onChange={(v) => cambiar('fotosEnviadas', v)}
-      />
-      <PreguntaSiNo
-        pregunta="¿Se subió información a la app?"
-        valor={datos.infoSubidaApp}
-        onChange={(v) => cambiar('infoSubidaApp', v)}
-      />
 
       <Boton ancho onClick={() => void enviar()} disabled={crear.isPending || leyendoFoto || tarjetas.length === 0}>
         {crear.isPending ? 'Enviando informe…' : 'Enviar informe'} <ArrowRight className="size-[19px]" />

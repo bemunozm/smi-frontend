@@ -18,12 +18,8 @@ const COLUMNAS = [
   { header: 'Observaciones', key: 'observaciones', width: 40 },
   { header: 'Supervisor responsable 1', key: 'responsable1', width: 24 },
   { header: 'Supervisor responsable 2', key: 'responsable2', width: 24 },
-  { header: '¿Fotos enviadas?', key: 'fotosEnviadas', width: 16 },
-  { header: '¿Info subida a la app?', key: 'infoSubidaApp', width: 20 },
   { header: 'AdBlue (L)', key: 'adBlue', width: 12 },
 ] as const;
-
-const siNo = (v: boolean) => (v ? 'Sí' : 'No');
 
 /** `dd-mm-yyyy`, como en la planilla del cliente. */
 const legible = (dia: string) => dia.split('-').reverse().join('-');
@@ -69,8 +65,6 @@ export async function construirExcelInformesTemporales(informes: InformeTemporal
       observaciones: informe.observaciones ?? '',
       responsable1: informe.supervisorResponsable1,
       responsable2: informe.supervisorResponsable2 ?? '',
-      fotosEnviadas: siNo(informe.fotosEnviadas),
-      infoSubidaApp: siNo(informe.infoSubidaApp),
     };
     const tarjetas = informe.tarjetas.length > 0 ? informe.tarjetas : [null];
     for (const t of tarjetas) {

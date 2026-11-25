@@ -61,8 +61,6 @@ const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | '
   observaciones: 'Sin novedades',
   supervisorResponsable1: 'Ana Soto',
   supervisorResponsable2: null,
-  fotosEnviadas: true,
-  infoSubidaApp: false,
   supervisorId: 's1',
   supervisorNombre: 'Ana Soto',
   inicio: '2026-11-20T10:00:00.000Z',

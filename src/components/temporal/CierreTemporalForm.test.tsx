@@ -82,7 +82,6 @@ describe('CierreTemporalForm', () => {
     fireEvent.change(screen.getByLabelText('Nombre de la persona 1 de la actividad 1'), {
       target: { value: 'Juan Pérez' },
     });
-    fireEvent.click(within(screen.getByRole('group', { name: '¿Se enviaron fotos de lo realizado?' })).getByText('Sí'));
 
     fireEvent.click(screen.getByRole('button', { name: /Enviar informe/ }));
 
@@ -91,8 +90,6 @@ describe('CierreTemporalForm', () => {
     expect(informe).toMatchObject({
       actividad1: 'Limpieza de cancha',
       supervisorResponsable1: 'Pedro Soto',
-      fotosEnviadas: true,
-      infoSubidaApp: false,
       personal: [{ actividad: 1, operatorId: null, nombre: 'Juan Pérez' }],
     });
     expect(informe.id).toBe(INFORME_ID);
