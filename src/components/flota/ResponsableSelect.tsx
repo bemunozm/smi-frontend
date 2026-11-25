@@ -8,8 +8,8 @@ import { ROLES } from '../../types/roles';
 /**
  * A cargo de quién está el equipo. En un pesado es el supervisor; un liviano
  * no lleva operador y lo usa cualquiera que se mueva en faena: supervisor,
- * mantenedor, administrador o prevencionista (`PATCH /equipment/:id/assignment`
- * admite esos cuatro roles en livianos).
+ * mantenedor, administrador, prevencionista o supervisor temporal (`PATCH
+ * /equipment/:id/assignment` admite esos cinco roles en livianos).
  *
  * La lista va separada por rol, con un título por grupo: con todos mezclados
  * no se distinguía quién era supervisor y quién mantenedor o administrador.
@@ -27,6 +27,7 @@ export function ResponsableSelect({
   const { data: mantenedores } = useUsers({ role: ROLES.MANTENEDOR }, liviano);
   const { data: administradores } = useUsers({ role: ROLES.ADMIN }, liviano);
   const { data: prevencionistas } = useUsers({ role: ROLES.PREVENCIONISTA }, liviano);
+  const { data: temporales } = useUsers({ role: ROLES.SUPERVISOR_TEMPORAL }, liviano);
 
   // En un pesado solo el supervisor de la cuadrilla; el resto de los grupos
   // es solo para livianos. Un grupo sin personas no muestra su título.
@@ -42,6 +43,7 @@ export function ResponsableSelect({
             usuarios: (administradores ?? []).filter((u) => u.usesLightVehicle),
           },
           { titulo: 'Prevención de riesgos', rol: 'Prevencionista', usuarios: prevencionistas ?? [] },
+          { titulo: 'Supervisión temporal', rol: 'Supervisor temporal', usuarios: temporales ?? [] },
         ]
       : []),
   ].filter((g) => g.usuarios.length > 0);

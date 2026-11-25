@@ -266,8 +266,8 @@ export const router = createBrowserRouter([
             ],
           },
           // Supervisor temporal — shell propio: abre equipos y los cierra
-          // juntos en un reporte (con el historial de los que envió) y
-          // registra hallazgos (la misma vista de Terreno).
+          // juntos en un reporte (con el historial de los que envió), registra
+          // el uso de su camioneta y los hallazgos (la misma vista de Terreno).
           {
             element: <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR_TEMPORAL]} />,
             children: [
@@ -275,6 +275,9 @@ export const router = createBrowserRouter([
                 element: <TemporalLayout />,
                 children: [
                   { path: '/temporal', element: <SupervisorTemporalView /> },
+                  // Su camioneta, aparte del informe (igual que el prevencionista,
+                  // sin «Ver camioneta»: la ficha vive en Equipos, que no abre).
+                  { path: '/temporal/camioneta', element: <MiCamionetaView conFicha={false} /> },
                   { path: '/temporal/hallazgos', element: <HallazgosView /> },
                 ],
               },

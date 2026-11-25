@@ -44,6 +44,8 @@ const PREP_BY_ROUTE: Readonly<Record<string, readonly PrepKey[]>> = {
   // Supervisor temporal: sus equipos, operadores para las tarjetas, sus tarjetas
   // y el historial de los informes que envió.
   '/temporal': ['equipment', 'operators', 'shiftCards', 'informesTemporales'],
+  // Su camioneta: lo mismo que `/camioneta` del prevencionista.
+  '/temporal/camioneta': ['equipment', 'shiftCards'],
   // Sus hallazgos: la lista y los equipos que ofrece el formulario.
   '/temporal/hallazgos': ['hallazgos', 'equipment'],
   // `dailyChecklists`: el supervisor valida los chequeos (M3). `reporteDiario`:
@@ -78,7 +80,7 @@ const RUTAS_POR_ROL: Readonly<Record<Role, readonly string[]>> = {
   // línea, como las del administrador: no tienen lista que precargar.
   [ROLES.SECRETARIA]: ['/', '/notificaciones'],
   [ROLES.PREVENCIONISTA]: ['/camioneta', '/notificaciones'],
-  [ROLES.SUPERVISOR_TEMPORAL]: ['/temporal', '/temporal/hallazgos', '/notificaciones'],
+  [ROLES.SUPERVISOR_TEMPORAL]: ['/temporal', '/temporal/camioneta', '/temporal/hallazgos', '/notificaciones'],
 };
 
 /** Sin rol reconocido (la barra de Terreno antes de resolver la sesión) se prepara

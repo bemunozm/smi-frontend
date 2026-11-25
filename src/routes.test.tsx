@@ -40,6 +40,13 @@ describe('routes', () => {
     expect(findGuardOf(router.routes as unknown as Rt[], '/temporal/reportes')).toBeUndefined();
   });
 
+  it('«Mi camioneta» del supervisor temporal cuelga de su guard, aparte de la del prevencionista', () => {
+    const guard = findGuardOf(router.routes as unknown as Rt[], '/temporal/camioneta');
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    const prevencion = findGuardOf(router.routes as unknown as Rt[], '/camioneta');
+    expect(prevencion?.element?.props?.allowedRoles).not.toContain(ROLES.SUPERVISOR_TEMPORAL);
+  });
+
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
     for (const path of [
       '/hallazgos',

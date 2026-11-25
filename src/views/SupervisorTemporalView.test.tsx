@@ -292,6 +292,56 @@ describe('SupervisorTemporalView', () => {
     expect(botonCerrar().hasAttribute('disabled')).toBe(false);
   });
 
+  it('su camioneta y los livianos ajenos («Mi camioneta») no se listan ni van al informe', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    const camioneta = {
+      ...tarjeta('card_cam'),
+      equipoId: 'eq_l1',
+      equipo: { internalCode: 'CM-001', type: 'Camioneta', controlUnit: 'KM', equipmentClass: 'LIGHT' },
+      operatorId: null,
+      operatorName: '',
+      temporal: false,
+    } satisfies ShiftCardResponse;
+    listMineMock.mockResolvedValue([
+      { ...tarjeta(), temporal: true },
+      camioneta,
+      { ...camioneta, id: 'card_ajena', supervisorId: 'sup_2', supervisorName: 'Marta Díaz' },
+    ]);
+    renderView();
+    expect(await screen.findByText('CA-003')).toBeTruthy();
+    expect(screen.queryByText('CM-001')).toBeNull();
+    expect(screen.getByText('1 equipo abierto')).toBeTruthy();
+  });
+
+  it('una apertura pendiente de «Mi camioneta» no se lista; una de «Mis equipos» sí', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValue([]);
+    const apertura = (id: string, extra: Record<string, unknown>) => ({
+      id,
+      type: 'openCard',
+      userId: 'tmp_1',
+      status: 'pending',
+      payload: {
+        id,
+        equipoId: 'eq_1',
+        operatorId: 'op_1',
+        valorInicial: 1200,
+        shiftDate: '2026-11-24',
+        shiftType: 'DIURNO',
+        capturedAt: '2026-11-24T11:00:00.000Z',
+        ...extra,
+      },
+    });
+    opsMock.current = [
+      apertura('op_equipo', {}),
+      apertura('op_cam', { camioneta: true }),
+    ] as unknown as OutboxOp[];
+    renderView();
+    expect(await screen.findByText('CA-003')).toBeTruthy();
+    expect(screen.getAllByText('CA-003')).toHaveLength(1);
+    expect(screen.getByText('1 equipo abierto')).toBeTruthy();
+  });
+
   it('una tarjeta que ya va en un informe pendiente de envío no se lista', async () => {
     equipmentListMock.mockResolvedValue([CARGADOR]);
     listMineMock.mockResolvedValue([tarjeta()]);

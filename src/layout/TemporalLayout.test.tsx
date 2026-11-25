@@ -46,6 +46,7 @@ function renderLayout(size: 'phone' | 'desktop', ruta = '/temporal') {
       <Routes>
         <Route element={<TemporalLayout />}>
           <Route path="/temporal" element={<p>contenido</p>} />
+          <Route path="/temporal/camioneta" element={<p>camioneta</p>} />
           <Route path="/temporal/hallazgos" element={<p>hallazgos</p>} />
         </Route>
       </Routes>
@@ -65,18 +66,33 @@ describe('TemporalLayout', () => {
     expect(screen.getByText('contenido')).toBeTruthy();
   });
 
-  it('dos pestañas en orden: Mis equipos y Hallazgos (barra inferior en celular)', () => {
+  it('tres pestañas en orden: Mis equipos, Mi camioneta y Hallazgos (barra inferior en celular)', () => {
     renderLayout('phone');
     const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
     const enlaces = within(nav).getAllByRole('link');
-    expect(enlaces.map((a) => a.textContent)).toEqual(['Equipos', 'Hallazgos']);
-    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual(['/temporal', '/temporal/hallazgos']);
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Equipos', 'Camioneta', 'Hallazgos']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual([
+      '/temporal',
+      '/temporal/camioneta',
+      '/temporal/hallazgos',
+    ]);
   });
 
   it('en escritorio las pestañas van en el header con su nombre largo', () => {
     renderLayout('desktop');
     const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Mis equipos', 'Hallazgos']);
+    const nombres = within(nav)
+      .getAllByRole('link')
+      .map((a) => a.textContent);
+    expect(nombres).toEqual(['Mis equipos', 'Mi camioneta', 'Hallazgos']);
+  });
+
+  it('en «Mi camioneta» solo esa pestaña queda activa', () => {
+    renderLayout('phone', '/temporal/camioneta');
+    expect(screen.getByText('camioneta')).toBeTruthy();
+    const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
+    expect(within(nav).getByRole('link', { name: 'Camioneta' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Equipos' }).getAttribute('aria-current')).toBeNull();
   });
 
   it('en «Hallazgos» solo esa pestaña queda activa, no «Mis equipos»', () => {

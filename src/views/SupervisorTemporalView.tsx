@@ -144,7 +144,8 @@ function FilaAbierta({
  * Offline-first como Terreno: la lista junta `mine` con las aperturas que
  * siguen en la cola (`useShiftProjection`). Las tarjetas de un informe que
  * todavía no llega al servidor se sacan de la lista (siguen abiertas en `mine`
- * hasta que se sincronice) para que no se cierren dos veces.
+ * hasta que se sincronice) para que no se cierren dos veces. Su camioneta
+ * va aparte, en «Mi camioneta» (`MiCamionetaView`), y no entra al informe.
  */
 export function SupervisorTemporalView() {
   const { user } = useCurrentUser();
@@ -165,6 +166,7 @@ export function SupervisorTemporalView() {
     ops,
     supervisor: nombre,
     userId,
+    rolTemporal: true,
   });
 
   // El formulario abierto es una «sesión» con su `informeId`, generado al abrirlo.
@@ -175,8 +177,10 @@ export function SupervisorTemporalView() {
     () => cardIdsEnInformePendiente(ops, sesionCierre?.informeId),
     [ops, sesionCierre?.informeId],
   );
+  // Solo las de su informe: `mine` también trae su camioneta y los livianos
+  // abiertos por otros («Mi camioneta»), que se cierran sueltos.
   const abiertas: TarjetaTemporal[] = proyeccion.tarjetas
-    .filter((t) => t.estado === 'curso' && !enInforme.has(t.id))
+    .filter((t) => t.temporal !== false && t.estado === 'curso' && !enInforme.has(t.id))
     .map((t) => {
       const equipo = equipos.find((e) => e.id === t.equipoId);
       return {
