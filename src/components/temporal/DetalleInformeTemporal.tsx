@@ -22,7 +22,8 @@ function Dato({ label, value }: { label: string; value: string }) {
 
 /**
  * Contenido del detalle de un informe temporal: datos, personal por actividad,
- * observaciones y cada equipo con sus lecturas, litros y foto del surtidor.
+ * observaciones, la foto del report en papel (si la tiene) y cada equipo con
+ * sus lecturas, litros y foto del surtidor.
  * Lo comparten el panel de oficina (`InformesTemporalesAdminView`, dentro de su
  * modal y con «Corregir» por tarjeta) y el historial de reportes del supervisor temporal
  * (`HistorialReportes`, solo lectura: sin `onCorregirTarjeta`).
@@ -61,6 +62,12 @@ export function DetalleInformeTemporal({
         <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">Observaciones</span>
         <p className="m-0 text-sm whitespace-pre-wrap text-foreground">{informe.observaciones ?? '—'}</p>
       </div>
+      {informe.fotoUrl ? (
+        <div className="flex flex-col gap-1.5 border-t border-separator pt-2.5">
+          <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">Foto del report</span>
+          <RecordPhoto alt="Foto del report" src={informe.fotoUrl} maxHeightClassName="max-h-80" />
+        </div>
+      ) : null}
       <div className="flex flex-col gap-3">
         <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">
           Equipos · {informe.tarjetas.length}

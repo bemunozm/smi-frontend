@@ -90,6 +90,9 @@ export const InformeTemporalSchema = z.object({
   /** ISO: apertura de la primera tarjeta y momento del envío. */
   inicio: z.string(),
   fin: z.string(),
+  /** URL firmada de la foto del report en papel (hoy solo la traen los «Report»
+   * migrados); `null`/ausente si no tiene. */
+  fotoUrl: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
   tarjetas: z.array(InformeTemporalTarjetaSchema),
