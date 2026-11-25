@@ -313,6 +313,26 @@ describe('SupervisorTemporalView', () => {
     expect(screen.getByText('1 equipo abierto')).toBeTruthy();
   });
 
+  it('sin el dato `temporal` (respuesta guardada) un liviano ajeno no se lista; el propio sí', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValue([
+      tarjeta(),
+      {
+        ...tarjeta('card_ajena'),
+        equipoId: 'eq_l1',
+        equipo: { internalCode: 'CM-009', type: 'Camioneta', controlUnit: 'KM', equipmentClass: 'LIGHT' },
+        operatorId: null,
+        operatorName: '',
+        supervisorId: 'sup_2',
+        supervisorName: 'Marta Díaz',
+      },
+    ]);
+    renderView();
+    expect(await screen.findByText('CA-003')).toBeTruthy();
+    expect(screen.queryByText('CM-009')).toBeNull();
+    expect(screen.getByText('1 equipo abierto')).toBeTruthy();
+  });
+
   it('una apertura pendiente de «Mi camioneta» no se lista; una de «Mis equipos» sí', async () => {
     equipmentListMock.mockResolvedValue([CARGADOR]);
     listMineMock.mockResolvedValue([]);

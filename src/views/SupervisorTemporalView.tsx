@@ -178,9 +178,12 @@ export function SupervisorTemporalView() {
     [ops, sesionCierre?.informeId],
   );
   // Solo las de su informe: `mine` también trae su camioneta y los livianos
-  // abiertos por otros («Mi camioneta»), que se cierran sueltos.
+  // abiertos por otros («Mi camioneta»), que se cierran sueltos. Además, solo
+  // las suyas: una respuesta guardada sin `temporal` no deja colar las ajenas.
   const abiertas: TarjetaTemporal[] = proyeccion.tarjetas
-    .filter((t) => t.temporal !== false && t.estado === 'curso' && !enInforme.has(t.id))
+    .filter(
+      (t) => t.temporal !== false && t.supervisorId === userId && t.estado === 'curso' && !enInforme.has(t.id),
+    )
     .map((t) => {
       const equipo = equipos.find((e) => e.id === t.equipoId);
       return {
