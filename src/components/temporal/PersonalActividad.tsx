@@ -1,10 +1,12 @@
 import { PenLine, Trash2, UserPlus } from 'lucide-react';
 
-import { OperatorPicker } from '../operators/OperatorPicker';
-import { Campo, Input, Label } from '../terreno/ui';
+import { Campo, Input, Label, Selector } from '../terreno/ui';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { useOperators } from '../../hooks/useOperators';
+import { opcionesOperador } from '../../lib/operadores-habituales';
 import { MAX_PERSONAL_POR_ACTIVIDAD, nuevaLinea, type PersonaForm } from '../../lib/informe-temporal';
 
-/** Una línea del personal: del catálogo (`OperatorPicker`) o escrita a mano (personal de apoyo). */
+/** Una línea del personal: del catálogo (selector del kit de Terreno) o escrita a mano (personal de apoyo). */
 export interface LineaPersonal extends PersonaForm {
   /** Solo para la `key` de React: quitar una línea del medio no corre lo
    * escrito (ni el operador elegido) a la línea de abajo. No viaja al backend. */
@@ -28,6 +30,8 @@ export function PersonalActividad({
   onChange: (lineas: LineaPersonal[]) => void;
   error?: string;
 }) {
+  const { data: operadores = [] } = useOperators({ isActive: true });
+  const supervisorId = useCurrentUser().user?.id;
   const lleno = lineas.length >= MAX_PERSONAL_POR_ACTIVIDAD;
   const cambiar = (i: number, cambio: Partial<LineaPersonal>) =>
     onChange(lineas.map((l, j) => (j === i ? { ...l, ...cambio } : l)));
@@ -43,11 +47,17 @@ export function PersonalActividad({
         <div key={linea.id} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             {linea.modo === 'catalogo' ? (
-              <OperatorPicker
-                label={`Persona ${i + 1}`}
-                value={linea.operatorId}
-                onChange={(op) => cambiar(i, { operatorId: op?.id ?? null, nombre: op?.name ?? '' })}
-              />
+              <Campo label={`Persona ${i + 1}`}>
+                <Selector
+                  etiqueta={`Persona ${i + 1}`}
+                  placeholder="Elige el operador"
+                  valor={linea.operatorId ?? ''}
+                  onChange={(id) =>
+                    cambiar(i, { operatorId: id || null, nombre: operadores.find((o) => o.id === id)?.name ?? '' })
+                  }
+                  opciones={opcionesOperador(operadores, supervisorId)}
+                />
+              </Campo>
             ) : (
               <Campo label={`Persona ${i + 1}`}>
                 <Input

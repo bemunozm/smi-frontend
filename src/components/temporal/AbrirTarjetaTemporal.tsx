@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { toast } from '@heroui/react';
 import { ArrowRight } from 'lucide-react';
 
-import { OperatorPicker } from '../operators/OperatorPicker';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { useOperators } from '../../hooks/useOperators';
 import { Boton, Campo, Form, Hint, Input, Selector } from '../terreno/ui';
 import { formatDecimalInput, parseDecimal } from '../../lib/decimal';
+import { opcionesOperador } from '../../lib/operadores-habituales';
 import { fmtLectura, nombreEquipo } from '../../lib/informe-temporal';
 import { fechaDeTurno, toDateOnly, turnoDe } from '../../lib/turno';
 import { generateUuid } from '../../lib/uuid';
@@ -30,6 +32,8 @@ export function AbrirTarjetaTemporal({
   userId: string | undefined;
   onAbierta?: () => void;
 }) {
+  const { data: operadores = [] } = useOperators({ isActive: true });
+  const supervisorId = useCurrentUser().user?.id;
   const [equipoId, setEquipoId] = useState('');
   const [operador, setOperador] = useState<string | null>(null);
   const [lectura, setLectura] = useState('');
@@ -98,7 +102,15 @@ export function AbrirTarjetaTemporal({
       </Campo>
 
       {equipo && !liviano && (
-        <OperatorPicker value={operador} onChange={(op) => setOperador(op?.id ?? null)} label="Operador" />
+        <Campo label="Operador">
+          <Selector
+            etiqueta="Operador"
+            placeholder="Elige el operador"
+            valor={operador ?? ''}
+            onChange={(id) => setOperador(id || null)}
+            opciones={opcionesOperador(operadores, supervisorId)}
+          />
+        </Campo>
       )}
 
       <Campo
