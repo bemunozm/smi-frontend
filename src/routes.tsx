@@ -20,6 +20,8 @@ import { LoginView } from './views/LoginView';
 import { ChecklistDiarioView } from './views/ChecklistDiarioView';
 import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { PrevencionLayout } from './layout/PrevencionLayout';
+import { TemporalLayout } from './layout/TemporalLayout';
+import { SupervisorTemporalView } from './views/SupervisorTemporalView';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
 import { HistorialOperacionesView } from './views/HistorialOperacionesView';
 import { MiCamionetaView } from './views/MiCamionetaView';
@@ -35,6 +37,7 @@ import { TrabajosExtraView } from './views/TrabajosExtraView';
 import { HallazgosView } from './views/HallazgosView';
 import { HallazgosAdminView } from './views/HallazgosAdminView';
 import { TrabajosExtraAdminView } from './views/TrabajosExtraAdminView';
+import { InformesTemporalesAdminView } from './views/InformesTemporalesAdminView';
 import { CargasCombustibleAdminView } from './views/CargasCombustibleAdminView';
 import { AsistenciaView } from './views/AsistenciaView';
 import { ActivityLogView } from './views/ActivityLogView';
@@ -158,6 +161,8 @@ export const router = createBrowserRouter([
                   // Trabajos extraordinarios (filtros, alta y corrección);
                   // Terreno conserva /terreno/trabajos-extra.
                   { path: '/trabajos-extra', element: <TrabajosExtraAdminView /> },
+                  // Informes de los supervisores temporales (corregir/eliminar).
+                  { path: '/informes-temporales', element: <InformesTemporalesAdminView /> },
                   // Todas las cargas de combustible (cierres de tarjeta +
                   // manuales), con filtros y alta manual.
                   { path: '/cargas-combustible', element: <CargasCombustibleAdminView /> },
@@ -257,6 +262,24 @@ export const router = createBrowserRouter([
               {
                 element: <PrevencionLayout />,
                 children: [{ path: '/camioneta', element: <MiCamionetaView conFicha={false} /> }],
+              },
+            ],
+          },
+          // Supervisor temporal — shell propio: abre equipos y los cierra
+          // juntos en un reporte (con el historial de los que envió), registra
+          // el uso de su camioneta y los hallazgos (la misma vista de Terreno).
+          {
+            element: <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR_TEMPORAL]} />,
+            children: [
+              {
+                element: <TemporalLayout />,
+                children: [
+                  { path: '/temporal', element: <SupervisorTemporalView /> },
+                  // Su camioneta, aparte del informe (igual que el prevencionista,
+                  // sin «Ver camioneta»: la ficha vive en Equipos, que no abre).
+                  { path: '/temporal/camioneta', element: <MiCamionetaView conFicha={false} /> },
+                  { path: '/temporal/hallazgos', element: <HallazgosView /> },
+                ],
               },
             ],
           },

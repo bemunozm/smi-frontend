@@ -26,6 +26,7 @@ const {
   plantasMock,
   empresasMock,
   vencimientosMock,
+  misInformesMock,
 } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
   operatorListMock: vi.fn(),
@@ -51,6 +52,7 @@ const {
   plantasMock: vi.fn(),
   empresasMock: vi.fn(),
   vencimientosMock: vi.fn(),
+  misInformesMock: vi.fn(),
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock, resumen: resumenMock } }));
@@ -79,6 +81,7 @@ vi.mock('../api/ReporteDiarioAPI', () => ({
   listEmpresasExternas: empresasMock,
 }));
 vi.mock('../api/VencimientosAPI', () => ({ VencimientosAPI: { calendario: vencimientosMock } }));
+vi.mock('../api/InformesTemporalesAPI', () => ({ InformesTemporalesAPI: { mios: misInformesMock } }));
 
 import { usePrepareOffline } from './usePrepareOffline';
 import { queryClient } from '../lib/query-client';
@@ -91,6 +94,7 @@ import {
   HALLAZGOS_KEY,
   COMBUSTIBLE_KEY,
   HOROMETRO_KEY,
+  INFORMES_TEMPORALES_MINE_KEY,
   INTERVENCIONES_KEY,
   INVENTORY_KEY,
   OPERATORS_KEY,
@@ -128,6 +132,7 @@ beforeEach(() => {
   plantasMock.mockResolvedValue([{ id: 'pl-1' }]);
   empresasMock.mockResolvedValue([{ id: 'ee-1' }]);
   vencimientosMock.mockResolvedValue({ meses: [] });
+  misInformesMock.mockResolvedValue([{ id: 'it-7' }]);
 });
 
 afterEach(() => {
@@ -283,12 +288,22 @@ describe('usePrepareOffline por rol', () => {
     expect(ordenesListMock).not.toHaveBeenCalled();
   });
 
-  it('ADMIN: todas las listas', async () => {
+  it('ADMIN: todas las listas menos el historial de reportes del supervisor temporal', async () => {
     const resultado = await preparar(ROLES.ADMIN);
 
-    for (const key of PREP_KEYS) {
+    for (const key of PREP_KEYS.filter((k) => k !== 'informesTemporales')) {
       expect(resultado[key], key).toBe('ok');
     }
+    expect(resultado.informesTemporales).toBeUndefined();
+    expect(misInformesMock).not.toHaveBeenCalled();
+  });
+
+  it('SUPERVISOR_TEMPORAL: sus equipos, hallazgos y su historial de reportes bajo la key de la pantalla', async () => {
+    const resultado = await preparar(ROLES.SUPERVISOR_TEMPORAL);
+
+    expect(resultado).toMatchObject({ equipment: 'ok', shiftCards: 'ok', hallazgos: 'ok', informesTemporales: 'ok' });
+    expect(queryClient.getQueryData(INFORMES_TEMPORALES_MINE_KEY)).toEqual([{ id: 'it-7' }]);
+    expect(queryClient.getQueryData(HALLAZGOS_KEY)).toEqual([{ id: 'h-1' }]);
   });
 
   it('suma el panel, las notificaciones, los movimientos y la bitácora bajo las keys de las pantallas', async () => {

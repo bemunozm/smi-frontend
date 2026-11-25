@@ -24,6 +24,7 @@ function mapOpenOpToTarjeta(
   equipos: Equipment[],
   operadores: Operator[],
   supervisor: string,
+  rolTemporal: boolean,
 ): TarjetaTurno {
   const equipo = equipos.find((e) => e.id === op.payload.equipoId);
   const operador = operadores.find((o) => o.id === op.payload.operatorId);
@@ -47,6 +48,9 @@ function mapOpenOpToTarjeta(
     sinSincronizar: true,
     arrastrada: !liviano && grupo === 'anterior',
     liviano,
+    // Lo mismo que decidirá el servidor: del supervisor temporal es temporal,
+    // salvo la camioneta que abrió desde «Mi camioneta».
+    temporal: rolTemporal && op.payload.camioneta !== true,
     abiertaEl: fechaHoraCorta(op.payload.capturedAt),
     abiertaIso: op.payload.capturedAt,
   };
@@ -120,6 +124,7 @@ function mapRegisterClosedOpToTarjeta(
     sinSincronizar: true,
     arrastrada: false,
     liviano,
+    temporal: false,
     abiertaEl: fechaHoraCorta(op.payload.capturedAt),
     abiertaIso: op.payload.capturedAt,
     cerradaA: new Date(op.payload.capturedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
@@ -190,6 +195,9 @@ export interface UseShiftProjectionParams {
    * la tarjeta ya cerrada (`POST /shift-cards/closed`), nunca compite por el
    * "slot" de tarjeta abierta del equipo. */
   modoDiaPasado?: boolean;
+  /** Quien mira es supervisor temporal: sus aperturas pendientes son
+   * temporales (van al informe) salvo las de «Mi camioneta». */
+  rolTemporal?: boolean;
 }
 
 export interface UseShiftProjectionResult {
@@ -228,6 +236,7 @@ export function useShiftProjection({
   supervisor,
   userId,
   modoDiaPasado = false,
+  rolTemporal = false,
 }: UseShiftProjectionParams): UseShiftProjectionResult {
   const opsAbrir = useMemo(() => ops.filter((op): op is OpenCardOp => op.type === 'openCard'), [ops]);
   const opsCerrar = useMemo(() => ops.filter((op): op is CloseCardOp => op.type === 'closeCard'), [ops]);
@@ -249,7 +258,7 @@ export function useShiftProjection({
     // todavía no se reflejó en este render — se ignora la sintética.
     opsAbrir.forEach((op) => {
       if (porId.has(op.id)) return;
-      porId.set(op.id, mapOpenOpToTarjeta(op, ctx, equipos, operadores, supervisor));
+      porId.set(op.id, mapOpenOpToTarjeta(op, ctx, equipos, operadores, supervisor, rolTemporal));
     });
     // Backfill pendiente: mismo criterio que la apertura (el servidor gana).
     opsRegistrarCerrada.forEach((op) => {
@@ -281,6 +290,7 @@ export function useShiftProjection({
     operadores,
     supervisor,
     userId,
+    rolTemporal,
   ]);
 
   const pesadas = tarjetas.filter((t) => !t.liviano);

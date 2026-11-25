@@ -20,10 +20,11 @@ export const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 export const REPROMPT_AFTER_MS = 15 * 60 * 1000;
 
 /**
- * Shells con formularios de campo (ver `routes.tsx`): Terreno, Taller y la
- * camioneta del prevencionista. `/login` e `/inicio` tampoco son del panel.
+ * Shells con formularios de campo (ver `routes.tsx`): Terreno, Taller, la
+ * camioneta del prevencionista y el supervisor temporal. `/login` e `/inicio`
+ * tampoco son del panel.
  */
-const RUTAS_FUERA_DEL_PANEL = ['/terreno', '/mantenimiento', '/camioneta', '/login', '/inicio'];
+const RUTAS_FUERA_DEL_PANEL = ['/terreno', '/mantenimiento', '/camioneta', '/temporal', '/login', '/inicio'];
 
 /** `true` si `pathname` es una pantalla del panel de administración (`AppLayout`). */
 export function isAdminPanelPath(pathname: string): boolean {

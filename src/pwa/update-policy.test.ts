@@ -9,8 +9,17 @@ describe('isAdminPanelPath', () => {
     }
   });
 
-  it('Terreno, Taller, la camioneta del prevencionista, login e inicio no', () => {
-    for (const ruta of ['/terreno', '/terreno/registro', '/mantenimiento/ordenes', '/camioneta', '/login', '/inicio']) {
+  it('Terreno, Taller, la camioneta del prevencionista, el supervisor temporal, login e inicio no', () => {
+    for (const ruta of [
+      '/terreno',
+      '/terreno/registro',
+      '/mantenimiento/ordenes',
+      '/camioneta',
+      '/temporal',
+      '/temporal/camioneta',
+      '/login',
+      '/inicio',
+    ]) {
       expect(isAdminPanelPath(ruta)).toBe(false);
     }
   });

@@ -29,6 +29,7 @@ const ETIQUETAS: Record<PrepKey, string> = {
   reporteDiario: 'Reportes diarios y sus catálogos precargados',
   horometro: 'Equipos en turno precargados',
   combustible: 'Cargas de combustible precargadas',
+  informesTemporales: 'Historial de reportes precargado',
 };
 
 type Estado = 'ok' | 'error' | 'aviso';

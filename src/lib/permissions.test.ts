@@ -6,12 +6,13 @@ import {
   MOVEMENT_ACTIONS,
   WRITE_ROLES,
   canCloseShiftCardFromFleet,
+  canEditShiftCard,
   canOpenPath,
   canWrite,
   canWriteAny,
 } from './permissions';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA, SUPERVISOR_TEMPORAL } = ROLES;
 
 describe('WRITE_ROLES', () => {
   it('cubre exactamente las escrituras del registro: ninguna queda sin decidir ni sobra una', () => {
@@ -47,6 +48,10 @@ describe('WRITE_ROLES', () => {
     ['orden.finalizar', [ADMIN, MANTENEDOR, SECRETARIA]],
     ['umbral.create', [ADMIN]],
     ['orden.update', [ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA]],
+    // SECRETARIA: solo tarjetas temporales (el backend le rechaza las demás).
+    ['shiftCard.edit', [ADMIN, SUPERVISOR, SECRETARIA]],
+    // El supervisor temporal registra y corrige hallazgos desde su shell.
+    ['hallazgo.edit', [ADMIN, SUPERVISOR, SECRETARIA, SUPERVISOR_TEMPORAL]],
   ])('%s la hacen %j', (accion, roles) => {
     expect([...WRITE_ROLES[accion]].sort()).toEqual([...roles].sort());
   });
@@ -113,5 +118,15 @@ describe('canCloseShiftCardFromFleet (SECRETARIA)', () => {
   it('cerrar la tarjeta de un turno abierto sigue siendo solo del administrador', () => {
     expect(canCloseShiftCardFromFleet(SECRETARIA)).toBe(false);
     expect(canCloseShiftCardFromFleet(ADMIN)).toBe(true);
+  });
+});
+
+describe('canEditShiftCard', () => {
+  it('una tarjeta normal la corrigen ADMIN y SUPERVISOR, no la SECRETARIA (solo las temporales)', () => {
+    expect(canEditShiftCard(ADMIN)).toBe(true);
+    expect(canEditShiftCard(SUPERVISOR)).toBe(true);
+    expect(canEditShiftCard(SECRETARIA)).toBe(false);
+    expect(canEditShiftCard(MANTENEDOR)).toBe(false);
+    expect(canEditShiftCard(null)).toBe(false);
   });
 });

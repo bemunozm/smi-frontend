@@ -6,10 +6,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { MiCamionetaView } from './MiCamionetaView';
 import type { ShiftCardResponse } from '../types/shift';
 
-const { equipmentListMock, listMineMock, enqueueOpenCardMock } = vi.hoisted(() => ({
+const { equipmentListMock, listMineMock, enqueueOpenCardMock, sesion } = vi.hoisted(() => ({
   equipmentListMock: vi.fn(),
   listMineMock: vi.fn(),
   enqueueOpenCardMock: vi.fn(),
+  sesion: { id: 'mant_1', name: 'Mario Mantenedor', role: 'MANTENEDOR' },
 }));
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
@@ -17,7 +18,7 @@ vi.mock('../api/ShiftCardAPI', () => ({ ShiftCardAPI: { listMine: listMineMock }
 vi.mock('../offline/outbox', () => ({ enqueueOpenCard: enqueueOpenCardMock, enqueueCloseCard: vi.fn() }));
 vi.mock('../offline/useOutboxOps', () => ({ useOutboxOps: () => [] }));
 vi.mock('../hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { id: 'mant_1', name: 'Mario Mantenedor', email: 'm@smi.local' }, role: 'MANTENEDOR' }),
+  useCurrentUser: () => ({ user: { id: sesion.id, name: sesion.name, email: 'm@smi.local' }, role: sesion.role }),
 }));
 vi.mock('@heroui/react', async (original) => ({
   ...(await original<typeof import('@heroui/react')>()),
@@ -36,9 +37,10 @@ const CAMIONETA = {
   openShift: null,
 };
 
-function tarjeta(supervisorId: string): ShiftCardResponse {
+function tarjeta(supervisorId: string, extra: Partial<ShiftCardResponse> = {}): ShiftCardResponse {
   return {
-    id: `card_${supervisorId}`,
+    ...extra,
+    id: extra.id ?? `card_${supervisorId}`,
     equipoId: 'eq_l1',
     equipo: { internalCode: 'CM-001', type: 'Camioneta', controlUnit: 'KM', equipmentClass: 'LIGHT' },
     operatorId: null,
@@ -75,6 +77,7 @@ function renderCard() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  Object.assign(sesion, { id: 'mant_1', name: 'Mario Mantenedor', role: 'MANTENEDOR' });
 });
 
 describe('MiCamionetaView (mantenedor)', () => {
@@ -99,6 +102,8 @@ describe('MiCamionetaView (mantenedor)', () => {
     expect(userId).toBe('mant_1');
     expect(payload).toMatchObject({ equipoId: 'eq_l1', valorInicial: 45120 });
     expect('operatorId' in payload).toBe(false);
+    // Solo el supervisor temporal marca su camioneta.
+    expect('camioneta' in payload).toBe(false);
   });
 
   it('con su camioneta abierta: la muestra y ofrece cerrarla al cargar combustible', async () => {
@@ -129,5 +134,63 @@ describe('MiCamionetaView (mantenedor)', () => {
 
     expect(await screen.findByText('Usar una camioneta')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Cerrar camioneta/ })).toBeNull();
+  });
+});
+
+describe('MiCamionetaView (supervisor temporal)', () => {
+  function comoTemporal() {
+    Object.assign(sesion, { id: 'tmp_1', name: 'Tomás Rojas', role: 'SUPERVISOR_TEMPORAL' });
+  }
+
+  it('la apertura va marcada como camioneta: queda fuera de su informe', async () => {
+    comoTemporal();
+    equipmentListMock.mockResolvedValue([CAMIONETA]);
+    listMineMock.mockResolvedValue([]);
+    enqueueOpenCardMock.mockResolvedValue(undefined);
+    renderCard();
+
+    const boton = await screen.findByRole('button', { name: /Empezar a usarla/ });
+    fireEvent.click(screen.getByLabelText('Camioneta'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-001/ }));
+    await waitFor(() => expect(boton.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(boton);
+
+    await waitFor(() => expect(enqueueOpenCardMock).toHaveBeenCalledTimes(1));
+    const [userId, payload] = enqueueOpenCardMock.mock.calls[0]!;
+    expect(userId).toBe('tmp_1');
+    expect(payload).toMatchObject({ equipoId: 'eq_l1', valorInicial: 45120, camioneta: true });
+  });
+
+  it('su camioneta (no temporal) se cierra acá', async () => {
+    comoTemporal();
+    equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Tomás Rojas' } }]);
+    listMineMock.mockResolvedValue([tarjeta('tmp_1', { temporal: false })]);
+    renderCard();
+
+    expect(await screen.findByRole('button', { name: /Cerrar camioneta/ })).toBeTruthy();
+    expect(screen.getByText('En uso')).toBeTruthy();
+  });
+
+  it('un liviano de su informe («Mis equipos») no aparece ni se ofrece cerrar', async () => {
+    comoTemporal();
+    equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Tomás Rojas' } }]);
+    listMineMock.mockResolvedValue([tarjeta('tmp_1', { temporal: true, shift: null })]);
+    renderCard();
+
+    expect(await screen.findByText('Usar una camioneta')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Cerrar camioneta/ })).toBeNull();
+    expect(screen.queryByText('En uso')).toBeNull();
+    // Sigue ocupada: no se ofrece abrirla de nuevo.
+    expect(screen.getByText('No hay camionetas libres: todas tienen una tarjeta abierta.')).toBeTruthy();
+  });
+
+  it('la camioneta abierta por otra persona se puede cerrar, como el prevencionista', async () => {
+    comoTemporal();
+    equipmentListMock.mockResolvedValue([{ ...CAMIONETA, openShift: { supervisorName: 'Marta Díaz' } }]);
+    listMineMock.mockResolvedValue([tarjeta('sup_2', { temporal: false })]);
+    renderCard();
+
+    expect(await screen.findByText('Abiertas por otros')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cerrar camioneta/ })).toBeTruthy();
   });
 });

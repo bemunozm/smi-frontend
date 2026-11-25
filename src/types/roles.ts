@@ -16,6 +16,9 @@ export const ROLES = {
   /** Prevencionista de riesgos: solo «Mi camioneta» (km de salida y de
    * carga de combustible de los livianos), en `/camioneta`. */
   PREVENCIONISTA: 'PREVENCIONISTA',
+  /** Supervisor temporal: horario libre, ve solo `/temporal` (abre equipos y
+   * los cierra juntos en un reporte). */
+  SUPERVISOR_TEMPORAL: 'SUPERVISOR_TEMPORAL',
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];

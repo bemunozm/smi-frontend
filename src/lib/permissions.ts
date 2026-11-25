@@ -1,7 +1,7 @@
 import type { EndpointKey } from '../offline/endpoints';
 import { ROLES, type Role } from '../types/roles';
 
-const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA } = ROLES;
+const { ADMIN, SUPERVISOR, MANTENEDOR, SECRETARIA, SUPERVISOR_TEMPORAL } = ROLES;
 
 /**
  * Quién puede hacer cada escritura: espejo de los `@Roles` del backend
@@ -83,13 +83,22 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   'operator.update': [ADMIN, SUPERVISOR],
   'operator.delete': [ADMIN],
   // Terreno
-  'shiftCard.edit': [ADMIN, SUPERVISOR],
+  // SECRETARIA solo corrige lecturas/litros de las tarjetas del supervisor
+  // temporal (detalle del informe): el backend le rechaza cualquier otra, y
+  // las pantallas de tarjetas normales la dejan fuera (`canEditShiftCard`).
+  'shiftCard.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   // SECRETARIA completa y corrige lo que un supervisor olvidó (pedido del
-  // cliente, 03/11).
-  'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  // cliente, 03/11). El supervisor temporal registra y corrige hallazgos
+  // desde su shell, como el supervisor (no los elimina).
+  'hallazgo.edit': [ADMIN, SUPERVISOR, SECRETARIA, SUPERVISOR_TEMPORAL],
   'trabajoExtra.edit': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.create': [ADMIN, SUPERVISOR, SECRETARIA],
   'reporteDiario.edit': [ADMIN, SUPERVISOR, SECRETARIA],
+  // El informe lo envía solo el supervisor temporal (cierra SUS tarjetas);
+  // lo corrige oficina y lo elimina el administrador.
+  'informeTemporal.create': [SUPERVISOR_TEMPORAL],
+  'informeTemporal.update': [ADMIN, SECRETARIA],
+  'informeTemporal.delete': [ADMIN],
 };
 
 /** `true` si `role` puede hacer la escritura `action`. Sin rol (sesión sin
@@ -111,6 +120,12 @@ export function canWriteAny(role: Role | null | undefined, actions: readonly End
  */
 export function canCloseShiftCardFromFleet(role: Role | null | undefined): boolean {
   return role === ADMIN;
+}
+
+/** Corregir una tarjeta de turno normal (no temporal): ADMIN y su supervisor.
+ * La SECRETARIA tiene `shiftCard.edit` solo para las tarjetas temporales. */
+export function canEditShiftCard(role: Role | null | undefined): boolean {
+  return canWrite(role, 'shiftCard.edit') && role !== SECRETARIA;
 }
 
 /** Eliminar un hallazgo: `DELETE /api/hallazgos/:id` es solo ADMIN. */
@@ -139,6 +154,12 @@ export function canDeleteCombustible(role: Role | null | undefined): boolean {
  * solo ADMIN — mismo criterio que los hallazgos. */
 export function canDeleteTrabajoExtra(role: Role | null | undefined): boolean {
   return role === ADMIN;
+}
+
+/** Eliminar un informe del supervisor temporal: `DELETE /api/informes-temporales/:id`
+ * es solo ADMIN (lo que declara `WRITE_ROLES['informeTemporal.delete']`). */
+export function canDeleteInformeTemporal(role: Role | null | undefined): boolean {
+  return canWrite(role, 'informeTemporal.delete');
 }
 
 /** Eliminar un reporte de producción diaria: `DELETE /api/reporte-diario/:id`
@@ -172,6 +193,7 @@ const RUTAS_SECRETARIA = [
   '/reportes-diarios',
   '/hallazgos',
   '/trabajos-extra',
+  '/informes-temporales',
   '/cargas-combustible',
   '/mantenciones',
   '/asistencia',

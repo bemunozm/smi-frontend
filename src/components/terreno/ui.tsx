@@ -991,28 +991,38 @@ export function Hoja({
   titulo,
   bajada,
   eyebrow,
+  amplia,
+  cerrarAlTocarFuera = true,
+  cerrarDeshabilitado = false,
   onCerrar,
   children,
 }: {
   titulo: string;
   bajada?: ReactNode;
   eyebrow?: string;
+  /** Diálogo más ancho en escritorio, para un formulario completo. */
+  amplia?: boolean;
+  /** Tocar el fondo cierra la hoja. Un formulario largo lo apaga: un toque
+   * perdido no puede botar todo lo escrito; ahí solo cierra la X. */
+  cerrarAlTocarFuera?: boolean;
+  /** La X no responde (p. ej. mientras se envía el formulario). */
+  cerrarDeshabilitado?: boolean;
   onCerrar: () => void;
   children: ReactNode;
 }) {
+  const fondo = 'fixed inset-0 z-40 bg-[#0d0c0a]/45';
   return (
     <>
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={onCerrar}
-        className="fixed inset-0 z-40 bg-[#0d0c0a]/45"
-      />
+      {cerrarAlTocarFuera ? (
+        <button type="button" aria-label="Cerrar" onClick={onCerrar} className={fondo} />
+      ) : (
+        <div aria-hidden className={fondo} />
+      )}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card shadow-[0_-10px_40px_rgba(13,12,10,.2)] lg:inset-x-auto lg:top-1/2 lg:bottom-auto lg:left-1/2 lg:max-h-[86%] lg:w-[600px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl"
+        className={`fixed inset-x-0 bottom-0 z-50 max-h-[88%] overflow-y-auto rounded-t-[28px] bg-card shadow-[0_-10px_40px_rgba(13,12,10,.2)] lg:inset-x-auto lg:top-1/2 lg:bottom-auto lg:left-1/2 lg:max-h-[86%] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl ${amplia ? 'lg:w-[min(760px,calc(100vw-48px))]' : 'lg:w-[600px]'}`}
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3.5 px-4 pt-2.5 pb-[22px] md:max-w-3xl lg:max-w-none lg:px-6 lg:pt-[22px] lg:pb-6">
           <div className="mx-auto mb-1 h-[5px] w-11 rounded-full bg-[#cfd4da] lg:hidden" />
@@ -1025,8 +1035,9 @@ export function Hoja({
             <button
               type="button"
               onClick={onCerrar}
+              disabled={cerrarDeshabilitado}
               aria-label="Cerrar"
-              className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
+              className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
                 <path d="M18 6 6 18M6 6l12 12" />

@@ -25,6 +25,7 @@ describe('NAV_ITEMS', () => {
       'Informe de producción diaria',
       'Hallazgos',
       'Report',
+      'Report supervisor temporal',
       'Cargas de combustible',
       'Mantenciones',
       'Asistencia',
@@ -38,7 +39,7 @@ describe('NAV_ITEMS', () => {
     expect(dashboard?.roles).toEqual([ROLES.ADMIN, ROLES.SECRETARIA]);
   });
 
-  it('SECRETARIA ve el dashboard, Equipos, Inventario, los nueve reportes del administrador y notificaciones', () => {
+  it('SECRETARIA ve el dashboard, Equipos, Inventario, los diez reportes del administrador y notificaciones', () => {
     const suyos = NAV_ITEMS.filter((item) => item.roles.includes(ROLES.SECRETARIA)).map((item) => item.to);
     expect(suyos).toEqual([
       '/',
@@ -49,6 +50,7 @@ describe('NAV_ITEMS', () => {
       '/reportes-diarios',
       '/hallazgos',
       '/trabajos-extra',
+      '/informes-temporales',
       '/cargas-combustible',
       '/mantenciones',
       '/asistencia',
@@ -64,6 +66,13 @@ describe('NAV_ITEMS', () => {
 });
 
 describe('navItemsDe', () => {
+  it('«Report supervisor temporal» es de ADMIN y SECRETARIA, no del supervisor', () => {
+    const labels = (rol: Parameters<typeof navItemsDe>[0]) => navItemsDe(rol, false).map((i) => i.label);
+    expect(labels(ROLES.ADMIN)).toContain('Report supervisor temporal');
+    expect(labels(ROLES.SECRETARIA)).toContain('Report supervisor temporal');
+    expect(labels(ROLES.SUPERVISOR)).not.toContain('Report supervisor temporal');
+  });
+
   it('«Mi camioneta» solo le aparece al administrador que usa camioneta', () => {
     const labels = (usa: boolean) => navItemsDe(ROLES.ADMIN, usa).map((i) => i.label);
     expect(labels(true)).toContain('Mi camioneta');

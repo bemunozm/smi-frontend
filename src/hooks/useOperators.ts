@@ -53,8 +53,12 @@ async function edicionDeOperador({ operator, input }: UpdateOperatorVars) {
   const edicion = await buildQueuedEdit<OperatorFields>({
     entity: operatorEntity(operator.id),
     ops: ['operator.update'],
-    // Sin supervisor habitual es `null` (una respuesta cacheada sin el campo, también).
-    base: { ...pickFields(operator, CAMPOS_DE_OPERADOR), supervisorHabitualId: operator.supervisorHabitualId ?? null },
+    // Sin supervisor habitual es `null`; sin RUT visible (rol sin acceso) tampoco hay base: `null`.
+    base: {
+      ...pickFields(operator, CAMPOS_DE_OPERADOR),
+      supervisorHabitualId: operator.supervisorHabitualId ?? null,
+      rut: operator.rut ?? null,
+    },
     next: input,
     fields: CAMPOS_DE_OPERADOR,
   });

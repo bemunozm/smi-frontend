@@ -15,6 +15,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useAbrirPdfReporte, useShiftReportCards } from '../../hooks/useShiftReports';
 import { mapCardToTarjeta, type TarjetaTurno } from '../../hooks/shift-register-helpers';
 import { NUM_CL_1 } from '../../lib/dashboard-format';
+import { canEditShiftCard } from '../../lib/permissions';
 import { contextoTurno, fromDateOnly } from '../../lib/turno';
 import { useOutboxOps } from '../../offline/useOutboxOps';
 import type { ShiftReportListItem } from '../../types/shift';
@@ -110,7 +111,8 @@ export function RegistroTurnoModal({
   const abrirPdf = useAbrirPdfReporte();
   const { user } = useCurrentUser();
   const ops = useOutboxOps(user?.id);
-  const puedeEditar = usePermissions().can('shiftCard.edit');
+  // Tarjetas normales: la SECRETARIA solo corrige las temporales (en su informe).
+  const puedeEditar = canEditShiftCard(usePermissions().role);
   const { data: operadores = [] } = useOperators({ isActive: true });
   const { data: equipos = [] } = useEquipment();
 

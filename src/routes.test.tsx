@@ -26,6 +26,27 @@ describe('routes', () => {
     expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.PREVENCIONISTA]);
   });
 
+  it('`/temporal` es solo del SUPERVISOR_TEMPORAL; `/terreno/registro` no lo admite', () => {
+    const temporal = findGuardOf(router.routes as unknown as Rt[], '/temporal');
+    expect(temporal?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    const terreno = findGuardOf(router.routes as unknown as Rt[], '/terreno/registro');
+    expect(terreno?.element?.props?.allowedRoles).not.toContain(ROLES.SUPERVISOR_TEMPORAL);
+  });
+
+  it('«Hallazgos» del supervisor temporal cuelga de su mismo guard; «Mis reportes» ya no es pestaña', () => {
+    const guard = findGuardOf(router.routes as unknown as Rt[], '/temporal/hallazgos');
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    // El historial de reportes vive dentro de «Mis equipos».
+    expect(findGuardOf(router.routes as unknown as Rt[], '/temporal/reportes')).toBeUndefined();
+  });
+
+  it('«Mi camioneta» del supervisor temporal cuelga de su guard, aparte de la del prevencionista', () => {
+    const guard = findGuardOf(router.routes as unknown as Rt[], '/temporal/camioneta');
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    const prevencion = findGuardOf(router.routes as unknown as Rt[], '/camioneta');
+    expect(prevencion?.element?.props?.allowedRoles).not.toContain(ROLES.SUPERVISOR_TEMPORAL);
+  });
+
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {
     for (const path of [
       '/hallazgos',

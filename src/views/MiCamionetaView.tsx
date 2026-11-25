@@ -35,6 +35,7 @@ import { tiempoEnUso } from '../lib/tiempo-en-uso';
 import { contextoTurno } from '../lib/turno';
 import type { OutboxOp } from '../offline/db';
 import { useOutboxOps } from '../offline/useOutboxOps';
+import { ROLES } from '../types/roles';
 
 const fmtKm = (n: number | undefined) =>
   n == null ? '—' : `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} km`;
@@ -110,8 +111,9 @@ function UsoCerrado({ t, op }: { t: TarjetaTurno; op: OutboxOp | undefined }) {
 }
 
 /**
- * «Mi camioneta» del mantenedor (vista propia del taller) y del prevencionista
- * (su única pantalla, `/camioneta`): la camioneta con que se mueve en faena.
+ * «Mi camioneta» del mantenedor (vista propia del taller), del prevencionista
+ * (su única pantalla, `/camioneta`) y del supervisor temporal
+ * (`/temporal/camioneta`): la camioneta con que se mueve en faena.
  * Abre con el km inicial y se cierra recién al cargar
  * combustible (km final, litros y foto del surtidor). Es la misma tarjeta de
  * liviano del supervisor (`/shift-cards`), así que también la ve —y la puede
@@ -124,8 +126,12 @@ export function MiCamionetaView({
   /** «Ver camioneta» lleva a su ficha en el taller; el prevencionista no la abre. */
   conFicha?: boolean;
 } = {}) {
-  const { user } = useCurrentUser();
+  const { user, role } = useCurrentUser();
   const userId = user?.id;
+  // El supervisor temporal abre aparte los equipos de su informe («Mis
+  // equipos»): esta camioneta va marcada para quedar fuera de él, y sus
+  // tarjetas temporales (aunque sean de un liviano) no se muestran acá.
+  const rolTemporal = role === ROLES.SUPERVISOR_TEMPORAL;
   const nombre = user?.name?.trim() || user?.email || 'Mantenedor';
   // El turno solo agrupa la tarjeta; el mantenedor no manda reporte de salida.
   const ctx = useMemo(() => contextoTurno(new Date()), []);
@@ -147,23 +153,36 @@ export function MiCamionetaView({
     ops,
     supervisor: nombre,
     userId,
+    rolTemporal,
   });
-  const mia = proyeccion.livianosAbiertos.find((t) => t.supervisorId === userId);
+  // Solo las que se cierran sueltas: nunca una del informe del supervisor
+  // temporal. En su sesión, además, una sin el dato (respuesta guardada antes
+  // de que el servidor lo informara) queda fuera, por las dudas.
+  const deCamioneta = (t: TarjetaTurno) => (rolTemporal ? t.temporal === false : t.temporal !== true);
+  const livianosAbiertos = proyeccion.livianosAbiertos.filter(deCamioneta);
+  const livianosCerrados = proyeccion.livianosCerrados.filter(deCamioneta);
+  const mia = livianosAbiertos.find((t) => t.supervisorId === userId);
   // Las que abrió otra persona y siguen abiertas: quien la está usando ahora
   // (otro supervisor, el mantenedor, el administrador…) la cierra al cargar
   // combustible, no necesariamente quien la abrió. Antes esta pantalla solo
   // mostraba la propia, y solo el supervisor podía cerrar las ajenas.
-  const deOtros = proyeccion.livianosAbiertos.filter((t) => t.supervisorId !== userId);
+  const deOtros = livianosAbiertos.filter((t) => t.supervisorId !== userId);
   // Las que usé o cerré yo (el servidor trae las cerradas de las últimas 48 h).
-  const misUsos = proyeccion.livianosCerrados.filter((t) => t.supervisorId === userId || t.cerradaPorId === userId);
+  const misUsos = livianosCerrados.filter((t) => t.supervisorId === userId || t.cerradaPorId === userId);
 
-  const apertura = useAperturaForm({ disponibles: proyeccion.disponiblesLivianos, ctx, userId, liviano: true });
+  const apertura = useAperturaForm({
+    disponibles: proyeccion.disponiblesLivianos,
+    ctx,
+    userId,
+    liviano: true,
+    camioneta: rolTemporal,
+  });
   const cierre = useCierreForm({ tarjetas: proyeccion.tarjetas, ctx, userId });
   const camioneta = apertura.equipoElegido;
   const equipoEnUso = mia ? equipos.find((e) => e.internalCode === mia.equipo) : undefined;
   const cerrandoMia = mia != null && cierre.cerrandoId === mia.id;
   // La camioneta que se está cerrando: la propia o una abierta por otro.
-  const cerrandoLiviano = proyeccion.livianosAbiertos.find((t) => t.id === cierre.cerrandoId);
+  const cerrandoLiviano = livianosAbiertos.find((t) => t.id === cierre.cerrandoId);
   const cerrandoAjena = cerrandoLiviano != null && cerrandoLiviano.supervisorId !== userId;
 
   const enUso = mia && (

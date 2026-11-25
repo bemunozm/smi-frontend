@@ -71,6 +71,10 @@ export interface TarjetaTurno {
   /** Camioneta: se mide en km, va sin operador y la puede cerrar cualquier
    * supervisor, en otro turno (la carga de combustible llega 24 o 48 h después). */
   liviano?: boolean;
+  /** Del supervisor temporal: se cierra con su informe («Mis equipos»), no
+   * suelta. `false` en su camioneta y en las de los demás roles; `undefined`
+   * en una respuesta guardada antes de que el servidor lo informara. */
+  temporal?: boolean;
   /** Cuándo se abrió, `mié 22/10 08:15` — en un liviano puede ser de hace días. */
   abiertaEl?: string;
   /** La misma hora en ISO, para calcular cuánto lleva en uso. */
@@ -209,6 +213,7 @@ export function mapCardToTarjeta(card: ShiftCardResponse, ctx: ContextoTurno): T
     // "arrastrada": sigue abierta y no pertenece al turno que corre ahora.
     arrastrada: !liviano && grupo === 'anterior' && estado === 'curso',
     liviano,
+    temporal: card.temporal,
     abiertaEl: fechaHoraCorta(card.createdAt),
     abiertaIso: card.createdAt,
     cerradaPor: card.closedByName ?? undefined,

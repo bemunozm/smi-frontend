@@ -79,6 +79,10 @@ export const ShiftCardResponseSchema = z.object({
   closedByName: z.string().nullish(),
   /** Turno de quien la cerró — el liviano entra en el reporte de ESE turno. */
   closedShift: z.object({ id: z.string(), date: z.string(), type: z.string() }).nullish(),
+  /** Tarjeta del supervisor temporal que se cierra con su informe («Mis
+   * equipos»); `false` en las demás, incluida su camioneta. Opcional: cubre
+   * respuestas guardadas antes de que el servidor lo incluyera. */
+  temporal: z.boolean().optional(),
 });
 export type ShiftCardResponse = z.infer<typeof ShiftCardResponseSchema>;
 
@@ -145,6 +149,10 @@ export interface OpenShiftCardInput {
   shiftType: ShiftType;
   /** Hora del DISPOSITIVO al abrir la tarjeta. */
   capturedAt: string;
+  /** Solo «Mi camioneta» del supervisor temporal: su camioneta va aparte del
+   * informe (tarjeta normal con turno, como la del prevencionista). Los demás
+   * roles no lo mandan. */
+  camioneta?: boolean;
 }
 
 /** Body de `POST /api/shift-cards/closed` — backfill de un turno YA

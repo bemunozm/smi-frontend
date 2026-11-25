@@ -16,6 +16,10 @@ describe('homePathFor', () => {
     expect(homePathFor(ROLES.PREVENCIONISTA)).toBe('/camioneta');
   });
 
+  it('manda a SUPERVISOR_TEMPORAL a su pantalla temporal', () => {
+    expect(homePathFor(ROLES.SUPERVISOR_TEMPORAL)).toBe('/temporal');
+  });
+
   it('manda a ADMIN al dashboard', () => {
     expect(homePathFor(ROLES.ADMIN)).toBe('/');
   });

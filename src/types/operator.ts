@@ -12,7 +12,8 @@ import { isValidRut, normalizeRut } from '../lib/rut';
 export const OperatorSchema = z.object({
   id: z.string(),
   name: z.string(),
-  rut: z.string().nullable(),
+  /** `nullish`: el backend omite la clave para roles sin acceso al RUT (PII). */
+  rut: z.string().nullish(),
   isActive: z.boolean(),
   /** Supervisor con que sale habitualmente (`user.id`) y su nombre; aparece
    * primero en los selectores de ese supervisor. `nullish`: respuestas

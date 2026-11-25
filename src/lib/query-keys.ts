@@ -34,6 +34,12 @@ export const TRABAJOS_EXTRA_KEY = ['trabajos-extra'] as const;
 /** Reportes diarios del supervisor (Módulo B): lista, detalle e historial de
  * cambios cuelgan de la raíz; la escribe `offline/replay.ts` al sincronizar. */
 export const REPORTE_DIARIO_KEY = ['reporte-diario'] as const;
+/** Informes del supervisor temporal: lista por rango, detalle e historial de
+ * cambios cuelgan de la raíz. */
+export const INFORMES_TEMPORALES_KEY = ['informes-temporales'] as const;
+/** El historial de reportes del supervisor temporal. Cuelga de la raíz: el envío de un
+ * informe (`informeTemporal.create`) invalida `informesTemporales` y la refresca. */
+export const INFORMES_TEMPORALES_MINE_KEY = [...INFORMES_TEMPORALES_KEY, 'mine'] as const;
 export const PLANTAS_KEY = ['plantas'] as const;
 export const EMPRESAS_EXTERNAS_KEY = ['empresas-externas'] as const;
 
@@ -99,6 +105,7 @@ export const QUERY_KEYS = {
   hallazgos: HALLAZGOS_KEY,
   trabajosExtra: TRABAJOS_EXTRA_KEY,
   reporteDiario: REPORTE_DIARIO_KEY,
+  informesTemporales: INFORMES_TEMPORALES_KEY,
   horometro: HOROMETRO_KEY,
   equipment: EQUIPMENT_KEY,
   equipmentDocuments: EQUIPMENT_DOCUMENTS_KEY,

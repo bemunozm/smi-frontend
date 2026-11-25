@@ -21,6 +21,9 @@ export interface UseAperturaFormParams {
   userId: string | undefined;
   /** Camioneta: sin operador y con el kilometraje en vez del horómetro. */
   liviano?: boolean;
+  /** «Mi camioneta» del supervisor temporal: la apertura va marcada para que
+   * el servidor no la sume a su informe. */
+  camioneta?: boolean;
 }
 
 export interface UseAperturaFormResult {
@@ -52,6 +55,7 @@ export function useAperturaForm({
   ctx,
   userId,
   liviano = false,
+  camioneta = false,
 }: UseAperturaFormParams): UseAperturaFormResult {
   const [apertura, setApertura] = useState<AperturaState>(DEFAULT_APERTURA);
   // Sin preselección: hasta que el supervisor elija, no hay equipo. Precargar el
@@ -90,6 +94,7 @@ export function useAperturaForm({
       shiftDate: toDateOnly(ctx.fecha),
       shiftType: ctx.turno,
       capturedAt: new Date().toISOString(),
+      ...(camioneta ? { camioneta: true } : {}),
     })
       .then(() => setApertura((a) => ({ ...a, equipoId: '', horometro: '' })))
       .catch((error: unknown) => {

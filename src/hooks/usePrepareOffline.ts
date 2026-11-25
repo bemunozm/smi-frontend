@@ -8,6 +8,7 @@ import { DailyChecklistAPI } from '../api/DailyChecklistAPI';
 import { EquipmentAPI } from '../api/EquipmentAPI';
 import { listHallazgos } from '../api/HallazgosAPI';
 import { listHorometro } from '../api/HorometroAPI';
+import { InformesTemporalesAPI } from '../api/InformesTemporalesAPI';
 import { InventoryAPI } from '../api/InventoryAPI';
 import { NotificacionAPI } from '../api/NotificacionAPI';
 import { OperatorAPI } from '../api/OperatorAPI';
@@ -27,6 +28,7 @@ import {
   EQUIPMENT_KEY,
   HALLAZGOS_KEY,
   HOROMETRO_KEY,
+  INFORMES_TEMPORALES_MINE_KEY,
   INTERVENCIONES_KEY,
   INVENTORY_KEY,
   NOTIFICACIONES_KEY,
@@ -151,6 +153,8 @@ const PRECARGAS: Readonly<Record<PrepKey, () => Promise<unknown>>> = {
   },
   horometro: () => precargar(HOROMETRO_KEY, listHorometro),
   combustible: () => precargar(COMBUSTIBLE_KEY, listCombustible),
+  // El historial de reportes del supervisor temporal: misma key que `useMisInformesTemporales`.
+  informesTemporales: () => precargar(INFORMES_TEMPORALES_MINE_KEY, InformesTemporalesAPI.mios),
 };
 
 /** Descarga en paralelo lo que el arranque en frío sin señal necesita para el

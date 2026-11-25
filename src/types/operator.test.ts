@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   OperatorFormSchema,
+  OperatorListResponseSchema,
   toCreateOperatorPayload,
   toUpdateOperatorPayload,
   type OperatorFormValues,
@@ -50,5 +51,23 @@ describe('toUpdateOperatorPayload', () => {
   it('normaliza el RUT igual que en la creación', () => {
     const values: OperatorFormValues = { name: 'Juan Rojas', rut: '40000000-k', isActive: true, supervisorHabitualId: '' };
     expect(toUpdateOperatorPayload(values).rut).toBe('40000000-K');
+  });
+});
+
+describe('OperatorListResponseSchema', () => {
+  const base = {
+    id: 'op-1',
+    name: 'Cristian Araya',
+    isActive: true,
+    createdAt: '2026-11-25T16:34:10.099Z',
+    updatedAt: '2026-11-25T16:34:10.099Z',
+  };
+
+  it('acepta un operador sin la clave `rut` (roles sin acceso al RUT)', () => {
+    expect(OperatorListResponseSchema.safeParse({ data: [base], message: 'ok' }).success).toBe(true);
+  });
+
+  it('acepta un operador con `rut: null`', () => {
+    expect(OperatorListResponseSchema.safeParse({ data: [{ ...base, rut: null }], message: 'ok' }).success).toBe(true);
   });
 });
