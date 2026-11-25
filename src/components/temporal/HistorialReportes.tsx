@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, History } from 'lucide-react';
 
 import { DetalleInformeTemporal, fechaLegible } from './DetalleInformeTemporal';
 import { MarcaSinSincronizar } from '../terreno/MarcaSinSincronizar';
-import { Boton, Card, CardHead, Hoja } from '../terreno/ui';
+import { Boton, Hoja } from '../terreno/ui';
 import { turnoLabel } from '../../config/flota-colors';
 import { useMisInformesProjection, type InformePendiente } from '../../hooks/useMisInformesProjection';
 import { plural } from '../../lib/format';
 import type { InformeTemporal } from '../../types/informe-temporal';
-
-/** Cuántos informes muestra la tarjeta; el resto, en «Ver historial completo». */
-export const HISTORIAL_VISIBLES = 5;
 
 const actividadesDe = (i: { actividad1: string; actividad2: string | null }) =>
   [i.actividad1, i.actividad2].filter(Boolean).join(' · ');
@@ -87,11 +84,12 @@ function ListaInformes({
 }
 
 /**
- * «Historial de reportes» del supervisor temporal, dentro de «Mis equipos»: los
- * informes más recientes (arriba los que siguen en la cola, con la marca «Sin
- * sincronizar») y, si hay más, «Ver historial completo» en una hoja. Tocar un
- * informe enviado abre su detalle, solo de lectura: corregir o eliminar es de
- * oficina. Su estado es propio y no toca el formulario de cierre de la vista.
+ * «Historial de reportes» del supervisor temporal, dentro de «Mis equipos»: un
+ * botón que abre el historial completo en una hoja (arriba los informes que
+ * siguen en la cola, con la marca «Sin sincronizar»; después los enviados, del
+ * más nuevo). Tocar un informe enviado abre su detalle, solo de lectura:
+ * corregir o eliminar es de oficina. Su estado es propio y no toca el
+ * formulario de cierre de la vista.
  */
 export function HistorialReportes() {
   const { informes, pendientes, isPending, isError, error } = useMisInformesProjection();
@@ -100,48 +98,40 @@ export function HistorialReportes() {
   const abierto = informes.find((i) => i.id === abiertoId) ?? null;
 
   const total = informes.length + pendientes.length;
-  // Los primeros cinco del total: los pendientes van primero.
-  const pendientesVisibles = pendientes.slice(0, HISTORIAL_VISIBLES);
-  const informesVisibles = informes.slice(0, Math.max(0, HISTORIAL_VISIBLES - pendientesVisibles.length));
+  const mensajeError = error instanceof Error ? error.message : 'No se pudieron cargar tus reportes.';
 
   return (
     <>
-      <Card>
-        <CardHead
-          titulo="Historial de reportes"
-          bajada={total > 0 ? plural(total, 'informe', 'informes') : 'Los informes que generas al cerrar tus equipos.'}
-        />
-        {isPending && pendientes.length === 0 ? (
-          <p className="m-0 py-4 text-center text-sm text-muted-foreground">Cargando tus reportes…</p>
-        ) : isError && pendientes.length === 0 ? (
-          <p className="m-0 text-sm text-[var(--danger-soft-foreground)]" role="alert">
-            {error instanceof Error ? error.message : 'No se pudieron cargar tus reportes.'}
-          </p>
-        ) : total === 0 ? (
-          <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-[var(--label-color)]">
-            Aún no has enviado reportes.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <ListaInformes pendientes={pendientesVisibles} informes={informesVisibles} onAbrir={setAbiertoId} />
-            {total > HISTORIAL_VISIBLES && (
-              <Boton variante="contorno" ancho onClick={() => setVerTodo(true)}>
-                Ver historial completo ({total})
-              </Boton>
-            )}
-          </div>
-        )}
-      </Card>
+      <Boton variante="contorno" ancho onClick={() => setVerTodo(true)}>
+        <History className="size-[19px]" aria-hidden /> Ver historial de reportes{' '}
+        {total > 0 && <span className="tabular text-[var(--label-color)]">({total})</span>}
+      </Boton>
 
       {/* Con un detalle abierto la hoja del historial se oculta y vuelve al cerrarlo. */}
       {verTodo && !abierto && (
         <Hoja
           eyebrow="Mis equipos"
           titulo="Historial de reportes"
-          bajada={plural(total, 'informe', 'informes')}
+          bajada={total > 0 ? plural(total, 'informe', 'informes') : 'Los informes que generas al cerrar tus equipos.'}
           onCerrar={() => setVerTodo(false)}
         >
-          <ListaInformes pendientes={pendientes} informes={informes} onAbrir={setAbiertoId} />
+          {/* El error se muestra aunque haya pendientes: los enviados no llegaron. */}
+          {isError && (
+            <p className="m-0 text-sm text-[var(--danger-soft-foreground)]" role="alert">
+              {mensajeError}
+            </p>
+          )}
+          {isPending && pendientes.length === 0 ? (
+            <p className="m-0 py-4 text-center text-sm text-muted-foreground">Cargando tus reportes…</p>
+          ) : total > 0 ? (
+            <ListaInformes pendientes={pendientes} informes={informes} onAbrir={setAbiertoId} />
+          ) : (
+            !isError && (
+              <p className="m-0 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-[var(--label-color)]">
+                Aún no has enviado reportes.
+              </p>
+            )
+          )}
         </Hoja>
       )}
       {abierto && (

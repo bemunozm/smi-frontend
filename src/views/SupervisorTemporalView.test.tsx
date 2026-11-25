@@ -9,7 +9,7 @@ import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
 
 // La cola es EN VIVO (como `useOutboxOps` sobre Dexie): un cambio re-renderiza la vista.
-const { equipmentListMock, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
+const { equipmentListMock, escritorio, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   const opsMock = {
     current: [] as unknown[],
@@ -24,6 +24,7 @@ const { equipmentListMock, listMineMock, misInformesMock, mutateAsyncMock, opsMo
   };
   return {
     equipmentListMock: vi.fn(),
+    escritorio: { value: false },
     listMineMock: vi.fn(),
     misInformesMock: vi.fn(() => ({ data: [], isPending: false, isError: false, error: null })),
     mutateAsyncMock: vi.fn(),
@@ -47,6 +48,11 @@ vi.mock('../offline/useOutboxOps', async () => {
 vi.mock('../hooks/useInformesTemporales', () => ({
   useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
   useMisInformesTemporales: () => misInformesMock(),
+}));
+// Teléfono o escritorio: el cierre va en una hoja en los dos.
+vi.mock('../hooks/useMediaQuery', () => ({
+  DESKTOP_QUERY: '(min-width: 1024px)',
+  useMediaQuery: () => escritorio.value,
 }));
 vi.mock('../api/OcrAPI', () => ({ fuelReadingOcr: vi.fn() }));
 vi.mock('../hooks/useOperators', () => ({ useOperators: () => ({ data: [], isPending: false }) }));
@@ -117,6 +123,7 @@ afterEach(() => {
   vi.clearAllMocks();
   listMineMock.mockReset();
   opsMock.current = [];
+  escritorio.value = false;
 });
 
 /** Como `submitWrite`: encola el informe ANTES de esperar al servidor; el 409 lo
@@ -159,13 +166,50 @@ describe('SupervisorTemporalView', () => {
     expect(screen.getByRole('button', { name: /Abrir equipo/ })).toBeTruthy();
   });
 
-  it('el historial de reportes va en la misma pestaña, debajo del cierre', async () => {
+  it('el historial es un botón debajo del cierre que lo abre en una hoja, no una lista en línea', async () => {
     equipmentListMock.mockResolvedValue([]);
     listMineMock.mockResolvedValue([]);
     renderView();
-    const historial = await screen.findByText('Historial de reportes');
-    expect(screen.getByText('Aún no has enviado reportes.')).toBeTruthy();
-    expect(botonCerrar().compareDocumentPosition(historial) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const boton = await screen.findByRole('button', { name: /Ver historial de reportes/ });
+    expect(botonCerrar().compareDocumentPosition(boton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Historial de reportes')).toBeNull();
+    expect(screen.queryByText('Aún no has enviado reportes.')).toBeNull();
+
+    fireEvent.click(boton);
+    const hoja = screen.getByRole('dialog', { name: 'Historial de reportes' });
+    expect(within(hoja).getByText('Aún no has enviado reportes.')).toBeTruthy();
+  });
+
+  it.each([
+    ['teléfono', false],
+    ['escritorio', true],
+  ])('en %s «Cerrar y generar informe» abre el formulario en una hoja', async (_, enEscritorio) => {
+    escritorio.value = enEscritorio;
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValue([tarjeta()]);
+    renderView();
+    await screen.findByText('CA-003');
+    expect(screen.queryByRole('button', { name: /Enviar informe/ })).toBeNull();
+
+    fireEvent.click(botonCerrar());
+    const hoja = screen.getByRole('dialog', { name: 'Informe de actividad' });
+    expect(within(hoja).getByRole('group', { name: /CA-003/ })).toBeTruthy();
+    expect(within(hoja).getByRole('button', { name: /Enviar informe/ })).toBeTruthy();
+  });
+
+  it('cerrar la hoja a mitad descarta lo escrito: al reabrir empieza vacío', async () => {
+    equipmentListMock.mockResolvedValue([CARGADOR]);
+    listMineMock.mockResolvedValue([tarjeta()]);
+    renderView();
+    await screen.findByText('CA-003');
+    fireEvent.click(botonCerrar());
+    const hoja = screen.getByRole('dialog', { name: 'Informe de actividad' });
+    fireEvent.change(within(hoja).getByLabelText(/Actividad realizada 1/), { target: { value: 'Limpieza' } });
+    fireEvent.click(within(hoja).getAllByRole('button', { name: 'Cerrar' })[0]!);
+    expect(screen.queryByRole('dialog', { name: 'Informe de actividad' })).toBeNull();
+
+    fireEvent.click(botonCerrar());
+    expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('');
   });
 
   it('lista las tarjetas abiertas con código y nombre, y habilita el cierre', async () => {
@@ -197,6 +241,7 @@ describe('SupervisorTemporalView', () => {
   });
 
   it('el formulario no se oculta con su propio envío: un 409 deja los datos, el mensaje y los mismos ids', async () => {
+    escritorio.value = true;
     equipmentListMock.mockResolvedValue([CARGADOR]);
     listMineMock.mockResolvedValue([tarjeta()]);
     renderView();
@@ -204,6 +249,9 @@ describe('SupervisorTemporalView', () => {
     await abrirYLlenar();
 
     expect(await screen.findByText('Falta CA-009 en el informe.')).toBeTruthy();
+    // Sigue dentro de la hoja, con la misma tarjeta aunque su informe estuvo en la cola.
+    const hoja = screen.getByRole('dialog', { name: 'Informe de actividad' });
+    expect(within(hoja).getByText('Falta CA-009 en el informe.')).toBeTruthy();
     expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('Limpieza de cancha');
     const fila = screen.getByRole('group', { name: /CA-003/ });
     expect((within(fila).getByLabelText(/Horómetro final/) as HTMLInputElement).value).toBe('1210');

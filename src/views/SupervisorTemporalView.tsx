@@ -7,7 +7,6 @@ import { HistorialReportes } from '../components/temporal/HistorialReportes';
 import { Boton, Card, CardHead, Chip, Hint, Hoja, VistaHead, VistaUnica } from '../components/terreno/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useEquipment } from '../hooks/useEquipment';
-import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useOperators } from '../hooks/useOperators';
 import { useDeleteShiftCard, useShiftCardsMine } from '../hooks/useShiftCards';
@@ -92,9 +91,10 @@ function FilaAbierta({
 /**
  * Pantalla única del supervisor temporal («Mis equipos»): abre equipos sin
  * ventana de turno y, al terminar la jornada, los cierra TODOS juntos con el
- * informe de actividad (`CierreTemporalForm`). Sus tarjetas no se cierran de
- * a una (el backend responde 409 `TEMPORAL_CARD`): solo por el informe. Abajo,
- * el historial de los informes que envió (`HistorialReportes`).
+ * informe de actividad (`CierreTemporalForm`, siempre en una hoja). Sus
+ * tarjetas no se cierran de a una (el backend responde 409 `TEMPORAL_CARD`):
+ * solo por el informe. Abajo, el botón al historial de los informes que envió
+ * (`HistorialReportes`).
  *
  * Offline-first como Terreno: la lista junta `mine` con las aperturas que
  * siguen en la cola (`useShiftProjection`). Las tarjetas de un informe que
@@ -106,7 +106,6 @@ export function SupervisorTemporalView() {
   const userId = user?.id;
   const nombre = user?.name?.trim() || user?.email || 'Supervisor';
   const ctx = useMemo(() => contextoTurno(new Date()), []);
-  const esEscritorio = useMediaQuery(DESKTOP_QUERY);
   const enLinea = useOnlineStatus();
 
   const { data: equipos = [] } = useEquipment();
@@ -160,16 +159,6 @@ export function SupervisorTemporalView() {
     if (!enLinea) return 'Para eliminarla hace falta señal.';
     return null;
   };
-
-  const formularioCierre = mostrarCierre && (
-    <CierreTemporalForm
-      informeId={sesionCierre.informeId}
-      tarjetas={abiertas}
-      supervisorNombre={nombre}
-      onEnviado={cerrarFormulario}
-    />
-  );
-  const bajadaCierre = 'Cierra todos tus equipos abiertos y registra el informe de la jornada.';
 
   return (
     <VistaUnica>
@@ -237,32 +226,25 @@ export function SupervisorTemporalView() {
         </div>
       </Card>
 
-      {esEscritorio && mostrarCierre && (
-        <Card>
-          <CardHead
-            titulo="Informe de actividad"
-            bajada={bajadaCierre}
-            extra={
-              <Boton variante="contorno" className="!min-h-11" onClick={cerrarFormulario}>
-                Cancelar
-              </Boton>
-            }
-          />
-          {formularioCierre}
-        </Card>
-      )}
-      {!esEscritorio && mostrarCierre && (
+      <HistorialReportes />
+
+      {/* Siempre en una hoja: diálogo centrado en escritorio, hoja inferior en teléfono. */}
+      {mostrarCierre && (
         <Hoja
           eyebrow="Cerrar y generar informe"
           titulo="Informe de actividad"
-          bajada={bajadaCierre}
+          bajada="Cierra todos tus equipos abiertos y registra el informe de la jornada."
+          amplia
           onCerrar={cerrarFormulario}
         >
-          {formularioCierre}
+          <CierreTemporalForm
+            informeId={sesionCierre.informeId}
+            tarjetas={abiertas}
+            supervisorNombre={nombre}
+            onEnviado={cerrarFormulario}
+          />
         </Hoja>
       )}
-
-      <HistorialReportes />
     </VistaUnica>
   );
 }
