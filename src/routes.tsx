@@ -22,7 +22,6 @@ import { MantenimientoLayout } from './layout/MantenimientoLayout';
 import { PrevencionLayout } from './layout/PrevencionLayout';
 import { TemporalLayout } from './layout/TemporalLayout';
 import { SupervisorTemporalView } from './views/SupervisorTemporalView';
-import { MisReportesTemporalView } from './views/MisReportesTemporalView';
 import { OrdenesTrabajoView } from './views/OrdenesTrabajoView';
 import { HistorialOperacionesView } from './views/HistorialOperacionesView';
 import { MiCamionetaView } from './views/MiCamionetaView';
@@ -267,8 +266,8 @@ export const router = createBrowserRouter([
             ],
           },
           // Supervisor temporal — shell propio: abre equipos y los cierra
-          // juntos en un reporte, registra hallazgos (la misma vista de
-          // Terreno) y consulta los reportes que envió.
+          // juntos en un reporte (con el historial de los que envió) y
+          // registra hallazgos (la misma vista de Terreno).
           {
             element: <ProtectedRoute allowedRoles={[ROLES.SUPERVISOR_TEMPORAL]} />,
             children: [
@@ -277,7 +276,6 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/temporal', element: <SupervisorTemporalView /> },
                   { path: '/temporal/hallazgos', element: <HallazgosView /> },
-                  { path: '/temporal/reportes', element: <MisReportesTemporalView /> },
                 ],
               },
             ],

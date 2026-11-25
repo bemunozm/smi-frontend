@@ -24,8 +24,8 @@ function Dato({ label, value }: { label: string; value: string }) {
  * Contenido del detalle de un informe temporal: datos, personal por actividad,
  * observaciones y cada equipo con sus lecturas, litros y foto del surtidor.
  * Lo comparten el panel de oficina (`InformesTemporalesAdminView`, dentro de su
- * modal y con «Corregir» por tarjeta) y «Mis reportes» del supervisor temporal
- * (`MisReportesTemporalView`, solo lectura: sin `onCorregirTarjeta`).
+ * modal y con «Corregir» por tarjeta) y el historial de reportes del supervisor temporal
+ * (`HistorialReportes`, solo lectura: sin `onCorregirTarjeta`).
  */
 export function DetalleInformeTemporal({
   informe,

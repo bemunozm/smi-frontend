@@ -28,7 +28,7 @@ export interface ShellTab {
   corto: string;
   icon: LucideIcon;
   /** Activa solo con la ruta exacta: para una pestaña cuya ruta es prefijo de
-   * otra (`/temporal` y `/temporal/reportes`). */
+   * otra (`/temporal` y `/temporal/hallazgos`). */
   end?: boolean;
   /** Cuántas cosas esperan en esa sección (p. ej. checklists por validar). */
   badge?: number;

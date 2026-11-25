@@ -19,7 +19,7 @@ export function useInformesTemporales(desde: string, hasta: string) {
   });
 }
 
-/** «Mis reportes» del supervisor temporal (los suyos, del más nuevo al más viejo). */
+/** El historial de reportes del supervisor temporal (los suyos, del más nuevo al más viejo). */
 export function useMisInformesTemporales() {
   return useQuery({ queryKey: INFORMES_TEMPORALES_MINE_KEY, queryFn: InformesTemporalesAPI.mios });
 }

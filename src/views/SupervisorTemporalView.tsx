@@ -3,6 +3,7 @@ import { Clock, FileText, Plus, Trash2 } from 'lucide-react';
 
 import { AbrirTarjetaTemporal } from '../components/temporal/AbrirTarjetaTemporal';
 import { CierreTemporalForm } from '../components/temporal/CierreTemporalForm';
+import { HistorialReportes } from '../components/temporal/HistorialReportes';
 import { Boton, Card, CardHead, Chip, Hint, Hoja, VistaHead, VistaUnica } from '../components/terreno/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useEquipment } from '../hooks/useEquipment';
@@ -92,7 +93,8 @@ function FilaAbierta({
  * Pantalla única del supervisor temporal («Mis equipos»): abre equipos sin
  * ventana de turno y, al terminar la jornada, los cierra TODOS juntos con el
  * informe de actividad (`CierreTemporalForm`). Sus tarjetas no se cierran de
- * a una (el backend responde 409 `TEMPORAL_CARD`): solo por el informe.
+ * a una (el backend responde 409 `TEMPORAL_CARD`): solo por el informe. Abajo,
+ * el historial de los informes que envió (`HistorialReportes`).
  *
  * Offline-first como Terreno: la lista junta `mine` con las aperturas que
  * siguen en la cola (`useShiftProjection`). Las tarjetas de un informe que
@@ -259,6 +261,8 @@ export function SupervisorTemporalView() {
           {formularioCierre}
         </Hoja>
       )}
+
+      <HistorialReportes />
     </VistaUnica>
   );
 }

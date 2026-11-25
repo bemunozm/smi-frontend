@@ -47,7 +47,6 @@ function renderLayout(size: 'phone' | 'desktop', ruta = '/temporal') {
         <Route element={<TemporalLayout />}>
           <Route path="/temporal" element={<p>contenido</p>} />
           <Route path="/temporal/hallazgos" element={<p>hallazgos</p>} />
-          <Route path="/temporal/reportes" element={<p>reportes</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -66,29 +65,25 @@ describe('TemporalLayout', () => {
     expect(screen.getByText('contenido')).toBeTruthy();
   });
 
-  it('tres pestañas en orden: Mis equipos, Hallazgos y Mis reportes (barra inferior en celular)', () => {
+  it('dos pestañas en orden: Mis equipos y Hallazgos (barra inferior en celular)', () => {
     renderLayout('phone');
     const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
     const enlaces = within(nav).getAllByRole('link');
-    expect(enlaces.map((a) => a.textContent)).toEqual(['Equipos', 'Hallazgos', 'Reportes']);
-    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual(['/temporal', '/temporal/hallazgos', '/temporal/reportes']);
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Equipos', 'Hallazgos']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual(['/temporal', '/temporal/hallazgos']);
   });
 
   it('en escritorio las pestañas van en el header con su nombre largo', () => {
     renderLayout('desktop');
     const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual([
-      'Mis equipos',
-      'Hallazgos',
-      'Mis reportes',
-    ]);
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Mis equipos', 'Hallazgos']);
   });
 
-  it('en «Mis reportes» solo esa pestaña queda activa, no «Mis equipos»', () => {
-    renderLayout('phone', '/temporal/reportes');
-    expect(screen.getByText('reportes')).toBeTruthy();
+  it('en «Hallazgos» solo esa pestaña queda activa, no «Mis equipos»', () => {
+    renderLayout('phone', '/temporal/hallazgos');
+    expect(screen.getByText('hallazgos')).toBeTruthy();
     const nav = screen.getByRole('navigation', { name: 'Secciones de Supervisión temporal' });
-    expect(within(nav).getByRole('link', { name: 'Reportes' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Hallazgos' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Equipos' }).getAttribute('aria-current')).toBeNull();
   });
 });

@@ -1,13 +1,13 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, screen, fireEvent, within } from '@testing-library/react';
 
-import type { InformePendiente } from '../hooks/useMisInformesProjection';
-import type { InformeTemporal } from '../types/informe-temporal';
+import type { InformePendiente } from '../../hooks/useMisInformesProjection';
+import type { InformeTemporal } from '../../types/informe-temporal';
 
 const { proyeccion } = vi.hoisted(() => ({ proyeccion: vi.fn() }));
-vi.mock('../hooks/useMisInformesProjection', () => ({ useMisInformesProjection: () => proyeccion() }));
+vi.mock('../../hooks/useMisInformesProjection', () => ({ useMisInformesProjection: () => proyeccion() }));
 
-import { MisReportesTemporalView } from './MisReportesTemporalView';
+import { HistorialReportes } from './HistorialReportes';
 
 const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | 'numero'>): InformeTemporal => ({
   fecha: '2026-11-20',
@@ -76,9 +76,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('MisReportesTemporalView', () => {
+describe('HistorialReportes', () => {
   it('lista sus informes con número, fecha, turno, actividades y cantidad de equipos', () => {
-    render(<MisReportesTemporalView />);
+    render(<HistorialReportes />);
     const lista = screen.getByRole('list', { name: 'Informes enviados' });
     const filas = within(lista).getAllByRole('button');
     expect(filas).toHaveLength(2);
@@ -90,12 +90,12 @@ describe('MisReportesTemporalView', () => {
 
   it('sin informes muestra el aviso vacío', () => {
     proyeccion.mockReturnValue(estado());
-    render(<MisReportesTemporalView />);
+    render(<HistorialReportes />);
     expect(screen.getByText('Aún no has enviado reportes.')).toBeTruthy();
   });
 
   it('el detalle es solo de lectura: datos, personal, responsables y cada equipo con sus lecturas', () => {
-    render(<MisReportesTemporalView />);
+    render(<HistorialReportes />);
     fireEvent.click(screen.getByRole('button', { name: 'Ver informe N° 8' }));
     const hoja = screen.getByRole('dialog', { name: 'Informe N° 8' });
     expect(within(hoja).getByText('Luis Vera')).toBeTruthy();
@@ -130,7 +130,7 @@ describe('MisReportesTemporalView', () => {
         ],
       }),
     );
-    render(<MisReportesTemporalView />);
+    render(<HistorialReportes />);
     const pendiente = screen.getByTestId('mi-informe-pendiente-p1');
     expect(pendiente.textContent).toContain('25-11-2026 · Nocturno');
     expect(pendiente.textContent).toContain('3 equipos');
@@ -157,8 +157,51 @@ describe('MisReportesTemporalView', () => {
         ],
       }),
     );
-    render(<MisReportesTemporalView />);
+    render(<HistorialReportes />);
     expect(screen.queryByText('Aún no has enviado reportes.')).toBeNull();
     expect(screen.getByText('Requiere atención · ver Sincronización')).toBeTruthy();
+  });
+
+  it('con más de cinco muestra los cinco más recientes y «Ver historial completo» abre todos', () => {
+    const informes = Array.from({ length: 6 }, (_, k) => informe({ id: `i${6 - k}`, numero: 6 - k }));
+    const pendiente: InformePendiente = {
+      id: 'p1',
+      fecha: '2026-11-25',
+      turno: 'DIURNO',
+      actividad1: 'Despeje',
+      actividad2: null,
+      equipos: 1,
+      requiereAtencion: false,
+    };
+    proyeccion.mockReturnValue(estado({ informes, pendientes: [pendiente] }));
+    render(<HistorialReportes />);
+
+    // El pendiente cuenta dentro de los cinco: quedan cuatro enviados, del más nuevo.
+    expect(screen.getByTestId('mi-informe-pendiente-p1')).toBeTruthy();
+    const enviados = screen.getByRole('list', { name: 'Informes enviados' });
+    expect(
+      within(enviados)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Ver informe N° 6', 'Ver informe N° 5', 'Ver informe N° 4', 'Ver informe N° 3']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver historial completo (7)' }));
+    const hoja = screen.getByRole('dialog', { name: 'Historial de reportes' });
+    expect(within(hoja).getByTestId('mi-informe-pendiente-p1')).toBeTruthy();
+    expect(within(within(hoja).getByRole('list', { name: 'Informes enviados' })).getAllByRole('button')).toHaveLength(
+      6,
+    );
+
+    // Abrir uno desde el historial muestra su detalle; al cerrarlo vuelve al historial.
+    fireEvent.click(within(hoja).getByRole('button', { name: 'Ver informe N° 1' }));
+    expect(screen.queryByRole('dialog', { name: 'Historial de reportes' })).toBeNull();
+    const detalle = screen.getByRole('dialog', { name: 'Informe N° 1' });
+    fireEvent.click(within(detalle).getAllByRole('button', { name: 'Cerrar' })[0]!);
+    expect(screen.getByRole('dialog', { name: 'Historial de reportes' })).toBeTruthy();
+  });
+
+  it('con cinco o menos no ofrece el historial completo', () => {
+    render(<HistorialReportes />);
+    expect(screen.queryByRole('button', { name: /Ver historial completo/ })).toBeNull();
   });
 });

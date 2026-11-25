@@ -37,7 +37,7 @@ export const REPORTE_DIARIO_KEY = ['reporte-diario'] as const;
 /** Informes del supervisor temporal: lista por rango, detalle e historial de
  * cambios cuelgan de la raíz. */
 export const INFORMES_TEMPORALES_KEY = ['informes-temporales'] as const;
-/** «Mis reportes» del supervisor temporal. Cuelga de la raíz: el envío de un
+/** El historial de reportes del supervisor temporal. Cuelga de la raíz: el envío de un
  * informe (`informeTemporal.create`) invalida `informesTemporales` y la refresca. */
 export const INFORMES_TEMPORALES_MINE_KEY = [...INFORMES_TEMPORALES_KEY, 'mine'] as const;
 export const PLANTAS_KEY = ['plantas'] as const;

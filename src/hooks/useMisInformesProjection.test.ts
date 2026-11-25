@@ -63,6 +63,14 @@ describe('proyectarInformesPendientes', () => {
     expect(lista[0]?.requiereAtencion).toBe(true);
   });
 
+  it('en la misma fecha va primero el último encolado', () => {
+    const lista = proyectarInformesPendientes(
+      [],
+      [envio('primero', {}, { seq: 10 }), envio('segundo', {}, { seq: 11 }), envio('ayer', { fecha: '2026-11-23' })],
+    );
+    expect(lista.map((p) => p.id)).toEqual(['segundo', 'primero', 'ayer']);
+  });
+
   it('ignora otras operaciones y cuerpos sin id o sin fecha', () => {
     const otra = { ...envio('x'), endpoint: 'informeTemporal.update' } as HttpWriteOp;
     const ops: OutboxOp[] = [otra, envio('sin-fecha', { fecha: undefined }), envio('', {})];
@@ -70,7 +78,7 @@ describe('proyectarInformesPendientes', () => {
   });
 });
 
-describe('«Mis reportes» se refresca al enviar un informe', () => {
+describe('El historial de reportes se refresca al enviar un informe', () => {
   it('su key cuelga de la que invalida `informeTemporal.create`', () => {
     expect(ENDPOINTS['informeTemporal.create'].invalidate).toContain('informesTemporales');
     expect(QUERY_KEYS.informesTemporales).toEqual(INFORMES_TEMPORALES_KEY);

@@ -22,7 +22,7 @@ export const InformesTemporalesAPI = {
     }
   },
 
-  /** «Mis reportes»: los informes que envió el supervisor de la sesión, del más
+  /** Historial de reportes: los informes que envió el supervisor de la sesión, del más
    * nuevo al más viejo (los últimos 100). */
   async mios(): Promise<InformeTemporal[]> {
     try {

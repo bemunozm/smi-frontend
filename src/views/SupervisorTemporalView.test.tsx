@@ -9,7 +9,7 @@ import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
 
 // La cola es EN VIVO (como `useOutboxOps` sobre Dexie): un cambio re-renderiza la vista.
-const { equipmentListMock, listMineMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
+const { equipmentListMock, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   const opsMock = {
     current: [] as unknown[],
@@ -22,7 +22,13 @@ const { equipmentListMock, listMineMock, mutateAsyncMock, opsMock } = vi.hoisted
       return () => listeners.delete(l);
     },
   };
-  return { equipmentListMock: vi.fn(), listMineMock: vi.fn(), mutateAsyncMock: vi.fn(), opsMock };
+  return {
+    equipmentListMock: vi.fn(),
+    listMineMock: vi.fn(),
+    misInformesMock: vi.fn(() => ({ data: [], isPending: false, isError: false, error: null })),
+    mutateAsyncMock: vi.fn(),
+    opsMock,
+  };
 });
 
 vi.mock('../api/EquipmentAPI', () => ({ EquipmentAPI: { list: equipmentListMock } }));
@@ -40,6 +46,7 @@ vi.mock('../offline/useOutboxOps', async () => {
 });
 vi.mock('../hooks/useInformesTemporales', () => ({
   useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
+  useMisInformesTemporales: () => misInformesMock(),
 }));
 vi.mock('../api/OcrAPI', () => ({ fuelReadingOcr: vi.fn() }));
 vi.mock('../hooks/useOperators', () => ({ useOperators: () => ({ data: [], isPending: false }) }));
@@ -150,6 +157,15 @@ describe('SupervisorTemporalView', () => {
     expect(await screen.findByText(/No tienes equipos abiertos/)).toBeTruthy();
     expect(botonCerrar().hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /Abrir equipo/ })).toBeTruthy();
+  });
+
+  it('el historial de reportes va en la misma pestaña, debajo del cierre', async () => {
+    equipmentListMock.mockResolvedValue([]);
+    listMineMock.mockResolvedValue([]);
+    renderView();
+    const historial = await screen.findByText('Historial de reportes');
+    expect(screen.getByText('Aún no has enviado reportes.')).toBeTruthy();
+    expect(botonCerrar().compareDocumentPosition(historial) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('lista las tarjetas abiertas con código y nombre, y habilita el cierre', async () => {

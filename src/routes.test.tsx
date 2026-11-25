@@ -33,11 +33,11 @@ describe('routes', () => {
     expect(terreno?.element?.props?.allowedRoles).not.toContain(ROLES.SUPERVISOR_TEMPORAL);
   });
 
-  it('«Hallazgos» y «Mis reportes» del supervisor temporal cuelgan de su mismo guard', () => {
-    for (const path of ['/temporal/hallazgos', '/temporal/reportes']) {
-      const guard = findGuardOf(router.routes as unknown as Rt[], path);
-      expect(guard?.element?.props?.allowedRoles, path).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
-    }
+  it('«Hallazgos» del supervisor temporal cuelga de su mismo guard; «Mis reportes» ya no es pestaña', () => {
+    const guard = findGuardOf(router.routes as unknown as Rt[], '/temporal/hallazgos');
+    expect(guard?.element?.props?.allowedRoles).toEqual([ROLES.SUPERVISOR_TEMPORAL]);
+    // El historial de reportes vive dentro de «Mis equipos».
+    expect(findGuardOf(router.routes as unknown as Rt[], '/temporal/reportes')).toBeUndefined();
   });
 
   it('SECRETARIA entra a hallazgos, trabajos extra y reportes diarios del panel, no a usuarios', () => {

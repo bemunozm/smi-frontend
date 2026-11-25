@@ -153,7 +153,7 @@ const PRECARGAS: Readonly<Record<PrepKey, () => Promise<unknown>>> = {
   },
   horometro: () => precargar(HOROMETRO_KEY, listHorometro),
   combustible: () => precargar(COMBUSTIBLE_KEY, listCombustible),
-  // «Mis reportes» del supervisor temporal: misma key que `useMisInformesTemporales`.
+  // El historial de reportes del supervisor temporal: misma key que `useMisInformesTemporales`.
   informesTemporales: () => precargar(INFORMES_TEMPORALES_MINE_KEY, InformesTemporalesAPI.mios),
 };
 

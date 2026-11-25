@@ -288,7 +288,7 @@ describe('usePrepareOffline por rol', () => {
     expect(ordenesListMock).not.toHaveBeenCalled();
   });
 
-  it('ADMIN: todas las listas menos «Mis reportes» del supervisor temporal', async () => {
+  it('ADMIN: todas las listas menos el historial de reportes del supervisor temporal', async () => {
     const resultado = await preparar(ROLES.ADMIN);
 
     for (const key of PREP_KEYS.filter((k) => k !== 'informesTemporales')) {
@@ -298,7 +298,7 @@ describe('usePrepareOffline por rol', () => {
     expect(misInformesMock).not.toHaveBeenCalled();
   });
 
-  it('SUPERVISOR_TEMPORAL: sus equipos, hallazgos y «Mis reportes» bajo la key de la pantalla', async () => {
+  it('SUPERVISOR_TEMPORAL: sus equipos, hallazgos y su historial de reportes bajo la key de la pantalla', async () => {
     const resultado = await preparar(ROLES.SUPERVISOR_TEMPORAL);
 
     expect(resultado).toMatchObject({ equipment: 'ok', shiftCards: 'ok', hallazgos: 'ok', informesTemporales: 'ok' });
