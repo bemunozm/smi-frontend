@@ -67,6 +67,32 @@ describe('CierreTemporalForm', () => {
     expect((screen.getByLabelText(/Supervisor responsable 1/) as HTMLInputElement).value).toBe('Pedro Soto');
   });
 
+  it('avisa si tiene algo escrito, comparando con lo inicial', () => {
+    const onCambiosChange = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CierreTemporalForm
+          informeId={INFORME_ID}
+          tarjetas={TARJETAS}
+          supervisorNombre="Pedro Soto"
+          onEnviado={vi.fn()}
+          onCambiosChange={onCambiosChange}
+        />
+      </QueryClientProvider>,
+    );
+    // Recién abierto (con el supervisor precargado y las filas avisando su foto vacía): limpio.
+    expect(onCambiosChange).toHaveBeenLastCalledWith(false);
+
+    const fila = screen.getByRole('group', { name: /CA-003/ });
+    fireEvent.change(within(fila).getByLabelText(/Horómetro final/), { target: { value: '1210' } });
+    expect(onCambiosChange).toHaveBeenLastCalledWith(true);
+    fireEvent.change(within(fila).getByLabelText(/Horómetro final/), { target: { value: '' } });
+    expect(onCambiosChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByLabelText(/Observaciones/), { target: { value: 'Lluvia' } });
+    expect(onCambiosChange).toHaveBeenLastCalledWith(true);
+  });
+
   it('sin actividad 1 no envía y lo dice', async () => {
     renderForm();
     fireEvent.click(screen.getByRole('button', { name: /Enviar informe/ }));

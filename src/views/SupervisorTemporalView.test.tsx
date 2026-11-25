@@ -9,7 +9,7 @@ import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
 
 // La cola es EN VIVO (como `useOutboxOps` sobre Dexie): un cambio re-renderiza la vista.
-const { equipmentListMock, escritorio, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
+const { equipmentListMock, enviando, escritorio, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   const opsMock = {
     current: [] as unknown[],
@@ -24,6 +24,7 @@ const { equipmentListMock, escritorio, listMineMock, misInformesMock, mutateAsyn
   };
   return {
     equipmentListMock: vi.fn(),
+    enviando: { value: false },
     escritorio: { value: false },
     listMineMock: vi.fn(),
     misInformesMock: vi.fn(() => ({ data: [], isPending: false, isError: false, error: null })),
@@ -46,7 +47,7 @@ vi.mock('../offline/useOutboxOps', async () => {
   };
 });
 vi.mock('../hooks/useInformesTemporales', () => ({
-  useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
+  useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: enviando.value }),
   useMisInformesTemporales: () => misInformesMock(),
 }));
 // Teléfono o escritorio: el cierre va en una hoja en los dos.
@@ -124,6 +125,7 @@ afterEach(() => {
   listMineMock.mockReset();
   opsMock.current = [];
   escritorio.value = false;
+  enviando.value = false;
 });
 
 /** Como `submitWrite`: encola el informe ANTES de esperar al servidor; el 409 lo
@@ -197,19 +199,88 @@ describe('SupervisorTemporalView', () => {
     expect(within(hoja).getByRole('button', { name: /Enviar informe/ })).toBeTruthy();
   });
 
-  it('cerrar la hoja a mitad descarta lo escrito: al reabrir empieza vacío', async () => {
-    equipmentListMock.mockResolvedValue([CARGADOR]);
-    listMineMock.mockResolvedValue([tarjeta()]);
-    renderView();
-    await screen.findByText('CA-003');
-    fireEvent.click(botonCerrar());
-    const hoja = screen.getByRole('dialog', { name: 'Informe de actividad' });
-    fireEvent.change(within(hoja).getByLabelText(/Actividad realizada 1/), { target: { value: 'Limpieza' } });
-    fireEvent.click(within(hoja).getAllByRole('button', { name: 'Cerrar' })[0]!);
-    expect(screen.queryByRole('dialog', { name: 'Informe de actividad' })).toBeNull();
+  describe('cerrar la hoja de cierre', () => {
+    async function abrirCierre() {
+      equipmentListMock.mockResolvedValue([CARGADOR]);
+      listMineMock.mockResolvedValue([tarjeta()]);
+      renderView();
+      await screen.findByText('CA-003');
+      fireEvent.click(botonCerrar());
+      return screen.getByRole('dialog', { name: 'Informe de actividad' });
+    }
+    const xDe = (hoja: HTMLElement) => within(hoja).getByRole('button', { name: 'Cerrar' });
 
-    fireEvent.click(botonCerrar());
-    expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('');
+    it('tocar el fondo no la cierra: el fondo ni siquiera es un botón', async () => {
+      const hoja = await abrirCierre();
+      fireEvent.change(within(hoja).getByLabelText(/Actividad realizada 1/), { target: { value: 'Limpieza' } });
+      // El único «Cerrar» es la X de la hoja.
+      expect(screen.getAllByRole('button', { name: 'Cerrar' })).toEqual([xDe(hoja)]);
+      fireEvent.click(hoja.previousElementSibling!);
+      expect(screen.getByRole('dialog', { name: 'Informe de actividad' })).toBeTruthy();
+      expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('Limpieza');
+    });
+
+    it('sin nada escrito, la X la cierra directo', async () => {
+      const hoja = await abrirCierre();
+      fireEvent.click(xDe(hoja));
+      expect(screen.queryByRole('dialog', { name: 'Informe de actividad' })).toBeNull();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('con algo escrito, la X pregunta: «Seguir llenando» conserva y «Descartar» cierra y al reabrir empieza vacío', async () => {
+      const hoja = await abrirCierre();
+      fireEvent.change(within(hoja).getByLabelText(/Actividad realizada 1/), { target: { value: 'Limpieza' } });
+      const fila = within(hoja).getByRole('group', { name: /CA-003/ });
+      fireEvent.change(within(fila).getByLabelText(/Horómetro final/), { target: { value: '1210' } });
+
+      fireEvent.click(xDe(hoja));
+      let confirmar = await screen.findByRole('alertdialog');
+      expect(within(confirmar).getByText('¿Descartar el informe?')).toBeTruthy();
+      expect(within(confirmar).getByText('Se perderá lo que llenaste.')).toBeTruthy();
+      fireEvent.click(within(confirmar).getByRole('button', { name: 'Seguir llenando' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Informe de actividad' })).toBeTruthy();
+      expect((screen.getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('Limpieza');
+      expect((within(fila).getByLabelText(/Horómetro final/) as HTMLInputElement).value).toBe('1210');
+
+      fireEvent.click(xDe(screen.getByRole('dialog', { name: 'Informe de actividad' })));
+      confirmar = await screen.findByRole('alertdialog');
+      fireEvent.click(within(confirmar).getByRole('button', { name: 'Descartar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Informe de actividad' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+
+      fireEvent.click(botonCerrar());
+      const nueva = screen.getByRole('dialog', { name: 'Informe de actividad' });
+      expect((within(nueva).getByLabelText(/Actividad realizada 1/) as HTMLInputElement).value).toBe('');
+      const filaNueva = within(nueva).getByRole('group', { name: /CA-003/ });
+      expect((within(filaNueva).getByLabelText(/Horómetro final/) as HTMLInputElement).value).toBe('');
+      // Limpio de nuevo: la X vuelve a cerrar sin preguntar.
+      fireEvent.click(xDe(nueva));
+      expect(screen.queryByRole('dialog', { name: 'Informe de actividad' })).toBeNull();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('mientras se envía no se puede cerrar', async () => {
+      enviando.value = true;
+      const hoja = await abrirCierre();
+      expect(within(hoja).getByRole('button', { name: /Enviando informe/ })).toBeTruthy();
+      const x = xDe(hoja);
+      expect(x.hasAttribute('disabled')).toBe(true);
+      fireEvent.click(x);
+      expect(screen.getByRole('dialog', { name: 'Informe de actividad' })).toBeTruthy();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('las otras hojas siguen cerrándose al tocar el fondo (historial)', async () => {
+      equipmentListMock.mockResolvedValue([]);
+      listMineMock.mockResolvedValue([]);
+      renderView();
+      fireEvent.click(await screen.findByRole('button', { name: /Ver historial de reportes/ }));
+      const hoja = screen.getByRole('dialog', { name: 'Historial de reportes' });
+      const fondo = screen.getAllByRole('button', { name: 'Cerrar' }).find((b) => !hoja.contains(b))!;
+      fireEvent.click(fondo);
+      expect(screen.queryByRole('dialog', { name: 'Historial de reportes' })).toBeNull();
+    });
   });
 
   it('lista las tarjetas abiertas con código y nombre, y habilita el cierre', async () => {

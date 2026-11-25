@@ -992,6 +992,8 @@ export function Hoja({
   bajada,
   eyebrow,
   amplia,
+  cerrarAlTocarFuera = true,
+  cerrarDeshabilitado = false,
   onCerrar,
   children,
 }: {
@@ -1000,17 +1002,22 @@ export function Hoja({
   eyebrow?: string;
   /** Diálogo más ancho en escritorio, para un formulario completo. */
   amplia?: boolean;
+  /** Tocar el fondo cierra la hoja. Un formulario largo lo apaga: un toque
+   * perdido no puede botar todo lo escrito; ahí solo cierra la X. */
+  cerrarAlTocarFuera?: boolean;
+  /** La X no responde (p. ej. mientras se envía el formulario). */
+  cerrarDeshabilitado?: boolean;
   onCerrar: () => void;
   children: ReactNode;
 }) {
+  const fondo = 'fixed inset-0 z-40 bg-[#0d0c0a]/45';
   return (
     <>
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={onCerrar}
-        className="fixed inset-0 z-40 bg-[#0d0c0a]/45"
-      />
+      {cerrarAlTocarFuera ? (
+        <button type="button" aria-label="Cerrar" onClick={onCerrar} className={fondo} />
+      ) : (
+        <div aria-hidden className={fondo} />
+      )}
       <div
         role="dialog"
         aria-modal="true"
@@ -1028,8 +1035,9 @@ export function Hoja({
             <button
               type="button"
               onClick={onCerrar}
+              disabled={cerrarDeshabilitado}
               aria-label="Cerrar"
-              className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2]"
+              className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[#eef0f2] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
                 <path d="M18 6 6 18M6 6l12 12" />

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 
@@ -24,6 +24,10 @@ type DatosInforme = Omit<InformeTemporalForm, 'cierres' | 'personal1' | 'persona
   personal1: LineaPersonal[];
   personal2: LineaPersonal[];
 };
+
+/** La fila tiene algo escrito o fotografiado (la lectura inicial viene dada). */
+const filaConDatos = (f: FilaCierreEstado) =>
+  f.final !== '' || f.litros !== '' || f.foto != null || f.adBlue || f.adBlueLitros !== '';
 
 const filaVacia = (t: TarjetaTemporal): FilaCierreEstado => ({
   cardId: t.id,
@@ -53,6 +57,8 @@ export function CierreTemporalForm({
   tarjetas,
   supervisorNombre,
   onEnviado,
+  onCambiosChange,
+  onEnviandoChange,
 }: {
   /** Generado UNA vez por quien abre el formulario (la pantalla lo necesita para
    * no ocultar las tarjetas de este informe mientras espera al servidor). */
@@ -61,6 +67,10 @@ export function CierreTemporalForm({
   supervisorNombre: string;
   /** El informe se guardó (enviado o en la cola): quien lo abrió cierra la hoja. */
   onEnviado: () => void;
+  /** Avisa si hay algo escrito: quien abrió la hoja pide confirmar antes de descartarlo. */
+  onCambiosChange?: (conCambios: boolean) => void;
+  /** Avisa mientras se envía: la hoja no se cierra a mitad (un 409 tiene que verse acá). */
+  onEnviandoChange?: (enviando: boolean) => void;
 }) {
   const crear = useCrearInformeTemporal();
   const queryClient = useQueryClient();
@@ -73,7 +83,7 @@ export function CierreTemporalForm({
     return ids.get(cardId)!;
   };
 
-  const [datos, setDatos] = useState<DatosInforme>(() => {
+  const [iniciales] = useState<DatosInforme>(() => {
     const ahora = new Date();
     return {
       fecha: toDateOnly(fechaDeTurno(ahora)),
@@ -87,6 +97,7 @@ export function CierreTemporalForm({
       supervisor2: '',
     };
   });
+  const [datos, setDatos] = useState<DatosInforme>(iniciales);
   const cambiar = <K extends keyof DatosInforme>(campo: K, valor: DatosInforme[K]) =>
     setDatos((d) => ({ ...d, [campo]: valor }));
 
@@ -116,6 +127,17 @@ export function CierreTemporalForm({
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const arriba = useRef<HTMLDivElement>(null);
   const leyendoFoto = filas.some((f) => f.leyendoFoto);
+
+  // Se compara contra lo inicial y no con un «tocado»: la fila avisa su foto
+  // (vacía) al montarse, y borrar lo escrito vuelve a dejar el formulario limpio.
+  const conCambios =
+    filas.some(filaConDatos) ||
+    (Object.keys(iniciales) as (keyof DatosInforme)[]).some((campo) => {
+      const valor = datos[campo];
+      return Array.isArray(valor) ? valor.length > 0 : valor !== iniciales[campo];
+    });
+  useEffect(() => onCambiosChange?.(conCambios), [onCambiosChange, conCambios]);
+  useEffect(() => onEnviandoChange?.(crear.isPending), [onEnviandoChange, crear.isPending]);
 
   const enviar = async () => {
     setIntentado(true);

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { AlertDialog, Button } from '@heroui/react';
 import { Clock, FileText, Plus, Trash2 } from 'lucide-react';
 
 import { AbrirTarjetaTemporal } from '../components/temporal/AbrirTarjetaTemporal';
@@ -23,6 +24,50 @@ function desdeCorto(iso: string | undefined): string {
   const d = new Date(iso);
   const dia = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   return `${dia} ${d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+}
+
+/**
+ * «¿Descartar el informe?»: la X de la hoja de cierre con algo escrito. Cerrar
+ * la hoja bota lecturas, litros, fotos y personal, así que se pregunta antes.
+ */
+function ConfirmarDescarte({
+  abierto,
+  onSeguir,
+  onDescartar,
+}: {
+  abierto: boolean;
+  onSeguir: () => void;
+  onDescartar: () => void;
+}) {
+  return (
+    <AlertDialog.Backdrop
+      isOpen={abierto}
+      onOpenChange={(open) => {
+        if (!open) onSeguir();
+      }}
+      className="z-[60]"
+    >
+      <AlertDialog.Container>
+        <AlertDialog.Dialog className="sm:max-w-105">
+          <AlertDialog.Header>
+            <AlertDialog.Icon status="warning" />
+            <AlertDialog.Heading>¿Descartar el informe?</AlertDialog.Heading>
+          </AlertDialog.Header>
+          <AlertDialog.Body>
+            <p>Se perderá lo que llenaste.</p>
+          </AlertDialog.Body>
+          <AlertDialog.Footer>
+            <Button variant="tertiary" onPress={onSeguir}>
+              Seguir llenando
+            </Button>
+            <Button variant="danger" onPress={onDescartar}>
+              Descartar
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Dialog>
+      </AlertDialog.Container>
+    </AlertDialog.Backdrop>
+  );
 }
 
 /** Una tarjeta abierta: código, nombre, lectura inicial, apertura y eliminar. */
@@ -151,7 +196,23 @@ export function SupervisorTemporalView() {
   // Abierto, el formulario no se desmonta aunque la lista cambie (p. ej. un 409
   // que refresca las tarjetas y deja cero): así su error sigue a la vista.
   const mostrarCierre = sesionCierre != null;
-  const cerrarFormulario = () => setSesionCierre(null);
+  // Lo que el formulario avisa hacia arriba: si tiene algo escrito y si se está enviando.
+  const [cierreConCambios, setCierreConCambios] = useState(false);
+  const [cierreEnviando, setCierreEnviando] = useState(false);
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
+  const cerrarFormulario = useCallback(() => {
+    setSesionCierre(null);
+    setCierreConCambios(false);
+    setCierreEnviando(false);
+    setConfirmandoDescarte(false);
+  }, []);
+  // La X: mientras se envía no hace nada (un 409 tiene que verse en el
+  // formulario); con algo escrito pregunta antes de descartarlo.
+  const pedirCerrarFormulario = () => {
+    if (cierreEnviando) return;
+    if (cierreConCambios) setConfirmandoDescarte(true);
+    else cerrarFormulario();
+  };
 
   const eliminar = useDeleteShiftCard();
   const motivoSinEliminar = (t: TarjetaTemporal): string | null => {
@@ -235,16 +296,25 @@ export function SupervisorTemporalView() {
           titulo="Informe de actividad"
           bajada="Cierra todos tus equipos abiertos y registra el informe de la jornada."
           amplia
-          onCerrar={cerrarFormulario}
+          cerrarAlTocarFuera={false}
+          cerrarDeshabilitado={cierreEnviando}
+          onCerrar={pedirCerrarFormulario}
         >
           <CierreTemporalForm
             informeId={sesionCierre.informeId}
             tarjetas={abiertas}
             supervisorNombre={nombre}
             onEnviado={cerrarFormulario}
+            onCambiosChange={setCierreConCambios}
+            onEnviandoChange={setCierreEnviando}
           />
         </Hoja>
       )}
+      <ConfirmarDescarte
+        abierto={confirmandoDescarte}
+        onSeguir={() => setConfirmandoDescarte(false)}
+        onDescartar={cerrarFormulario}
+      />
     </VistaUnica>
   );
 }
