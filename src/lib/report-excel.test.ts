@@ -128,3 +128,55 @@ describe('construirExcelReport', () => {
     expect(ws.getCell('N9').value).toBeCloseTo(6.5);
   }, 30_000);
 });
+
+describe('construirExcelReport — report nulo', () => {
+  it('sale en UNA fila con su N°, fecha y 0 h, marcada NULO en Actividad, sin romper las columnas', async () => {
+    const blob = await construirExcelReport(
+      [
+        trabajo({ id: 't1' }),
+        trabajo({
+          id: 'n1',
+          nulo: true,
+          equipoId: null,
+          equipo: null,
+          operatorId: null,
+          operador: null,
+          horometroInicial: 0,
+          horometroFinal: 0,
+          totalHoras: 0,
+          actividades: [],
+          detalleActividades: null,
+          descripcion: 'Tachado',
+          reportNumero: '4511',
+        }),
+      ],
+      '2026-10-01',
+      '2026-10-31',
+    );
+    const excel = await import('exceljs');
+    const Workbook = excel.Workbook ?? excel.default.Workbook;
+    const wb = new Workbook();
+    await wb.xlsx.load(await blob.arrayBuffer());
+    const ws = wb.getWorksheet('Report')!;
+
+    // Las 16 columnas de la planilla del cliente, en su lugar.
+    expect(ws.getCell('I4').value).toBe('Actividad');
+    expect(ws.getCell('P4').value).toBe('Observaciones');
+    expect(ws.getCell('Q4').value == null).toBe(true);
+
+    // t1 ocupa las filas 5 y 6 (dos actividades); el nulo, SOLO la 7.
+    expect(ws.getCell('G7').value).toBe('4511');
+    expect(String(ws.getCell('B7').value)).toContain('-10-2026');
+    expect(ws.getCell('D7').value == null || ws.getCell('D7').value === '').toBe(true);
+    expect(ws.getCell('F7').value == null || ws.getCell('F7').value === '').toBe(true);
+    expect(ws.getCell('I7').value).toBe('NULO');
+    expect(ws.getCell('K7').value).toBe(0);
+    expect(ws.getCell('N7').value).toBe(0);
+    expect(ws.getCell('L7').value == null || ws.getCell('L7').value === '').toBe(true);
+    expect(ws.getCell('O7').value).toBe('Tachado');
+
+    // El total del período no cambia: el nulo suma 0.
+    expect(ws.getCell('I8').value).toBe('Total horas del período');
+    expect(ws.getCell('N8').value).toBeCloseTo(1);
+  }, 30_000);
+});

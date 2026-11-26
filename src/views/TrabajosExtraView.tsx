@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { opcionesOperador } from '../lib/operadores-habituales';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Switch } from '@heroui/react';
 import { ArrowLeft, ArrowRight, ChevronRight, History, Lock, Pencil, Plus, X } from 'lucide-react';
 
 import {
+  esNulo,
+  reportNuloFormSchema,
   trabajoExtraCorreccionSchema,
   trabajoExtraFormSchema,
   ACTIVIDAD_DE_PLANTA,
@@ -27,7 +30,9 @@ import { usePhotoCaptureFlow } from '../lib/usePhotoCaptureFlow';
 import { FotoRespaldoField } from '../components/flota/FotoRespaldoField';
 import {
   COBRO_MINIMO_HORAS,
+  ETIQUETA_NULO,
   actividadDeFila,
+  codigoEquipoReport,
   cobraMinimo,
   horasCobrables,
   horasDelDetalle,
@@ -42,6 +47,7 @@ import {
   useEditarTrabajoExtra,
   useCambiosTrabajoExtra,
   useFolioOcupado,
+  type ValoresReport,
 } from '../hooks/useTrabajosExtra';
 import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
 import { useEquipment } from '../hooks/useEquipment';
@@ -119,6 +125,8 @@ function etiquetaActividades(r: { actividades: string[]; otraActividad: string |
 const MOTIVO_SIN_SINCRONIZAR = 'Se puede editar cuando termine de sincronizarse.';
 /** Un cambio anterior del mismo trabajo espera una acción: encadenar otro encima lo dejaría trabado. */
 const MOTIVO_EDICION_ATENCION = 'Resuelve el cambio pendiente en Sincronización antes de editar de nuevo.';
+/** Un report nulo lo corrigen el administrador o la secretaria, desde el panel. */
+const MOTIVO_NULO = 'Un report nulo lo corrige un administrador o la secretaria desde el panel.';
 
 /** Error fuera de un `Campo` (el mismo rojo que `Campo error=`): el aviso
  * junto al botón, la foto faltante, el desglose sin filas. */
@@ -186,7 +194,9 @@ export function TrabajosExtraView() {
     ? MOTIVO_SIN_SINCRONIZAR
     : detalle?.edicionRequiereAtencion
       ? MOTIVO_EDICION_ATENCION
-      : undefined;
+      : detalle?.nulo
+        ? MOTIVO_NULO
+        : undefined;
 
   /**
    * El turno arranca en el vigente de Terreno (`useTurnoActual`: el mismo que
@@ -238,7 +248,7 @@ export function TrabajosExtraView() {
    * Solo equipos pesados: son los que hacen los trabajos del Report (cliente,
    * 13-11). Al corregir un report viejo hecho con otro equipo, ese se mantiene.
    */
-  const equipoEditado = detalle?.equipoId;
+  const equipoEditado = detalle?.equipoId ?? undefined;
   const opcionesEquipo = useMemo((): OpcionSelector[] => {
     const opcion = (e: (typeof equipos)[number]): OpcionSelector => {
       const operador = enTurno.get(e.id);
@@ -279,6 +289,7 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         foto={foto}
+        permitirNulo
         textoBoton="Registrar trabajo"
         pendiente={isGuardando}
         onGuardar={async (values) => {
@@ -295,7 +306,9 @@ export function TrabajosExtraView() {
     </Card>
   );
 
-  const codigo = (r: TrabajoExtraProyectado) => r.equipo?.internalCode ?? r.equipoId;
+  const codigo = (r: TrabajoExtraProyectado) => codigoEquipoReport(r);
+  /** Las horas a cobrar de una fila: 0 en un nulo. */
+  const horasFila = (r: TrabajoExtraProyectado) => horasCobrables(r.totalHoras, r.nulo);
 
   const lista =
     registros.length === 0 ? (
@@ -320,7 +333,14 @@ export function TrabajosExtraView() {
         <tbody>
           {registros.map((r) => (
             <tr key={r.id}>
-              <td className={`${TD} tabular font-semibold whitespace-nowrap`}>{numeroReport(r.reportNumero)}</td>
+              <td className={`${TD} tabular font-semibold whitespace-nowrap`}>
+                {numeroReport(r.reportNumero)}
+                {r.nulo && (
+                  <div className="mt-1">
+                    <Chip tono="danger">{ETIQUETA_NULO}</Chip>
+                  </div>
+                )}
+              </td>
               <td className={`${TD} tabular whitespace-nowrap`}>
                 {fmtDate(r.fecha)}
                 <div className="text-[12.5px] text-muted-foreground">{r.turno}</div>
@@ -330,13 +350,13 @@ export function TrabajosExtraView() {
                 <b className="tabular block text-[15px] font-semibold">{codigo(r)}</b>
               </td>
               <td className={`${TD} whitespace-nowrap`}>
-                {r.operador}
+                {r.operador ?? '—'}
                 {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
                 {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
               </td>
               <td className={`${TD} tabular text-right font-semibold whitespace-nowrap`}>
-                {fmtNum(horasCobrables(r.totalHoras))} h
-                {cobraMinimo(r.totalHoras) && (
+                {fmtNum(horasFila(r))} h
+                {cobraMinimo(r.totalHoras, r.nulo) && (
                   <div className="text-[12px] font-normal text-muted-foreground">real {fmtNum(r.totalHoras)} h</div>
                 )}
               </td>
@@ -363,11 +383,15 @@ export function TrabajosExtraView() {
                   {numeroReport(r.reportNumero)}
                 </div>
                 <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{codigo(r)}</div>
-                <div className="truncate text-[13px] text-muted-foreground">{r.operador}</div>
+                <div className="truncate text-[13px] text-muted-foreground">{r.operador ?? 'Sin operador'}</div>
               </div>
               <Chip tono="neutral">{r.faena}</Chip>
             </div>
-            <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            {r.nulo ? (
+              <Chip tono="danger">{ETIQUETA_NULO} · report anulado</Chip>
+            ) : (
+              <Chip tono="info">{etiquetaActividades(r)}</Chip>
+            )}
             {r.sinSincronizar && <MarcaSinSincronizar requiereAtencion={r.requiereAtencion} />}
                 {r.edicionSinSincronizar && <MarcaSinSincronizar edicion requiereAtencion={r.edicionRequiereAtencion} />}
             <div className="tabular flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted-foreground">
@@ -375,8 +399,8 @@ export function TrabajosExtraView() {
                 {fmtDate(r.fecha)} · {r.turno}
               </span>
               <span className="font-semibold text-foreground">
-                {fmtNum(horasCobrables(r.totalHoras))} h
-                {cobraMinimo(r.totalHoras) && (
+                {fmtNum(horasFila(r))} h
+                {cobraMinimo(r.totalHoras, r.nulo) && (
                   <span className="font-normal text-muted-foreground"> · real {fmtNum(r.totalHoras)} h</span>
                 )}
               </span>
@@ -399,7 +423,7 @@ export function TrabajosExtraView() {
       <AvisoEdicion />
       <FormularioTrabajo
         inicial={{
-          equipoId: detalle.equipoId,
+          equipoId: detalle.equipoId ?? '',
           operatorId: detalle.operatorId ?? '',
           faena: detalle.faena,
           turno: detalle.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO',
@@ -431,6 +455,9 @@ export function TrabajosExtraView() {
         idEditado={detalle.id}
         pendiente={isActualizando}
         onGuardar={async (payload) => {
+          // La edición de Terreno es solo de Reports normales (un nulo se
+          // corrige desde el panel).
+          if (esNulo(payload)) return;
           if (await guardarCambio(detalle, payload)) setEditando(false);
         }}
         onCancelar={() => setEditando(false)}
@@ -464,77 +491,11 @@ export function TrabajosExtraView() {
       )}
       {detalle.edicionRequiereAtencion && <Hint>{MOTIVO_EDICION_ATENCION}</Hint>}
 
-      <Cifras
-        items={[
-          { label: 'Horóm. inicial', valor: fmtNum(detalle.horometroInicial) },
-          { label: 'Horóm. final', valor: fmtNum(detalle.horometroFinal) },
-          { label: 'Horas reales', valor: `${fmtNum(detalle.totalHoras)} h` },
-          { label: 'A cobrar', valor: `${fmtNum(horasCobrables(detalle.totalHoras))} h`, destacado: true },
-        ]}
-      />
-      {cobraMinimo(detalle.totalHoras) && (
-        <Hint>Duró menos de {COBRO_MINIMO_HORAS} h: se cobra el mínimo de {COBRO_MINIMO_HORAS} h máquina.</Hint>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <GrupoHead titulo="Trabajo" />
-        <Filas
-          filas={[
-            ['N° de report', numeroReport(detalle.reportNumero)],
-            ['Fecha', fmtDate(detalle.fecha)],
-            ['Turno', detalle.turno],
-            ['Faena', detalle.faena],
-            ['Equipo', codigo(detalle)],
-            ['Operador', detalle.operador],
-          ]}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <GrupoHead titulo="Actividades" />
-        {detalle.detalleActividades?.length ? (
-          // El desglose: qué se hizo, dónde y cuántas horas máquina cada una.
-          <div className="flex flex-col overflow-hidden rounded-2xl border border-border">
-            {detalle.detalleActividades.map((f, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-2.5 border-t border-border bg-card px-3 py-2.5 first:border-t-0"
-              >
-                <div className="min-w-0">
-                  <div className="text-[14.5px] font-semibold">{actividadDeFila(f, detalle.otraActividad)}</div>
-                  <div className="text-[12.5px] text-muted-foreground">{lugarDeFila(f)}</div>
-                  {f.descripcion && <div className="mt-0.5 text-[13px] leading-snug">{f.descripcion}</div>}
-                </div>
-                <span className="tabular shrink-0 text-[14.5px] font-semibold">{fmtNum(f.horas)} h</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          // Registro anterior al desglose: solo la lista de actividades.
-          <div className="flex flex-wrap gap-1.5">
-            {etiquetaActividades(detalle)
-              .split(', ')
-              .map((a) => (
-                <ChipContexto key={a}>{a}</ChipContexto>
-              ))}
-          </div>
-        )}
-      </div>
-
-      {/* Un solo bloque: los reports anteriores tenían las observaciones
-          aparte y se muestran juntas, una debajo de la otra. */}
-      <div className="flex flex-col gap-1.5">
-        <GrupoHead titulo="Descripción y observaciones" />
-        <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
-          {descripcionYObservaciones(detalle) || (
-            <span className="text-muted-foreground">Sin descripción ni observaciones.</span>
-          )}
-        </p>
-      </div>
+      {detalle.nulo ? vistaDetalleNulo(detalle) : vistaDetalleTrabajo(detalle)}
 
       {detalle.fotoUrl && (
         <div className="flex flex-col gap-1.5">
-          <GrupoHead titulo="Foto del report" />
+          <GrupoHead titulo={detalle.nulo ? 'Foto del report anulado' : 'Foto del report'} />
           <a
             className="text-sm font-medium text-(--accent) hover:underline"
             href={detalle.fotoUrl}
@@ -549,6 +510,111 @@ export function TrabajosExtraView() {
       <HistorialCambios entradas={cambios.data ?? []} cargando={cambios.isLoading} />
     </div>
   );
+
+  /** El detalle de un report NULO: sin cifras ni actividades (no hubo trabajo). */
+  function vistaDetalleNulo(d: TrabajoExtraProyectado) {
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tono="danger">{ETIQUETA_NULO}</Chip>
+          <Hint>Report en papel anulado: queda registrado su N° y no suma horas ni cobro.</Hint>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Report nulo" />
+          <Filas
+            filas={[
+              ['N° de report', numeroReport(d.reportNumero)],
+              ['Fecha', fmtDate(d.fecha)],
+              ['Turno', d.turno],
+              ['Faena', d.faena],
+              ['Equipo', d.equipoId ? codigo(d) : 'Sin equipo'],
+              ['Operador', d.operador ?? 'Sin operador'],
+            ]}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Motivo" />
+          <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
+            {d.descripcion?.trim() || <span className="text-muted-foreground">Sin motivo indicado.</span>}
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  function vistaDetalleTrabajo(detalle: TrabajoExtraProyectado) {
+    return (
+      <>
+        <Cifras
+          items={[
+            { label: 'Horóm. inicial', valor: fmtNum(detalle.horometroInicial) },
+            { label: 'Horóm. final', valor: fmtNum(detalle.horometroFinal) },
+            { label: 'Horas reales', valor: `${fmtNum(detalle.totalHoras)} h` },
+            { label: 'A cobrar', valor: `${fmtNum(horasCobrables(detalle.totalHoras))} h`, destacado: true },
+          ]}
+        />
+        {cobraMinimo(detalle.totalHoras) && (
+          <Hint>Duró menos de {COBRO_MINIMO_HORAS} h: se cobra el mínimo de {COBRO_MINIMO_HORAS} h máquina.</Hint>
+        )}
+
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Trabajo" />
+          <Filas
+            filas={[
+              ['N° de report', numeroReport(detalle.reportNumero)],
+              ['Fecha', fmtDate(detalle.fecha)],
+              ['Turno', detalle.turno],
+              ['Faena', detalle.faena],
+              ['Equipo', codigo(detalle)],
+              ['Operador', detalle.operador ?? '—'],
+            ]}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Actividades" />
+          {detalle.detalleActividades?.length ? (
+            // El desglose: qué se hizo, dónde y cuántas horas máquina cada una.
+            <div className="flex flex-col overflow-hidden rounded-2xl border border-border">
+              {detalle.detalleActividades.map((f, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2.5 border-t border-border bg-card px-3 py-2.5 first:border-t-0"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[14.5px] font-semibold">{actividadDeFila(f, detalle.otraActividad)}</div>
+                    <div className="text-[12.5px] text-muted-foreground">{lugarDeFila(f)}</div>
+                    {f.descripcion && <div className="mt-0.5 text-[13px] leading-snug">{f.descripcion}</div>}
+                  </div>
+                  <span className="tabular shrink-0 text-[14.5px] font-semibold">{fmtNum(f.horas)} h</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // Registro anterior al desglose: solo la lista de actividades.
+            <div className="flex flex-wrap gap-1.5">
+              {etiquetaActividades(detalle)
+                .split(', ')
+                .map((a) => (
+                  <ChipContexto key={a}>{a}</ChipContexto>
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* Un solo bloque: los reports anteriores tenían las observaciones
+            aparte y se muestran juntas, una debajo de la otra. */}
+        <div className="flex flex-col gap-1.5">
+          <GrupoHead titulo="Descripción y observaciones" />
+          <p className="m-0 rounded-2xl border border-border bg-[#fafbfc] px-3 py-2.5 text-[14.5px] whitespace-pre-line">
+            {descripcionYObservaciones(detalle) || (
+              <span className="text-muted-foreground">Sin descripción ni observaciones.</span>
+            )}
+          </p>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -585,12 +651,12 @@ export function TrabajosExtraView() {
         }}
         titulo={
           detalle
-            ? `${editando ? 'Editar · ' : ''}${numeroReport(detalle.reportNumero)} · ${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
+            ? `${editando ? 'Editar · ' : ''}${numeroReport(detalle.reportNumero)}${detalle.nulo ? ` · ${ETIQUETA_NULO}` : ''} · ${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
             : 'Historial de trabajos'
         }
         detalle={
           detalle
-            ? `${detalle.faena} · turno ${detalle.turno} · ${detalle.operador}`
+            ? `${detalle.faena} · turno ${detalle.turno} · ${detalle.operador ?? 'sin operador'}`
             : `Patillo y Kainita · ${registros.length} ${registros.length === 1 ? 'registro' : 'registros'}`
         }
       >
@@ -620,8 +686,11 @@ function FormularioTrabajo({
   onCancelar,
   folios,
   idEditado,
+  permitirNulo = false,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
+  /** Ofrece el interruptor «Report nulo» (solo al registrar uno nuevo). */
+  permitirNulo?: boolean;
   /** Los Reports ya registrados (los del servidor y los que esperan en la
    * cola): de ahí sale el último folio y si el escrito se repite. */
   folios: readonly { id: string; reportNumero?: string | null }[];
@@ -638,9 +707,17 @@ function FormularioTrabajo({
   foto?: ReturnType<typeof usePhotoCaptureFlow>;
   textoBoton: string;
   pendiente: boolean;
-  onGuardar: (values: TrabajoExtraForm) => void | Promise<void>;
+  onGuardar: (values: ValoresReport) => void | Promise<void>;
   onCancelar?: () => void;
 }) {
+  /**
+   * «Report nulo»: el papel se anuló. El formulario pide solo N°, fecha y la
+   * foto; equipo, operador y motivo quedan opcionales y se ocultan horómetros
+   * y actividades. Vive en un ref además del estado: el resolver lo lee al
+   * validar, sin depender del render.
+   */
+  const [nulo, setNuloEstado] = useState(false);
+  const nuloRef = useRef(false);
   // «Tus operadores» primero: los que salen habitualmente con este supervisor.
   const supervisorId = useCurrentUser().user?.id;
   const {
@@ -649,11 +726,33 @@ function FormularioTrabajo({
     watch,
     setValue,
     formState: { errors, isSubmitted, submitCount },
-  } = useForm<TrabajoExtraFormInput, unknown, TrabajoExtraForm>({
-    // Al corregir, una actividad anterior a la descripción puede quedar sin ella.
-    resolver: zodResolver(idEditado ? trabajoExtraCorreccionSchema : trabajoExtraFormSchema),
+    clearErrors,
+  } = useForm<TrabajoExtraFormInput, unknown, ValoresReport>({
+    // Al corregir, una actividad anterior a la descripción puede quedar sin
+    // ella. Un nulo valida con su propio schema (solo N°, fecha y opcionales).
+    resolver: (valores, contexto, opciones) =>
+      nuloRef.current
+        ? (zodResolver(reportNuloFormSchema) as unknown as Resolver<TrabajoExtraFormInput, unknown, ValoresReport>)(
+            { ...valores, nulo: true } as unknown as TrabajoExtraFormInput,
+            contexto,
+            opciones,
+          )
+        : (
+            zodResolver(idEditado ? trabajoExtraCorreccionSchema : trabajoExtraFormSchema) as unknown as Resolver<
+              TrabajoExtraFormInput,
+              unknown,
+              ValoresReport
+            >
+          )(valores, contexto, opciones),
     defaultValues: inicial,
   });
+  const setNulo = (valor: boolean) => {
+    nuloRef.current = valor;
+    setNuloEstado(valor);
+    // Los errores del otro modo ya no aplican (p. ej. horómetros vacíos).
+    clearErrors();
+    setFotoFaltante(false);
+  };
   /** La foto no vive en el schema (es un `File`): se exige a mano al enviar. */
   const [fotoFaltante, setFotoFaltante] = useState(false);
 
@@ -737,9 +836,28 @@ function FormularioTrabajo({
       })}
     >
       <Form>
+        {permitirNulo && (
+          <div className="flex flex-col gap-1.5 rounded-2xl border border-border bg-[#fafbfc] p-3">
+            <Switch isSelected={nulo} onChange={setNulo}>
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+                <span className="flex flex-col">
+                  <span className="text-[14.5px] font-semibold text-foreground">Report nulo</span>
+                  <span className="text-[12.5px] leading-snug text-muted-foreground">
+                    El report en papel se anuló (tachado y marcado «NULO»). Se registra igual para que su N° no quede
+                    como hueco: pide el N°, la fecha y la foto del papel. No suma horas ni cobro.
+                  </span>
+                </span>
+              </Switch.Content>
+            </Switch>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <Campo
-            label="Equipo"
+            label={nulo ? 'Equipo (opcional)' : 'Equipo'}
             error={errors.equipoId?.message}
             hint={
               operadorEnTurno != null
@@ -765,7 +883,7 @@ function FormularioTrabajo({
               opciones={opcionesEquipo}
             />
           </Campo>
-          <Campo label="Operador" error={errors.operatorId?.message}>
+          <Campo label={nulo ? 'Operador (opcional)' : 'Operador'} error={errors.operatorId?.message}>
             <Selector
               etiqueta="Operador"
               placeholder="Elegí el operador"
@@ -817,205 +935,218 @@ function FormularioTrabajo({
           />
         </Campo>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Campo label="Horómetro inicial" unidad="h" error={errors.horometroInicial?.message}>
-            <Input numerico placeholder="0" {...register('horometroInicial')} />
-          </Campo>
-          <Campo label="Horómetro final" unidad="h" error={errors.horometroFinal?.message}>
-            <Input numerico placeholder="0" {...register('horometroFinal')} />
-          </Campo>
-        </div>
-        <Hint>Delimitan el trabajo, no el turno completo.</Hint>
+        {!nulo && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo label="Horómetro inicial" unidad="h" error={errors.horometroInicial?.message}>
+                <Input numerico placeholder="0" {...register('horometroInicial')} />
+              </Campo>
+              <Campo label="Horómetro final" unidad="h" error={errors.horometroFinal?.message}>
+                <Input numerico placeholder="0" {...register('horometroFinal')} />
+              </Campo>
+            </div>
+            <Hint>Delimitan el trabajo, no el turno completo.</Hint>
 
-        {/* Lo que se muestra es lo que se COBRA: el mínimo es una hora
-            máquina. Las horas reales van en la nota cuando
-            son menos, para que se vea por qué la cifra no calza con la
-            resta de los horómetros. */}
-        <Calculado
-          label="Horas a cobrar"
-          nota={
-            <span className="flex items-center gap-1.5">
-              <Lock className="h-[13px] w-[13px]" />
-              {totalHoras != null && cobraMinimo(totalHoras)
-                ? `Duró ${fmtNum(totalHoras)} h · mínimo ${COBRO_MINIMO_HORAS} h máquina`
-                : `Calculado · mínimo ${COBRO_MINIMO_HORAS} h máquina`}
-            </span>
-          }
-          valor={totalHoras != null ? `${fmtNum(horasCobrables(totalHoras))} h` : '—'}
-        />
+            {/* Lo que se muestra es lo que se COBRA: el mínimo es una hora
+                máquina. Las horas reales van en la nota cuando
+                son menos, para que se vea por qué la cifra no calza con la
+                resta de los horómetros. */}
+            <Calculado
+              label="Horas a cobrar"
+              nota={
+                <span className="flex items-center gap-1.5">
+                  <Lock className="h-[13px] w-[13px]" />
+                  {totalHoras != null && cobraMinimo(totalHoras)
+                    ? `Duró ${fmtNum(totalHoras)} h · mínimo ${COBRO_MINIMO_HORAS} h máquina`
+                    : `Calculado · mínimo ${COBRO_MINIMO_HORAS} h máquina`}
+                </span>
+              }
+              valor={totalHoras != null ? `${fmtNum(horasCobrables(totalHoras))} h` : '—'}
+            />
 
-        {/*
-          El desglose del report, UNA FILA POR ACTIVIDAD (planilla del
-          cliente): qué se hizo, de qué tipo —define cómo se paga; la
-          limpieza de silos es Planta sola y es la única—, cuántas horas
-          máquina tomó y su descripción. Las horas son desglose: el cobro
-          sigue saliendo de los horómetros, y un descuadre avisa sin bloquear.
-        */}
-        <div className="flex flex-col gap-2">
-          <Label>Actividades del report</Label>
-          <Hint>
-            Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado, lo
-            circunstancial, como trabajos con otras empresas.
-          </Hint>
-          {filas.map((fila, i) => {
-            const err = erroresDetalle?.[i];
-            return (
-              <div key={i} className="flex flex-col gap-2 rounded-2xl border border-border bg-[#fafbfc] p-2.5">
-                <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <Campo label={`Actividad ${i + 1}`} error={err?.actividad?.message}>
-                      <Selector
-                        etiqueta={`Actividad ${i + 1}`}
-                        placeholder="Elegí la actividad"
-                        valor={fila.actividad}
-                        onChange={(v) => {
-                          const lugar = tipoAlCambiarActividad(v, fila.lugar);
-                          cambiarFila(i, { actividad: v, lugar, ...(lugar !== 'PLANTA' ? { plantas: [] } : {}) });
-                        }}
-                        opciones={ACTIVIDADES.map((a) => ({ valor: a.value, titulo: a.label }))}
-                      />
-                    </Campo>
-                  </div>
-                  {filas.length > 1 && (
-                    <button
-                      type="button"
-                      aria-label={`Quitar la actividad ${i + 1}`}
-                      onClick={() => ponerFilas(filas.filter((_, j) => j !== i))}
-                      className="inline-flex h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl border-[1.5px] border-[var(--line2,#c3c9d1)] bg-card text-muted-foreground"
-                    >
-                      <X className="h-[18px] w-[18px]" aria-hidden />
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
-                  {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
-                    // La limpieza de silos es siempre de tipo Planta: no se elige.
-                    <Campo label="Tipo" error={err?.lugar?.message}>
-                      <Input
-                        readOnly
-                        aria-label={`Tipo de la actividad ${i + 1}`}
-                        value={`${destinoLabel.PLANTA} · automático`}
-                      />
-                    </Campo>
-                  ) : (
-                    <Campo label="Tipo" error={err?.lugar?.message}>
-                      <Selector
-                        etiqueta={`Tipo de la actividad ${i + 1}`}
-                        placeholder="Elige el tipo"
-                        valor={fila.lugar}
-                        onChange={(v) => cambiarFila(i, { lugar: v, plantas: [] })}
-                        opciones={TIPOS_ELEGIBLES.map((d) => ({ valor: d.value as string, titulo: d.label }))}
-                      />
-                    </Campo>
-                  )}
-                  <Campo label="HM" unidad="h" error={err?.horas?.message}>
-                    <Input
-                      numerico
-                      aria-label={`Horas máquina de la actividad ${i + 1}`}
-                      value={fila.horas ?? ''}
-                      onChange={(e) =>
-                        cambiarFila(i, { horas: e.target.value === '' ? undefined : e.target.value })
-                      }
-                    />
-                  </Campo>
-                </div>
-                {fila.lugar === 'PLANTA' && (
-                  // Una limpieza de silos puede abarcar varias plantas (PP1 y PP4):
-                  // se marcan todas las que correspondan.
-                  <div
-                    role="group"
-                    aria-label={`Plantas de la actividad ${i + 1}`}
-                    className="flex flex-col gap-1.5"
-                  >
-                    <Label requerido>¿En qué plantas? · Selecciona 1 o más</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {opcionesPlantasSilos(fila.plantas ?? []).map(({ nombre, detalle }) => {
-                        const elegidas = fila.plantas ?? [];
-                        const activo = elegidas.includes(nombre);
-                        return (
-                          <ChipSeleccion
-                            key={nombre}
-                            activo={activo}
-                            onToggle={() =>
-                              cambiarFila(i, {
-                                plantas: activo ? elegidas.filter((p) => p !== nombre) : [...elegidas, nombre],
-                              })
-                            }
-                          >
-                            <span className="flex flex-col items-start leading-tight">
-                              <span>{nombre}</span>
-                              {detalle && (
-                                <span className="text-[11.5px] font-normal text-muted-foreground">{detalle}</span>
-                              )}
-                            </span>
-                          </ChipSeleccion>
-                        );
-                      })}
+            {/*
+              El desglose del report, UNA FILA POR ACTIVIDAD (planilla del
+              cliente): qué se hizo, de qué tipo —define cómo se paga; la
+              limpieza de silos es Planta sola y es la única—, cuántas horas
+              máquina tomó y su descripción. Las horas son desglose: el cobro
+              sigue saliendo de los horómetros, y un descuadre avisa sin bloquear.
+            */}
+            <div className="flex flex-col gap-2">
+              <Label>Actividades del report</Label>
+              <Hint>
+                Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado, lo
+                circunstancial, como trabajos con otras empresas.
+              </Hint>
+              {filas.map((fila, i) => {
+                const err = erroresDetalle?.[i];
+                return (
+                  <div key={i} className="flex flex-col gap-2 rounded-2xl border border-border bg-[#fafbfc] p-2.5">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Campo label={`Actividad ${i + 1}`} error={err?.actividad?.message}>
+                          <Selector
+                            etiqueta={`Actividad ${i + 1}`}
+                            placeholder="Elegí la actividad"
+                            valor={fila.actividad}
+                            onChange={(v) => {
+                              const lugar = tipoAlCambiarActividad(v, fila.lugar);
+                              cambiarFila(i, { actividad: v, lugar, ...(lugar !== 'PLANTA' ? { plantas: [] } : {}) });
+                            }}
+                            opciones={ACTIVIDADES.map((a) => ({ valor: a.value, titulo: a.label }))}
+                          />
+                        </Campo>
+                      </div>
+                      {filas.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Quitar la actividad ${i + 1}`}
+                          onClick={() => ponerFilas(filas.filter((_, j) => j !== i))}
+                          className="inline-flex h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl border-[1.5px] border-[var(--line2,#c3c9d1)] bg-card text-muted-foreground"
+                        >
+                          <X className="h-[18px] w-[18px]" aria-hidden />
+                        </button>
+                      )}
                     </div>
-                    {err?.plantas?.message ? (
-                      <TextoError>{err.plantas.message}</TextoError>
-                    ) : (
-                      <Hint>{AYUDA_PLANTAS_SILOS}</Hint>
+                    <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
+                      {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
+                        // La limpieza de silos es siempre de tipo Planta: no se elige.
+                        <Campo label="Tipo" error={err?.lugar?.message}>
+                          <Input
+                            readOnly
+                            aria-label={`Tipo de la actividad ${i + 1}`}
+                            value={`${destinoLabel.PLANTA} · automático`}
+                          />
+                        </Campo>
+                      ) : (
+                        <Campo label="Tipo" error={err?.lugar?.message}>
+                          <Selector
+                            etiqueta={`Tipo de la actividad ${i + 1}`}
+                            placeholder="Elige el tipo"
+                            valor={fila.lugar}
+                            onChange={(v) => cambiarFila(i, { lugar: v, plantas: [] })}
+                            opciones={TIPOS_ELEGIBLES.map((d) => ({ valor: d.value as string, titulo: d.label }))}
+                          />
+                        </Campo>
+                      )}
+                      <Campo label="HM" unidad="h" error={err?.horas?.message}>
+                        <Input
+                          numerico
+                          aria-label={`Horas máquina de la actividad ${i + 1}`}
+                          value={fila.horas ?? ''}
+                          onChange={(e) =>
+                            cambiarFila(i, { horas: e.target.value === '' ? undefined : e.target.value })
+                          }
+                        />
+                      </Campo>
+                    </div>
+                    {fila.lugar === 'PLANTA' && (
+                      // Una limpieza de silos puede abarcar varias plantas (PP1 y PP4):
+                      // se marcan todas las que correspondan.
+                      <div
+                        role="group"
+                        aria-label={`Plantas de la actividad ${i + 1}`}
+                        className="flex flex-col gap-1.5"
+                      >
+                        <Label requerido>¿En qué plantas? · Selecciona 1 o más</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {opcionesPlantasSilos(fila.plantas ?? []).map(({ nombre, detalle }) => {
+                            const elegidas = fila.plantas ?? [];
+                            const activo = elegidas.includes(nombre);
+                            return (
+                              <ChipSeleccion
+                                key={nombre}
+                                activo={activo}
+                                onToggle={() =>
+                                  cambiarFila(i, {
+                                    plantas: activo ? elegidas.filter((p) => p !== nombre) : [...elegidas, nombre],
+                                  })
+                                }
+                              >
+                                <span className="flex flex-col items-start leading-tight">
+                                  <span>{nombre}</span>
+                                  {detalle && (
+                                    <span className="text-[11.5px] font-normal text-muted-foreground">{detalle}</span>
+                                  )}
+                                </span>
+                              </ChipSeleccion>
+                            );
+                          })}
+                        </div>
+                        {err?.plantas?.message ? (
+                          <TextoError>{err.plantas.message}</TextoError>
+                        ) : (
+                          <Hint>{AYUDA_PLANTAS_SILOS}</Hint>
+                        )}
+                      </div>
                     )}
+                    <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>
+                      <Textarea
+                        rows={2}
+                        maxLength={DESCRIPCION_ACTIVIDAD_MAX}
+                        aria-label={`Descripción de la actividad ${i + 1}`}
+                        placeholder={
+                          fila.actividad === ACTIVIDAD_DE_PLANTA
+                            ? 'Ej: silo 2, limpieza de fondo y paredes'
+                            : 'Qué se hizo en esta actividad y dónde'
+                        }
+                        value={fila.descripcion ?? ''}
+                        onChange={(e) => cambiarFila(i, { descripcion: e.target.value })}
+                      />
+                    </Campo>
                   </div>
-                )}
-                <Campo label="Descripción de la actividad" error={err?.descripcion?.message}>
-                  <Textarea
-                    rows={2}
-                    maxLength={DESCRIPCION_ACTIVIDAD_MAX}
-                    aria-label={`Descripción de la actividad ${i + 1}`}
-                    placeholder={
-                      fila.actividad === ACTIVIDAD_DE_PLANTA
-                        ? 'Ej: silo 2, limpieza de fondo y paredes'
-                        : 'Qué se hizo en esta actividad y dónde'
-                    }
-                    value={fila.descripcion ?? ''}
-                    onChange={(e) => cambiarFila(i, { descripcion: e.target.value })}
-                  />
-                </Campo>
-              </div>
-            );
-          })}
-          <Boton variante="contorno" ancho type="button" onClick={() => ponerFilas([...filas, filaVacia()])}>
-            <Plus className="h-[18px] w-[18px]" /> Agregar actividad
-          </Boton>
-          {erroresDetalle?.message && <TextoError>{erroresDetalle.message}</TextoError>}
-          {descuadre && totalHoras != null && (
-            <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" role="status">
-              Las actividades suman {fmtNum(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
-              {fmtNum(horasCobrables(totalHoras))} h a cobrar. Se puede registrar igual — revisá el desglose por si
-              un dato quedó mal.
-            </span>
-          )}
-        </div>
+                );
+              })}
+              <Boton variante="contorno" ancho type="button" onClick={() => ponerFilas([...filas, filaVacia()])}>
+                <Plus className="h-[18px] w-[18px]" /> Agregar actividad
+              </Boton>
+              {erroresDetalle?.message && <TextoError>{erroresDetalle.message}</TextoError>}
+              {descuadre && totalHoras != null && (
+                <span className="text-[12.5px] leading-snug text-[var(--warning-soft-foreground)]" role="status">
+                  Las actividades suman {fmtNum(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
+                  {fmtNum(horasCobrables(totalHoras))} h a cobrar. Se puede registrar igual — revisá el desglose por si
+                  un dato quedó mal.
+                </span>
+              )}
+            </div>
 
-        {/* El texto aparece solo si alguna fila eligió «Otro», y es
-            obligatorio: sin él la actividad quedaría como «otro» a secas y el
-            trabajo no se podría justificar ni cobrar. */}
-        {filas.some((f) => f.actividad === 'OTRO') && (
-          <Campo label="¿Cuál fue la otra actividad?" requerido error={errors.otraActividad?.message}>
-            <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
-          </Campo>
+            {/* El texto aparece solo si alguna fila eligió «Otro», y es
+                obligatorio: sin él la actividad quedaría como «otro» a secas y el
+                trabajo no se podría justificar ni cobrar. */}
+            {filas.some((f) => f.actividad === 'OTRO') && (
+              <Campo label="¿Cuál fue la otra actividad?" requerido error={errors.otraActividad?.message}>
+                <Input placeholder="Ej: despeje de acceso a romana" {...register('otraActividad')} />
+              </Campo>
+            )}
+          </>
         )}
 
-        {/* Un solo campo para la descripción general y las observaciones
-            (pedido del 15/11/2026): cada actividad ya trae su descripción, y
-            dos cajas de texto libre confundían. Va en `descripcion`. */}
-        <Campo
-          label="Descripción general y/u observaciones (opcional)"
-          hint="Lo que se hizo en general y los incidentes que respalden el cobro: una detención, un neumático pinchado."
-          error={errors.descripcion?.message}
-        >
-          <Textarea rows={3} placeholder="Resumen del trabajo, novedades, detenciones…" {...register('descripcion')} />
-        </Campo>
-
-        {/* Un report anterior con observaciones aparte las sigue mostrando
-            para poder corregirlas; los nuevos ya no las piden. */}
-        {inicial.observaciones ? (
-          <Campo label="Observaciones">
-            <Textarea rows={2} {...register('observaciones')} />
+        {nulo ? (
+          // En un nulo, `descripcion` es el MOTIVO de la anulación.
+          <Campo label="Motivo de la anulación (opcional)" error={errors.descripcion?.message}>
+            <Textarea rows={2} placeholder="Ej: se tachó por un error al llenarlo" {...register('descripcion')} />
           </Campo>
-        ) : null}
+        ) : (
+          <>
+            {/* Un solo campo para la descripción general y las observaciones
+                (pedido del 15/11/2026): cada actividad ya trae su descripción, y
+                dos cajas de texto libre confundían. Va en `descripcion`. */}
+            <Campo
+              label="Descripción general y/u observaciones (opcional)"
+              hint="Lo que se hizo en general y los incidentes que respalden el cobro: una detención, un neumático pinchado."
+              error={errors.descripcion?.message}
+            >
+              <Textarea rows={3} placeholder="Resumen del trabajo, novedades, detenciones…" {...register('descripcion')} />
+            </Campo>
+
+            {/* Un report anterior con observaciones aparte las sigue mostrando
+                para poder corregirlas; los nuevos ya no las piden. */}
+            {inicial.observaciones ? (
+              <Campo label="Observaciones">
+                <Textarea rows={2} {...register('observaciones')} />
+              </Campo>
+            ) : null}
+          </>
+        )}
 
         {foto && (
           <>
@@ -1029,9 +1160,17 @@ function FormularioTrabajo({
               }}
               onClear={foto.handleClearPhoto}
               requerida
-              guia="Encuadrá el report completo, legible y con el folio a la vista: es el respaldo del cobro."
-              title="Foto del report"
-              subtitle="Obligatoria: el trabajo se cobra contra el report en papel."
+              guia={
+                nulo
+                  ? 'Encuadrá el report anulado completo, con el folio y la marca «NULO» a la vista.'
+                  : 'Encuadrá el report completo, legible y con el folio a la vista: es el respaldo del cobro.'
+              }
+              title={nulo ? 'Foto del report anulado' : 'Foto del report'}
+              subtitle={
+                nulo
+                  ? 'Obligatoria: respalda que el papel se anuló.'
+                  : 'Obligatoria: el trabajo se cobra contra el report en papel.'
+              }
               staleQuestion="¿Es la foto del report de este trabajo?"
             />
             {fotoFaltante && <TextoError>La foto del report es obligatoria: sacala antes de registrar.</TextoError>}
@@ -1043,7 +1182,7 @@ function FormularioTrabajo({
         )}
 
         <Boton ancho type="submit" disabled={pendiente}>
-          {pendiente ? 'Guardando…' : textoBoton}
+          {pendiente ? 'Guardando…' : nulo ? 'Registrar report nulo' : textoBoton}
           <ArrowRight className="h-[19px] w-[19px]" />
         </Boton>
         {onCancelar && (

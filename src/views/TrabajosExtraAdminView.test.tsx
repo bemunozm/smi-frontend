@@ -422,3 +422,100 @@ describe('TrabajosExtraAdminView', () => {
     });
   });
 });
+
+describe('TrabajosExtraAdminView — report nulo', () => {
+  const NULO = trabajo({
+    id: 'n1',
+    nulo: true,
+    reportNumero: '4613',
+    equipoId: null,
+    equipo: null,
+    operador: null,
+    horometroInicial: 0,
+    horometroFinal: 0,
+    totalHoras: 0,
+    actividades: [],
+    detalleActividades: null,
+    descripcion: 'Tachado',
+    fecha: '2026-10-15T15:00:00.000Z',
+  });
+
+  it('la tabla marca NULO, no suma horas ni lo cuenta como trabajo', () => {
+    listHook.mockReturnValue(ok([...LISTA, NULO]));
+    render(<TrabajosExtraAdminView />);
+    const fila = screen.getByTestId('trabajo-fila-n1');
+    expect(within(fila).getByText('NULO')).toBeTruthy();
+    expect(fila.textContent).toContain('N° 4613');
+    expect(fila.textContent).toContain('0 h');
+    expect(screen.getByTestId('total-filtrado').textContent).toBe('9,5 h en 3 trabajos · 1 nulo');
+  });
+
+  it('el detalle de un nulo muestra su motivo y no horómetros ni actividades', () => {
+    listHook.mockReturnValue(ok([NULO]));
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-n1'));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('NULO')).toBeTruthy();
+    expect(dialog.getByText('Tachado')).toBeTruthy();
+    expect(dialog.getByText('Sin equipo')).toBeTruthy();
+    expect(dialog.queryByText('Horómetro')).toBeNull();
+  });
+
+  it('«Nuevo report» en modo nulo pide solo N°, fecha y foto y manda `nulo: true`', async () => {
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Nuevo report' }));
+    const dialog = within(screen.getByRole('dialog'));
+    fireEvent.click(dialog.getByRole('switch', { name: /Report nulo/ }));
+
+    expect(dialog.queryByLabelText('Horómetro inicial')).toBeNull();
+    expect(dialog.queryByText('Actividades (qué · tipo · HM)')).toBeNull();
+    const registrar = () => dialog.getByRole('button', { name: 'Registrar report nulo' });
+    // Sin N° ni foto, deshabilitado.
+    expect(registrar().hasAttribute('disabled') || registrar().getAttribute('aria-disabled') === 'true').toBe(true);
+
+    fireEvent.change(dialog.getByLabelText('Fecha y hora del report'), { target: { value: '2026-10-05T21:15' } });
+    fireEvent.change(dialog.getByLabelText('N° de report'), { target: { value: '4614' } });
+    const foto = new File(['nulo'], 'nulo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(dialog.getByLabelText('Foto del report'), { target: { files: [foto] } });
+    fireEvent.click(registrar());
+
+    expect(crearMock).toHaveBeenCalledTimes(1);
+    const [{ values, foto: enviada }] = crearMock.mock.calls[0] as [{ values: Record<string, unknown>; foto: File }];
+    expect(enviada).toBe(foto);
+    expect(values).toMatchObject({
+      nulo: true,
+      reportNumero: '4614',
+      faena: 'Patillo',
+      turno: 'DIURNO',
+      fecha: new Date('2026-10-05T21:15').toISOString(),
+    });
+    expect(values.equipoId).toBeUndefined();
+    expect(values.operatorId).toBeUndefined();
+    expect(values).not.toHaveProperty('detalle');
+    expect(values).not.toHaveProperty('horometroInicial');
+  });
+
+  it('corregir un nulo: N°, fecha y motivo, sin horómetros ni actividades', async () => {
+    listHook.mockReturnValue(ok([NULO]));
+    render(<TrabajosExtraAdminView />);
+    fireEvent.click(screen.getByTestId('trabajo-fila-n1'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.queryByRole('switch', { name: /Report nulo/ })).toBeNull();
+    expect(dialog.queryByLabelText('Horómetro inicial')).toBeNull();
+    fireEvent.change(dialog.getByLabelText('N° de report'), { target: { value: '4615' } });
+    fireEvent.change(dialog.getByLabelText('Motivo de la anulación (opcional)'), { target: { value: 'Mal folio' } });
+    fireEvent.change(dialog.getByLabelText('Fecha y hora del report'), { target: { value: '2026-10-14T10:30' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(guardarMock).toHaveBeenCalledTimes(1));
+    const [original, corregido] = guardarMock.mock.calls[0] as [TrabajoExtraordinario, Record<string, unknown>];
+    expect(original.id).toBe('n1');
+    expect(corregido).toMatchObject({
+      reportNumero: '4615',
+      descripcion: 'Mal folio',
+      fecha: new Date('2026-10-14T10:30').toISOString(),
+    });
+    expect(corregido).not.toHaveProperty('detalle');
+  });
+});

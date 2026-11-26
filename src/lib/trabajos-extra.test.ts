@@ -79,3 +79,22 @@ describe('normalizarFolio y numeroReport', () => {
     expect(numeroReport(null)).toBe('Sin N°');
   });
 });
+
+describe('report nulo — cobro y folio', () => {
+  it('un nulo no se cobra: 0 h y sin el mínimo de 1 h', () => {
+    expect(horasCobrables(0, true)).toBe(0);
+    expect(cobraMinimo(0, true)).toBe(false);
+    // Uno normal sigue con el mínimo.
+    expect(horasCobrables(0)).toBe(1);
+    expect(cobraMinimo(0.3)).toBe(true);
+  });
+
+  it('la pista del folio cuenta un nulo como tomado', () => {
+    const registros = [
+      { id: 'a', reportNumero: '4508' },
+      { id: 'n', reportNumero: '4509', nulo: true },
+    ];
+    expect(pistaFolio(registros, '')).toMatchObject({ ultimo: '4509', siguiente: '4510' });
+    expect(pistaFolio(registros, '4509').repetido).toBe(true);
+  });
+});

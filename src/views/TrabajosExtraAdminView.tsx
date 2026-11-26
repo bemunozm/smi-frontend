@@ -13,6 +13,7 @@ import {
   RangeCalendar,
   Select,
   Spinner,
+  Switch,
   Table,
   TextArea,
   TextField,
@@ -41,6 +42,7 @@ import { turnoLabel } from '../config/flota-colors';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-styles';
 import { NUM_CL, NUM_CL_1 } from '../lib/dashboard-format';
 import {
+  ETIQUETA_NULO,
   actividadDeFila,
   horasDelDetalle,
   horasCobrables,
@@ -66,11 +68,13 @@ import {
   opcionesPlantasSilos,
   descripcionYObservaciones,
   plantasDeFila,
+  reportNuloEdicionSchema,
+  reportNuloFormSchema,
   tipoAlCambiarActividad,
   trabajoExtraEdicionSchema,
   trabajoExtraFormSchema,
 } from '../types/trabajosExtra';
-import type { TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
+import type { ReportNuloEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 const TURNOS = ['DIURNO', 'NOCTURNO'] as const;
 
@@ -107,8 +111,10 @@ function diaLocal(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-/** Actividades legibles; «Otro» muestra el texto libre si lo trae. */
+/** Actividades legibles; «Otro» muestra el texto libre si lo trae. Un report
+ * nulo no tiene actividades: se lee como tal. */
 function actividadesDe(trabajo: TrabajoExtraordinario): string {
+  if (trabajo.nulo) return 'Report nulo (papel anulado)';
   return trabajo.actividades
     .map((a) => (a === 'OTRO' && trabajo.otraActividad ? `Otro: ${trabajo.otraActividad}` : (actividadLabel[a] ?? a)))
     .join(', ');
@@ -166,6 +172,15 @@ const OPCIONES_ORDEN: SortOption[] = [
 /** Por defecto: la fecha más reciente primero. */
 const ORDEN_INICIAL: TableSort = { column: 'fecha', direction: 'descending' };
 
+/** El chip «NULO» de un report anulado (tabla, tarjetas y detalle). */
+function ChipNulo() {
+  return (
+    <Chip color="danger" size="sm" variant="soft">
+      {ETIQUETA_NULO}
+    </Chip>
+  );
+}
+
 function Dato({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3.5 border-t border-separator py-2.5">
@@ -208,12 +223,45 @@ function DetalleTrabajoModal({
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
-            {trabajo ? (
+            {trabajo?.nulo ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ChipNulo />
+                  <span className="text-sm text-muted-foreground">
+                    Report en papel anulado: queda registrado su N° y no suma horas ni cobro.
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
+                  <Dato label="Fecha" value={formatFecha(trabajo.fecha)} />
+                  <Dato label="Equipo" value={trabajo.equipo?.internalCode ?? 'Sin equipo'} />
+                  <Dato label="Operador" value={trabajo.operador ?? 'Sin operador'} />
+                  <Dato label="Turno" value={turnoLabel(trabajo.turno)} />
+                  <Dato label="Faena" value={trabajo.faena} />
+                  <Dato label="Registrado por" value={trabajo.registradoPor ?? 'Sin registro'} />
+                </div>
+                {trabajo.fotoUrl ? (
+                  <a
+                    className="text-sm font-medium text-(--accent) hover:underline"
+                    href={trabajo.fotoUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Ver foto del report anulado
+                  </a>
+                ) : null}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold tracking-wider text-(--label-color) uppercase">Motivo</span>
+                  <p className="text-sm whitespace-pre-line text-foreground">
+                    {trabajo.descripcion?.trim() || <span className="text-muted-foreground">Sin motivo indicado.</span>}
+                  </p>
+                </div>
+              </div>
+            ) : trabajo ? (
               <div className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-x-7 sm:grid-cols-2 [&>*:first-child]:border-t-0 sm:[&>*:nth-child(2)]:border-t-0">
                   <Dato label="Fecha" value={formatFecha(trabajo.fecha)} />
                   <Dato label="Equipo" value={trabajo.equipo?.internalCode ?? '—'} />
-                  <Dato label="Operador" value={trabajo.operador} />
+                  <Dato label="Operador" value={trabajo.operador ?? '—'} />
                   <Dato label="Turno" value={turnoLabel(trabajo.turno)} />
                   <Dato label="Faena" value={trabajo.faena} />
                   <Dato
@@ -308,6 +356,10 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const { data: operadores } = useOperators();
   const crear = useCrearTrabajoExtra();
   const { guardar, isGuardando } = useEditarTrabajoExtra();
+  // «Report nulo» (papel anulado): se elige al crear; un nulo ya registrado se
+  // corrige como nulo (no pasa a normal ni al revés). Pide solo N°, fecha y
+  // foto; equipo, operador y motivo quedan opcionales.
+  const [nulo, setNulo] = useState(trabajo?.nulo === true);
   const [equipoId, setEquipoId] = useState(trabajo?.equipoId ?? '');
   const [operatorId, setOperatorId] = useState(trabajo?.operatorId ?? '');
   const [turno, setTurno] = useState(trabajo?.turno === 'NOCTURNO' ? 'NOCTURNO' : 'DIURNO');
@@ -350,9 +402,12 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   // sube online antes del POST (`useCrearTrabajoExtra`). Al editar se
   // conserva la existente.
   const [foto, setFoto] = useState<File | null>(null);
-  const [fecha, setFecha] = useState(() => toDateTimeLocal(new Date()));
-  const fechaIso = trabajo ? null : fechaRegistroIso(fecha);
-  const fechaValida = trabajo != null || fechaIso !== null;
+  // La fecha se elige al crear y, en un nulo, también al corregirlo.
+  const fechaOriginal = trabajo ? toDateTimeLocal(new Date(trabajo.fecha)) : null;
+  const [fecha, setFecha] = useState(() => fechaOriginal ?? toDateTimeLocal(new Date()));
+  const conFecha = !trabajo || nulo;
+  const fechaIso = conFecha ? fechaRegistroIso(fecha) : null;
+  const fechaValida = !conFecha || fechaIso !== null;
 
   const cambiarFila = (i: number, cambios: Partial<FilaDetalleAdmin>) => {
     setFilas((previas) => previas.map((f, j) => (j === i ? { ...f, ...cambios } : f)));
@@ -385,13 +440,21 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   // Al CREAR, folio y desglose son obligatorios. Al EDITAR un trabajo legacy
   // (anterior a esos campos) se pueden dejar vacíos: se omiten del parse y el
   // diff de la edición no los toca (`edicionContraBase` ignora `undefined`).
-  const parsed = trabajo
-    ? trabajoExtraEdicionSchema.safeParse({
-        ...entrada,
-        ...(reportNumero.trim() ? { reportNumero: reportNumero.trim() } : {}),
-        ...(filas.length > 0 ? { detalle: detalleEntrada } : {}),
-      })
-    : trabajoExtraFormSchema.safeParse({ ...entrada, reportNumero, detalle: detalleEntrada });
+  const entradaNulo = { reportNumero, faena, turno, equipoId, operatorId, descripcion };
+  const parsedNulo = nulo
+    ? trabajo
+      ? reportNuloEdicionSchema.safeParse(entradaNulo)
+      : reportNuloFormSchema.safeParse({ ...entradaNulo, nulo: true })
+    : null;
+  const parsed = parsedNulo
+    ? parsedNulo
+    : trabajo
+      ? trabajoExtraEdicionSchema.safeParse({
+          ...entrada,
+          ...(reportNumero.trim() ? { reportNumero: reportNumero.trim() } : {}),
+          ...(filas.length > 0 ? { detalle: detalleEntrada } : {}),
+        })
+      : trabajoExtraFormSchema.safeParse({ ...entrada, reportNumero, detalle: detalleEntrada });
 
   // Aviso del descuadre del desglose, que NO bloquea (decisión del cliente);
   // la regla de PLANTA se avisa por fila y la corta el schema con el botón.
@@ -408,6 +471,25 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
 
   const registrar = () => {
     if (!parsed.success || folioRepetido) return;
+    if (nulo && trabajo) {
+      // La fecha viaja solo si se cambió.
+      const corregido: ReportNuloEdicion = {
+        ...(parsed.data as ReportNuloEdicion),
+        ...(fechaIso && fecha !== fechaOriginal ? { fecha: fechaIso } : { fecha: undefined }),
+      };
+      void guardar(trabajo, corregido).then((ok) => {
+        if (ok) onClose();
+      });
+      return;
+    }
+    if (nulo) {
+      if (!fechaIso || !foto) return;
+      crear.mutate(
+        { values: { ...(parsed.data as ReportNuloEdicion), nulo: true, fecha: fechaIso }, foto },
+        { onSuccess: onClose },
+      );
+      return;
+    }
     if (trabajo) {
       void guardar(trabajo, parsed.data).then((ok) => {
         if (ok) onClose();
@@ -433,15 +515,46 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               {trabajo
-                ? `Editar Report ${numeroReport(trabajo.reportNumero)} · ${trabajo.equipo?.internalCode ?? '—'}`
+                ? `Editar Report ${trabajo.nulo ? 'nulo ' : ''}${numeroReport(trabajo.reportNumero)} · ${trabajo.equipo?.internalCode ?? '—'}`
                 : 'Nuevo report'}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
             <div className="flex flex-col gap-4">
+              {trabajo ? null : (
+                <Switch
+                  isSelected={nulo}
+                  onChange={(on) => {
+                    setNulo(on);
+                    // Faena y turno quedan con su valor por defecto en un nulo.
+                    if (on && !faena.trim()) setFaena('Patillo');
+                  }}
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <span className="flex flex-col">
+                      <span className="text-sm font-medium text-foreground">Report nulo</span>
+                      <span className="text-xs text-muted-foreground">
+                        El report en papel se anuló (tachado y marcado «NULO»). Se registra igual para que su N° no
+                        quede como hueco: pide el N°, la fecha y la foto. No suma horas ni cobro.
+                      </span>
+                    </span>
+                  </Switch.Content>
+                </Switch>
+              )}
+              {trabajo?.nulo ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <ChipNulo />
+                  <span className="text-sm text-muted-foreground">
+                    Se corrigen el N°, la fecha, el motivo y, si se conocen, el equipo y el operador.
+                  </span>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Select fullWidth placeholder="Elegir equipo" value={equipoId} onChange={(value) => value && setEquipoId(String(value))}>
-                  <Label>Equipo</Label>
+                  <Label>{nulo ? 'Equipo (opcional)' : 'Equipo'}</Label>
                   <Select.Trigger>
                     <Select.Value />
                     <Select.Indicator />
@@ -459,7 +572,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 </Select>
 
                 <Select fullWidth placeholder="Elegir operador" value={operatorId} onChange={(value) => value && setOperatorId(String(value))}>
-                  <Label>Operador</Label>
+                  <Label>{nulo ? 'Operador (opcional)' : 'Operador'}</Label>
                   <Select.Trigger>
                     <Select.Value />
                     <Select.Indicator />
@@ -499,26 +612,30 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
 
               {/* «Subir reportes antiguos»: la fecha parte en ahora y se cambia
                   para cargar uno pasado (solo no puede ser futura). */}
-              {trabajo ? null : (
+              {conFecha ? (
                 <TextField fullWidth isInvalid={fechaIso === null} name="fecha" onChange={setFecha} value={fecha}>
-                  <Label>Fecha y hora del trabajo</Label>
+                  <Label>{nulo ? 'Fecha y hora del report' : 'Fecha y hora del trabajo'}</Label>
                   <Input max={toDateTimeLocal(new Date())} type="datetime-local" />
                 </TextField>
-              )}
+              ) : null}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className={`grid grid-cols-1 gap-4 ${nulo ? '' : 'sm:grid-cols-3'}`}>
                 <TextField fullWidth name="faena" onChange={setFaena} value={faena}>
                   <Label>Faena</Label>
                   <Input placeholder="Dónde se hizo el trabajo" />
                 </TextField>
-                <TextField fullWidth name="horometroInicial" onChange={setHorometroInicial} value={horometroInicial}>
-                  <Label>Horómetro inicial</Label>
-                  <Input inputMode="decimal" placeholder="0" />
-                </TextField>
-                <TextField fullWidth name="horometroFinal" onChange={setHorometroFinal} value={horometroFinal}>
-                  <Label>Horómetro final</Label>
-                  <Input inputMode="decimal" placeholder="0" />
-                </TextField>
+                {nulo ? null : (
+                  <>
+                    <TextField fullWidth name="horometroInicial" onChange={setHorometroInicial} value={horometroInicial}>
+                      <Label>Horómetro inicial</Label>
+                      <Input inputMode="decimal" placeholder="0" />
+                    </TextField>
+                    <TextField fullWidth name="horometroFinal" onChange={setHorometroFinal} value={horometroFinal}>
+                      <Label>Horómetro final</Label>
+                      <Input inputMode="decimal" placeholder="0" />
+                    </TextField>
+                  </>
+                )}
               </div>
 
               <div className="flex flex-col gap-1">
@@ -547,203 +664,217 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                   se paga; la limpieza de silos es Planta sola), sus horas
                   máquina y su descripción. En un trabajo legacy la tabla parte
                   vacía; agregar filas reemplaza el desglose completo. */}
-              <div className="flex flex-col gap-3">
-                <span className="text-sm font-medium text-foreground">Actividades (qué · tipo · HM)</span>
-                <p className="m-0 text-xs text-muted-foreground">
-                  Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado,
-                  lo circunstancial, como trabajos con otras empresas.
-                </p>
-                {trabajo && filas.length === 0 ? (
-                  <p className="m-0 text-sm text-muted-foreground">
-                    Este trabajo es anterior al desglose ({actividadesDe(trabajo)}). Si agregás filas, el
-                    desglose nuevo lo reemplaza.
-                  </p>
-                ) : null}
-                {filas.map((fila, i) => (
-                  <div className="flex flex-col gap-3 rounded-xl border border-separator p-3" key={i}>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_96px]">
-                      <Select
-                        fullWidth
-                        placeholder="Actividad"
-                        value={fila.actividad}
-                        onChange={(value) => {
-                          if (!value) return;
-                          const lugar = tipoAlCambiarActividad(String(value), fila.lugar);
-                          cambiarFila(i, {
-                            actividad: String(value),
-                            lugar,
-                            ...(lugar !== 'PLANTA' ? { plantas: [] } : {}),
-                          });
-                        }}
-                      >
-                        <Label>Actividad</Label>
-                        <Select.Trigger>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {ACTIVIDADES.map((a) => (
-                              <ListBox.Item id={a.value} key={a.value} textValue={a.label}>
-                                {a.label}
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
-
-                      {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
-                        // La limpieza de silos es siempre de tipo Planta: no se elige.
-                        <TextField fullWidth isReadOnly name={`detalle-tipo-${i}`} value={`${destinoLabel.PLANTA} · automático`}>
-                          <Label>Tipo</Label>
-                          <Input />
-                        </TextField>
-                      ) : (
-                        <Select
-                          fullWidth
-                          placeholder="Tipo"
-                          value={fila.lugar}
-                          onChange={(value) => value && cambiarFila(i, { lugar: String(value), plantas: [] })}
-                        >
-                          <Label>Tipo</Label>
-                          <Select.Trigger>
-                            <Select.Value />
-                            <Select.Indicator />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox>
-                              {TIPOS_ELEGIBLES.map((d) => (
-                                <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
-                                  {d.label}
-                                  <ListBox.ItemIndicator />
-                                </ListBox.Item>
-                              ))}
-                            </ListBox>
-                          </Select.Popover>
-                        </Select>
-                      )}
-
-                      <TextField
-                        fullWidth
-                        name={`detalle-horas-${i}`}
-                        onChange={(valor) => cambiarFila(i, { horas: valor })}
-                        value={fila.horas}
-                      >
-                        <Label>HM</Label>
-                        <Input inputMode="decimal" placeholder="0" />
-                      </TextField>
-                    </div>
-
-                    {fila.lugar === 'PLANTA' ? (
-                      // Una limpieza de silos puede abarcar varias plantas: se marcan todas.
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-medium text-foreground">
-                          ¿En qué plantas? <span className="font-normal text-muted-foreground">· Selecciona 1 o más</span>
-                        </span>
-                        <ToggleButtonGroup
-                          aria-label={`Plantas de la actividad ${i + 1}`}
-                          className="flex-wrap"
-                          selectedKeys={new Set(fila.plantas)}
-                          selectionMode="multiple"
-                          onSelectionChange={(keys) =>
-                            cambiarFila(i, { plantas: [...keys].filter((k): k is string => typeof k === 'string') })
-                          }
-                        >
-                          {opcionesPlantasSilos(fila.plantas).map(({ nombre, detalle }) => (
-                            <ToggleButton id={nombre} key={nombre}>
-                              {detalle ? `${nombre} · ${detalle}` : nombre}
-                            </ToggleButton>
-                          ))}
-                        </ToggleButtonGroup>
-                        {fila.plantas.length === 0 ? (
-                          <p className="m-0 text-xs text-danger-soft-foreground">Elige al menos una planta.</p>
-                        ) : (
-                          <p className="m-0 text-xs text-muted-foreground">{AYUDA_PLANTAS_SILOS}</p>
-                        )}
-                      </div>
+              {nulo ? (
+                <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
+                  <Label>Motivo de la anulación (opcional)</Label>
+                  <TextArea placeholder="Ej: se tachó por un error al llenarlo" rows={2} />
+                </TextField>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3">
+                    <span className="text-sm font-medium text-foreground">Actividades (qué · tipo · HM)</span>
+                    <p className="m-0 text-xs text-muted-foreground">
+                      Tipo: Planta es la limpieza de silos (se asigna sola); Transporte, el resto de las tareas; Variado,
+                      lo circunstancial, como trabajos con otras empresas.
+                    </p>
+                    {trabajo && filas.length === 0 ? (
+                      <p className="m-0 text-sm text-muted-foreground">
+                        Este trabajo es anterior al desglose ({actividadesDe(trabajo)}). Si agregás filas, el
+                        desglose nuevo lo reemplaza.
+                      </p>
                     ) : null}
+                    {filas.map((fila, i) => (
+                      <div className="flex flex-col gap-3 rounded-xl border border-separator p-3" key={i}>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_96px]">
+                          <Select
+                            fullWidth
+                            placeholder="Actividad"
+                            value={fila.actividad}
+                            onChange={(value) => {
+                              if (!value) return;
+                              const lugar = tipoAlCambiarActividad(String(value), fila.lugar);
+                              cambiarFila(i, {
+                                actividad: String(value),
+                                lugar,
+                                ...(lugar !== 'PLANTA' ? { plantas: [] } : {}),
+                              });
+                            }}
+                          >
+                            <Label>Actividad</Label>
+                            <Select.Trigger>
+                              <Select.Value />
+                              <Select.Indicator />
+                            </Select.Trigger>
+                            <Select.Popover>
+                              <ListBox>
+                                {ACTIVIDADES.map((a) => (
+                                  <ListBox.Item id={a.value} key={a.value} textValue={a.label}>
+                                    {a.label}
+                                    <ListBox.ItemIndicator />
+                                  </ListBox.Item>
+                                ))}
+                              </ListBox>
+                            </Select.Popover>
+                          </Select>
 
-                    <TextField
-                      fullWidth
-                      name={`detalle-descripcion-${i}`}
-                      onChange={(valor) => cambiarFila(i, { descripcion: valor })}
-                      value={fila.descripcion}
-                    >
-                      <Label>Descripción de la actividad</Label>
-                      <TextArea
-                        maxLength={DESCRIPCION_ACTIVIDAD_MAX}
-                        placeholder={
-                          fila.actividad === ACTIVIDAD_DE_PLANTA
-                            ? 'Ej: silo 2, limpieza de fondo y paredes'
-                            : 'Qué se hizo en esta actividad y dónde'
-                        }
-                        rows={2}
-                      />
-                    </TextField>
+                          {fila.actividad === ACTIVIDAD_DE_PLANTA ? (
+                            // La limpieza de silos es siempre de tipo Planta: no se elige.
+                            <TextField fullWidth isReadOnly name={`detalle-tipo-${i}`} value={`${destinoLabel.PLANTA} · automático`}>
+                              <Label>Tipo</Label>
+                              <Input />
+                            </TextField>
+                          ) : (
+                            <Select
+                              fullWidth
+                              placeholder="Tipo"
+                              value={fila.lugar}
+                              onChange={(value) => value && cambiarFila(i, { lugar: String(value), plantas: [] })}
+                            >
+                              <Label>Tipo</Label>
+                              <Select.Trigger>
+                                <Select.Value />
+                                <Select.Indicator />
+                              </Select.Trigger>
+                              <Select.Popover>
+                                <ListBox>
+                                  {TIPOS_ELEGIBLES.map((d) => (
+                                    <ListBox.Item id={d.value} key={d.value} textValue={d.label}>
+                                      {d.label}
+                                      <ListBox.ItemIndicator />
+                                    </ListBox.Item>
+                                  ))}
+                                </ListBox>
+                              </Select.Popover>
+                            </Select>
+                          )}
 
-                    {filas.length > 1 || trabajo ? (
-                      <div className="flex justify-end">
-                        <Button onPress={() => setFilas((previas) => previas.filter((_, j) => j !== i))} size="sm" variant="tertiary">
-                          Quitar actividad
-                        </Button>
+                          <TextField
+                            fullWidth
+                            name={`detalle-horas-${i}`}
+                            onChange={(valor) => cambiarFila(i, { horas: valor })}
+                            value={fila.horas}
+                          >
+                            <Label>HM</Label>
+                            <Input inputMode="decimal" placeholder="0" />
+                          </TextField>
+                        </div>
+
+                        {fila.lugar === 'PLANTA' ? (
+                          // Una limpieza de silos puede abarcar varias plantas: se marcan todas.
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-sm font-medium text-foreground">
+                              ¿En qué plantas? <span className="font-normal text-muted-foreground">· Selecciona 1 o más</span>
+                            </span>
+                            <ToggleButtonGroup
+                              aria-label={`Plantas de la actividad ${i + 1}`}
+                              className="flex-wrap"
+                              selectedKeys={new Set(fila.plantas)}
+                              selectionMode="multiple"
+                              onSelectionChange={(keys) =>
+                                cambiarFila(i, { plantas: [...keys].filter((k): k is string => typeof k === 'string') })
+                              }
+                            >
+                              {opcionesPlantasSilos(fila.plantas).map(({ nombre, detalle }) => (
+                                <ToggleButton id={nombre} key={nombre}>
+                                  {detalle ? `${nombre} · ${detalle}` : nombre}
+                                </ToggleButton>
+                              ))}
+                            </ToggleButtonGroup>
+                            {fila.plantas.length === 0 ? (
+                              <p className="m-0 text-xs text-danger-soft-foreground">Elige al menos una planta.</p>
+                            ) : (
+                              <p className="m-0 text-xs text-muted-foreground">{AYUDA_PLANTAS_SILOS}</p>
+                            )}
+                          </div>
+                        ) : null}
+
+                        <TextField
+                          fullWidth
+                          name={`detalle-descripcion-${i}`}
+                          onChange={(valor) => cambiarFila(i, { descripcion: valor })}
+                          value={fila.descripcion}
+                        >
+                          <Label>Descripción de la actividad</Label>
+                          <TextArea
+                            maxLength={DESCRIPCION_ACTIVIDAD_MAX}
+                            placeholder={
+                              fila.actividad === ACTIVIDAD_DE_PLANTA
+                                ? 'Ej: silo 2, limpieza de fondo y paredes'
+                                : 'Qué se hizo en esta actividad y dónde'
+                            }
+                            rows={2}
+                          />
+                        </TextField>
+
+                        {filas.length > 1 || trabajo ? (
+                          <div className="flex justify-end">
+                            <Button onPress={() => setFilas((previas) => previas.filter((_, j) => j !== i))} size="sm" variant="tertiary">
+                              Quitar actividad
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
+                    ))}
+                    <div>
+                      <Button onPress={() => setFilas((previas) => [...previas, FILA_VACIA])} size="sm" variant="secondary">
+                        Agregar actividad
+                      </Button>
+                    </div>
+                    {descuadre ? (
+                      <p className="m-0 text-sm text-warning-soft-foreground" role="status">
+                        Las actividades suman {NUM_CL_1.format(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
+                        {NUM_CL_1.format(horasCobrables(totalHorometros))} h a cobrar. Se puede guardar igual — revisá
+                        el desglose por si un dato quedó mal.
+                      </p>
+                    ) : null}
+                    {filas.some((f) => f.actividad === 'OTRO') ? (
+                      <TextField fullWidth name="otraActividad" onChange={setOtraActividad} value={otraActividad}>
+                        <Label>Cuál fue la otra actividad</Label>
+                        <Input placeholder="Describí la actividad" />
+                      </TextField>
                     ) : null}
                   </div>
-                ))}
-                <div>
-                  <Button onPress={() => setFilas((previas) => [...previas, FILA_VACIA])} size="sm" variant="secondary">
-                    Agregar actividad
-                  </Button>
-                </div>
-                {descuadre ? (
-                  <p className="m-0 text-sm text-warning-soft-foreground" role="status">
-                    Las actividades suman {NUM_CL_1.format(sumaDetalle)} h, pero por horómetros el trabajo da{' '}
-                    {NUM_CL_1.format(horasCobrables(totalHorometros))} h a cobrar. Se puede guardar igual — revisá
-                    el desglose por si un dato quedó mal.
-                  </p>
-                ) : null}
-                {filas.some((f) => f.actividad === 'OTRO') ? (
-                  <TextField fullWidth name="otraActividad" onChange={setOtraActividad} value={otraActividad}>
-                    <Label>Cuál fue la otra actividad</Label>
-                    <Input placeholder="Describí la actividad" />
+
+                  {/* Un solo campo (15/11/2026); las observaciones aparte solo
+                      aparecen en un report anterior que ya las tenga. */}
+                  <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
+                    <Label>Descripción general y/u observaciones (opcional)</Label>
+                    <TextArea placeholder="Resumen del trabajo, novedades, detenciones…" rows={3} />
                   </TextField>
-                ) : null}
-              </div>
 
-              {/* Un solo campo (15/11/2026); las observaciones aparte solo
-                  aparecen en un report anterior que ya las tenga. */}
-              <TextField fullWidth name="descripcion" onChange={setDescripcion} value={descripcion}>
-                <Label>Descripción general y/u observaciones (opcional)</Label>
-                <TextArea placeholder="Resumen del trabajo, novedades, detenciones…" rows={3} />
-              </TextField>
+                  {trabajo?.observaciones ? (
+                    <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
+                      <Label>Observaciones</Label>
+                      <TextArea placeholder=" " rows={2} />
+                    </TextField>
+                  ) : null}
+                </>
+              )}
 
-              {trabajo?.observaciones ? (
-                <TextField fullWidth name="observaciones" onChange={setObservaciones} value={observaciones}>
-                  <Label>Observaciones</Label>
-                  <TextArea placeholder=" " rows={2} />
-                </TextField>
-              ) : null}
-
-              {/* Foto del report en papel — obligatoria: el trabajo se cobra
-                  contra el report. */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Foto del report (obligatoria)</span>
-                <input
-                  accept="image/*"
-                  aria-label="Foto del report"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-default file:px-3 file:py-1 file:text-sm"
-                  onChange={(event) => setFoto(event.target.files?.[0] ?? null)}
-                  type="file"
-                />
-                {foto ? (
-                  <span className="text-xs text-muted-foreground">{foto.name}</span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    Encuadrá el report completo, con el folio legible.
+              {/* Foto del report en papel — obligatoria al crear: el trabajo
+                  se cobra contra el report (y un nulo se respalda con el papel
+                  anulado). Al corregir se conserva la existente. */}
+              {trabajo ? null : (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-foreground">
+                    {nulo ? 'Foto del report anulado (obligatoria)' : 'Foto del report (obligatoria)'}
                   </span>
-                )}
-              </div>
+                  <input
+                    accept="image/*"
+                    aria-label="Foto del report"
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-default file:px-3 file:py-1 file:text-sm"
+                    onChange={(event) => setFoto(event.target.files?.[0] ?? null)}
+                    type="file"
+                  />
+                  {foto ? (
+                    <span className="text-xs text-muted-foreground">{foto.name}</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Encuadrá el report completo, con el folio legible.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </Modal.Body>
           <Modal.Footer>
@@ -756,7 +887,15 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
               onPress={registrar}
             >
               {({ isPending }) =>
-                isPending ? <Spinner color="current" size="sm" /> : trabajo ? 'Guardar cambios' : 'Registrar trabajo'
+                isPending ? (
+                  <Spinner color="current" size="sm" />
+                ) : trabajo ? (
+                  'Guardar cambios'
+                ) : nulo ? (
+                  'Registrar report nulo'
+                ) : (
+                  'Registrar trabajo'
+                )
               }
             </Button>
           </Modal.Footer>
@@ -812,7 +951,7 @@ export function TrabajosExtraAdminView() {
   // Opciones del filtro de equipo: solo los que tienen trabajos registrados.
   const equipos = useMemo(() => {
     const porId = new Map<string, string>();
-    for (const t of trabajos) porId.set(t.equipoId, t.equipo?.internalCode ?? t.equipoId);
+    for (const t of trabajos) if (t.equipoId) porId.set(t.equipoId, t.equipo?.internalCode ?? t.equipoId);
     return [...porId.entries()].map(([id, codigo]) => ({ id, codigo })).sort((a, b) => a.codigo.localeCompare(b.codigo));
   }, [trabajos]);
 
@@ -841,7 +980,10 @@ export function TrabajosExtraAdminView() {
     [trabajos, equipoEfectivo, turnoFiltro, desde, hasta, orden],
   );
 
-  const totalHoras = lista.reduce((acc, t) => acc + t.totalHoras, 0);
+  // Un report NULO no suma horas (guarda 0) ni cuenta como trabajo.
+  const totalHoras = lista.reduce((acc, t) => acc + (t.nulo ? 0 : t.totalHoras), 0);
+  const nulosFiltrados = lista.filter((t) => t.nulo).length;
+  const trabajosFiltrados = lista.length - nulosFiltrados;
 
   /** Los trabajos del rango elegido en el diálogo de exportación — TODOS los
    * equipos y turnos: el Excel es la planilla del período, no hereda en
@@ -887,8 +1029,9 @@ export function TrabajosExtraAdminView() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chip color="accent" data-testid="total-filtrado" size="md" variant="soft">
-            {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(lista.length)}{' '}
-            {lista.length === 1 ? 'trabajo' : 'trabajos'}
+            {NUM_CL_1.format(totalHoras)} h en {NUM_CL.format(trabajosFiltrados)}{' '}
+            {trabajosFiltrados === 1 ? 'trabajo' : 'trabajos'}
+            {nulosFiltrados > 0 ? ` · ${NUM_CL.format(nulosFiltrados)} ${nulosFiltrados === 1 ? 'nulo' : 'nulos'}` : ''}
           </Chip>
           <Button isDisabled={trabajos.length === 0} onPress={() => setExportando(true)} variant="secondary">
             Exportar Excel
@@ -995,6 +1138,11 @@ export function TrabajosExtraAdminView() {
                       <span className="text-[15px] font-semibold text-foreground">
                         <span className="font-mono">{numeroReport(t.reportNumero)}</span> · {formatFecha(t.fecha)} ·{' '}
                         <span className="font-mono">{t.equipo?.internalCode ?? '—'}</span>
+                        {t.nulo ? (
+                          <span className="ms-2 align-middle">
+                            <ChipNulo />
+                          </span>
+                        ) : null}
                       </span>
                       <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
                         {NUM_CL_1.format(t.totalHoras)} h
@@ -1006,7 +1154,7 @@ export function TrabajosExtraAdminView() {
                           <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                             Operador
                           </dt>
-                          <dd className="m-0 text-foreground">{t.operador}</dd>
+                          <dd className="m-0 text-foreground">{t.operador ?? '—'}</dd>
                         </div>
                         <div className="flex flex-col">
                           <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -1067,6 +1215,11 @@ export function TrabajosExtraAdminView() {
                            se parte en 5 líneas. */}
                         <Table.Cell className="font-mono text-sm font-semibold whitespace-nowrap">
                           {numeroReport(t.reportNumero)}
+                          {t.nulo ? (
+                            <span className="ms-2 align-middle font-sans">
+                              <ChipNulo />
+                            </span>
+                          ) : null}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
                           {formatFecha(t.fecha)}
@@ -1074,7 +1227,7 @@ export function TrabajosExtraAdminView() {
                         <Table.Cell className="font-mono text-sm whitespace-nowrap">
                           {t.equipo?.internalCode ?? '—'}
                         </Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">{t.operador ?? '—'}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{lugaresDe(t)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? 'Sin registro'}</Table.Cell>

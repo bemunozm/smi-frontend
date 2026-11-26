@@ -77,10 +77,10 @@ const REGISTRO = {
   equipo: { internalCode: 'CM-003' },
 };
 
-function renderConRegistro() {
+function renderConRegistro(registros: unknown[] = [REGISTRO]) {
   const qc = new QueryClient();
   qc.setQueryData(['equipment'], [{ id: 'e1', internalCode: 'CM-003', type: 'Camión' }]);
-  qc.setQueryData(['trabajos-extra'], [REGISTRO]);
+  qc.setQueryData(['trabajos-extra'], registros);
   qc.setQueryData(['operators', { isActive: true }], [OPERADOR, OPERADOR_NUEVO]);
   qc.setQueryData(['plantas'], [{ id: 'p1', nombre: 'Planta 1' }, { id: 'p4', nombre: 'Planta 4' }]);
   return render(
@@ -641,6 +641,7 @@ describe('TrabajosExtraView', () => {
     await waitFor(async () => expect(await db.outbox.count()).toBe(1));
     const op = (await db.outbox.toArray())[0]!;
     if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    if (op.payload.nulo === true) throw new Error('nulo inesperado');
     expect(op.payload.operatorId).toBe('op_1');
     // El mínimo de cobro se aplica al leer, no al guardar.
     expect(op.payload.horometroFinal - op.payload.horometroInicial).toBeCloseTo(0.3);
@@ -757,5 +758,132 @@ describe('TrabajosExtraView', () => {
       expect(ventana.getByRole('button', { name: /Editar/ })).toBeTruthy();
       expect(await db.outbox.count()).toBe(0);
     });
+  });
+});
+
+/** Un report NULO ya registrado: 0 h, sin desglose, sin equipo ni operador. */
+const NULO = {
+  ...REGISTRO,
+  id: 'r2',
+  nulo: true,
+  equipoId: null,
+  equipo: null,
+  operatorId: null,
+  operador: null,
+  horometroInicial: 0,
+  horometroFinal: 0,
+  totalHoras: 0,
+  actividades: [],
+  detalleActividades: null,
+  descripcion: 'Se tachó por un error al llenarlo',
+  observaciones: null,
+  reportNumero: '4510',
+  fecha: '2026-08-02T09:00:00.000Z',
+};
+
+describe('TrabajosExtraView — report nulo', () => {
+  beforeEach(async () => {
+    await db.outbox.clear();
+    toastDangerMock.mockClear();
+    toastSuccessMock.mockClear();
+  });
+
+  const activarNulo = () => fireEvent.click(screen.getByRole('switch', { name: /Report nulo/ }));
+
+  it('en modo nulo oculta horómetros y actividades y pide solo el N° y la foto', async () => {
+    renderConRegistro();
+    activarNulo();
+
+    expect(screen.queryByLabelText('Horómetro inicial')).toBeNull();
+    expect(screen.queryByLabelText('Actividad 1')).toBeNull();
+    expect(screen.queryByText('Horas a cobrar')).toBeNull();
+    expect(screen.getByText('Equipo (opcional)')).toBeTruthy();
+    expect(screen.getByText('Operador (opcional)')).toBeTruthy();
+    expect(screen.getByLabelText('Motivo de la anulación (opcional)')).toBeTruthy();
+
+    // Sin N° ni foto no se registra: el N° es lo único obligatorio del schema.
+    fireEvent.click(screen.getByRole('button', { name: /Registrar report nulo/ }));
+    expect(await screen.findByText('Indicá el N° de report')).toBeTruthy();
+    const alertas = screen.getAllByRole('alert').map((a) => a.textContent);
+    expect(alertas).not.toContain('Seleccioná un equipo');
+    expect(alertas).not.toContain('Elegí el operador');
+    expect(alertas).not.toContain('Agregá al menos una actividad');
+
+    // Con el N° pero sin foto: la foto sigue siendo obligatoria.
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '4512' } });
+    fireEvent.click(screen.getByRole('button', { name: /Registrar report nulo/ }));
+    expect(await screen.findByText(/La foto del report es obligatoria/)).toBeTruthy();
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  it('registra por el outbox con `nulo: true`, sin horómetros ni desglose ni opcionales vacíos', async () => {
+    renderConRegistro();
+    activarNulo();
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '04512' } });
+    elegirFoto();
+    fireEvent.click(screen.getByRole('button', { name: /Registrar report nulo/ }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op.payload).toMatchObject({ nulo: true, reportNumero: '4512', faena: 'Patillo' });
+    expect(op.payload.id).toBe(op.id);
+    for (const campo of ['horometroInicial', 'horometroFinal', 'detalle', 'equipoId', 'operatorId', 'descripcion']) {
+      expect(op.payload).not.toHaveProperty(campo);
+    }
+    // Va con la foto, como cualquier Report (la sube el replay).
+    expect(op.status).toBe('pending_upload');
+  });
+
+  it('con equipo, operador y motivo los manda', async () => {
+    renderConRegistro();
+    activarNulo();
+    fireEvent.click(screen.getByLabelText('Equipo'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: /CM-003/ }));
+    fireEvent.click(screen.getByLabelText('Operador'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: OPERADOR.name }));
+    fireEvent.change(screen.getByLabelText('Motivo de la anulación (opcional)'), { target: { value: ' Tachado ' } });
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '4513' } });
+    elegirFoto();
+    fireEvent.click(screen.getByRole('button', { name: /Registrar report nulo/ }));
+
+    await waitFor(async () => expect(await db.outbox.count()).toBe(1));
+    const op = (await db.outbox.toArray())[0]!;
+    if (op.type !== 'createTrabajoExtra') throw new Error('tipo inesperado');
+    expect(op.payload).toMatchObject({
+      nulo: true,
+      equipoId: 'e1',
+      operatorId: 'op_1',
+      descripcion: 'Tachado',
+      reportNumero: '4513',
+    });
+  });
+
+  it('la pista del N° cuenta el folio de un nulo como tomado, y repetirlo bloquea', () => {
+    renderConRegistro([REGISTRO, NULO]);
+    expect(screen.getByText(/Último report registrado: 4510 · el siguiente sería 4511./)).toBeTruthy();
+    activarNulo();
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '4510' } });
+    expect(screen.getByText(/El N° 4510 ya está registrado en otro Report/)).toBeTruthy();
+  });
+
+  it('el historial muestra el chip NULO, 0 h y el detalle sin cifras, con su motivo', () => {
+    renderConRegistro([NULO, REGISTRO]);
+    fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
+
+    const ventana = within(screen.getByRole('dialog'));
+    expect(ventana.getByText(/NULO · report anulado/)).toBeTruthy();
+    expect(ventana.getByText('Sin operador')).toBeTruthy();
+    // Un nulo no se cobra: 0 h, sin el mínimo de 1 h.
+    expect(ventana.getByText('0 h')).toBeTruthy();
+
+    fireEvent.click(ventana.getAllByRole('button', { name: /Ver detalle/ })[0]!);
+    const detalle = within(screen.getByRole('dialog'));
+    expect(detalle.getByText('NULO')).toBeTruthy();
+    expect(detalle.getByText('Se tachó por un error al llenarlo')).toBeTruthy();
+    expect(detalle.getByText('Sin equipo')).toBeTruthy();
+    expect(detalle.queryByText('A cobrar')).toBeNull();
+    // Un nulo lo corrige el panel (ADMIN/SECRETARIA), no Terreno.
+    expect((detalle.getByRole('button', { name: /Editar/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

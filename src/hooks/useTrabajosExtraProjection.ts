@@ -8,6 +8,7 @@ import type { CreateTrabajoExtraOp, HttpWriteOp, OutboxOp } from '../offline/db'
 import { useOutboxOps } from '../offline/useOutboxOps';
 import type { Equipment } from '../types/equipment';
 import type { Operator } from '../types/operator';
+import { esNulo } from '../types/trabajosExtra';
 import type { DetalleActividadRegistro, TrabajoExtraordinario } from '../types/trabajosExtra';
 
 /** Un trabajo del historial: el del servidor, o uno sintético armado desde
@@ -33,6 +34,31 @@ function mapOpToTrabajo(op: CreateTrabajoExtraOp, equipos: Equipment[], operador
   const { payload } = op;
   const equipo = equipos.find((e) => e.id === payload.equipoId);
   const operador = operadores.find((o) => o.id === payload.operatorId);
+  if (esNulo(payload)) {
+    // Un NULO pendiente: 0 h, sin desglose; equipo y operador si se dieron.
+    return {
+      id: op.id,
+      nulo: true,
+      equipoId: payload.equipoId ?? null,
+      operatorId: payload.operatorId ?? null,
+      operador: payload.operatorId ? (operador?.name ?? 'Operador') : null,
+      faena: payload.faena,
+      turno: payload.turno,
+      horometroInicial: 0,
+      horometroFinal: 0,
+      totalHoras: 0,
+      actividades: [],
+      detalleActividades: null,
+      reportNumero: payload.reportNumero,
+      otraActividad: null,
+      descripcion: payload.descripcion ?? '',
+      observaciones: null,
+      fecha: payload.capturedAt,
+      equipo: equipo ? { internalCode: equipo.internalCode } : undefined,
+      sinSincronizar: true,
+      requiereAtencion: op.status === 'needs_attention',
+    };
+  }
   return {
     id: op.id,
     equipoId: payload.equipoId,
