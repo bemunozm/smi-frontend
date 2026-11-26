@@ -1,11 +1,18 @@
 import { useState } from 'react';
 import { Button, Modal, Spinner } from '@heroui/react';
 
+import { EquiposRegistradosCampos } from './EquiposRegistradosCampos';
 import { PersonalActividad, type LineaPersonal } from './PersonalActividad';
 import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../flota/modal-styles';
 import { DateField } from '../terreno/DateField';
 import { Campo, Input, Label, Segmentado, Textarea } from '../terreno/ui';
 import { useActualizarInformeTemporal } from '../../hooks/useInformesTemporales';
+import {
+  equiposDeFilas,
+  filasDeEquipos,
+  validarFilasEquipos,
+  type FilaEquipoForm,
+} from '../../lib/informe-antiguo';
 import type { InformeTemporal, PersonalInforme, UpdateInformeTemporalInput } from '../../types/informe-temporal';
 import {
   MAX_ACTIVIDAD_INFORME,
@@ -14,6 +21,7 @@ import {
   nuevaLinea,
 } from '../../lib/informe-temporal';
 import { toDateOnly, type Turno } from '../../lib/turno';
+import { generateUuid } from '../../lib/uuid';
 
 const lineasDe = (informe: InformeTemporal, actividad: 1 | 2): LineaPersonal[] =>
   informe.personal
@@ -37,7 +45,8 @@ const clave = (p: PersonalInforme[]) => JSON.stringify(p.map((x) => [x.actividad
  * acá: tienen su propio «Corregir» en el detalle del informe
  * (`CorregirTarjetaTemporalModal`). Solo se envía lo que
  * cambió; `actividad2`, `observaciones` y `supervisorResponsable2` en `''` los
- * quitan.
+ * quitan. Un informe subido después no tiene tarjetas: sus equipos escritos a
+ * mano se corrigen acá mismo y, si cambiaron, viajan completos (`equipos`).
  */
 export function EditarInformeTemporalModal({ informe, onClose }: { informe: InformeTemporal; onClose: () => void }) {
   const actualizar = useActualizarInformeTemporal();
@@ -50,6 +59,9 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
   const [observaciones, setObservaciones] = useState(informe.observaciones ?? '');
   const [supervisor1, setSupervisor1] = useState(informe.supervisorResponsable1);
   const [supervisor2, setSupervisor2] = useState(informe.supervisorResponsable2 ?? '');
+  const [equipos, setEquipos] = useState<FilaEquipoForm[]>(() =>
+    filasDeEquipos(informe.equiposRegistrados ?? [], generateUuid),
+  );
   const [intentado, setIntentado] = useState(false);
 
   const errores: Record<string, string> = {};
@@ -60,6 +72,7 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
   if (nuevoPersonal.some((p) => p.actividad === 2) && actividad2.trim() === '') {
     errores.personal2 = 'Hay personal en la actividad 2: escribe la actividad 2 o quítalo.';
   }
+  if (informe.antiguo) Object.assign(errores, validarFilasEquipos(equipos));
   const visibles = intentado ? errores : {};
 
   const cambios: UpdateInformeTemporalInput = {};
@@ -73,6 +86,16 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
   if (supervisor1.trim() !== informe.supervisorResponsable1) cambios.supervisorResponsable1 = supervisor1.trim();
   if (supervisor2.trim() !== (informe.supervisorResponsable2 ?? ''))
     cambios.supervisorResponsable2 = supervisor2.trim();
+  if (informe.antiguo && errores.equipos === undefined) {
+    const nuevos = equiposDeFilas(equipos);
+    const previos = (informe.equiposRegistrados ?? []).map((e) => ({
+      equipoId: e.equipoId,
+      inicial: e.inicial,
+      final: e.final,
+      litros: e.litros,
+    }));
+    if (JSON.stringify(nuevos) !== JSON.stringify(previos)) cambios.equipos = nuevos;
+  }
 
   const guardar = () => {
     setIntentado(true);
@@ -145,9 +168,18 @@ export function EditarInformeTemporalModal({ informe, onClose }: { informe: Info
               <Campo label="Supervisor responsable 2">
                 <Input value={supervisor2} maxLength={120} onChange={(e) => setSupervisor2(e.target.value)} />
               </Campo>
+              {informe.antiguo ? (
+                <EquiposRegistradosCampos
+                  filas={equipos}
+                  onChange={setEquipos}
+                  errores={visibles}
+                />
+              ) : null}
               <p className="text-xs text-muted-foreground">
-                Hasta {MAX_PERSONAL_POR_ACTIVIDAD} personas por actividad. Las lecturas y litros de cada equipo se
-                corrigen con «Corregir» en su tarjeta, en el detalle del informe.
+                Hasta {MAX_PERSONAL_POR_ACTIVIDAD} personas por actividad.
+                {informe.antiguo
+                  ? ''
+                  : ' Las lecturas y litros de cada equipo se corrigen con «Corregir» en su tarjeta, en el detalle del informe.'}
               </p>
             </div>
           </Modal.Body>

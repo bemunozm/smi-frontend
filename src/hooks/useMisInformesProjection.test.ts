@@ -45,8 +45,20 @@ describe('proyectarInformesPendientes', () => {
         actividad1: 'Limpieza de cancha',
         actividad2: 'Riego',
         equipos: 2,
+        numero: null,
         requiereAtencion: false,
       },
+    ]);
+  });
+
+  it('un informe antiguo en cola también aparece, con su N° y sus equipos', () => {
+    const antiguo = envio(
+      'a1',
+      { numero: 12, cierres: undefined, equipos: [{ equipoId: 'e1' }] },
+      { endpoint: 'informeTemporal.createAntiguo' },
+    );
+    expect(proyectarInformesPendientes([], [antiguo])).toEqual([
+      expect.objectContaining({ id: 'a1', numero: 12, equipos: 1 }),
     ]);
   });
 

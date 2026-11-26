@@ -433,6 +433,18 @@ describe('SyncStatus — etiquetas de hallazgos y trabajos extra', () => {
     expect(screen.getByText('Trabajo extra · EX-005')).toBeTruthy();
   });
 
+  it('con folio, el Report se nombra por su N° («Report N° 4615 · <equipo>»)', () => {
+    queryClient.setQueryData(EQUIPMENT_KEY, [{ id: 'eq-1', internalCode: 'EX-005' }]);
+    mockEquipos = [{ id: 'eq-1', internalCode: 'EX-005' }];
+    mockSyncState = { ...mockSyncState, attentionCount: 1 };
+    mockOps = [atencion({ type: 'createTrabajoExtra', payload: { ...TRABAJO_PAYLOAD, reportNumero: '4615' } })];
+    renderBar();
+
+    fireEvent.click(screen.getByRole('button', { name: /1 registro requiere atención/ }));
+
+    expect(screen.getByText('Report N° 4615 · EX-005')).toBeTruthy();
+  });
+
   it('sin el equipo en el catálogo, la etiqueta queda genérica', () => {
     mockSyncState = { ...mockSyncState, attentionCount: 2 };
     mockOps = [

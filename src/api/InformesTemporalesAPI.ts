@@ -4,6 +4,7 @@ import { EntradaCambiosListResponseSchema, type EntradaCambios } from '../types/
 import {
   InformeTemporalResponseSchema,
   InformesTemporalesResponseSchema,
+  NumeroLibreResponseSchema,
   type InformeTemporal,
 } from '../types/informe-temporal';
 
@@ -39,6 +40,16 @@ export const InformesTemporalesAPI = {
       return InformeTemporalResponseSchema.parse(res.data).data;
     } catch (error) {
       throw toDomainError(error, 'No se pudo cargar el informe.');
+    }
+  },
+
+  /** ¿El N° está libre entre los informes temporales? Para el informe antiguo. */
+  async numeroLibre(numero: number): Promise<boolean> {
+    try {
+      const res = await api.get('/api/informes-temporales/numero-libre', { params: { numero } });
+      return NumeroLibreResponseSchema.parse(res.data).data.libre;
+    } catch (error) {
+      throw toDomainError(error, 'No se pudo revisar el N° del informe.');
     }
   },
 

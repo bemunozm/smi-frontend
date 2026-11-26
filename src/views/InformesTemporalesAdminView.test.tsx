@@ -3,10 +3,11 @@ import { render, cleanup, screen, fireEvent, within } from '@testing-library/rea
 
 import type { InformeTemporal } from '../types/informe-temporal';
 
-const { listaHook, eliminarMock, excelMock } = vi.hoisted(() => ({
+const { listaHook, eliminarMock, excelMock, actualizarMock } = vi.hoisted(() => ({
   listaHook: vi.fn(),
   eliminarMock: vi.fn(),
   excelMock: vi.fn(),
+  actualizarMock: vi.fn(),
 }));
 const { rol } = vi.hoisted(() => ({ rol: { value: 'ADMIN' as 'ADMIN' | 'SECRETARIA' } }));
 const { edicionTarjeta, toastDanger } = vi.hoisted(() => ({
@@ -31,7 +32,19 @@ vi.mock('../hooks/useCurrentUser', () => ({ useCurrentUser: () => ({ user: { id:
 vi.mock('../hooks/useInformesTemporales', () => ({
   useInformesTemporales: (desde: string, hasta: string) => listaHook(desde, hasta),
   useEliminarInformeTemporal: () => ({ mutate: eliminarMock, isPending: false }),
-  useActualizarInformeTemporal: () => ({ mutate: vi.fn(), isPending: false }),
+  useActualizarInformeTemporal: () => ({ mutate: actualizarMock, isPending: false }),
+  useCrearInformeAntiguo: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useNumeroInformeOcupado: () => ({ ocupado: null }),
+}));
+
+// «Subir informe antiguo»: el catálogo de equipos y los supervisores temporales.
+vi.mock('../hooks/useEquipment', () => ({
+  useEquipment: () => ({
+    data: [{ id: 'e9', internalCode: 'COMPRESOR', type: 'Compresor', brand: 'Kaeser', model: 'M50', equipmentClass: 'HEAVY' }],
+  }),
+}));
+vi.mock('../hooks/useUsers', () => ({
+  useUsers: () => ({ data: [{ id: 'st1', name: 'Juan Torres', email: 'jt@smi.local' }] }),
 }));
 
 vi.mock('../hooks/usePermissions', async () => {
@@ -53,6 +66,8 @@ vi.mock('../hooks/useOperators', () => ({ useOperators: () => ({ data: [] }) }))
 import { InformesTemporalesAdminView } from './InformesTemporalesAdminView';
 
 const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | 'numero'>): InformeTemporal => ({
+  antiguo: false,
+  equiposRegistrados: [],
   fecha: '2026-11-20',
   turno: 'DIURNO',
   actividad1: 'Carga de material',
@@ -207,5 +222,49 @@ describe('InformesTemporalesAdminView', () => {
     render(<InformesTemporalesAdminView />);
     expect(screen.getByText(/No hay informes/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Exportar Excel' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  describe('informe subido después', () => {
+    const ANTIGUO = informe({
+      id: 'a1',
+      numero: 3,
+      antiguo: true,
+      tarjetas: [],
+      equiposRegistrados: [
+        { equipoId: 'e9', codigo: 'COMPRESOR', nombre: 'Compresor Kaeser M50', unidad: 'h', inicial: 484.92, final: 487.1, litros: null },
+      ],
+    });
+
+    it('la lista lo marca «Subido después» y muestra sus equipos escritos a mano', () => {
+      listaHook.mockReturnValue({ data: [ANTIGUO], isPending: false, isError: false, error: null });
+      render(<InformesTemporalesAdminView />);
+      const fila = screen.getByTestId('informe-fila-a1');
+      expect(fila.textContent).toContain('Subido después');
+      expect(fila.textContent).toContain('COMPRESOR');
+    });
+
+    it('la corrección deja cambiar sus equipos y manda solo los equipos que cambiaron', () => {
+      listaHook.mockReturnValue({ data: [ANTIGUO], isPending: false, isError: false, error: null });
+      render(<InformesTemporalesAdminView />);
+      fireEvent.click(screen.getByTestId('informe-fila-a1'));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Corregir' }));
+      fireEvent.change(screen.getByLabelText('Lectura final del equipo 1'), { target: { value: '488' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar corrección' }));
+      expect(actualizarMock).toHaveBeenCalledWith(
+        { id: 'a1', cambios: { equipos: [{ equipoId: 'e9', inicial: 484.92, final: 488, litros: null }] } },
+        expect.anything(),
+      );
+    });
+
+    it('ADMIN y SECRETARIA ven «Subir informe antiguo» y eligen de qué supervisor temporal es', () => {
+      rol.value = 'SECRETARIA';
+      render(<InformesTemporalesAdminView />);
+      fireEvent.click(screen.getByRole('button', { name: 'Subir informe antiguo' }));
+      const hoja = screen.getByRole('dialog', { name: 'Informe de actividad en papel' });
+      expect(within(hoja).getByLabelText(/Supervisor temporal/)).toBeTruthy();
+      // Sin elegirlo no se puede subir.
+      fireEvent.click(within(hoja).getByRole('button', { name: /Subir informe/ }));
+      expect(within(hoja).getByText('Elige a qué supervisor temporal pertenece el informe.')).toBeTruthy();
+    });
   });
 });

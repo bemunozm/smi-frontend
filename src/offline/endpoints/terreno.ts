@@ -2,6 +2,7 @@ import type { Hallazgo, EditHallazgoBody } from '../../types/hallazgos';
 import { HallazgoSchema } from '../../types/hallazgos';
 import {
   InformeTemporalSchema,
+  type CreateInformeAntiguoInput,
   type CreateInformeTemporalInput,
   type InformeTemporal,
   type UpdateInformeTemporalInput,
@@ -48,6 +49,8 @@ export interface TerrenoEndpointMap {
   /** Cierre agrupado del supervisor temporal: cierra todas sus tarjetas y
    * registra el informe. Las fotos viajan como `cierres.<i>.tmpPhotoKey`. */
   'informeTemporal.create': { params: NoParams; body: CreateInformeTemporalInput; result: InformeTemporal };
+  /** «Subir informe antiguo»: sin tarjetas; la foto del report va como `fotoKey`. */
+  'informeTemporal.createAntiguo': { params: NoParams; body: CreateInformeAntiguoInput; result: InformeTemporal };
   'informeTemporal.update': { params: { id: string }; body: UpdateInformeTemporalInput; result: InformeTemporal };
   'informeTemporal.delete': { params: { id: string }; body: NoParams; result: true };
 }
@@ -139,6 +142,20 @@ export const TERRENO_ENDPOINTS = defineDomain<TerrenoEndpointMap>({
     creates: true,
     entity: (_params, body) => entityOf(informeTemporalEntity, bodyText(body, 'id')),
     parents: (_params, body) => tarjetasDelInforme(body),
+  },
+  'informeTemporal.createAntiguo': {
+    method: 'POST',
+    path: () => '/api/informes-temporales/antiguo',
+    failMessage: 'No se pudo subir el informe.',
+    parse: parseWith(InformeTemporalSchema),
+    // No toca tarjetas ni equipos: solo aparece en los informes.
+    invalidate: ['informesTemporales'],
+    label: (_params, body) =>
+      etiqueta(`Informe antiguo N° ${typeof body.numero === 'number' ? body.numero : '—'}`, bodyText(body, 'fecha')),
+    notFoundIsDone: false,
+    carriesFiles: true,
+    creates: true,
+    entity: (_params, body) => entityOf(informeTemporalEntity, bodyText(body, 'id')),
   },
   'informeTemporal.update': {
     method: 'PATCH',

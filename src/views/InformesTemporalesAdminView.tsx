@@ -8,15 +8,20 @@ import { RESPONSIVE_SHEET_DIALOG_WIDE_CLASS } from '../components/flota/modal-st
 import { CorregirTarjetaTemporalModal } from '../components/temporal/CorregirTarjetaTemporalModal';
 import { DetalleInformeTemporal } from '../components/temporal/DetalleInformeTemporal';
 import { EditarInformeTemporalModal } from '../components/temporal/EditarInformeTemporalModal';
+import { SubirInformeAntiguo } from '../components/temporal/SubirInformeAntiguo';
 import { Chip } from '../components/ui/Chip';
 import { turnoLabel } from '../config/flota-colors';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useEliminarInformeTemporal, useInformesTemporales } from '../hooks/useInformesTemporales';
 import { DESKTOP_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { usePermissions } from '../hooks/usePermissions';
 import { NUM_CL } from '../lib/dashboard-format';
+import { equiposDelInforme, numerosEnCola } from '../lib/informe-antiguo';
 import { construirExcelInformesTemporales } from '../lib/informe-temporal-excel';
 import { canDeleteInformeTemporal } from '../lib/permissions';
 import { toDateOnly } from '../lib/turno';
+import { generateUuid } from '../lib/uuid';
+import { useOutboxOps } from '../offline/useOutboxOps';
 import type { InformeTemporal } from '../types/informe-temporal';
 
 /** Días que cubre el rango inicial (hoy incluido). */
@@ -32,7 +37,17 @@ function rangoInicial(): { desde: string; hasta: string } {
   return { desde: toDateOnly(inicio), hasta: toDateOnly(hoy) };
 }
 
-const equiposDe = (informe: InformeTemporal) => informe.tarjetas.map((t) => t.equipo.internalCode).join(', ') || '—';
+const equiposDe = (informe: InformeTemporal) =>
+  equiposDelInforme(informe)
+    .map((e) => e.codigo)
+    .join(', ') || '—';
+
+/** «Subido después»: un informe en papel digitalizado más tarde, sin tarjetas. */
+const ChipAntiguo = () => (
+  <Chip color="warning" size="sm" variant="soft">
+    Subido después
+  </Chip>
+);
 
 const actividadesDe = (informe: InformeTemporal) =>
   [informe.actividad1, informe.actividad2].filter(Boolean).join(' · ');
@@ -116,6 +131,12 @@ export function InformesTemporalesAdminView() {
   const puedeEliminar = canDeleteInformeTemporal(permisos.role);
   const eliminar = useEliminarInformeTemporal();
   const esEscritorio = useMediaQuery(DESKTOP_QUERY);
+  // «Subir informe antiguo» (ADMIN y SECRETARIA): a nombre del supervisor
+  // temporal que se elige. Cada apertura es un informe nuevo con su id.
+  const puedeSubirAntiguo = permisos.can('informeTemporal.createAntiguo');
+  const [subiendoAntiguo, setSubiendoAntiguo] = useState<{ informeId: string } | null>(null);
+  const { user } = useCurrentUser();
+  const ops = useOutboxOps(user?.id);
 
   const informes = useMemo(
     () => [...(data ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.numero - a.numero),
@@ -128,6 +149,13 @@ export function InformesTemporalesAdminView() {
     informes
       .find((i) => i.id === corrigiendoTarjeta?.informeId)
       ?.tarjetas.find((t) => t.id === corrigiendoTarjeta?.tarjetaId) ?? null;
+
+  // Los N° que se conocen: los del período cargado y los que esperan en la
+  // cola. El resto lo revisa el servidor al escribirlo.
+  const numerosConocidos = useMemo(
+    () => [...informes.map((i) => i.numero), ...numerosEnCola(ops)],
+    [informes, ops],
+  );
 
   const exportarExcel = async () => {
     try {
@@ -166,6 +194,9 @@ export function InformesTemporalesAdminView() {
           <Button isDisabled={informes.length === 0} onPress={() => void exportarExcel()} variant="secondary">
             Exportar Excel
           </Button>
+          {puedeSubirAntiguo ? (
+            <Button onPress={() => setSubiendoAntiguo({ informeId: generateUuid() })}>Subir informe antiguo</Button>
+          ) : null}
         </div>
       </div>
 
@@ -248,8 +279,11 @@ export function InformesTemporalesAdminView() {
                     onClick={() => setDetalleId(i.id)}
                     type="button"
                   >
-                    <span className="text-[15px] font-semibold text-foreground">
-                      <span className="font-mono">#{i.numero}</span> · {legible(i.fecha)} · {turnoLabel(i.turno)}
+                    <span className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-foreground">
+                      <span>
+                        <span className="font-mono">#{i.numero}</span> · {legible(i.fecha)} · {turnoLabel(i.turno)}
+                      </span>
+                      {i.antiguo ? <ChipAntiguo /> : null}
                     </span>
                     <span className="text-sm text-foreground">{i.supervisorNombre}</span>
                     <span className="text-sm text-muted-foreground">{actividadesDe(i)}</span>
@@ -287,7 +321,12 @@ export function InformesTemporalesAdminView() {
                           {legible(i.fecha)}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(i.turno)}</Table.Cell>
-                        <Table.Cell className="text-sm whitespace-nowrap">{i.supervisorNombre}</Table.Cell>
+                        <Table.Cell className="text-sm whitespace-nowrap">
+                          <span className="flex items-center gap-2">
+                            {i.supervisorNombre}
+                            {i.antiguo ? <ChipAntiguo /> : null}
+                          </span>
+                        </Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(i)}</Table.Cell>
                         <Table.Cell className="font-mono text-sm whitespace-nowrap">{equiposDe(i)}</Table.Cell>
                       </Table.Row>
@@ -328,6 +367,15 @@ export function InformesTemporalesAdminView() {
             : undefined
         }
       />
+
+      {subiendoAntiguo ? (
+        <SubirInformeAntiguo
+          informeId={subiendoAntiguo.informeId}
+          oficina
+          numerosConocidos={numerosConocidos}
+          onCerrar={() => setSubiendoAntiguo(null)}
+        />
+      ) : null}
 
       {corrigiendo ? <EditarInformeTemporalModal informe={corrigiendo} onClose={() => setCorrigiendoId(null)} /> : null}
 

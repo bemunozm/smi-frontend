@@ -1,17 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AlertDialog, Button } from '@heroui/react';
-import { Clock, FileText, Plus, Trash2 } from 'lucide-react';
+import { Clock, FileText, FileUp, Plus, Trash2 } from 'lucide-react';
 
 import { AbrirTarjetaTemporal } from '../components/temporal/AbrirTarjetaTemporal';
 import { CierreTemporalForm } from '../components/temporal/CierreTemporalForm';
+import { ConfirmarDescarte } from '../components/temporal/ConfirmarDescarte';
 import { HistorialReportes } from '../components/temporal/HistorialReportes';
+import { SubirInformeAntiguo } from '../components/temporal/SubirInformeAntiguo';
 import { Boton, Card, CardHead, Chip, Hint, Hoja, VistaHead, VistaUnica } from '../components/terreno/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useEquipment } from '../hooks/useEquipment';
+import { useMisInformesTemporales } from '../hooks/useInformesTemporales';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useOperators } from '../hooks/useOperators';
 import { useDeleteShiftCard, useShiftCardsMine } from '../hooks/useShiftCards';
 import { useShiftProjection } from '../hooks/useShiftProjection';
+import { numerosEnCola } from '../lib/informe-antiguo';
 import { cardIdsEnInformePendiente, fmtLectura, nombreEquipo, type TarjetaTemporal } from '../lib/informe-temporal';
 import { plural } from '../lib/format';
 import { contextoTurno } from '../lib/turno';
@@ -24,50 +27,6 @@ function desdeCorto(iso: string | undefined): string {
   const d = new Date(iso);
   const dia = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   return `${dia} ${d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
-}
-
-/**
- * «¿Descartar el informe?»: la X de la hoja de cierre con algo escrito. Cerrar
- * la hoja bota lecturas, litros, fotos y personal, así que se pregunta antes.
- */
-function ConfirmarDescarte({
-  abierto,
-  onSeguir,
-  onDescartar,
-}: {
-  abierto: boolean;
-  onSeguir: () => void;
-  onDescartar: () => void;
-}) {
-  return (
-    <AlertDialog.Backdrop
-      isOpen={abierto}
-      onOpenChange={(open) => {
-        if (!open) onSeguir();
-      }}
-      className="z-[60]"
-    >
-      <AlertDialog.Container>
-        <AlertDialog.Dialog className="sm:max-w-105">
-          <AlertDialog.Header>
-            <AlertDialog.Icon status="warning" />
-            <AlertDialog.Heading>¿Descartar el informe?</AlertDialog.Heading>
-          </AlertDialog.Header>
-          <AlertDialog.Body>
-            <p>Se perderá lo que llenaste.</p>
-          </AlertDialog.Body>
-          <AlertDialog.Footer>
-            <Button variant="tertiary" onPress={onSeguir}>
-              Seguir llenando
-            </Button>
-            <Button variant="danger" onPress={onDescartar}>
-              Descartar
-            </Button>
-          </AlertDialog.Footer>
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
-  );
 }
 
 /** Una tarjeta abierta: código, nombre, lectura inicial, apertura y eliminar. */
@@ -221,6 +180,15 @@ export function SupervisorTemporalView() {
     else cerrarFormulario();
   };
 
+  // «Subir informe antiguo»: el informe en papel de una jornada pasada, sin
+  // tarjetas. Cada apertura es un informe nuevo con su id.
+  const [subiendoAntiguo, setSubiendoAntiguo] = useState<{ informeId: string } | null>(null);
+  const { data: misInformes = [] } = useMisInformesTemporales();
+  const numerosConocidos = useMemo(
+    () => [...misInformes.map((i) => i.numero), ...numerosEnCola(ops)],
+    [misInformes, ops],
+  );
+
   const eliminar = useDeleteShiftCard();
   const motivoSinEliminar = (t: TarjetaTemporal): string | null => {
     if (t.sinSincronizar) return 'Todavía no se envió: se descarta desde el panel de sincronización.';
@@ -291,6 +259,9 @@ export function SupervisorTemporalView() {
           >
             <FileText className="size-[19px]" aria-hidden /> Cerrar y generar informe
           </Boton>
+          <Boton variante="contorno" ancho onClick={() => setSubiendoAntiguo({ informeId: generateUuid() })}>
+            <FileUp className="size-[19px]" aria-hidden /> Subir informe antiguo
+          </Boton>
         </div>
       </Card>
 
@@ -316,6 +287,14 @@ export function SupervisorTemporalView() {
             onEnviandoChange={setCierreEnviando}
           />
         </Hoja>
+      )}
+      {subiendoAntiguo && (
+        <SubirInformeAntiguo
+          informeId={subiendoAntiguo.informeId}
+          supervisorNombre={nombre}
+          numerosConocidos={numerosConocidos}
+          onCerrar={() => setSubiendoAntiguo(null)}
+        />
       )}
       <ConfirmarDescarte
         abierto={confirmandoDescarte}

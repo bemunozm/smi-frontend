@@ -9,7 +9,16 @@ import type { OutboxOp } from '../offline/db';
 import type { ShiftCardResponse } from '../types/shift';
 
 // La cola es EN VIVO (como `useOutboxOps` sobre Dexie): un cambio re-renderiza la vista.
-const { equipmentListMock, enviando, escritorio, listMineMock, misInformesMock, mutateAsyncMock, opsMock } = vi.hoisted(() => {
+const {
+  antiguoMock,
+  equipmentListMock,
+  enviando,
+  escritorio,
+  listMineMock,
+  misInformesMock,
+  mutateAsyncMock,
+  opsMock,
+} = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   const opsMock = {
     current: [] as unknown[],
@@ -29,6 +38,7 @@ const { equipmentListMock, enviando, escritorio, listMineMock, misInformesMock, 
     listMineMock: vi.fn(),
     misInformesMock: vi.fn(() => ({ data: [], isPending: false, isError: false, error: null })),
     mutateAsyncMock: vi.fn(),
+    antiguoMock: vi.fn(),
     opsMock,
   };
 });
@@ -49,6 +59,9 @@ vi.mock('../offline/useOutboxOps', async () => {
 vi.mock('../hooks/useInformesTemporales', () => ({
   useCrearInformeTemporal: () => ({ mutateAsync: mutateAsyncMock, isPending: enviando.value }),
   useMisInformesTemporales: () => misInformesMock(),
+  useCrearInformeAntiguo: () => ({ mutateAsync: antiguoMock, isPending: false }),
+  // Sin servidor en el test: el N° se revisa contra los informes conocidos.
+  useNumeroInformeOcupado: () => ({ ocupado: null }),
 }));
 // Teléfono o escritorio: el cierre va en una hoja en los dos.
 vi.mock('../hooks/useMediaQuery', () => ({
@@ -418,5 +431,63 @@ describe('SupervisorTemporalView', () => {
     expect(await screen.findByText(/No te quedan equipos abiertos/)).toBeTruthy();
     expect(screen.getByText('Las tarjetas ya se cerraron.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Enviar informe/ }).hasAttribute('disabled')).toBe(true);
+  });
+
+  describe('«Subir informe antiguo»', () => {
+    async function abrirAntiguo() {
+      equipmentListMock.mockResolvedValue([CARGADOR]);
+      listMineMock.mockResolvedValue([]);
+      renderView();
+      fireEvent.click(await screen.findByRole('button', { name: /Subir informe antiguo/ }));
+      return screen.getByRole('dialog', { name: 'Informe de actividad en papel' });
+    }
+
+    async function llenar(hoja: HTMLElement, numero: string) {
+      fireEvent.change(within(hoja).getByLabelText(/N° del informe/), { target: { value: numero } });
+      fireEvent.click(within(hoja).getByRole('button', { name: 'Abrir Equipo 1' }));
+      fireEvent.click(await screen.findByRole('option', { name: /CA-003/ }));
+      fireEvent.change(within(hoja).getByLabelText('Lectura inicial del equipo 1'), { target: { value: '484,92' } });
+      fireEvent.change(within(hoja).getByLabelText('Lectura final del equipo 1'), { target: { value: '487,1' } });
+      fireEvent.change(within(hoja).getByLabelText(/Actividad realizada 1/), { target: { value: 'Compresor' } });
+    }
+
+    it('se abre aunque no haya equipos abiertos y sube el informe a su nombre, sin tarjetas', async () => {
+      antiguoMock.mockResolvedValue({ status: 'sent' });
+      const hoja = await abrirAntiguo();
+      // Responsable 1 parte en el supervisor de la sesión.
+      expect((within(hoja).getByLabelText(/Supervisor responsable 1/) as HTMLInputElement).value).toBe('Pedro Soto');
+      await llenar(hoja, '12');
+      fireEvent.click(within(hoja).getByRole('button', { name: /Subir informe/ }));
+
+      await waitFor(() => expect(antiguoMock).toHaveBeenCalledTimes(1));
+      const { informe } = antiguoMock.mock.calls[0]![0] as { informe: Record<string, unknown> };
+      expect(informe).toMatchObject({
+        numero: 12,
+        actividad1: 'Compresor',
+        supervisorResponsable1: 'Pedro Soto',
+        equipos: [{ equipoId: 'eq_1', inicial: 484.92, final: 487.1, litros: null }],
+      });
+      expect(informe).not.toHaveProperty('supervisorId');
+      expect(informe).not.toHaveProperty('cierres');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Informe de actividad en papel' })).toBeNull());
+    });
+
+    it('un N° que ya tiene otro informe se marca en rojo y no se envía', async () => {
+      misInformesMock.mockReturnValue({ data: [{ id: 'x', numero: 12 }], isPending: false, isError: false, error: null } as never);
+      const hoja = await abrirAntiguo();
+      await llenar(hoja, '12');
+      expect(within(hoja).getByText('El N° 12 ya está registrado en otro informe.')).toBeTruthy();
+      fireEvent.click(within(hoja).getByRole('button', { name: /Subir informe/ }));
+      expect(antiguoMock).not.toHaveBeenCalled();
+    });
+
+    it('con algo escrito, la X pregunta antes de descartarlo', async () => {
+      const hoja = await abrirAntiguo();
+      fireEvent.change(within(hoja).getByLabelText(/N° del informe/), { target: { value: '5' } });
+      fireEvent.click(within(hoja).getByRole('button', { name: 'Cerrar' }));
+      const confirmar = await screen.findByRole('alertdialog');
+      fireEvent.click(within(confirmar).getByRole('button', { name: 'Descartar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Informe de actividad en papel' })).toBeNull());
+    });
   });
 });

@@ -20,8 +20,10 @@ export interface InformePendiente {
   turno: ShiftType;
   actividad1: string;
   actividad2: string | null;
-  /** Cuántos equipos cierra (uno por cierre). */
+  /** Cuántos equipos cierra (uno por cierre) o, en uno subido después, cuántos trae. */
   equipos: number;
+  /** El N° del papel de un informe subido después; `null` en uno normal (se asigna al llegar). */
+  numero: number | null;
   /** El servidor lo rechazó y espera Reintentar/Descartar en la sincronización. */
   requiereAtencion: boolean;
 }
@@ -42,11 +44,15 @@ export function proyectarInformesPendientes(
   const idsServidor = new Set(servidor.map((i) => i.id));
   const pendientes: { informe: InformePendiente; seq: number }[] = [];
   for (const op of ops) {
-    if (op.type !== 'httpWrite' || op.endpoint !== 'informeTemporal.create') continue;
+    if (op.type !== 'httpWrite') continue;
+    // Los subidos después también esperan en la cola (sin tarjetas, con su N°).
+    const antiguo = op.endpoint === 'informeTemporal.createAntiguo';
+    if (op.endpoint !== 'informeTemporal.create' && !antiguo) continue;
     const { body } = op;
     const id = texto(body.id);
     const fecha = texto(body.fecha);
     if (!id || !fecha || idsServidor.has(id)) continue;
+    const lista = antiguo ? body.equipos : body.cierres;
     pendientes.push({
       informe: {
         id,
@@ -54,7 +60,8 @@ export function proyectarInformesPendientes(
         turno: esTurno(body.turno) ? body.turno : 'DIURNO',
         actividad1: texto(body.actividad1)?.trim() ?? '',
         actividad2: texto(body.actividad2)?.trim() || null,
-        equipos: Array.isArray(body.cierres) ? body.cierres.length : 0,
+        equipos: Array.isArray(lista) ? lista.length : 0,
+        numero: antiguo && typeof body.numero === 'number' ? body.numero : null,
         requiereAtencion: op.status === 'needs_attention',
       },
       seq: op.seq,

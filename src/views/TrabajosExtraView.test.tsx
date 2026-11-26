@@ -108,7 +108,7 @@ function completarFormularioValido({ conOperador = true }: { conOperador?: boole
     target: { value: 'Carga de material extra' },
   });
   // Los campos del report: folio y la foto obligatoria.
-  fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
+  fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '4511' } });
   elegirFoto();
 }
 
@@ -483,22 +483,47 @@ describe('TrabajosExtraView', () => {
     scrollMock.mockRestore();
   });
 
-  /** El correlativo lo asigna el sistema al guardar: en el alta la fila
-   * «Se asigna al guardar» no decía nada y se quitó (pedido del 14-11). Al
-   * corregir sí se muestra, ya asignado y fijo. */
-  it('el alta no muestra la fila del correlativo; al editar aparece con su número fijo', () => {
+  /** El N° del Report es el folio del papel (26-11): el correlativo
+   * automático ya no se muestra, ni en el alta ni al corregir. */
+  it('el N° del Report es el folio: el correlativo no aparece en el detalle ni al editar', () => {
     renderConRegistro();
 
-    expect(screen.queryByText('Se asigna al guardar')).toBeNull();
-    expect(screen.queryByText('Automático')).toBeNull();
-
+    expect(screen.queryByText('Correlativo')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Ver historial de trabajos/ }));
     fireEvent.click(screen.getByRole('button', { name: /Ver detalle/ }));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Editar/ }));
+    const detalle = within(screen.getByRole('dialog'));
+    expect(detalle.getAllByText(/N° 4509/).length).toBeGreaterThan(0);
+    expect(detalle.queryByText('#12')).toBeNull();
+    expect(detalle.queryByText('Correlativo')).toBeNull();
 
+    fireEvent.click(detalle.getByRole('button', { name: /Editar/ }));
     const ventana = within(screen.getByRole('dialog'));
-    expect(ventana.getAllByText('#12').length).toBeGreaterThan(0);
-    expect(ventana.getByText('No se cambia')).toBeTruthy();
+    expect(ventana.queryByText('No se cambia')).toBeNull();
+    expect(ventana.queryByText('#12')).toBeNull();
+  });
+
+  /** El folio es único: uno ya registrado BLOQUEA (en rojo), no solo avisa. */
+  it('un N° de report ya registrado se marca en rojo y no deja registrar', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '04509' } });
+    expect(screen.getByText('El N° 4509 ya está registrado en otro Report: revisa el folio.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() => expect(screen.getByText(/falta corregir los campos marcados/i)).toBeTruthy());
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  it('un N° de report con letras no es válido', async () => {
+    renderConRegistro();
+
+    completarFormularioValido();
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '45A' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
+
+    await waitFor(() => expect(screen.getByText('El N° de report lleva solo números.')).toBeTruthy());
+    expect(await db.outbox.count()).toBe(0);
   });
 
   it('al guardar, encola con id y capturedAt del cliente, manda operatorId y no manda operador', async () => {
@@ -523,7 +548,7 @@ describe('TrabajosExtraView', () => {
         { actividad: 'SOLTAR_MATERIAL', lugar: 'TRANSPORTE', plantas: [], horas: 12, descripcion: 'Frente norte' },
       ],
       descripcion: 'Carga de material extra',
-      reportNumero: '4509',
+      reportNumero: '4511',
     });
     expect(await db.blobs.count()).toBe(1);
     expect(op.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -609,7 +634,7 @@ describe('TrabajosExtraView', () => {
     fireEvent.change(screen.getByLabelText('Horómetro final'), { target: { value: '100.3' } });
     completarFila(1, { actividad: 'Soltar material', lugar: 'Variado', horas: '0.3' });
     fireEvent.change(screen.getByLabelText(/^Descripción general y.u observaciones/), { target: { value: 'Despeje' } });
-    fireEvent.change(screen.getByLabelText('N° del report (boleta)'), { target: { value: '4510' } });
+    fireEvent.change(screen.getByLabelText('N° de report'), { target: { value: '4510' } });
     elegirFoto();
     fireEvent.click(screen.getByRole('button', { name: 'Registrar trabajo' }));
 

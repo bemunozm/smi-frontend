@@ -27,6 +27,10 @@ export const ERROR_CODES = [
   'STALE_UPDATE',
   'CARD_NOT_CLOSED',
   'INSUFFICIENT_STOCK',
+  // El N° de report (folio) o el N° de un informe temporal subido después ya
+  // está tomado: el mensaje del servidor dice por quién, así que se muestra tal cual.
+  'FOLIO_EN_USO',
+  'NUMERO_EN_USO',
   // Códigos SOLO del cliente — nunca los manda el backend.
   'PHOTO_MISSING',
   'INVALID_RESPONSE',
