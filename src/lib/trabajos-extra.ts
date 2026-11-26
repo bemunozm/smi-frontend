@@ -95,13 +95,24 @@ export function numeroReport(reportNumero: string | null | undefined): string {
   return folio ? `N° ${folio}` : 'Sin N°';
 }
 
-export function horasCobrables(horasReales: number): number {
+/** Horas a cobrar: las reales con el mínimo de 1 h. Un report NULO (papel
+ * anulado) no se cobra: 0 h, sin mínimo. */
+export function horasCobrables(horasReales: number, nulo = false): number {
+  if (nulo) return 0;
   return Math.max(COBRO_MINIMO_HORAS, horasReales);
 }
 
-/** ¿Se está cobrando el mínimo y no las horas reales? */
-export function cobraMinimo(horasReales: number): boolean {
-  return horasReales < COBRO_MINIMO_HORAS;
+/** ¿Se está cobrando el mínimo y no las horas reales? Nunca en un nulo. */
+export function cobraMinimo(horasReales: number, nulo = false): boolean {
+  return !nulo && horasReales < COBRO_MINIMO_HORAS;
+}
+
+/** Etiqueta del chip de un report nulo (lista, tabla, detalle, Excel). */
+export const ETIQUETA_NULO = 'NULO';
+
+/** El código del equipo de un Report, o `—` (un nulo puede no tenerlo). */
+export function codigoEquipoReport(t: { equipo?: { internalCode: string } | null; equipoId: string | null }): string {
+  return t.equipo?.internalCode ?? t.equipoId ?? '—';
 }
 
 /** Lo que el formulario dice bajo «N° de report». */
@@ -117,7 +128,8 @@ export interface PistaFolio {
 /**
  * Pista para el folio del report en papel (pedido del 05/11): los reports
  * vienen foliados en secuencia, así que se muestra el último registrado y el
- * que seguiría — para que el siguiente se cargue con el número correcto.
+ * que seguiría — para que el siguiente se cargue con el número correcto. Un
+ * report NULO cuenta igual: su folio está tomado.
  *
  * «Último» es el folio NUMÉRICO más alto, no el último que se cargó: un report
  * olvidado que se carga días después trae un folio viejo y no debe mover la

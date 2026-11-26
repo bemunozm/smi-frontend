@@ -291,7 +291,8 @@ function TrabajosExtraKpiCard() {
     );
   }
 
-  const trabajos = data ?? [];
+  // Un report NULO (papel anulado) no es trabajo: ni horas ni conteo.
+  const trabajos = (data ?? []).filter((t) => !t.nulo);
   const totalHoras = trabajos.reduce((acc, t) => acc + t.totalHoras, 0);
   const recientes = [...trabajos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 10);
   return (

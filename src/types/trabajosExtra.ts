@@ -164,6 +164,9 @@ export const folioSchema = z
 
 const camposTrabajoExtra = z
   .object({
+    /** Un Report normal no es nulo: `false` o ausente (discrimina contra
+     * `reportNuloFormSchema`). */
+    nulo: z.literal(false).optional(),
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
     // `id` del catálogo de Operadores (ver `types/operator.ts`) — ya no texto
     // libre. El servidor guarda `operador` (el nombre) como snapshot a partir
@@ -267,6 +270,44 @@ export const trabajoExtraEdicionSchema = camposTrabajoExtra
   })
   .superRefine(reglasTrabajoExtra);
 
+/** Vacío o solo espacios = no viene (un selector sin elegir). */
+const opcional = z
+  .string()
+  .optional()
+  .transform((v) => v?.trim() || undefined);
+
+/**
+ * Report NULO (papel tachado y marcado «NULO»): se registra solo para que el
+ * folio no deje un hueco en la secuencia. Pide N°, fecha y la foto del papel
+ * anulado (la foto se exige fuera del schema, como en un Report normal);
+ * equipo, operador y motivo son opcionales; faena y turno quedan con su valor
+ * por defecto. Horómetros y actividades no existen: el servidor rechaza un
+ * nulo que los traiga, y nunca suma horas ni cobro.
+ */
+export const reportNuloFormSchema = z.object({
+  nulo: z.literal(true),
+  reportNumero: folioSchema,
+  fecha: z.string().optional(),
+  faena: z.string().min(1, 'Indicá la faena'),
+  turno: z.enum(['DIURNO', 'NOCTURNO']),
+  equipoId: opcional,
+  operatorId: opcional,
+  /** El MOTIVO de la anulación (opcional). Viaja en `descripcion`. */
+  descripcion: opcional,
+});
+
+export type ReportNuloForm = z.infer<typeof reportNuloFormSchema>;
+
+/** ¿Es un report nulo? Sirve para el formulario, el payload y el registro. */
+export function esNulo<T extends { nulo?: boolean | null }>(t: T): t is T & { nulo: true } {
+  return t.nulo === true;
+}
+
+/** Corrección de un report NULO (panel, ADMIN/SECRETARIA): N°, fecha,
+ * motivo, equipo y operador. No pasa de nulo a normal. */
+export const reportNuloEdicionSchema = reportNuloFormSchema.omit({ nulo: true });
+export type ReportNuloEdicion = z.infer<typeof reportNuloEdicionSchema>;
+
 export type TrabajoExtraForm = z.infer<typeof trabajoExtraFormSchema>;
 /** La forma de la EDICIÓN: folio y desglose opcionales (trabajos legacy). */
 export type TrabajoExtraEdicion = z.infer<typeof trabajoExtraEdicionSchema>;
@@ -278,7 +319,7 @@ export type TrabajoExtraFormInput = z.input<typeof trabajoExtraFormSchema>;
  * del report NO viaja acá: en Terreno queda como blob junto a la operación y
  * el replay sube el archivo e inyecta `fotoKey` recién al mandar (el admin,
  * online, la sube antes del POST). */
-export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
+export type CreateTrabajoExtraInput = (TrabajoExtraForm | ReportNuloForm) & {
   id: string;
   capturedAt: string;
   /** Fecha elegida en el panel (un trabajo olvidado): gana sobre `capturedAt`. */
@@ -286,21 +327,26 @@ export interface CreateTrabajoExtraInput extends TrabajoExtraForm {
   /** Key `tmp/...` de la foto del report ya subida — la pone el replay o el
    * flujo online del admin, nunca el formulario. */
   fotoKey?: string;
-}
+};
 
 export interface TrabajoExtraordinario {
   id: string;
   /** Correlativo del sistema (lo asigna la base; no es el folio `reportNumero`). Sin él todavía: un
    * registro que sigue en el equipo, sin señal. */
   numero?: number | null;
-  equipoId: string;
+  /** Report NULO (papel anulado): 0 h, sin desglose ni horómetros que leer;
+   * equipo y operador pueden faltar. Ausente en un backend anterior. */
+  nulo?: boolean;
+  /** `null` solo en un report nulo sin equipo. */
+  equipoId: string | null;
   /** `id` del catálogo de Operadores — `null` en registros legacy (previos al
    * catálogo) o si el operador fue borrado (`onDelete: SetNull`). */
   operatorId: string | null;
   /** Snapshot del nombre al momento de crear el registro — es lo que se
    * muestra en historial y detalle, tal cual quedó guardado (no se
-   * actualiza si el operador cambia de nombre después). */
-  operador: string;
+   * actualiza si el operador cambia de nombre después). `null` solo en un
+   * report nulo sin operador. */
+  operador: string | null;
   faena: string;
   turno: string;
   horometroInicial: number;
@@ -319,7 +365,8 @@ export interface TrabajoExtraordinario {
    * opcional para tolerar un backend que aún no manda el campo. */
   fotoUrl?: string | null;
   fecha: string;
-  equipo?: { internalCode: string };
+  /** `null` en un report nulo sin equipo. */
+  equipo?: { internalCode: string } | null;
   /** Nombre de quien lo registró — null si la cuenta ya no existe; opcional
    * para tolerar un backend que aún no manda el campo. */
   registradoPor?: string | null;
@@ -332,9 +379,10 @@ export const TrabajoExtraordinarioSchema = z.object({
    * registro guardado en el equipo (sin señal) todavía no lo tiene, y una
    * respuesta cacheada antes de la columna tampoco. */
   numero: z.number().nullish(),
-  equipoId: z.string(),
+  nulo: z.boolean().optional(),
+  equipoId: z.string().nullable(),
   operatorId: z.string().nullable(),
-  operador: z.string(),
+  operador: z.string().nullable(),
   faena: z.string(),
   turno: z.string(),
   horometroInicial: z.number(),
@@ -359,9 +407,12 @@ export const TrabajoExtraordinarioSchema = z.object({
     .nullish(),
   fotoUrl: z.string().nullable().optional(),
   fecha: z.string(),
-  equipo: z.object({ internalCode: z.string() }).optional(),
+  equipo: z.object({ internalCode: z.string() }).nullish(),
   registradoPor: z.string().nullable().optional(),
 });
 
 /** `PATCH /api/trabajos-extra/:id`: solo los campos que cambiaron. */
-export type EditTrabajoExtraBody = Partial<TrabajoExtraForm>;
+export type EditTrabajoExtraBody = Partial<TrabajoExtraForm> & {
+  /** Solo en un report nulo (el servidor la rechaza en uno normal). */
+  fecha?: string;
+};

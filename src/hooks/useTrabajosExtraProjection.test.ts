@@ -203,3 +203,30 @@ describe('proyectarTrabajosExtra — ediciones pendientes', () => {
     expect(t).toMatchObject({ faena: 'Patillo', edicionRequiereAtencion: true });
   });
 });
+
+describe('proyectarTrabajosExtra — report nulo pendiente', () => {
+  it('se proyecta con 0 h, sin desglose ni operador, y marcado nulo', () => {
+    const pendiente = op('n-1');
+    pendiente.payload = {
+      id: 'n-1',
+      nulo: true,
+      faena: 'Patillo',
+      turno: 'DIURNO',
+      reportNumero: '4512',
+      capturedAt: '2026-09-24T09:00:00.000Z',
+    } as CreateTrabajoExtraOp['payload'];
+    const [t] = proyectarTrabajosExtra([], [pendiente], EQUIPOS, OPERADORES);
+
+    expect(t).toMatchObject({
+      id: 'n-1',
+      nulo: true,
+      equipoId: null,
+      operador: null,
+      totalHoras: 0,
+      actividades: [],
+      detalleActividades: null,
+      reportNumero: '4512',
+      sinSincronizar: true,
+    });
+  });
+});

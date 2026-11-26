@@ -23,7 +23,41 @@ import { normalizarFolio, numeroReport } from '../lib/trabajos-extra';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
 import { detalleComparable } from '../lib/trabajos-extra';
-import type { TrabajoExtraEdicion, TrabajoExtraForm, TrabajoExtraordinario } from '../types/trabajosExtra';
+import { esNulo } from '../types/trabajosExtra';
+import type {
+  CreateTrabajoExtraInput,
+  ReportNuloEdicion,
+  ReportNuloForm,
+  TrabajoExtraEdicion,
+  TrabajoExtraForm,
+  TrabajoExtraordinario,
+} from '../types/trabajosExtra';
+
+/** Lo que el formulario entrega al registrar: un Report normal o uno NULO. */
+export type ValoresReport = TrabajoExtraForm | ReportNuloForm;
+
+/**
+ * El cuerpo del alta sin `id`/`capturedAt`: un normal con su desglose en
+ * forma canónica; un NULO solo con lo que trae (sin desglose ni horómetros, y
+ * sin los opcionales vacíos — el servidor los rechazaría o los guardaría
+ * vacíos).
+ */
+type SinIds<T> = T extends unknown ? Omit<T, 'id' | 'capturedAt'> : never;
+
+function cuerpoAlta(values: ValoresReport): SinIds<CreateTrabajoExtraInput> {
+  if (esNulo(values)) {
+    const { equipoId, operatorId, descripcion, ...resto } = values;
+    return {
+      ...resto,
+      ...(equipoId ? { equipoId } : {}),
+      ...(operatorId ? { operatorId } : {}),
+      ...(descripcion ? { descripcion } : {}),
+    } as ReportNuloForm;
+  }
+  // Forma canónica del desglose (planta solo en filas PLANTA, horas a 2
+  // decimales) — la misma normalización que aplica el servidor.
+  return { ...values, detalle: (detalleComparable(values.detalle) ?? []) as TrabajoExtraForm['detalle'] };
+}
 
 const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
 
@@ -62,7 +96,7 @@ export interface UseRegistrarTrabajoExtraResult {
    * sin señal: un único camino. Los rechazos de negocio (operador inactivo,
    * equipo/operador inexistente) llegan después, desde el replay, a la hoja
    * de `SyncStatus` (`needs_attention`). `true` si quedó guardado. */
-  registrar: (values: TrabajoExtraForm, foto: File) => Promise<boolean>;
+  registrar: (values: ValoresReport, foto: File) => Promise<boolean>;
   isGuardando: boolean;
 }
 
@@ -96,20 +130,17 @@ export function useCrearTrabajoExtra() {
   return useMutation({
     // `values.fecha` (panel, trabajo olvidado) viaja tal cual; la foto del
     // report se sube ANTES del POST y viaja como `fotoKey`.
-    mutationFn: async ({ values, foto }: { values: TrabajoExtraForm & { fecha?: string }; foto: File }) => {
+    mutationFn: async ({ values, foto }: { values: ValoresReport & { fecha?: string }; foto: File }) => {
       const subida = await uploadFile(foto);
       return createTrabajoExtra({
-        ...values,
-        // Forma canónica del desglose (planta solo en filas PLANTA, horas a 2
-        // decimales) — la misma normalización que aplica el servidor.
-        detalle: (detalleComparable(values.detalle) ?? []) as TrabajoExtraForm['detalle'],
+        ...cuerpoAlta(values),
         fotoKey: subida.key,
         id: generateUuid(),
         capturedAt: new Date().toISOString(),
       });
     },
     onSuccess: (creado) => {
-      toast.success(`Report ${numeroReport(creado.reportNumero)} registrado`);
+      toast.success(`Report ${creado.nulo ? 'nulo ' : ''}${numeroReport(creado.reportNumero)} registrado`);
       void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
     },
     onError: (error: unknown) => {
@@ -122,7 +153,7 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
   const { user } = useCurrentUser();
   const [isGuardando, setIsGuardando] = useState(false);
 
-  const registrar = async (values: TrabajoExtraForm, foto: File): Promise<boolean> => {
+  const registrar = async (values: ValoresReport, foto: File): Promise<boolean> => {
     if (isGuardando) return false;
     if (!user?.id) {
       toast.danger('No hay una sesión activa. Iniciá sesión para guardar el trabajo.');
@@ -133,16 +164,16 @@ export function useRegistrarTrabajoExtra(): UseRegistrarTrabajoExtraResult {
       // `fecha` solo viaja cuando difiere de hoy (carga histórica): para los
       // registros del día, el backend conserva la hora real de captura. La
       // foto del report queda como blob junto a la op y la sube el replay.
-      const { fecha, ...resto } = values;
+      // Un NULO va por el MISMO camino (outbox, idempotente por `id`).
+      const { fecha, ...resto } = cuerpoAlta(values);
       await enqueueCreateTrabajoExtra(
         user.id,
         {
           ...resto,
-          detalle: (detalleComparable(values.detalle) ?? []) as TrabajoExtraForm['detalle'],
           ...(fecha && fecha !== toDateOnly(new Date()) ? { fecha } : {}),
           id: generateUuid(),
           capturedAt: new Date().toISOString(),
-        },
+        } as CreateTrabajoExtraInput,
         foto,
       );
       avisarGuardadoEnCola();
@@ -162,7 +193,7 @@ export interface UseEditarTrabajoExtraResult {
   /** Encola solo los campos que cambiaron respecto de `original` (lo que la
    * pantalla muestra hoy, con las ediciones pendientes ya aplicadas), con su
    * precondición. `true` si quedó guardado. */
-  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion) => Promise<boolean>;
+  guardar: (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion | ReportNuloEdicion) => Promise<boolean>;
   isGuardando: boolean;
 }
 
@@ -183,15 +214,20 @@ const CAMPOS_TRABAJO = [
  * cuando el servidor la recibe, no al guardar. */
 export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   const { user } = useCurrentUser();
-  const edicion = useQueuedMutation<'trabajoExtra.edit', { original: TrabajoExtraordinario; corregido: TrabajoExtraEdicion }>({
+  const edicion = useQueuedMutation<
+    'trabajoExtra.edit',
+    { original: TrabajoExtraordinario; corregido: TrabajoExtraEdicion | ReportNuloEdicion }
+  >({
     endpoint: 'trabajoExtra.edit',
     waitMs: 0,
     userId: user?.id,
     build: ({ original, corregido }) => {
+      if (esNulo(original)) return edicionNulo(original, corregido as ReportNuloEdicion);
+      const corregidoNormal = corregido as TrabajoExtraEdicion;
       // Un texto opcional vacío y uno ausente son lo mismo: sin esto, abrir y
       // guardar sin tocar nada marcaría `observaciones` como cambiada.
       const base = {
-        equipoId: original.equipoId,
+        equipoId: original.equipoId ?? '',
         operatorId: original.operatorId ?? '',
         faena: original.faena,
         turno: original.turno === 'NOCTURNO' ? ('NOCTURNO' as const) : ('DIURNO' as const),
@@ -206,9 +242,9 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
         reportNumero: original.reportNumero ?? '',
       };
       const nuevo = {
-        ...corregido,
-        otraActividad: corregido.otraActividad ?? '',
-        observaciones: corregido.observaciones ?? '',
+        ...corregidoNormal,
+        otraActividad: corregidoNormal.otraActividad ?? '',
+        observaciones: corregidoNormal.observaciones ?? '',
       };
       const cambio = edicionContraBase(base, nuevo, CAMPOS_TRABAJO);
       // El desglose va APARTE del diff de escalares: es un arreglo de objetos
@@ -216,7 +252,7 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
       // viaja completo (reemplaza al vigente) y el servidor lo audita por
       // contenido; un formulario legacy que no armó la tabla no manda nada.
       const detalleBase = detalleComparable(original.detalleActividades);
-      const detalleNuevo = detalleComparable(corregido.detalle);
+      const detalleNuevo = detalleComparable(corregidoNormal.detalle);
       const detalleCambio =
         detalleNuevo !== undefined &&
         JSON.stringify(detalleBase ?? null) !== JSON.stringify(detalleNuevo);
@@ -234,7 +270,10 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
     errorMessage: (error) => mensajeErrorTrabajoExtra(error, 'No se pudo guardar el cambio en el equipo.'),
   });
 
-  const guardar = async (original: TrabajoExtraordinario, corregido: TrabajoExtraEdicion): Promise<boolean> => {
+  const guardar = async (
+    original: TrabajoExtraordinario,
+    corregido: TrabajoExtraEdicion | ReportNuloEdicion,
+  ): Promise<boolean> => {
     try {
       await edicion.mutateAsync({ original, corregido });
       return true;
@@ -245,6 +284,41 @@ export function useEditarTrabajoExtra(): UseEditarTrabajoExtraResult {
   };
 
   return { guardar, isGuardando: edicion.isPending };
+}
+
+const CAMPOS_NULO = ['equipoId', 'operatorId', 'faena', 'turno', 'descripcion', 'reportNumero'] as const;
+
+/**
+ * Corrección de un report NULO: N°, fecha, motivo, equipo y operador (y
+ * faena/turno). Un equipo u operador que se deja sin elegir no se borra (el
+ * diff ignora lo ausente). La fecha viaja solo si cambió y no entra en la
+ * precondición: un nulo lo corrige el panel, online.
+ */
+function edicionNulo(original: TrabajoExtraordinario, corregido: ReportNuloEdicion) {
+  const base = {
+    equipoId: original.equipoId ?? '',
+    operatorId: original.operatorId ?? '',
+    faena: original.faena,
+    turno: original.turno === 'NOCTURNO' ? ('NOCTURNO' as const) : ('DIURNO' as const),
+    descripcion: original.descripcion,
+    reportNumero: original.reportNumero ?? '',
+  };
+  const nuevo = {
+    faena: corregido.faena,
+    turno: corregido.turno,
+    reportNumero: corregido.reportNumero,
+    descripcion: corregido.descripcion ?? '',
+    ...(corregido.equipoId ? { equipoId: corregido.equipoId } : {}),
+    ...(corregido.operatorId ? { operatorId: corregido.operatorId } : {}),
+  };
+  const cambio = edicionContraBase(base, nuevo, CAMPOS_NULO);
+  const fecha = corregido.fecha && corregido.fecha !== original.fecha ? corregido.fecha : undefined;
+  if (!cambio.hayCambios && !fecha) return null;
+  return {
+    params: { id: original.id },
+    body: { ...cambio.cambios, ...(fecha ? { fecha } : {}) },
+    expected: cambio.esperado,
+  };
 }
 
 /** Eliminación definitiva de un report (solo ADMIN en el backend). */

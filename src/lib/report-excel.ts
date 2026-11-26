@@ -1,6 +1,6 @@
 import { actividadLabel, destinoLabel, type TrabajoExtraordinario } from '../types/trabajosExtra';
 import type { DetalleActividadRegistro } from '../types/trabajosExtra';
-import { actividadDeFila } from './trabajos-extra';
+import { ETIQUETA_NULO, actividadDeFila } from './trabajos-extra';
 
 /** Columna «Planta» de la planilla: la planta concreta cuando la fila es
  * PLANTA, el lugar legible en el resto. */
@@ -94,9 +94,12 @@ export async function construirExcelReport(
   titulo.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF111827' } };
   titulo.getCell(1).alignment = { vertical: 'middle' };
 
+  // Un report NULO no es un trabajo: se cuenta aparte.
+  const nulos = trabajos.filter((t) => t.nulo).length;
+  const reales = trabajos.length - nulos;
   const subtitulo = ws.addRow([
-    `Del ${legible(desde)} al ${legible(hasta)} · ${trabajos.length} ${
-      trabajos.length === 1 ? 'trabajo' : 'trabajos'
+    `Del ${legible(desde)} al ${legible(hasta)} · ${reales} ${reales === 1 ? 'trabajo' : 'trabajos'}${
+      nulos > 0 ? ` · ${nulos} ${nulos === 1 ? 'nulo' : 'nulos'}` : ''
     } · exportado el ${legible(diaLocal(new Date().toISOString()))}`,
   ]);
   ws.mergeCells(2, 1, 2, N_COLUMNAS);
@@ -140,10 +143,10 @@ export async function construirExcelReport(
       item: t.turno === 'NOCTURNO' ? 'Noche' : 'Día',
       fecha: legible(diaLocal(t.fecha)),
       empresa: t.faena,
-      equipo: t.equipo?.internalCode ?? t.equipoId,
+      equipo: t.equipo?.internalCode ?? t.equipoId ?? '',
       supervisor: t.registradoPor ?? '',
       report: t.reportNumero ?? '',
-      operador: t.operador,
+      operador: t.operador ?? '',
     };
     // Los que van SOLO en la primera fila: sumar Total_Horas no debe duplicar.
     const soloPrimera = {
@@ -154,8 +157,21 @@ export async function construirExcelReport(
       observaciones: t.observaciones ?? '',
     };
     const desglose = t.detalleActividades ?? [];
-    const valores =
-      desglose.length > 0
+    const valores = t.nulo
+      ? // Report NULO (papel anulado): una fila con su N°, fecha y 0 h, marcada
+        // NULO en Actividad; el motivo va en Descripción. Sin horómetros.
+        [
+          {
+            ...comunes,
+            planta: '',
+            actividad: ETIQUETA_NULO,
+            horasAct: 0,
+            total: 0,
+            descripcion: t.descripcion,
+            observaciones: t.observaciones ?? '',
+          },
+        ]
+      : desglose.length > 0
         ? desglose.map((f, j) => ({
             ...comunes,
             planta: lugarExcel(f),

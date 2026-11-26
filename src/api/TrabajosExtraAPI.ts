@@ -35,7 +35,8 @@ export async function createTrabajoExtra(
 export interface FolioLibre {
   folio: string;
   libre: boolean;
-  ocupadoPor: { id: string; equipo: string; fecha: string } | null;
+  /** `equipo` null: un report nulo sin equipo. */
+  ocupadoPor: { id: string; equipo: string | null; nulo?: boolean; fecha: string } | null;
 }
 
 /** ¿El folio está libre? `exceptoId`: al corregir, el Report propio no cuenta. */
