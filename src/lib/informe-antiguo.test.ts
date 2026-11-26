@@ -80,6 +80,16 @@ describe('validarInformeAntiguo', () => {
     expect(errores[claveErrorEquipo('equipo', 'c')]).toBe('Elige el equipo.');
   });
 
+  it('lecturas y litros con más de 2 decimales no valen (el backend los rechaza)', () => {
+    const errores = validarInformeAntiguo(
+      form({ equipos: [{ id: 'a', equipoId: 'e1', inicial: '484,925', final: '487,1', litros: '1,255' }] }),
+      opciones,
+    );
+    expect(errores[claveErrorEquipo('inicial', 'a')]).toBe('Usa hasta 2 decimales, por ejemplo 484,92.');
+    expect(errores[claveErrorEquipo('litros', 'a')]).toBe('Usa hasta 2 decimales, por ejemplo 484,92.');
+    expect(errores[claveErrorEquipo('final', 'a')]).toBeUndefined();
+  });
+
   it('reusa las reglas del informe normal (actividad y supervisor responsable)', () => {
     const errores = validarInformeAntiguo(form({ actividad1: ' ', supervisor1: '' }), opciones);
     expect(errores.actividad1).toBeTruthy();

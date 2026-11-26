@@ -94,6 +94,10 @@ export function validarInformeAntiguo(form: InformeAntiguoForm, opciones: Opcion
   return errores;
 }
 
+/** Hasta 2 decimales, como el papel (y como lo acepta el backend). */
+const DOS_DECIMALES = 'Usa hasta 2 decimales, por ejemplo 484,92.';
+const masDeDosDecimales = (n: number) => Math.abs(Math.round(n * 100) - n * 100) > 1e-6;
+
 /** Errores de las filas de equipo (alta y corrección): al menos una, sin
  * repetir equipo, lecturas válidas con final ≥ inicial y litros opcionales. */
 export function validarFilasEquipos(filas: readonly FilaEquipoForm[]): Record<string, string> {
@@ -113,9 +117,11 @@ export function validarFilasEquipos(filas: readonly FilaEquipoForm[]): Record<st
     if (fila.inicial.trim() === '') errores[claveErrorEquipo('inicial', fila.id)] = 'Escribe la lectura inicial.';
     else if (inicial == null || inicial < 0)
       errores[claveErrorEquipo('inicial', fila.id)] = 'Escribe un número, por ejemplo 1250,5.';
+    else if (masDeDosDecimales(inicial)) errores[claveErrorEquipo('inicial', fila.id)] = DOS_DECIMALES;
     if (fila.final.trim() === '') errores[claveErrorEquipo('final', fila.id)] = 'Escribe la lectura final.';
     else if (final == null || final < 0)
       errores[claveErrorEquipo('final', fila.id)] = 'Escribe un número, por ejemplo 1250,5.';
+    else if (masDeDosDecimales(final)) errores[claveErrorEquipo('final', fila.id)] = DOS_DECIMALES;
     else if (inicial != null && final < inicial) {
       errores[claveErrorEquipo('final', fila.id)] = 'No puede ser menor que la lectura inicial.';
     }
@@ -124,6 +130,8 @@ export function validarFilasEquipos(filas: readonly FilaEquipoForm[]): Record<st
       const litros = parseDecimal(fila.litros);
       if (litros == null || litros < 0 || litros > 100_000) {
         errores[claveErrorEquipo('litros', fila.id)] = 'Escribe los litros, por ejemplo 40.';
+      } else if (masDeDosDecimales(litros)) {
+        errores[claveErrorEquipo('litros', fila.id)] = DOS_DECIMALES;
       }
     }
   }
