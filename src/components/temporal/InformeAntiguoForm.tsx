@@ -91,7 +91,12 @@ export function InformeAntiguoForm({
     return set;
   }, [numerosConocidos, ocupado, numero]);
   const hoy = toDateOnly(new Date());
-  const errores = validarInformeAntiguo(datos, { numerosTomados: tomados, exigirSupervisor: oficina, hoy });
+  const errores = validarInformeAntiguo(datos, {
+    numerosTomados: tomados,
+    exigirSupervisor: oficina,
+    hoy,
+    desde: haceUnAnio(),
+  });
   const [intentado, setIntentado] = useState(false);
   // Un N° repetido se avisa apenas se escribe (bloquea el envío); el resto, al intentar.
   const visibles: Record<string, string> = intentado
@@ -151,8 +156,11 @@ export function InformeAntiguoForm({
             valor={datos.supervisorId}
             onChange={(id) => {
               cambiar('supervisorId', id);
+              // Responsable 1 sigue al supervisor elegido mientras nadie lo haya escrito a mano.
               const elegido = supervisores.find((u) => u.id === id);
-              if (elegido && datos.supervisor1.trim() === '') cambiar('supervisor1', elegido.name);
+              const anterior = supervisores.find((u) => u.id === datos.supervisorId)?.name ?? '';
+              const automatico = datos.supervisor1.trim() === '' || datos.supervisor1 === anterior;
+              if (elegido && automatico) cambiar('supervisor1', elegido.name);
             }}
             opciones={supervisores.map((u) => ({ valor: u.id, titulo: u.name, detalle: u.email }))}
           />

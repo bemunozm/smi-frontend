@@ -74,4 +74,17 @@ describe('sync-detalle', () => {
     } as unknown as OutboxOp;
     expect(queHacer(report, [report])).toMatch(/^Ese N° ya está registrado\. Descarta/);
   });
+
+  it('qué hacer: una corrección con un N° ya usado se descarta y se corrige de nuevo', () => {
+    const edicion = {
+      ...base,
+      id: 'e1',
+      seq: 4,
+      type: 'httpWrite',
+      endpoint: 'trabajoExtra.edit',
+      status: 'needs_attention',
+      lastError: { status: 409, code: 'FOLIO_EN_USO', message: 'El N° de report 4615 ya está registrado.' },
+    } as unknown as OutboxOp;
+    expect(queHacer(edicion, [edicion])).toMatch(/^Ese N° ya lo tiene otro registro\. Descarta esta corrección/);
+  });
 });

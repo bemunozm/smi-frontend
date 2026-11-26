@@ -157,6 +157,7 @@ export const folioSchema = z
   .string()
   .trim()
   .min(1, 'Indicá el N° de report')
+  .max(30, 'El N° de report es demasiado largo.')
   .regex(/^\d+$/, 'El N° de report lleva solo números.')
   .refine((v) => /[1-9]/.test(v), 'El N° de report tiene que ser mayor que 0.')
   .transform((v) => v.replace(/^0+/, ''));

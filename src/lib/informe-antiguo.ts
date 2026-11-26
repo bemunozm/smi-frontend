@@ -68,6 +68,8 @@ export interface OpcionesValidacion {
   exigirSupervisor: boolean;
   /** `YYYY-MM-DD` de hoy: la fecha no puede ser futura. */
   hoy: string;
+  /** `YYYY-MM-DD` más antiguo aceptado (un año atrás, como el backend). */
+  desde?: string;
 }
 
 /** Errores del formulario por campo; `{}` si se puede enviar. */
@@ -81,6 +83,9 @@ export function validarInformeAntiguo(form: InformeAntiguoForm, opciones: Opcion
   else if (opciones.numerosTomados.has(numero)) errores.numero = mensajeNumeroTomado(numero);
 
   if (form.fecha.trim() !== '' && form.fecha > opciones.hoy) errores.fecha = 'La fecha no puede ser futura.';
+  else if (opciones.desde && form.fecha.trim() !== '' && form.fecha < opciones.desde) {
+    errores.fecha = 'La fecha tiene más de un año de antigüedad.';
+  }
   if (opciones.exigirSupervisor && form.supervisorId === '') {
     errores.supervisorId = 'Elige a qué supervisor temporal pertenece el informe.';
   }

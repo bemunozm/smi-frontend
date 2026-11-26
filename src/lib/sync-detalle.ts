@@ -98,7 +98,11 @@ export function queHacer(op: OutboxOp, ops: readonly OutboxOp[]): string {
   // El N° ya lo tiene otro registro: reintentar no sirve, hay que volver a
   // cargarlo con el número correcto.
   if (op.lastError?.code === 'FOLIO_EN_USO' || op.lastError?.code === 'NUMERO_EN_USO') {
-    return 'Ese N° ya está registrado. Descarta este registro y vuelve a cargarlo con el N° correcto del papel.';
+    const esAlta =
+      op.type === 'createTrabajoExtra' || (op.type === 'httpWrite' && op.endpoint === 'informeTemporal.createAntiguo');
+    return esAlta
+      ? 'Ese N° ya está registrado. Descarta este registro y vuelve a cargarlo con el N° correcto del papel.'
+      : 'Ese N° ya lo tiene otro registro. Descarta esta corrección y vuelve a corregir con el N° correcto del papel.';
   }
   if (status === 403) return 'Tu usuario no puede hacer esto. Descártalo o pide a un administrador que lo registre.';
   return 'Si ya se resolvió el problema, toca Reintentar. Si el registro ya no sirve, descártalo.';

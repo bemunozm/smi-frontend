@@ -44,6 +44,12 @@ describe('validarInformeAntiguo', () => {
     );
   });
 
+  it('la fecha no puede tener más de un año', () => {
+    expect(validarInformeAntiguo(form({ fecha: '2025-11-01' }), { ...opciones, desde: '2025-11-26' }).fecha).toBe(
+      'La fecha tiene más de un año de antigüedad.',
+    );
+  });
+
   it('la fecha no puede ser futura', () => {
     expect(validarInformeAntiguo(form({ fecha: '2026-11-27' }), opciones).fecha).toBe('La fecha no puede ser futura.');
   });

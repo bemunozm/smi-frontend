@@ -9,6 +9,7 @@ import { discardOp, overwriteOp, retryOp } from '../../offline/outbox';
 import { isNonRetryable } from '../../offline/retryable';
 import { detalleOp, mensajeLegible, queHacer } from '../../lib/sync-detalle';
 import type { Equipment } from '../../types/equipment';
+import { normalizarFolio } from '../../lib/trabajos-extra';
 
 /** Código del equipo desde el catálogo (el mismo que precarga "Preparar para
  * uso sin señal") — sin él la etiqueta queda genérica en vez de esperar una
@@ -53,7 +54,7 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly O
     }
     case 'createTrabajoExtra': {
       // El folio es EL número del Report: con él se reconoce cuál se trabó.
-      const folio = op.payload.reportNumero?.trim();
+      const folio = normalizarFolio(op.payload.reportNumero);
       return conCodigo(folio ? `Report N° ${folio}` : 'Trabajo extra', codigoEquipo(equipos, op.payload.equipoId));
     }
     case 'httpWrite':
