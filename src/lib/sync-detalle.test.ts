@@ -58,4 +58,20 @@ describe('sync-detalle', () => {
     // Sin un cierre trabado antes, es que otra persona tiene el equipo.
     expect(queHacer(apertura, [apertura])).toMatch(/^Alguien más tiene el equipo abierto/);
   });
+
+  it('qué hacer: un Report con un N° ya registrado se descarta y se vuelve a cargar', () => {
+    const report = {
+      ...base,
+      id: 'r1',
+      seq: 3,
+      type: 'createTrabajoExtra',
+      status: 'needs_attention',
+      lastError: {
+        status: 409,
+        code: 'FOLIO_EN_USO',
+        message: 'El N° de report 4615 ya está registrado (equipo SEM 02, fecha 20-11-2026).',
+      },
+    } as unknown as OutboxOp;
+    expect(queHacer(report, [report])).toMatch(/^Ese N° ya está registrado\. Descarta/);
+  });
 });

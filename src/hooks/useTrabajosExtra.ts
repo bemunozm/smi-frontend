@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
 import {
   createTrabajoExtra,
   deleteTrabajoExtra,
+  folioLibreTrabajoExtra,
   listTrabajosExtra,
   listCambiosTrabajoExtra,
 } from '../api/TrabajosExtraAPI';
 import { uploadFile } from '../api/UploadsAPI';
 import { useCurrentUser } from './useCurrentUser';
+import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedMutation } from './useQueuedMutation';
 import { DomainError } from '../lib/api-error';
 import { mensajeErrorOperacion } from '../lib/error-messages';
@@ -17,7 +19,7 @@ import { TRABAJOS_EXTRA_KEY } from '../lib/query-keys';
 import { avisarGuardadoEnCola } from '../lib/outbox-feedback';
 import { generateUuid } from '../lib/uuid';
 import { toDateOnly } from '../lib/turno';
-import { numeroReport } from '../lib/trabajos-extra';
+import { normalizarFolio, numeroReport } from '../lib/trabajos-extra';
 import { enqueueCreateTrabajoExtra } from '../offline/outbox';
 import { edicionContraBase } from '../lib/edit-diff';
 import { detalleComparable } from '../lib/trabajos-extra';
@@ -27,6 +29,32 @@ const cambiosKey = (id: string) => [...TRABAJOS_EXTRA_KEY, id, 'cambios'];
 
 export function useTrabajosExtraList() {
   return useQuery({ queryKey: TRABAJOS_EXTRA_KEY, queryFn: listTrabajosExtra });
+}
+
+/**
+ * ¿El folio escrito lo tiene otro Report en el servidor? Complementa el
+ * chequeo contra la lista guardada (`pistaFolio`), que sin señal es lo único
+ * que hay: con señal pregunta al servidor —medio segundo después de dejar de
+ * escribir— y ve también lo que la lista del equipo no tiene todavía.
+ * `ocupado` es `null` mientras no se sabe (sin señal, folio inválido, error).
+ */
+export function useFolioOcupado(escrito: string, exceptoId?: string): { ocupado: boolean | null } {
+  const folio = normalizarFolio(escrito);
+  const [esperado, setEsperado] = useState(folio);
+  useEffect(() => {
+    const t = setTimeout(() => setEsperado(folio), 500);
+    return () => clearTimeout(t);
+  }, [folio]);
+  const enLinea = useOnlineStatus();
+  const consulta = useQuery({
+    queryKey: [...TRABAJOS_EXTRA_KEY, 'folio-libre', esperado, exceptoId ?? null],
+    queryFn: () => folioLibreTrabajoExtra(esperado!, exceptoId),
+    enabled: enLinea && esperado != null && esperado === folio,
+    staleTime: 15_000,
+    retry: false,
+  });
+  if (folio == null || esperado !== folio || !consulta.data) return { ocupado: null };
+  return { ocupado: !consulta.data.libre };
 }
 
 export interface UseRegistrarTrabajoExtraResult {
@@ -81,8 +109,7 @@ export function useCrearTrabajoExtra() {
       });
     },
     onSuccess: (creado) => {
-      // Dice el correlativo que le tocó: lo asigna el sistema, no el usuario.
-      toast.success(creado.numero != null ? `Report ${numeroReport(creado.numero)} registrado` : 'Report registrado');
+      toast.success(`Report ${numeroReport(creado.reportNumero)} registrado`);
       void queryClient.invalidateQueries({ queryKey: TRABAJOS_EXTRA_KEY });
     },
     onError: (error: unknown) => {

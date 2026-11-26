@@ -31,6 +31,25 @@ export async function createTrabajoExtra(
   }
 }
 
+/** Lo que responde `GET /api/trabajos-extra/folio-libre`. */
+export interface FolioLibre {
+  folio: string;
+  libre: boolean;
+  ocupadoPor: { id: string; equipo: string; fecha: string } | null;
+}
+
+/** ¿El folio está libre? `exceptoId`: al corregir, el Report propio no cuenta. */
+export async function folioLibreTrabajoExtra(folio: string, exceptoId?: string): Promise<FolioLibre> {
+  try {
+    const res = await api.get<ApiResponse<FolioLibre>>('/api/trabajos-extra/folio-libre', {
+      params: { folio, ...(exceptoId ? { exceptoId } : {}) },
+    });
+    return res.data.data;
+  } catch (error) {
+    throw toDomainError(error, 'No se pudo revisar el N° de report.');
+  }
+}
+
 /** Quién cambió qué de un trabajo, del cambio más reciente al más viejo. */
 export async function listCambiosTrabajoExtra(id: string): Promise<EntradaCambios[]> {
   try {

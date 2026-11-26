@@ -52,7 +52,9 @@ function labelOp(op: OutboxOp, equipos: Equipment[] | undefined, ops: readonly O
       return conCodigo('Hallazgo', op.payload.equipoId ? codigoEquipo(equipos, op.payload.equipoId) : undefined);
     }
     case 'createTrabajoExtra': {
-      return conCodigo('Trabajo extra', codigoEquipo(equipos, op.payload.equipoId));
+      // El folio es EL número del Report: con él se reconoce cuál se trabó.
+      const folio = op.payload.reportNumero?.trim();
+      return conCodigo(folio ? `Report N° ${folio}` : 'Trabajo extra', codigoEquipo(equipos, op.payload.equipoId));
     }
     case 'httpWrite':
       // La etiqueta la armó el registro de endpoints al encolar.

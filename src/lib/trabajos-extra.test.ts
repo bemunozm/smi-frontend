@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 
-import { cobraMinimo, horasCobrables, pistaFolio, textoPistaFolio } from './trabajos-extra';
+import {
+  cobraMinimo,
+  horasCobrables,
+  normalizarFolio,
+  numeroReport,
+  pistaFolio,
+  textoPistaFolio,
+} from './trabajos-extra';
 
 /** Acta N.° 004, punto 4: mínimo de una hora máquina por trabajo. */
 describe('horasCobrables', () => {
@@ -46,9 +53,29 @@ describe('pistaFolio', () => {
     expect(pistaFolio(registros, '4509').repetido).toBe(false);
   });
 
+  it('compara el folio normalizado, como el servidor (04508 = 4508)', () => {
+    expect(pistaFolio(registros, '04508').repetido).toBe(true);
+    expect(pistaFolio([{ id: 'a', reportNumero: '0099' }], '99').repetido).toBe(true);
+  });
+
   it('respeta los ceros a la izquierda y no inventa nada sin folios', () => {
     expect(pistaFolio([{ id: 'a', reportNumero: '0099' }], '').siguiente).toBe('0100');
     expect(pistaFolio([], '')).toEqual({ ultimo: null, siguiente: null, repetido: false });
     expect(textoPistaFolio(pistaFolio([], ''))).toBeNull();
+  });
+});
+
+/** El folio del papel es EL número del Report (26-11). */
+describe('normalizarFolio y numeroReport', () => {
+  it('deja solo dígitos sin ceros a la izquierda; lo demás no es folio', () => {
+    expect(normalizarFolio(' 04615 ')).toBe('4615');
+    expect(normalizarFolio('46A')).toBeNull();
+    expect(normalizarFolio('000')).toBeNull();
+    expect(normalizarFolio('')).toBeNull();
+  });
+
+  it('muestra «N° 4615», o «Sin N°» en un registro previo al folio', () => {
+    expect(numeroReport('4615')).toBe('N° 4615');
+    expect(numeroReport(null)).toBe('Sin N°');
   });
 });

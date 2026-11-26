@@ -148,6 +148,19 @@ export function plantasDeFila(f: { planta?: string | null; plantas?: readonly st
   return f.planta?.trim() ? [f.planta.trim()] : [];
 }
 
+/**
+ * El N° de report (folio del papel): solo dígitos, mayor que 0. Sale
+ * normalizado sin ceros a la izquierda («04615» → «4615»), como lo guarda el
+ * servidor — así corregir «04615» sobre un «4615» no cuenta como cambio.
+ */
+export const folioSchema = z
+  .string()
+  .trim()
+  .min(1, 'Indicá el N° de report')
+  .regex(/^\d+$/, 'El N° de report lleva solo números.')
+  .refine((v) => /[1-9]/.test(v), 'El N° de report tiene que ser mayor que 0.')
+  .transform((v) => v.replace(/^0+/, ''));
+
 const camposTrabajoExtra = z
   .object({
     equipoId: z.string().min(1, 'Seleccioná un equipo'),
@@ -179,8 +192,9 @@ const camposTrabajoExtra = z
      * `useRegistrarTrabajoExtra`): así los registros del día conservan la
      * hora real de captura. */
     fecha: z.string().optional(),
-    /** N° del report en papel que respalda el trabajo — el Excel del admin lo lleva. */
-    reportNumero: z.string().min(1, 'Indicá el N° del report'),
+    /** N° del report en papel: EL número del Report (único; el servidor
+     * rechaza uno ya usado con 409 `FOLIO_EN_USO`). */
+    reportNumero: folioSchema,
   });
 
 /**
@@ -247,7 +261,7 @@ export const trabajoExtraCorreccionSchema = camposTrabajoExtra.superRefine((d, c
  */
 export const trabajoExtraEdicionSchema = camposTrabajoExtra
   .extend({
-    reportNumero: z.string().min(1, 'Indicá el N° del report').optional(),
+    reportNumero: folioSchema.optional(),
     detalle: camposTrabajoExtra.shape.detalle.optional(),
   })
   .superRefine(reglasTrabajoExtra);

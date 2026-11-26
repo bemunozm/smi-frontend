@@ -73,13 +73,26 @@ export function horasDelDetalle(filas: readonly { horas: number }[]): number {
 }
 
 /**
- * El correlativo del sistema: «#12». Sin él (todavía en el equipo, sin señal),
- * «Sin correlativo aún». No es el folio del report en papel (`reportNumero`,
- * «Report N°»), que escribe el supervisor: este lo asigna la base y nadie lo
- * cambia.
+ * El folio del papel en su forma canónica: dígitos sin ceros a la izquierda
+ * («04615» → «4615»), igual que lo guarda el servidor. `null` si no es un
+ * entero positivo (vacío, letras, signos o cero).
  */
-export function numeroReport(numero: number | null | undefined): string {
-  return numero == null ? 'Sin correlativo aún' : `#${numero}`;
+export function normalizarFolio(texto: string | null | undefined): string | null {
+  const limpio = (texto ?? '').trim();
+  if (!/^\d+$/.test(limpio)) return null;
+  const sinCeros = limpio.replace(/^0+/, '');
+  return sinCeros === '' ? null : sinCeros;
+}
+
+/**
+ * EL número del Report: el folio del papel que escribe el supervisor
+ * (`reportNumero`, único — decisión del cliente, 26-11), «N° 4615». El
+ * correlativo automático (`numero`) ya no se muestra. Un registro previo al
+ * folio sale «Sin N°».
+ */
+export function numeroReport(reportNumero: string | null | undefined): string {
+  const folio = reportNumero?.trim();
+  return folio ? `N° ${folio}` : 'Sin N°';
 }
 
 export function horasCobrables(horasReales: number): number {
@@ -91,13 +104,13 @@ export function cobraMinimo(horasReales: number): boolean {
   return horasReales < COBRO_MINIMO_HORAS;
 }
 
-/** Lo que el formulario dice bajo «N° del report». */
+/** Lo que el formulario dice bajo «N° de report». */
 export interface PistaFolio {
   /** El folio más alto ya registrado (tal como se escribió), o null si no hay. */
   ultimo: string | null;
   /** El que seguiría en la secuencia (`ultimo + 1`, con sus ceros a la izquierda). */
   siguiente: string | null;
-  /** El folio escrito ya está en otro Report. */
+  /** El folio escrito ya está en otro Report — BLOQUEA el envío (es único). */
   repetido: boolean;
 }
 
@@ -109,7 +122,8 @@ export interface PistaFolio {
  * «Último» es el folio NUMÉRICO más alto, no el último que se cargó: un report
  * olvidado que se carga días después trae un folio viejo y no debe mover la
  * sugerencia. Los folios que no son solo dígitos no cuentan para la secuencia.
- * `exceptoId`: al corregir un Report, el suyo no cuenta como repetido.
+ * `repetido` compara normalizado (`0099` = `99`), como el servidor, que no
+ * deja repetirlo. `exceptoId`: al corregir un Report, el suyo no cuenta.
  */
 export function pistaFolio(
   registros: readonly { id: string; reportNumero?: string | null }[],
@@ -128,9 +142,10 @@ export function pistaFolio(
     }
   }
   const siguiente = ultimo == null ? null : String(maximo + 1).padStart(ultimo.length, '0');
-  const buscado = escrito.trim();
+  const buscado = normalizarFolio(escrito);
   const repetido =
-    buscado !== '' && registros.some((r) => r.id !== exceptoId && r.reportNumero?.trim() === buscado);
+    buscado != null &&
+    registros.some((r) => r.id !== exceptoId && normalizarFolio(r.reportNumero) === buscado);
   return { ultimo, siguiente, repetido };
 }
 
@@ -138,4 +153,9 @@ export function pistaFolio(
 export function textoPistaFolio(pista: PistaFolio): string | null {
   if (pista.ultimo == null) return null;
   return `Último report registrado: ${pista.ultimo} · el siguiente sería ${pista.siguiente}.`;
+}
+
+/** El error (bloqueante) de un folio que ya tiene otro Report. */
+export function mensajeFolioRepetido(folio: string): string {
+  return `El N° ${normalizarFolio(folio) ?? folio.trim()} ya está registrado en otro Report: revisa el folio.`;
 }

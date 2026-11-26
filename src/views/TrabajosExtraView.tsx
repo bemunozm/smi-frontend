@@ -32,6 +32,7 @@ import {
   horasCobrables,
   horasDelDetalle,
   lugarDeFila,
+  mensajeFolioRepetido,
   numeroReport,
   pistaFolio,
   textoPistaFolio,
@@ -40,6 +41,7 @@ import {
   useRegistrarTrabajoExtra,
   useEditarTrabajoExtra,
   useCambiosTrabajoExtra,
+  useFolioOcupado,
 } from '../hooks/useTrabajosExtra';
 import { useTrabajosExtraProjection, type TrabajoExtraProyectado } from '../hooks/useTrabajosExtraProjection';
 import { useEquipment } from '../hooks/useEquipment';
@@ -54,8 +56,6 @@ import { DateField } from '../components/terreno/DateField';
 import { MarcaSinSincronizar } from '../components/terreno/MarcaSinSincronizar';
 import {
   AvisoEdicion,
-  Automatico,
-  Automaticos,
   Boton,
   Calculado,
   Campo,
@@ -306,7 +306,7 @@ export function TrabajosExtraView() {
       <Tabla titulo="Trabajos registrados" detalle={`Patillo y Kainita · ${registros.length} registros`}>
         <thead>
           <tr>
-            <th className={TH}>Correlativo</th>
+            <th className={TH}>N°</th>
             <th className={TH}>Fecha</th>
             <th className={TH}>Faena</th>
             <th className={TH}>Equipo</th>
@@ -320,7 +320,7 @@ export function TrabajosExtraView() {
         <tbody>
           {registros.map((r) => (
             <tr key={r.id}>
-              <td className={`${TD} tabular font-semibold whitespace-nowrap`}>{r.numero ?? '—'}</td>
+              <td className={`${TD} tabular font-semibold whitespace-nowrap`}>{numeroReport(r.reportNumero)}</td>
               <td className={`${TD} tabular whitespace-nowrap`}>
                 {fmtDate(r.fecha)}
                 <div className="text-[12.5px] text-muted-foreground">{r.turno}</div>
@@ -359,7 +359,9 @@ export function TrabajosExtraView() {
           <Tarjeta key={r.id}>
             <div className="flex items-start justify-between gap-2.5">
               <div className="min-w-0">
-                <div className="tabular text-[12.5px] font-semibold text-muted-foreground">{numeroReport(r.numero)}</div>
+                <div className="tabular text-[12.5px] font-semibold text-muted-foreground">
+                  {numeroReport(r.reportNumero)}
+                </div>
                 <div className="tabular text-[19px] font-semibold tracking-[-0.01em]">{codigo(r)}</div>
                 <div className="truncate text-[13px] text-muted-foreground">{r.operador}</div>
               </div>
@@ -425,7 +427,6 @@ export function TrabajosExtraView() {
         enTurno={enTurno}
         opcionesEquipo={opcionesEquipo}
         textoBoton="Guardar cambios"
-        numero={detalle.numero}
         folios={registros}
         idEditado={detalle.id}
         pendiente={isActualizando}
@@ -479,13 +480,12 @@ export function TrabajosExtraView() {
         <GrupoHead titulo="Trabajo" />
         <Filas
           filas={[
-            ['Correlativo', numeroReport(detalle.numero)],
+            ['N° de report', numeroReport(detalle.reportNumero)],
             ['Fecha', fmtDate(detalle.fecha)],
             ['Turno', detalle.turno],
             ['Faena', detalle.faena],
             ['Equipo', codigo(detalle)],
             ['Operador', detalle.operador],
-            ['Report N°', detalle.reportNumero || '—'],
           ]}
         />
       </div>
@@ -585,7 +585,7 @@ export function TrabajosExtraView() {
         }}
         titulo={
           detalle
-            ? `${editando ? 'Editar · ' : ''}${numeroReport(detalle.numero)} · ${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
+            ? `${editando ? 'Editar · ' : ''}${numeroReport(detalle.reportNumero)} · ${codigo(detalle)} · ${fmtDate(detalle.fecha)}`
             : 'Historial de trabajos'
         }
         detalle={
@@ -618,17 +618,15 @@ function FormularioTrabajo({
   pendiente,
   onGuardar,
   onCancelar,
-  numero,
   folios,
   idEditado,
 }: {
   inicial: Partial<TrabajoExtraFormInput>;
-  /** Los Reports ya registrados: de ahí sale el último folio y si el escrito se repite. */
+  /** Los Reports ya registrados (los del servidor y los que esperan en la
+   * cola): de ahí sale el último folio y si el escrito se repite. */
   folios: readonly { id: string; reportNumero?: string | null }[];
   /** Al corregir, el Report que se edita (su folio no cuenta como repetido). */
   idEditado?: string;
-  /** El correlativo al corregir; sin él (alta), se asigna al guardar. */
-  numero?: number | null;
   equipos: { id: string; internalCode: string }[];
   /** Catálogo de operadores activos: el operador se elige, no se escribe. */
   operadores: Pick<Operator, 'id' | 'name'>[];
@@ -660,9 +658,16 @@ function FormularioTrabajo({
   const [fotoFaltante, setFotoFaltante] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
+  const reportNumero = (watch('reportNumero') as string | undefined) ?? '';
+  const pista = pistaFolio(folios, reportNumero, idEditado);
+  // El folio es EL número del Report y es único: repetido BLOQUEA. Se revisa
+  // contra la lista del equipo (sirve sin señal) y, con señal, contra el
+  // servidor, que ve también lo que el equipo todavía no tiene.
+  const { ocupado: ocupadoEnServidor } = useFolioOcupado(reportNumero, idEditado);
+  const folioRepetido = pista.repetido || ocupadoEnServidor === true;
   /** Quedan errores del último intento: con el resolver, cada cambio revalida
    * el schema completo, así que esto se limpia solo al corregir. */
-  const hayErrores = Object.keys(errors).length > 0;
+  const hayErrores = Object.keys(errors).length > 0 || (submitCount > 0 && folioRepetido);
   // El formulario es largo y el error suele quedar arriba, fuera de pantalla:
   // dar a «Registrar trabajo» parecía no hacer nada (supervisor, 14-11). Tras
   // cada intento la vista va sola al primer campo marcado. Corre después del
@@ -677,8 +682,6 @@ function FormularioTrabajo({
 
   const turno = (watch('turno') as TrabajoExtraForm['turno']) ?? 'DIURNO';
   const faena = watch('faena') || 'Patillo';
-  const reportNumero = (watch('reportNumero') as string | undefined) ?? '';
-  const pista = pistaFolio(folios, reportNumero, idEditado);
   /** Las filas del desglose, con los vacíos intermedios que el schema no admite. */
   const filas = (watch('detalle') ?? []) as unknown as FilaDetalleInput[];
   // Antes del primer intento de guardar no se valida al tipear: marcaría en
@@ -719,6 +722,9 @@ function FormularioTrabajo({
     <form
       ref={formRef}
       onSubmit={handleSubmit((values) => {
+        // Un folio ya usado no se envía: el servidor lo rechazaría (409) y,
+        // sin señal, el registro quedaría trabado en la cola.
+        if (folioRepetido) return;
         // La foto del report es obligatoria al registrar (al editar no se
         // toca). Se chequea acá y no en el schema: un `File` no viaja en el
         // formulario validado.
@@ -780,27 +786,29 @@ function FormularioTrabajo({
           <Segmentado etiqueta="Turno" valor={turno} onChange={(v) => setValue('turno', v)} opciones={TURNOS} />
         </div>
 
-        {/* Carga histórica: por defecto hoy; una fecha pasada registra el
-            trabajo en ese día (misma ventana de 30 días del backend). */}
-        <DateField
-          label="Fecha del trabajo"
-          value={(watch('fecha') as string | undefined) ?? toDateOnly(new Date())}
-          onChange={(v) => setValue('fecha', v)}
-          min={toDateOnly(
-            new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
-          )}
-          max={toDateOnly(new Date())}
-        />
+        {/* Carga histórica («subir reportes antiguos»): por defecto hoy; una
+            fecha pasada registra el trabajo en ese día (hasta un año atrás,
+            la misma ventana del backend). Al corregir, la fecha no se toca. */}
+        {!idEditado && (
+          <DateField
+            label="Fecha del trabajo"
+            value={(watch('fecha') as string | undefined) ?? toDateOnly(new Date())}
+            onChange={(v) => setValue('fecha', v)}
+            min={toDateOnly(
+              new Date(new Date().getFullYear() - 1, new Date().getMonth(), new Date().getDate()),
+            )}
+            max={toDateOnly(new Date())}
+          />
+        )}
 
         {/* El folio del report en papel: con él se cruza este registro contra
             la planilla del cliente (y el Excel que exporta el admin). */}
         <Campo
-          label="N° del report (boleta)"
-          error={errors.reportNumero?.message}
+          label="N° de report"
+          error={errors.reportNumero?.message ?? (folioRepetido ? mensajeFolioRepetido(reportNumero) : undefined)}
           hint={['El número impreso en la boleta del report en papel.', textoPistaFolio(pista)]
             .filter(Boolean)
             .join(' ')}
-          aviso={pista.repetido ? `El N° ${reportNumero.trim()} ya está registrado en otro Report: revisa el folio.` : undefined}
         >
           <Input
             inputMode="numeric"
@@ -1028,17 +1036,6 @@ function FormularioTrabajo({
             />
             {fotoFaltante && <TextoError>La foto del report es obligatoria: sacala antes de registrar.</TextoError>}
           </>
-        )}
-
-        {/* El correlativo lo pone el sistema al guardar, nunca el usuario (el
-            backend rechaza un `numero` en el body). En el alta la fila «Se
-            asigna al guardar» no decía nada y se quitó (14-11): se muestra
-            solo al corregir, ya asignado y fijo. No es el folio del papel
-            («N° del report», arriba), que sí se escribe. */}
-        {numero != null && (
-          <Automaticos>
-            <Automatico label="Correlativo" valor={numeroReport(numero)} nota="No se cambia" />
-          </Automaticos>
         )}
 
         {hayErrores && (

@@ -17,6 +17,8 @@ vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams
 
 vi.mock('../hooks/useTrabajosExtra', () => ({
   useTrabajosExtraList: () => listHook(),
+  // Sin servidor en el test: el chequeo del folio sale de la lista.
+  useFolioOcupado: () => ({ ocupado: null }),
   useCrearTrabajoExtra: () => ({ mutate: crearMock, isPending: false }),
   useEditarTrabajoExtra: () => ({ guardar: guardarMock, isGuardando: false }),
   useEliminarTrabajoExtra: () => ({ mutate: eliminarMock, isPending: false }),
@@ -71,6 +73,7 @@ const LISTA: TrabajoExtraordinario[] = [
   trabajo({
     id: 't2',
     numero: 12,
+    reportNumero: '4612',
     equipoId: 'e2',
     equipo: { internalCode: 'EX-001' },
     turno: 'NOCTURNO',
@@ -111,8 +114,8 @@ describe('TrabajosExtraAdminView', () => {
     // «Otro» muestra el texto libre en vez del valor crudo.
     expect(screen.getByText('Otro: Rescate de camión')).toBeTruthy();
     // El N° de Report encabeza cada fila; uno sin número todavía lo dice.
-    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('#12');
-    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin correlativo aún');
+    expect(screen.getByTestId('trabajo-fila-t2').textContent).toContain('N° 4612');
+    expect(screen.getByTestId('trabajo-fila-t1').textContent).toContain('Sin N°');
   });
 
   it('filtra por equipo, por turno y por rango de fechas, y el total sigue al filtro', () => {
@@ -163,7 +166,7 @@ describe('TrabajosExtraAdminView', () => {
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t2'));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Report #12 · EX-001')).toBeTruthy();
+    expect(within(dialog).getByText('Report N° 4612 · EX-001')).toBeTruthy();
     expect(within(dialog).getByText('P. Rojas')).toBeTruthy();
     expect(within(dialog).getByText('Nocturno')).toBeTruthy();
     expect(within(dialog).getByText('Otro: Rescate de camión')).toBeTruthy();
@@ -173,14 +176,14 @@ describe('TrabajosExtraAdminView', () => {
 
   it('«Editar» abre el formulario con los datos del trabajo y guarda la corrección', async () => {
     rol.value = 'SECRETARIA';
-    const original = trabajo({ id: 't9', numero: 9, operatorId: 'op_1', operador: 'Juan Rojas' });
+    const original = trabajo({ id: 't9', numero: 9, reportNumero: '4609', operatorId: 'op_1', operador: 'Juan Rojas' });
     listHook.mockReturnValue(ok([original]));
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByTestId('trabajo-fila-t9'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
 
     const editor = screen.getByRole('dialog');
-    expect(within(editor).getByText('Editar Report #9 · CG-002')).toBeTruthy();
+    expect(within(editor).getByText('Editar Report N° 4609 · CG-002')).toBeTruthy();
     expect((within(editor).getByLabelText('Faena') as HTMLInputElement).value).toBe('Mina Caleta');
     fireEvent.change(within(editor).getByLabelText('Horómetro final'), { target: { value: '104' } });
     fireEvent.click(within(editor).getByRole('button', { name: 'Guardar cambios' }));
@@ -234,15 +237,17 @@ describe('TrabajosExtraAdminView', () => {
     expect(within(screen.getByRole('dialog')).getByText('Pedro Pérez')).toBeTruthy();
   });
 
-  it('«N° del report» muestra el último registrado y avisa uno repetido', () => {
+  it('«N° de report» muestra el último registrado y un repetido bloquea el registro', () => {
     listHook.mockReturnValue(ok([trabajo({ id: 'f1', reportNumero: '4508' }), trabajo({ id: 'f2', reportNumero: '4507' })]));
     render(<TrabajosExtraAdminView />);
     fireEvent.click(screen.getByRole('button', { name: 'Nuevo report' }));
     const dialog = screen.getByRole('dialog');
 
     expect(within(dialog).getByText(/Último report registrado: 4508 · el siguiente sería 4509./)).toBeTruthy();
-    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4508' } });
+    fireEvent.change(within(dialog).getByLabelText('N° de report'), { target: { value: '4508' } });
     expect(within(dialog).getByText(/El N° 4508 ya está registrado en otro Report/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
+    expect(crearMock).not.toHaveBeenCalled();
   });
 
   it('«Nuevo report» registra con operador del catálogo, horómetros, actividades, report y foto', async () => {
@@ -269,7 +274,7 @@ describe('TrabajosExtraAdminView', () => {
       target: { value: '2026-10-05T21:15' },
     });
     // Los campos del report: folio y la foto obligatoria.
-    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
+    fireEvent.change(within(dialog).getByLabelText('N° de report'), { target: { value: '4509' } });
     const foto = new File(['report'], 'report.jpg', { type: 'image/jpeg' });
     fireEvent.change(within(dialog).getByLabelText('Foto del report'), { target: { files: [foto] } });
 
@@ -339,7 +344,7 @@ describe('TrabajosExtraAdminView', () => {
     fireEvent.change(within(dialog).getByLabelText('HM'), { target: { value: '12' } });
     fireEvent.change(within(dialog).getByLabelText('Descripción de la actividad'), { target: { value: 'Romana 2' } });
     fireEvent.change(within(dialog).getByLabelText(/^Descripción general y.u observaciones/), { target: { value: 'Carga de material' } });
-    fireEvent.change(within(dialog).getByLabelText('N° del report (boleta)'), { target: { value: '4509' } });
+    fireEvent.change(within(dialog).getByLabelText('N° de report'), { target: { value: '4509' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Registrar trabajo' }));
     expect(crearMock).not.toHaveBeenCalled();
@@ -376,23 +381,22 @@ describe('TrabajosExtraAdminView', () => {
       expect(orden()).toEqual(['x01', 'x10d', 'x10n', 'x20']);
     });
 
-    it('Report N° ordena numérico y deja los vacíos al final en ambos sentidos', () => {
+    it('N° (el folio) ordena numérico y deja los vacíos al final en ambos sentidos', () => {
       comoEscritorio(true);
       listHook.mockReturnValue(ok(DESORDENADOS));
       render(<TrabajosExtraAdminView />);
-      const th = () => screen.getByRole('columnheader', { name: /Report N°/ });
+      const th = () => screen.getByRole('columnheader', { name: /^N°/ });
       fireEvent.click(th());
       expect(orden()).toEqual(['x01', 'x10d', 'x20', 'x10n']);
       fireEvent.click(th());
       expect(orden()).toEqual(['x20', 'x10d', 'x01', 'x10n']);
     });
 
-    it('Correlativo y HM ordenan como número', () => {
+    it('HM ordena como número y ya no hay columna de correlativo', () => {
       comoEscritorio(true);
       listHook.mockReturnValue(ok(DESORDENADOS));
       render(<TrabajosExtraAdminView />);
-      fireEvent.click(screen.getByRole('columnheader', { name: /Correlativo/ }));
-      expect(orden()).toEqual(['x01', 'x10n', 'x20', 'x10d']);
+      expect(screen.queryByRole('columnheader', { name: /Correlativo/ })).toBeNull();
       fireEvent.click(screen.getByRole('columnheader', { name: /HM/ }));
       expect(orden()).toEqual(['x10d', 'x20', 'x10n', 'x01']);
     });

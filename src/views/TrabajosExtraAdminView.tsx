@@ -34,6 +34,7 @@ import {
   useCrearTrabajoExtra,
   useEditarTrabajoExtra,
   useEliminarTrabajoExtra,
+  useFolioOcupado,
   useTrabajosExtraList,
 } from '../hooks/useTrabajosExtra';
 import { turnoLabel } from '../config/flota-colors';
@@ -44,6 +45,8 @@ import {
   horasDelDetalle,
   horasCobrables,
   lugarDeFila,
+  mensajeFolioRepetido,
+  normalizarFolio,
   numeroReport,
   pistaFolio,
   textoPistaFolio,
@@ -122,35 +125,39 @@ function lugaresDe(trabajo: TrabajoExtraordinario): string {
 const TURNO_ORDEN: Record<string, number> = { DIURNO: 0, NOCTURNO: 1 };
 const turnoOrden = (turno: string): number => TURNO_ORDEN[turno] ?? 9;
 
-/** Desempate de la fecha: turno y luego correlativo (los sin correlativo, al final). */
-const porTurnoYCorrelativo = (a: TrabajoExtraordinario, b: TrabajoExtraordinario): number =>
+/** El N° de report como número, para ordenar; `null` en un registro sin folio. */
+const folioNumerico = (t: TrabajoExtraordinario): number | null => {
+  const folio = normalizarFolio(t.reportNumero);
+  return folio == null ? null : Number(folio);
+};
+
+/** Desempate de la fecha: turno y luego N° de report (los sin N°, al final). */
+const porTurnoYFolio = (a: TrabajoExtraordinario, b: TrabajoExtraordinario): number =>
   turnoOrden(a.turno) - turnoOrden(b.turno) ||
-  (a.numero ?? Number.MAX_SAFE_INTEGER) - (b.numero ?? Number.MAX_SAFE_INTEGER);
-/** Desempate del resto de las columnas: por día, y luego turno y correlativo. */
+  (folioNumerico(a) ?? Number.MAX_SAFE_INTEGER) - (folioNumerico(b) ?? Number.MAX_SAFE_INTEGER);
+/** Desempate del resto de las columnas: por día, y luego turno y N° de report. */
 const porFecha = (a: TrabajoExtraordinario, b: TrabajoExtraordinario): number =>
-  diaLocal(a.fecha).localeCompare(diaLocal(b.fecha)) || porTurnoYCorrelativo(a, b);
+  diaLocal(a.fecha).localeCompare(diaLocal(b.fecha)) || porTurnoYFolio(a, b);
 
 /** Columnas ordenables (el `id` es el de `Table.Column`). Actividades no ordena. */
 const COLUMNAS_ORDEN: Record<string, SortColumn<TrabajoExtraordinario>> = {
-  numero: { kind: 'number', value: (t) => t.numero, tiebreak: porFecha },
-  fecha: { kind: 'date', value: (t) => diaLocal(t.fecha) || null, tiebreak: porTurnoYCorrelativo },
+  // EL número del Report es el folio del papel (26-11), en orden numérico.
+  reportNumero: { kind: 'number', value: folioNumerico, tiebreak: porFecha },
+  fecha: { kind: 'date', value: (t) => diaLocal(t.fecha) || null, tiebreak: porTurnoYFolio },
   equipo: { kind: 'text', value: (t) => t.equipo?.internalCode, tiebreak: porFecha },
   operador: { kind: 'text', value: (t) => t.operador, tiebreak: porFecha },
   turno: { kind: 'number', value: (t) => turnoOrden(t.turno), tiebreak: porFecha },
-  // Texto con orden numérico: «2» antes que «10»; los folios con letras también ordenan.
-  reportNumero: { kind: 'text', value: (t) => t.reportNumero, tiebreak: porFecha },
   tipo: { kind: 'text', value: (t) => (lugaresDe(t) === '—' ? null : lugaresDe(t)), tiebreak: porFecha },
   registradoPor: { kind: 'text', value: (t) => t.registradoPor, tiebreak: porFecha },
   horas: { kind: 'number', value: (t) => t.totalHoras, tiebreak: porFecha },
 };
 
 const OPCIONES_ORDEN: SortOption[] = [
-  { id: 'numero', label: 'Correlativo' },
+  { id: 'reportNumero', label: 'N°' },
   { id: 'fecha', label: 'Fecha' },
   { id: 'equipo', label: 'Equipo' },
   { id: 'operador', label: 'Operador' },
   { id: 'turno', label: 'Turno' },
-  { id: 'reportNumero', label: 'Report N°' },
   { id: 'tipo', label: 'Tipo' },
   { id: 'registradoPor', label: 'Registrado por' },
   { id: 'horas', label: 'HM' },
@@ -197,7 +204,7 @@ function DetalleTrabajoModal({
           <Modal.CloseTrigger />
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
-              {`Report ${numeroReport(trabajo?.numero)} · ${trabajo?.equipo?.internalCode ?? '—'}`}
+              {`Report ${numeroReport(trabajo?.reportNumero)} · ${trabajo?.equipo?.internalCode ?? '—'}`}
             </Modal.Heading>
           </Modal.Header>
           <Modal.Body>
@@ -214,7 +221,6 @@ function DetalleTrabajoModal({
                     value={`${NUM_CL_1.format(trabajo.horometroInicial)} → ${NUM_CL_1.format(trabajo.horometroFinal)} h`}
                   />
                   <Dato label="Horas máquina" value={`${NUM_CL_1.format(trabajo.totalHoras)} h`} />
-                  <Dato label="Report N°" value={trabajo.reportNumero || '—'} />
                   <Dato label="Registrado por" value={trabajo.registradoPor ?? 'Sin registro'} />
                 </div>
                 {trabajo.detalleActividades?.length ? (
@@ -331,6 +337,15 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
   const { data: registrados = [] } = useTrabajosExtraList();
   const pista = pistaFolio(registrados, reportNumero, trabajo?.id);
   const textoPista = textoPistaFolio(pista);
+  // El folio es único: repetido bloquea (lista en caché y, con señal, el servidor).
+  const { ocupado: ocupadoEnServidor } = useFolioOcupado(reportNumero, trabajo?.id);
+  const folioRepetido = pista.repetido || ocupadoEnServidor === true;
+  // Al corregir uno legacy sin folio se puede dejar vacío; si se escribe, va validado.
+  const errorFolio = folioRepetido
+    ? mensajeFolioRepetido(reportNumero)
+    : reportNumero.trim() !== '' && normalizarFolio(reportNumero) == null
+      ? 'El N° de report lleva solo números (mayor que 0).'
+      : null;
   // Foto del report — obligatoria al CREAR, igual que en Terreno; acá se
   // sube online antes del POST (`useCrearTrabajoExtra`). Al editar se
   // conserva la existente.
@@ -392,7 +407,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
     Math.abs(sumaDetalle - horasCobrables(totalHorometros)) > 0.01;
 
   const registrar = () => {
-    if (!parsed.success) return;
+    if (!parsed.success || folioRepetido) return;
     if (trabajo) {
       void guardar(trabajo, parsed.data).then((ok) => {
         if (ok) onClose();
@@ -418,7 +433,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
           <Modal.Header>
             <Modal.Heading className="font-display text-xl font-semibold tracking-[-0.02em]">
               {trabajo
-                ? `Editar Report ${numeroReport(trabajo.numero)} · ${trabajo.equipo?.internalCode ?? '—'}`
+                ? `Editar Report ${numeroReport(trabajo.reportNumero)} · ${trabajo.equipo?.internalCode ?? '—'}`
                 : 'Nuevo report'}
             </Modal.Heading>
           </Modal.Header>
@@ -482,18 +497,8 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
                 </Select>
               </div>
 
-              {/* El correlativo lo pone el sistema: se informa solo al editar,
-                  ya asignado — en el alta la fila «Se asigna al guardar» no
-                  decía nada y se quitó (14-11). El folio del papel es «N° del
-                  report», que sí se escribe. */}
-              {trabajo && (
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-secondary px-3.5 py-2.5">
-                  <span className="text-sm text-muted-foreground">Correlativo</span>
-                  <span className="font-mono text-sm font-semibold text-foreground">{numeroReport(trabajo.numero)}</span>
-                  <span className="text-[11px] font-bold tracking-wide text-(--accent) uppercase">No se cambia</span>
-                </div>
-              )}
-
+              {/* «Subir reportes antiguos»: la fecha parte en ahora y se cambia
+                  para cargar uno pasado (solo no puede ser futura). */}
               {trabajo ? null : (
                 <TextField fullWidth isInvalid={fechaIso === null} name="fecha" onChange={setFecha} value={fecha}>
                   <Label>Fecha y hora del trabajo</Label>
@@ -517,13 +522,19 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
               </div>
 
               <div className="flex flex-col gap-1">
-                <TextField fullWidth name="reportNumero" onChange={setReportNumero} value={reportNumero}>
-                  <Label>N° del report (boleta)</Label>
+                <TextField
+                  fullWidth
+                  isInvalid={errorFolio != null}
+                  name="reportNumero"
+                  onChange={setReportNumero}
+                  value={reportNumero}
+                >
+                  <Label>N° de report</Label>
                   <Input inputMode="numeric" placeholder={pista.siguiente ? `Ej: ${pista.siguiente}` : 'Ej: 4509'} />
                 </TextField>
-                {pista.repetido ? (
-                  <p className="m-0 text-xs font-semibold text-(--warning)">
-                    El N° {reportNumero.trim()} ya está registrado en otro Report: revisa el folio.
+                {errorFolio ? (
+                  <p className="m-0 text-xs font-semibold text-danger" role="alert">
+                    {errorFolio}
                   </p>
                 ) : (
                   <p className="m-0 text-xs text-muted-foreground">
@@ -740,7 +751,7 @@ function TrabajoExtraModal({ trabajo, onClose }: { trabajo?: TrabajoExtraordinar
               Cancelar
             </Button>
             <Button
-              isDisabled={!parsed.success || !fechaValida || (!trabajo && foto == null)}
+              isDisabled={!parsed.success || folioRepetido || !fechaValida || (!trabajo && foto == null)}
               isPending={pendiente}
               onPress={registrar}
             >
@@ -982,7 +993,7 @@ export function TrabajosExtraAdminView() {
                   >
                     <div className="flex w-full items-start justify-between gap-2">
                       <span className="text-[15px] font-semibold text-foreground">
-                        <span className="font-mono">{numeroReport(t.numero)}</span> · {formatFecha(t.fecha)} ·{' '}
+                        <span className="font-mono">{numeroReport(t.reportNumero)}</span> · {formatFecha(t.fecha)} ·{' '}
                         <span className="font-mono">{t.equipo?.internalCode ?? '—'}</span>
                       </span>
                       <span className="shrink-0 font-mono text-[15px] font-semibold text-foreground">
@@ -1033,12 +1044,11 @@ export function TrabajosExtraAdminView() {
                   sortDescriptor={orden}
                 >
                   <Table.Header>
-                    <Table.Column allowsSorting id="numero" isRowHeader>{sortableHeader('Correlativo')}</Table.Column>
+                    <Table.Column allowsSorting id="reportNumero" isRowHeader>{sortableHeader('N°')}</Table.Column>
                     <Table.Column allowsSorting id="fecha">{sortableHeader('Fecha')}</Table.Column>
                     <Table.Column allowsSorting id="equipo">{sortableHeader('Equipo')}</Table.Column>
                     <Table.Column allowsSorting id="operador">{sortableHeader('Operador')}</Table.Column>
                     <Table.Column allowsSorting id="turno">{sortableHeader('Turno')}</Table.Column>
-                    <Table.Column allowsSorting id="reportNumero">{sortableHeader('Report N°')}</Table.Column>
                     <Table.Column allowsSorting id="tipo">{sortableHeader('Tipo')}</Table.Column>
                     <Table.Column allowsSorting id="registradoPor">{sortableHeader('Registrado por')}</Table.Column>
                     <Table.Column className="w-full">Actividades</Table.Column>
@@ -1056,7 +1066,7 @@ export function TrabajosExtraAdminView() {
                            columna ancha (Actividades, `w-full`) las aprieta y la fecha
                            se parte en 5 líneas. */}
                         <Table.Cell className="font-mono text-sm font-semibold whitespace-nowrap">
-                          {t.numero ?? '—'}
+                          {numeroReport(t.reportNumero)}
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap text-muted-foreground">
                           {formatFecha(t.fecha)}
@@ -1066,7 +1076,6 @@ export function TrabajosExtraAdminView() {
                         </Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.operador}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{turnoLabel(t.turno)}</Table.Cell>
-                        <Table.Cell className="font-mono text-sm whitespace-nowrap">{t.reportNumero ?? '—'}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{lugaresDe(t)}</Table.Cell>
                         <Table.Cell className="text-sm whitespace-nowrap">{t.registradoPor ?? 'Sin registro'}</Table.Cell>
                         <Table.Cell className="max-w-0 truncate text-sm">{actividadesDe(t)}</Table.Cell>
@@ -1212,7 +1221,7 @@ export function TrabajosExtraAdminView() {
                 </AlertDialog.Header>
                 <AlertDialog.Body>
                   <p>
-                    El Report {eliminando ? numeroReport(eliminando.numero) : ''} de{' '}
+                    El Report {eliminando ? numeroReport(eliminando.reportNumero) : ''} de{' '}
                     {eliminando?.equipo?.internalCode ?? 'este equipo'} se eliminará definitivamente, junto a su
                     foto. Esta acción no se puede deshacer.
                   </p>

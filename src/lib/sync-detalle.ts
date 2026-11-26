@@ -95,6 +95,11 @@ export function queHacer(op: OutboxOp, ops: readonly OutboxOp[]): string {
   if (op.type === 'closeCard' && (status === 400 || status === 422)) {
     return 'Un dato no es válido y no se puede corregir desde aquí. Descarta este cierre: la tarjeta vuelve a quedar abierta y la cierras de nuevo con el valor correcto.';
   }
+  // El N° ya lo tiene otro registro: reintentar no sirve, hay que volver a
+  // cargarlo con el número correcto.
+  if (op.lastError?.code === 'FOLIO_EN_USO' || op.lastError?.code === 'NUMERO_EN_USO') {
+    return 'Ese N° ya está registrado. Descarta este registro y vuelve a cargarlo con el N° correcto del papel.';
+  }
   if (status === 403) return 'Tu usuario no puede hacer esto. Descártalo o pide a un administrador que lo registre.';
   return 'Si ya se resolvió el problema, toca Reintentar. Si el registro ya no sirve, descártalo.';
 }
