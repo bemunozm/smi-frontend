@@ -10,6 +10,8 @@ vi.mock('../../hooks/useMisInformesProjection', () => ({ useMisInformesProjectio
 import { HistorialReportes } from './HistorialReportes';
 
 const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | 'numero'>): InformeTemporal => ({
+  antiguo: false,
+  equiposRegistrados: [],
   fecha: '2026-11-20',
   turno: 'DIURNO',
   actividad1: 'Carga de material',
@@ -89,6 +91,7 @@ const PENDIENTE: InformePendiente = {
   actividad1: 'Despeje',
   actividad2: null,
   equipos: 3,
+  numero: null,
   requiereAtencion: false,
 };
 

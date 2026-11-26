@@ -97,6 +97,9 @@ export const WRITE_ROLES: Record<EndpointKey, readonly Role[]> = {
   // El informe lo envía solo el supervisor temporal (cierra SUS tarjetas);
   // lo corrige oficina y lo elimina el administrador.
   'informeTemporal.create': [SUPERVISOR_TEMPORAL],
+  // «Subir informe antiguo»: el supervisor temporal los suyos; la oficina, a
+  // nombre del supervisor temporal que elige.
+  'informeTemporal.createAntiguo': [SUPERVISOR_TEMPORAL, ADMIN, SECRETARIA],
   'informeTemporal.update': [ADMIN, SECRETARIA],
   'informeTemporal.delete': [ADMIN],
 };

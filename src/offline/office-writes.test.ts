@@ -64,6 +64,7 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
     'dailyChecklist.submit',
     'reporteDiario.create',
     'informeTemporal.create',
+    'informeTemporal.createAntiguo',
   ];
 
   it('toda entrada que crea declara `creates` y la entidad que crea (a partir del id del body)', () => {
@@ -129,6 +130,8 @@ describe('registro de endpoints: una entrada por escritura de oficina', () => {
         'dailyChecklist.resubmit',
         // La foto del surtidor de cada tarjeta que cierra el informe temporal.
         'informeTemporal.create',
+        // La foto del report en papel del informe subido después.
+        'informeTemporal.createAntiguo',
       ].sort(),
     );
   });

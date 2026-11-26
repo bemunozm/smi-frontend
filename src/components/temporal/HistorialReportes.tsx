@@ -3,10 +3,11 @@ import { ChevronRight, History } from 'lucide-react';
 
 import { DetalleInformeTemporal, fechaLegible } from './DetalleInformeTemporal';
 import { MarcaSinSincronizar } from '../terreno/MarcaSinSincronizar';
-import { Boton, Hoja } from '../terreno/ui';
+import { Boton, Chip, Hoja } from '../terreno/ui';
 import { turnoLabel } from '../../config/flota-colors';
 import { useMisInformesProjection, type InformePendiente } from '../../hooks/useMisInformesProjection';
 import { plural } from '../../lib/format';
+import { equiposDelInforme } from '../../lib/informe-antiguo';
 import type { InformeTemporal } from '../../types/informe-temporal';
 
 const actividadesDe = (i: { actividad1: string; actividad2: string | null }) =>
@@ -20,6 +21,7 @@ function FilaPendiente({ informe }: { informe: InformePendiente }) {
       data-testid={`mi-informe-pendiente-${informe.id}`}
     >
       <span className="tabular text-[15px] font-bold text-foreground">
+        {informe.numero != null ? `#${informe.numero} · ` : ''}
         {fechaLegible(informe.fecha)} · {turnoLabel(informe.turno)}
       </span>
       <span className="text-[13.5px] text-foreground">{actividadesDe(informe)}</span>
@@ -43,8 +45,9 @@ function FilaInforme({ informe, onAbrir }: { informe: InformeTemporal; onAbrir: 
             #{informe.numero} · {fechaLegible(informe.fecha)} · {turnoLabel(informe.turno)}
           </span>
           <span className="text-[13.5px] text-foreground">{actividadesDe(informe)}</span>
-          <span className="text-[13px] text-[var(--label-color)]">
-            {plural(informe.tarjetas.length, 'equipo', 'equipos')}
+          <span className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--label-color)]">
+            {plural(equiposDelInforme(informe).length, 'equipo', 'equipos')}
+            {informe.antiguo && <Chip tono="neutral">Subido después</Chip>}
           </span>
         </span>
         <ChevronRight aria-hidden className="size-5 shrink-0 text-muted-foreground" />

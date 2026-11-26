@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 
@@ -5,10 +6,12 @@ import { InformesTemporalesAPI } from '../api/InformesTemporalesAPI';
 import { INFORMES_TEMPORALES_KEY, INFORMES_TEMPORALES_MINE_KEY } from '../lib/query-keys';
 import type {
   CierreTemporalInput,
+  CreateInformeAntiguoInput,
   CreateInformeTemporalInput,
   UpdateInformeTemporalInput,
 } from '../types/informe-temporal';
 import { useCurrentUser } from './useCurrentUser';
+import { useOnlineStatus } from './useOnlineStatus';
 import { useQueuedDelete, useQueuedMutation } from './useQueuedMutation';
 
 /** Informes de un rango de días (`YYYY-MM-DD`, ambos incluidos). */
@@ -95,6 +98,63 @@ export function useCrearInformeTemporal() {
     },
     errorFallback: 'No se pudo guardar el informe en el equipo.',
   });
+}
+
+export interface CrearInformeAntiguoVars {
+  /** Con el `id` ya puesto por el formulario: lo genera UNA vez y lo repite en
+   * cada reintento, así un reenvío no crea dos informes. */
+  informe: CreateInformeAntiguoInput;
+  /** Foto del report en papel (opcional). */
+  foto?: File | null;
+}
+
+/**
+ * «Subir informe antiguo» por la cola: una operación con la foto del report
+ * como archivo (`fotoKey`). Con señal espera unos segundos, así un 409
+ * (`NUMERO_EN_USO`, `ID_CONFLICT`) rechaza la mutación y el formulario lo
+ * muestra; sin señal vuelve con `queued` y se envía solo.
+ */
+export function useCrearInformeAntiguo() {
+  const { user } = useCurrentUser();
+  return useQueuedMutation<'informeTemporal.createAntiguo', CrearInformeAntiguoVars>({
+    endpoint: 'informeTemporal.createAntiguo',
+    userId: user?.id,
+    build: ({ informe, foto }) => {
+      const body: CreateInformeAntiguoInput = { ...informe };
+      delete body.fotoKey;
+      return { params: {}, body, ...(foto ? { files: [{ field: 'fotoKey', file: foto }] } : {}) };
+    },
+    onSent: () => {
+      toast.success('Informe subido');
+    },
+    onQueued: () => {
+      toast.success('Se enviará al recuperar señal');
+    },
+    errorFallback: 'No se pudo guardar el informe en el equipo.',
+  });
+}
+
+/**
+ * ¿Otro informe ya tiene ese N°? Con señal pregunta al servidor (medio
+ * segundo después de dejar de escribir), que ve los de todos los supervisores;
+ * sin señal queda `null` y el formulario se apoya en los que conoce.
+ */
+export function useNumeroInformeOcupado(numero: number | null): { ocupado: boolean | null } {
+  const [esperado, setEsperado] = useState(numero);
+  useEffect(() => {
+    const t = setTimeout(() => setEsperado(numero), 500);
+    return () => clearTimeout(t);
+  }, [numero]);
+  const enLinea = useOnlineStatus();
+  const consulta = useQuery({
+    queryKey: [...INFORMES_TEMPORALES_KEY, 'numero-libre', esperado],
+    queryFn: () => InformesTemporalesAPI.numeroLibre(esperado!),
+    enabled: enLinea && esperado != null && esperado === numero,
+    staleTime: 15_000,
+    retry: false,
+  });
+  if (numero == null || esperado !== numero || consulta.data == null) return { ocupado: null };
+  return { ocupado: !consulta.data };
 }
 
 /** Corrección de los datos de un informe ya enviado (no de sus tarjetas). */

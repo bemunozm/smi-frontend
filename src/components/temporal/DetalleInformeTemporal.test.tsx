@@ -5,6 +5,8 @@ import type { InformeTemporal } from '../../types/informe-temporal';
 import { DetalleInformeTemporal } from './DetalleInformeTemporal';
 
 const informe = (over: Partial<InformeTemporal> = {}): InformeTemporal => ({
+  antiguo: false,
+  equiposRegistrados: [],
   id: 'i1',
   numero: 7,
   fecha: '2026-11-20',
@@ -44,5 +46,30 @@ describe('DetalleInformeTemporal · foto del report', () => {
     render(<DetalleInformeTemporal informe={informe()} />);
     expect(screen.queryByText('Foto del report')).toBeNull();
     expect(screen.queryByRole('img')).toBeNull();
+  });
+});
+
+describe('DetalleInformeTemporal · informe subido después', () => {
+  it('muestra el chip y sus equipos escritos a mano como los de una tarjeta, sin «Corregir»', () => {
+    render(
+      <DetalleInformeTemporal
+        informe={informe({
+          antiguo: true,
+          equiposRegistrados: [
+            { equipoId: 'e1', codigo: 'COMPRESOR', nombre: 'Compresor Kaeser M50', unidad: 'h', inicial: 484.92, final: 487.1, litros: 12 },
+          ],
+        })}
+        onCorregirTarjeta={() => {}}
+      />,
+    );
+    expect(screen.getByText('Subido después')).toBeTruthy();
+    expect(screen.getByText('Equipos · 1')).toBeTruthy();
+    expect(screen.getByText('COMPRESOR')).toBeTruthy();
+    expect(screen.getByText('Inicial: 484,92 h')).toBeTruthy();
+    expect(screen.getByText('Final: 487,1 h')).toBeTruthy();
+    expect(screen.getByText('Combustible: 12 L')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Corregir/ })).toBeNull();
+    // Sin tarjetas no hay ventana real que mostrar.
+    expect(screen.queryByText('Inicio')).toBeNull();
   });
 });

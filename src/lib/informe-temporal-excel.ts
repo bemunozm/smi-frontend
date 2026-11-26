@@ -1,4 +1,5 @@
 import { turnoLabel } from '../config/flota-colors';
+import { equiposDelInforme } from './informe-antiguo';
 import type { InformeTemporal } from '../types/informe-temporal';
 
 const COLUMNAS = [
@@ -19,16 +20,19 @@ const COLUMNAS = [
   { header: 'Supervisor responsable 1', key: 'responsable1', width: 24 },
   { header: 'Supervisor responsable 2', key: 'responsable2', width: 24 },
   { header: 'AdBlue (L)', key: 'adBlue', width: 12 },
+  // Informe en papel digitalizado después: sus equipos se escribieron a mano.
+  { header: 'Subido después', key: 'antiguo', width: 15 },
 ] as const;
 
 /** `dd-mm-yyyy`, como en la planilla del cliente. */
 const legible = (dia: string) => dia.split('-').reverse().join('-');
 
 /**
- * Arma el Excel de «Report supervisor temporal»: UNA FILA POR TARJETA (equipo
- * cerrado en el informe); los datos del informe se repiten en cada una. `Total`
- * es la lectura final menos la inicial (vacío si la tarjeta no tiene final).
- * Un informe sin tarjetas sale en una fila, con el equipo vacío.
+ * Arma el Excel de «Report supervisor temporal»: UNA FILA POR EQUIPO (la
+ * tarjeta cerrada en el informe o, en uno subido después, el equipo escrito a
+ * mano); los datos del informe se repiten en cada una. `Total` es la lectura
+ * final menos la inicial (vacío si la tarjeta no tiene final). Un informe sin
+ * equipos sale en una fila, con el equipo vacío.
  *
  * `exceljs` entra por import dinámico: solo se descarga al exportar.
  */
@@ -65,17 +69,18 @@ export async function construirExcelInformesTemporales(informes: InformeTemporal
       observaciones: informe.observaciones ?? '',
       responsable1: informe.supervisorResponsable1,
       responsable2: informe.supervisorResponsable2 ?? '',
+      antiguo: informe.antiguo ? 'Sí' : undefined,
     };
-    const tarjetas = informe.tarjetas.length > 0 ? informe.tarjetas : [null];
-    for (const t of tarjetas) {
+    const equipos = equiposDelInforme(informe);
+    for (const t of equipos.length > 0 ? equipos : [null]) {
       ws.addRow({
         ...comunes,
-        equipo: t?.equipo.internalCode ?? '',
-        inicial: t?.valorInicial,
-        final: t?.valorFinal ?? undefined,
-        total: t && t.valorFinal != null ? Math.round((t.valorFinal - t.valorInicial) * 100) / 100 : undefined,
-        combustible: t?.fuelLiters ?? undefined,
-        adBlue: t?.adBlueLiters ?? undefined,
+        equipo: t?.codigo ?? '',
+        inicial: t?.inicial,
+        final: t?.final ?? undefined,
+        total: t && t.final != null ? Math.round((t.final - t.inicial) * 100) / 100 : undefined,
+        combustible: t?.litros ?? undefined,
+        adBlue: t?.adBlue ?? undefined,
       });
     }
   }

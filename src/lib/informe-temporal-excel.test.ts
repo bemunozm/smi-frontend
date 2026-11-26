@@ -18,6 +18,8 @@ const tarjeta = (id: string, code: string, ini: number, fin: number | null, litr
   }) satisfies InformeTemporalTarjeta;
 
 const informe = (over: Partial<InformeTemporal> & Pick<InformeTemporal, 'id' | 'numero'>): InformeTemporal => ({
+  antiguo: false,
+  equiposRegistrados: [],
   fecha: '2026-11-20',
   turno: 'DIURNO',
   actividad1: 'Carga de material',
@@ -84,6 +86,7 @@ describe('construirExcelInformesTemporales', () => {
       'Supervisor responsable 1',
       'Supervisor responsable 2',
       'AdBlue (L)',
+      'Subido después',
     ]);
     expect(ws.rowCount).toBe(5);
 
@@ -113,5 +116,29 @@ describe('construirExcelInformesTemporales', () => {
     expect(fila(3)[16]).toBeUndefined();
     expect(fila(5)[2]).toBe('Nocturno');
     expect(fila(5)[0]).toBe(8);
+  });
+
+  it('un informe subido después: una fila por equipo escrito a mano, marcado «Sí»', async () => {
+    const buffer = await construirExcelInformesTemporales([
+      informe({
+        id: 'a1',
+        numero: 1,
+        antiguo: true,
+        equiposRegistrados: [
+          { equipoId: 'e1', codigo: 'COMPRESOR', nombre: 'Compresor', unidad: 'h', inicial: 484.92, final: 487.1, litros: null },
+          { equipoId: 'e2', codigo: 'SEM 02', nombre: 'Cargador', unidad: 'h', inicial: 4713, final: 4720, litros: 30 },
+        ],
+      }),
+    ]);
+    const excel = await import('exceljs');
+    const Workbook = excel.Workbook ?? excel.default.Workbook;
+    const wb = new Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0]!;
+    const fila = (n: number) => (ws.getRow(n).values as unknown[]).slice(1);
+    expect(ws.rowCount).toBe(3);
+    expect(fila(2).slice(6, 11)).toEqual(['COMPRESOR', 484.92, 487.1, 2.18, undefined]);
+    expect(fila(3).slice(6, 11)).toEqual(['SEM 02', 4713, 4720, 7, 30]);
+    expect(fila(2)[17]).toBe('Sí');
   });
 });
