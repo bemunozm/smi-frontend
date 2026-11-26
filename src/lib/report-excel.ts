@@ -94,9 +94,12 @@ export async function construirExcelReport(
   titulo.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF111827' } };
   titulo.getCell(1).alignment = { vertical: 'middle' };
 
+  // Un report NULO no es un trabajo: se cuenta aparte.
+  const nulos = trabajos.filter((t) => t.nulo).length;
+  const reales = trabajos.length - nulos;
   const subtitulo = ws.addRow([
-    `Del ${legible(desde)} al ${legible(hasta)} · ${trabajos.length} ${
-      trabajos.length === 1 ? 'trabajo' : 'trabajos'
+    `Del ${legible(desde)} al ${legible(hasta)} · ${reales} ${reales === 1 ? 'trabajo' : 'trabajos'}${
+      nulos > 0 ? ` · ${nulos} ${nulos === 1 ? 'nulo' : 'nulos'}` : ''
     } · exportado el ${legible(diaLocal(new Date().toISOString()))}`,
   ]);
   ws.mergeCells(2, 1, 2, N_COLUMNAS);

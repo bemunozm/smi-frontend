@@ -909,7 +909,7 @@ function FormularioTrabajo({
             la misma ventana del backend). Al corregir, la fecha no se toca. */}
         {!idEditado && (
           <DateField
-            label="Fecha del trabajo"
+            label={nulo ? 'Fecha del report' : 'Fecha del trabajo'}
             value={(watch('fecha') as string | undefined) ?? toDateOnly(new Date())}
             onChange={(v) => setValue('fecha', v)}
             min={toDateOnly(

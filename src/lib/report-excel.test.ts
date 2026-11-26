@@ -159,6 +159,8 @@ describe('construirExcelReport — report nulo', () => {
     await wb.xlsx.load(await blob.arrayBuffer());
     const ws = wb.getWorksheet('Report')!;
 
+    // El subtítulo cuenta el nulo aparte de los trabajos.
+    expect(String(ws.getCell('A2').value)).toContain('1 trabajo · 1 nulo');
     // Las 16 columnas de la planilla del cliente, en su lugar.
     expect(ws.getCell('I4').value).toBe('Actividad');
     expect(ws.getCell('P4').value).toBe('Observaciones');
